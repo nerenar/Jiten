@@ -34,10 +34,24 @@ public class DeckWord
     /// </summary>
     public int Occurrences { get; set; }
     
-    [JsonIgnore]
+    /// <summary>
+    /// The list of conjugation strings, reconstructed from the byte indices when accessed
+    /// </summary>
+    // [JsonIgnore]
     [NotMapped]
-    public List<string> Conjugations { get; set; } = new();
+    public List<string> Conjugations 
+    { 
+        get => _conjugationIndices.Select(ConjugationCache.GetString).ToList();
+        set => _conjugationIndices = value.Select(ConjugationCache.GetOrAddByte).ToList();
+    }
 
     [JsonIgnore]
     public Deck Deck { get; set; } = new();
+    
+    /// <summary>
+    /// The conjugation bytes that reference the cached conjugation strings
+    /// </summary>
+    [JsonIgnore]
+    [NotMapped]
+    private List<byte> _conjugationIndices = new();
 }

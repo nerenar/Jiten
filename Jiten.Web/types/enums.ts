@@ -57,3 +57,9 @@ export enum TitleLanguage {
   Romaji = 1,
   English = 2,
 }
+
+export enum DisplayStyle {
+  Card = 0,
+  Compact = 1,
+  Table = 2,
+}

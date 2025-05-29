@@ -112,7 +112,6 @@
           order: deckOrder.value,
           minFrequency: frequencyRange.value![0],
           maxFrequency: frequencyRange.value![1],
-          excludeFullWidthDigits: excludeFullWidthDigits.value,
           excludeKana: excludeKana.value,
         },
         responseType: 'blob'
@@ -229,10 +228,6 @@
           <AccordionContent>
             <div class="flex flex-col gap-2">
           <div class="text-sm text-gray-500">These options might not be reflected in the card count below.</div>
-            <div class="flex items-center gap-2">
-              <Checkbox v-model="excludeFullWidthDigits" input-id="excludeFullWidthDigits" name="digits" :binary="true" />
-              <label for="excludeFullWidthDigits">Exclude Western-style numbers (e.g. 13, ６０)"</label>
-            </div>
             <div class="flex items-center gap-2">
               <Checkbox v-model="excludeKana" input-id="excludeKana" name="kanaOnly" :binary="true" />
               <label for="excludeKana">Exclude kana-only vocabulary</label>

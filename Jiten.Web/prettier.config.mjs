@@ -9,7 +9,7 @@ const config = {
     singleQuote: true,
     bracketSameLine: false,
     vueIndentScriptAndStyle: true,
-    printWidth: 120
+    printWidth: 160
 };
 
 export default config;

@@ -4,101 +4,106 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-importers:
+dependencies:
+  '@nuxt/eslint':
+    specifier: ^1.3.0
+    version: 1.3.0(@vue/compiler-sfc@3.5.13)(eslint@9.23.0)(typescript@5.8.2)(vite@6.2.5)
+  '@nuxt/icon':
+    specifier: ^1.11.0
+    version: 1.11.0(vite@6.2.5)(vue@3.5.13)
+  '@nuxt/scripts':
+    specifier: 0.11.5
+    version: 0.11.5(@unhead/vue@2.0.3)(nuxt@3.16.2)(typescript@5.8.2)(vue@3.5.13)
+  '@nuxtjs/google-fonts':
+    specifier: ^3.2.0
+    version: 3.2.0
+  '@nuxtjs/seo':
+    specifier: ^3.0.2
+    version: 3.0.2(@unhead/vue@2.0.3)(h3@1.15.1)(unstorage@1.15.0)(vite@6.2.5)(vue@3.5.13)
+  '@pinia/nuxt':
+    specifier: ^0.10.1
+    version: 0.10.1(pinia@3.0.1)
+  '@primeuix/themes':
+    specifier: ^1.0.1
+    version: 1.0.1
+  '@primevue/forms':
+    specifier: ^4.3.3
+    version: 4.3.3(vue@3.5.13)
+  '@radix-icons/vue':
+    specifier: ^1.0.0
+    version: 1.0.0(vue@3.5.13)
+  '@tailwindcss/vite':
+    specifier: ^4.1.2
+    version: 4.1.2(vite@6.2.5)
+  '@unhead/vue':
+    specifier: ^2.0.3
+    version: 2.0.3(vue@3.5.13)
+  chart.js:
+    specifier: ^4.4.8
+    version: 4.4.8
+  chartjs-plugin-datalabels:
+    specifier: ^2.2.0
+    version: 2.2.0(chart.js@4.4.8)
+  eslint-config-prettier:
+    specifier: ^9.1.0
+    version: 9.1.0(eslint@9.23.0)
+  eslint-plugin-prettier:
+    specifier: ^5.2.6
+    version: 5.2.6(eslint-config-prettier@9.1.0)(eslint@9.23.0)(prettier@3.5.3)
+  hatsuon:
+    specifier: ^2.0.0
+    version: 2.0.0
+  nuxt:
+    specifier: ^3.16.2
+    version: 3.16.2(eslint@9.23.0)(typescript@5.8.2)(vite@6.2.5)
+  nuxt-umami:
+    specifier: 3.2.0
+    version: 3.2.0
+  perfect-debounce:
+    specifier: ^1.0.0
+    version: 1.0.0
+  pinia:
+    specifier: ^3.0.1
+    version: 3.0.1(typescript@5.8.2)(vue@3.5.13)
+  prettier:
+    specifier: ^3.5.3
+    version: 3.5.3
+  primeicons:
+    specifier: ^7.0.0
+    version: 7.0.0
+  primevue:
+    specifier: ^4.3.3
+    version: 4.3.3(vue@3.5.13)
+  tailwindcss:
+    specifier: ^4.1.2
+    version: 4.1.2
+  tailwindcss-primeui:
+    specifier: ^0.5.1
+    version: 0.5.1(tailwindcss@4.1.2)
+  vue:
+    specifier: latest
+    version: 3.5.13(typescript@5.8.2)
+  vue-chartjs:
+    specifier: ^5.3.2
+    version: 5.3.2(chart.js@4.4.8)(vue@3.5.13)
+  vue-router:
+    specifier: latest
+    version: 4.5.0(vue@3.5.13)
 
-  .:
-    dependencies:
-      '@nuxt/eslint':
-        specifier: ^1.3.0
-        version: 1.3.0(@vue/compiler-sfc@3.5.13)(eslint@9.23.0(jiti@2.4.2))(magicast@0.3.5)(typescript@5.8.2)(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(yaml@2.7.1))
-      '@nuxt/icon':
-        specifier: ^1.11.0
-        version: 1.11.0(magicast@0.3.5)(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(yaml@2.7.1))(vue@3.5.13(typescript@5.8.2))
-      '@nuxt/scripts':
-        specifier: 0.11.5
-        version: 0.11.5(@unhead/vue@2.0.3(vue@3.5.13(typescript@5.8.2)))(db0@0.3.1)(ioredis@5.6.0)(magicast@0.3.5)(nuxt@3.16.2(@parcel/watcher@2.5.1)(@types/node@22.14.0)(db0@0.3.1)(eslint@9.23.0(jiti@2.4.2))(ioredis@5.6.0)(lightningcss@1.29.2)(magicast@0.3.5)(optionator@0.9.4)(rollup@4.39.0)(terser@5.39.0)(typescript@5.8.2)(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(yaml@2.7.1))(yaml@2.7.1))(typescript@5.8.2)(vue@3.5.13(typescript@5.8.2))
-      '@nuxtjs/google-fonts':
-        specifier: ^3.2.0
-        version: 3.2.0(magicast@0.3.5)
-      '@nuxtjs/seo':
-        specifier: ^3.0.2
-        version: 3.0.2(@unhead/vue@2.0.3(vue@3.5.13(typescript@5.8.2)))(h3@1.15.1)(magicast@0.3.5)(rollup@4.39.0)(unstorage@1.15.0(db0@0.3.1)(ioredis@5.6.0))(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(yaml@2.7.1))(vue@3.5.13(typescript@5.8.2))
-      '@pinia/nuxt':
-        specifier: ^0.10.1
-        version: 0.10.1(magicast@0.3.5)(pinia@3.0.1(typescript@5.8.2)(vue@3.5.13(typescript@5.8.2)))
-      '@primeuix/themes':
-        specifier: ^1.0.1
-        version: 1.0.1
-      '@primevue/forms':
-        specifier: ^4.3.3
-        version: 4.3.3(vue@3.5.13(typescript@5.8.2))
-      '@radix-icons/vue':
-        specifier: ^1.0.0
-        version: 1.0.0(vue@3.5.13(typescript@5.8.2))
-      '@tailwindcss/vite':
-        specifier: ^4.1.2
-        version: 4.1.2(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(yaml@2.7.1))
-      '@unhead/vue':
-        specifier: ^2.0.3
-        version: 2.0.3(vue@3.5.13(typescript@5.8.2))
-      chart.js:
-        specifier: ^4.4.8
-        version: 4.4.8
-      chartjs-plugin-datalabels:
-        specifier: ^2.2.0
-        version: 2.2.0(chart.js@4.4.8)
-      eslint-config-prettier:
-        specifier: ^9.1.0
-        version: 9.1.0(eslint@9.23.0(jiti@2.4.2))
-      eslint-plugin-prettier:
-        specifier: ^5.2.6
-        version: 5.2.6(eslint-config-prettier@9.1.0(eslint@9.23.0(jiti@2.4.2)))(eslint@9.23.0(jiti@2.4.2))(prettier@3.5.3)
-      hatsuon:
-        specifier: ^2.0.0
-        version: 2.0.0
-      nuxt:
-        specifier: ^3.16.2
-        version: 3.16.2(@parcel/watcher@2.5.1)(@types/node@22.14.0)(db0@0.3.1)(eslint@9.23.0(jiti@2.4.2))(ioredis@5.6.0)(lightningcss@1.29.2)(magicast@0.3.5)(optionator@0.9.4)(rollup@4.39.0)(terser@5.39.0)(typescript@5.8.2)(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(yaml@2.7.1))(yaml@2.7.1)
-      nuxt-umami:
-        specifier: 3.2.0
-        version: 3.2.0(magicast@0.3.5)
-      perfect-debounce:
-        specifier: ^1.0.0
-        version: 1.0.0
-      pinia:
-        specifier: ^3.0.1
-        version: 3.0.1(typescript@5.8.2)(vue@3.5.13(typescript@5.8.2))
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      primevue:
-        specifier: ^4.3.3
-        version: 4.3.3(vue@3.5.13(typescript@5.8.2))
-      tailwindcss:
-        specifier: ^4.1.2
-        version: 4.1.2
-      tailwindcss-primeui:
-        specifier: ^0.5.1
-        version: 0.5.1(tailwindcss@4.1.2)
-      vue:
-        specifier: latest
-        version: 3.5.13(typescript@5.8.2)
-      vue-chartjs:
-        specifier: ^5.3.2
-        version: 5.3.2(chart.js@4.4.8)(vue@3.5.13(typescript@5.8.2))
-      vue-router:
-        specifier: latest
-        version: 4.5.0(vue@3.5.13(typescript@5.8.2))
-    devDependencies:
-      '@css-inline/css-inline-wasm':
-        specifier: ^0.14.3
-        version: 0.14.3
-      '@primevue/nuxt-module':
-        specifier: ^4.3.3
-        version: 4.3.3(@babel/parser@7.27.0)(magicast@0.3.5)(vue@3.5.13(typescript@5.8.2))
-      typescript:
-        specifier: ^5.8.2
-        version: 5.8.2
+devDependencies:
+  '@css-inline/css-inline-wasm':
+    specifier: ^0.14.3
+    version: 0.14.3
+  '@primevue/nuxt-module':
+    specifier: ^4.3.3
+    version: 4.3.3(vue@3.5.13)
+  cross-env:
+    specifier: ^7.0.3
+    version: 7.0.3
+  typescript:
+    specifier: ^5.8.2
+    version: 5.8.2
+
 
 packages:
 
@@ -6405,7 +6410,17 @@ snapshots:
 
   croner@9.0.0: {}
 
-  cross-spawn@7.0.6:
+  /cross-env@7.0.3:
+    resolution: {integrity: sha512-+/HKd6EgcQCJGh2PSjZuUitQBQynKor4wrFbRg4DtAgS1aWO+gU52xpH7M9ScGgXSYmAVS9bIJ8EzuaGw0oNAw==}
+    engines: {node: '>=10.14', npm: '>=6', yarn: '>=1'}
+    hasBin: true
+    dependencies:
+      cross-spawn: 7.0.6
+    dev: true
+
+  /cross-spawn@7.0.6:
+    resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
+    engines: {node: '>= 8'}
     dependencies:
       path-key: 3.1.1
       shebang-command: 2.0.0
@@ -7238,7 +7253,9 @@ snapshots:
 
   isarray@1.0.0: {}
 
-  isexe@2.0.0: {}
+
+  /isexe@2.0.0:
+    resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
   isexe@3.1.1: {}
 
@@ -7771,14 +7788,30 @@ snapshots:
       - magicast
       - vue
 
-  nuxt-umami@3.2.0(magicast@0.3.5):
+
+  /nuxt-umami@3.2.0:
+    resolution: {integrity: sha512-fqX5tX+2P/5J0fES3C7ykJP6H4bcP8fJzYZP7UcIW0ibwuLRbBzTRDdCd7gEkaXB0nABpSfKlCVInhMcIs07GA==}
+
     dependencies:
       '@nuxt/kit': 3.16.2(magicast@0.3.5)
       request-ip: 3.3.0
     transitivePeerDependencies:
       - magicast
+    dev: false
 
-  nuxt@3.16.2(@parcel/watcher@2.5.1)(@types/node@22.14.0)(db0@0.3.1)(eslint@9.23.0(jiti@2.4.2))(ioredis@5.6.0)(lightningcss@1.29.2)(magicast@0.3.5)(optionator@0.9.4)(rollup@4.39.0)(terser@5.39.0)(typescript@5.8.2)(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(yaml@2.7.1))(yaml@2.7.1):
+  /nuxt@3.16.2(eslint@9.23.0)(typescript@5.8.2)(vite@6.2.5):
+    resolution: {integrity: sha512-yjIC/C4HW8Pd+m0ACGliEF0HnimXYGYvUzjOsTiLQKkDDt2T+djyZ+pCl9BfhQBA8rYmnsym2jUI+ubjv1iClw==}
+    engines: {node: ^18.12.0 || ^20.9.0 || >=22.0.0}
+    hasBin: true
+    peerDependencies:
+      '@parcel/watcher': ^2.1.0
+      '@types/node': ^18.0.0 || ^20.0.0 || >=22.0.0
+    peerDependenciesMeta:
+      '@parcel/watcher':
+        optional: true
+      '@types/node':
+        optional: true
+
     dependencies:
       '@nuxt/cli': 3.24.1(magicast@0.3.5)
       '@nuxt/devalue': 2.0.2
@@ -8025,7 +8058,9 @@ snapshots:
 
   path-exists@5.0.0: {}
 
-  path-key@3.1.1: {}
+  /path-key@3.1.1:
+    resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
+    engines: {node: '>=8'}
 
   path-key@4.0.0: {}
 
@@ -8254,7 +8289,13 @@ snapshots:
     dependencies:
       parse-ms: 4.0.0
 
-  primevue@4.3.3(vue@3.5.13(typescript@5.8.2)):
+  /primeicons@7.0.0:
+    resolution: {integrity: sha512-jK3Et9UzwzTsd6tzl2RmwrVY/b8raJ3QZLzoDACj+oTJ0oX7L9Hy+XnVwgo4QVKlKpnP/Ur13SXV/pVh4LzaDw==}
+    dev: false
+
+  /primevue@4.3.3(vue@3.5.13):
+    resolution: {integrity: sha512-nooYVoEz5CdP3EhUkD6c3qTdRmpLHZh75fBynkUkl46K8y5rksHTjdSISiDijwTA5STQIOkyqLb+RM+HQ6nC1Q==}
+    engines: {node: '>=12.11.0'}
     dependencies:
       '@primeuix/styled': 0.5.1
       '@primeuix/styles': 1.0.1
@@ -8357,7 +8398,14 @@ snapshots:
     dependencies:
       jsesc: 3.0.2
 
-  request-ip@3.3.0: {}
+  /request-ip@3.3.0:
+    resolution: {integrity: sha512-cA6Xh6e0fDBBBwH77SLJaJPBmD3nWVAcF9/XAcsrIHdjhFzFiB5aNQFytdjCGPezU3ROwrR11IddKAM08vohxA==}
+    dev: false
+
+  /require-directory@2.1.1:
+    resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
+    engines: {node: '>=0.10.0'}
+    dev: false
 
   require-directory@2.1.1: {}
 
@@ -8492,6 +8540,10 @@ snapshots:
   shebang-command@2.0.0:
     dependencies:
       shebang-regex: 3.0.0
+
+  /shebang-regex@3.0.0:
+    resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
+    engines: {node: '>=8'}
 
   shebang-regex@3.0.0: {}
 

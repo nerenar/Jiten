@@ -31,8 +31,19 @@ public static class JmDictHelper
                                                                             { "cards", "card games" }, { "chem", "chemistry" },
                                                                             { "Christn", "Christianity" }, { "cloth", "clothing" },
                                                                             { "comp", "computing" }, { "cryst", "crystallography" },
-                                                                            { "dent", "dentistry" }, { "ecol", "ecology" },
-                                                                            { "econ", "economics" }, { "elec", "electricity, elec. eng." },
+                                                                            // Name types from JMNedict
+                                                                            { "name", "name" }, { "name-fem", "female name" },
+                                                                            { "name-male", "male name" }, { "name-given", "given name" },
+                                                                            { "name-surname", "surname" }, { "name-place", "place name" },
+                                                                            { "name-person", "person name" },
+                                                                            { "name-unclass", "unclassified name" },
+                                                                            { "name-station", "station name" },
+                                                                            { "name-organization", "organization name" },
+                                                                            { "name-company", "company name" },
+                                                                            { "name-product", "product name" },
+                                                                            { "name-work", "work name" }, { "dent", "dentistry" },
+                                                                            { "ecol", "ecology" }, { "econ", "economics" },
+                                                                            { "elec", "electricity, elec. eng." },
                                                                             { "electr", "electronics" }, { "embryo", "embryology" },
                                                                             { "engr", "engineering" }, { "ent", "entomology" },
                                                                             { "film", "film" }, { "finc", "finance" },
@@ -317,7 +328,26 @@ public static class JmDictHelper
     {
         Regex reg = new Regex(@"<!ENTITY (.*) ""(.*)"">");
 
-        foreach (var line in await File.ReadAllLinesAsync(dtdPath))
+        var dtdLines = await File.ReadAllLinesAsync(dtdPath);
+        dtdLines = dtdLines.Concat(new[]
+                                   {
+                                       "<!ENTITY name-char \"character\">", "<!ENTITY name-company \"company name\">",
+                                       "<!ENTITY name-creat \"creature\">", "<!ENTITY name-dei \"deity\">",
+                                       "<!ENTITY name-doc \"document\">", "<!ENTITY name-ev \"event\">",
+                                       "<!ENTITY name-fem \"female given name or forename\">", "<!ENTITY name-fict \"fiction\">",
+                                       "<!ENTITY name-given \"given name or forename, gender not specified\">",
+                                       "<!ENTITY name-group \"group\">", "<!ENTITY name-leg \"legend\">",
+                                       "<!ENTITY name-masc \"male given name or forename\">", "<!ENTITY name-myth \"mythology\">",
+                                       "<!ENTITY name-obj \"object\">", "<!ENTITY name-organization \"organization name\">",
+                                       "<!ENTITY name-oth \"other\">", "<!ENTITY name-person \"full name of a particular person\">",
+                                       "<!ENTITY name-place \"place name\">", "<!ENTITY name-product \"product name\">",
+                                       "<!ENTITY name-relig \"religion\">", "<!ENTITY name-serv \"service\">",
+                                       "<!ENTITY name-ship \"ship name\">", "<!ENTITY name-station \"railway station\">",
+                                       "<!ENTITY name-surname \"family or surname\">", "<!ENTITY name-unclass \"unclassified name\">",
+                                       "<!ENTITY name-work \"work of art, literature, music, etc. name\">"
+                                   }).ToArray();
+
+        foreach (var line in dtdLines)
         {
             var matches = reg.Match(line);
             if (matches.Length > 0)
@@ -369,12 +399,17 @@ public static class JmDictHelper
         wordInfos.AddRange(GetCustomWords());
 
         var furiganas = await JsonSerializer.DeserializeAsync<List<JMDictFurigana>>(File.OpenRead(furiganaPath));
-        Dictionary<string, string> furiganaDict = new();
+        Dictionary<string, List<JMDictFurigana>> furiganaDict = new();
         foreach (var f in furiganas!)
         {
-            // We only take the first one
-            if (!furiganaDict.ContainsKey(f.Text))
-                furiganaDict.Add(f.Text, f.Parse());
+            // Store all furiganas with the same key
+            if (!furiganaDict.TryGetValue(f.Text, out var list))
+            {
+                list = new List<JMDictFurigana>();
+                furiganaDict.Add(f.Text, list);
+            }
+
+            list.Add(f);
         }
 
         await using var context = new JitenDbContext(options);
@@ -401,6 +436,9 @@ public static class JmDictHelper
                     lookups.Add(new JmDictLookup { WordId = reading.WordId, LookupKey = lookupKeyWithoutLongVowelMark });
                 }
 
+                if (WanaKana.IsKatakana(r) && !lookups.Any(l => l.WordId == reading.WordId && l.LookupKey == r))
+                    lookups.Add(new JmDictLookup { WordId = reading.WordId, LookupKey = r });
+
                 // For single kanjis only words, the furigana deck will probably be wrong, so we need an alternative
                 if (r.Length == 1 && WanaKana.IsKanji(r))
                 {
@@ -408,8 +446,35 @@ public static class JmDictHelper
                 }
                 else
                 {
-                    furiganaDict.TryGetValue(r, out var furiReading);
-                    reading.ReadingsFurigana.Add(furiReading ?? reading.Readings[i]);
+                    string? furiReading = null;
+
+                    // Try to find a matching furigana
+                    if (furiganaDict.TryGetValue(r, out var furiList) && furiList.Count > 0)
+                    {
+                        // Try to match one of the furiganas with the readings
+                        foreach (var furi in furiList)
+                        {
+                            // Check if the reading matches with any of the readings in the word
+                            if (reading.Readings.Contains(furi.Reading))
+                            {
+                                furiReading = furi.Parse();
+                                reading.ReadingsFurigana.Add(furiReading ?? reading.Readings[i]);
+                                break;
+                            }
+                        }
+
+                        // If no match found, show error and add the current reading instead
+                        if (furiReading == null)
+                        {
+                            Console.WriteLine($"No furigana found for reading {r}");
+                            reading.ReadingsFurigana.Add(reading.Readings[i]);
+                        }
+                    }
+                    // Probably kana reading
+                    else
+                    {
+                        reading.ReadingsFurigana.Add(reading.Readings[i]);
+                    }
                 }
             }
 
@@ -417,11 +482,367 @@ public static class JmDictHelper
             reading.Lookups = lookups;
         }
 
+        // custom priorities
+        wordInfos.First(w => w.WordId == 1332650).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 2848543).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1160790).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1203260).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1397260).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1499720).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1315130).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1315130).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1191730).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 2844190).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 2207630).Priorities?.Add("jiten");
+
         context.JMDictWords.AddRange(wordInfos);
 
         await context.SaveChangesAsync();
 
         return true;
+    }
+
+    public static async Task<bool> ImportJMNedict(DbContextOptions<JitenDbContext> options, string jmneDictPath)
+    {
+        Console.WriteLine("Starting JMNedict import...");
+
+        var readerSettings = new XmlReaderSettings() { Async = true, DtdProcessing = DtdProcessing.Parse, MaxCharactersFromEntities = 0 };
+        XmlReader reader = XmlReader.Create(jmneDictPath, readerSettings);
+
+        await reader.MoveToContentAsync();
+
+        // Dictionary to store entries by kanji element (keb) to combine entries with the same kanji
+        Dictionary<string, JmDictWord> namesByKeb = new();
+
+        await using var context = new JitenDbContext(options);
+
+        // Load existing entries from JMDict to check for duplicates
+        Console.WriteLine("Loading existing JMDict entries to check for duplicates...");
+        var existingEntries = await LoadAllWords(context);
+        var existingReadings = new HashSet<string>(existingEntries.SelectMany(e => e.Readings));
+        Console.WriteLine($"Loaded {existingEntries.Count} existing entries with {existingReadings.Count} unique readings");
+
+        while (await reader.ReadAsync())
+        {
+            if (reader.NodeType != XmlNodeType.Element) continue;
+            if (reader.Name != "entry") continue;
+
+            var nameEntry = new JmDictWord();
+            string? primaryKeb = null;
+
+            while (await reader.ReadAsync())
+            {
+                if (reader.NodeType == XmlNodeType.Element)
+                {
+                    if (reader.Name == "ent_seq")
+                        nameEntry.WordId = reader.ReadElementContentAsInt();
+
+                    // Parse kanji elements (k_ele)
+                    if (reader.Name == "k_ele")
+                    {
+                        await ParseNameKEle(reader, nameEntry);
+                        // Save the first kanji element as the primary key for grouping
+                        if (primaryKeb == null && nameEntry.Readings.Count > 0)
+                        {
+                            primaryKeb = nameEntry.Readings[0];
+                        }
+                    }
+
+                    // Parse reading elements (r_ele)
+                    if (reader.Name == "r_ele")
+                    {
+                        await ParseNameREle(reader, nameEntry);
+                    }
+
+                    // Parse translation elements (trans)
+                    if (reader.Name == "trans")
+                    {
+                        await ParseNameTrans(reader, nameEntry);
+                    }
+                }
+
+                if (reader.NodeType != XmlNodeType.EndElement) continue;
+                if (reader.Name != "entry") continue;
+
+                nameEntry.Readings = nameEntry.Readings.Select(r => r.Replace("ゎ", "わ").Replace("ヮ", "わ")).ToList();
+
+                // Check if this entry already exists in JMDict
+                bool alreadyExists = nameEntry.Readings.Any(r => existingReadings.Contains(r));
+                if (alreadyExists)
+                {
+                    // Skip this entry as it already exists in JMDict
+                    break;
+                }
+
+                // If we have a primary kanji, check if we need to merge with an existing entry
+                if (primaryKeb != null && nameEntry.Readings.Count > 0)
+                {
+                    if (namesByKeb.TryGetValue(primaryKeb, out var existingEntry))
+                    {
+                        // Merge this entry with the existing one
+                        MergeNameEntries(existingEntry, nameEntry);
+                    }
+                    else
+                    {
+                        // Add as a new entry
+                        namesByKeb[primaryKeb] = nameEntry;
+                    }
+                }
+                else if (nameEntry.Readings.Count > 0)
+                {
+                    // If no kanji but has readings, use the first reading as key
+                    string readingKey = nameEntry.Readings[0];
+                    if (namesByKeb.TryGetValue(readingKey, out var existingEntry))
+                    {
+                        MergeNameEntries(existingEntry, nameEntry);
+                    }
+                    else
+                    {
+                        namesByKeb[readingKey] = nameEntry;
+                    }
+                }
+
+                break;
+            }
+        }
+
+        reader.Close();
+
+        Console.WriteLine($"Processed {namesByKeb.Count} unique name entries after filtering out duplicates");
+
+        // Process the merged name entries
+        List<JmDictWord> nameWords = namesByKeb.Values.ToList();
+        foreach (var nameWord in nameWords)
+        {
+            // Create lookups for searching
+            List<JmDictLookup> lookups = new();
+            nameWord.ReadingsFurigana = new List<string>();
+
+            for (var i = 0; i < nameWord.Readings.Count; i++)
+            {
+                string? r = nameWord.Readings[i];
+                var lookupKey = WanaKana.ToHiragana(r.Replace("ゎ", "わ").Replace("ヮ", "わ"),
+                                                    new DefaultOptions() { ConvertLongVowelMark = false });
+                var lookupKeyWithoutLongVowelMark = WanaKana.ToHiragana(r.Replace("ゎ", "わ").Replace("ヮ", "わ"));
+
+                if (!lookups.Any(l => l.WordId == nameWord.WordId && l.LookupKey == lookupKey))
+                {
+                    lookups.Add(new JmDictLookup { WordId = nameWord.WordId, LookupKey = lookupKey });
+                }
+
+                if (lookupKeyWithoutLongVowelMark != lookupKey &&
+                    !lookups.Any(l => l.WordId == nameWord.WordId && l.LookupKey == lookupKeyWithoutLongVowelMark))
+                {
+                    lookups.Add(new JmDictLookup { WordId = nameWord.WordId, LookupKey = lookupKeyWithoutLongVowelMark });
+                }
+
+                if (WanaKana.IsKatakana(r) && !lookups.Any(l => l.WordId == nameWord.WordId && l.LookupKey == r))
+                    lookups.Add(new JmDictLookup { WordId = nameWord.WordId, LookupKey = r });
+
+                // Populate furigana readings
+                if (r.Length == 1 && WanaKana.IsKanji(r))
+                {
+                    // For single kanji, use kana reading as furigana
+                    var kanaReading = nameWord.Readings.FirstOrDefault(WanaKana.IsKana);
+                    nameWord.ReadingsFurigana.Add(kanaReading != null ? $"{r}[{kanaReading}]" : r);
+                }
+                else
+                {
+                    // For regular entries, just use the reading as is (no furigana data available)
+                    nameWord.ReadingsFurigana.Add(nameWord.Readings[i]);
+                }
+            }
+
+            // Set parts of speech from definitions (name types)
+            nameWord.PartsOfSpeech = nameWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
+            nameWord.Lookups = lookups;
+
+            // Add "name" priority to indicate it's from JMNedict
+            if (nameWord.Priorities == null)
+                nameWord.Priorities = new List<string>();
+            nameWord.Priorities.Add("name");
+        }
+
+        if (nameWords.Count > 0)
+        {
+            // Add the processed name entries to the database
+            context.JMDictWords.AddRange(nameWords);
+            await context.SaveChangesAsync();
+
+            Console.WriteLine($"Added {nameWords.Count} name entries to the database");
+        }
+        else
+        {
+            Console.WriteLine("No new name entries to add to the database");
+        }
+
+        return true;
+    }
+
+    private static void MergeNameEntries(JmDictWord target, JmDictWord source)
+    {
+        // Merge readings (avoiding duplicates)
+        foreach (var reading in source.Readings)
+        {
+            if (!target.Readings.Contains(reading))
+            {
+                target.Readings.Add(reading);
+                target.ReadingTypes.Add(JmDictReadingType.Reading);
+            }
+        }
+
+        // Merge definitions
+        target.Definitions.AddRange(source.Definitions);
+
+        // Merge priorities
+        if (source.Priorities != null && source.Priorities.Count > 0)
+        {
+            if (target.Priorities == null)
+                target.Priorities = new List<string>();
+
+            foreach (var priority in source.Priorities)
+            {
+                if (!target.Priorities.Contains(priority))
+                    target.Priorities.Add(priority);
+            }
+        }
+    }
+
+    private static async Task<JmDictWord> ParseNameKEle(XmlReader reader, JmDictWord wordInfo)
+    {
+        if (reader.Name != "k_ele") return wordInfo;
+
+        while (await reader.ReadAsync())
+        {
+            if (reader.NodeType == XmlNodeType.Element)
+            {
+                if (reader.Name == "keb")
+                {
+                    var keb = await reader.ReadElementContentAsStringAsync();
+                    wordInfo.Readings.Add(keb);
+                    wordInfo.ReadingTypes.Add(JmDictReadingType.Reading);
+                }
+
+                if (reader.Name == "ke_pri")
+                {
+                    var pri = await reader.ReadElementContentAsStringAsync();
+                    if (!wordInfo.Priorities.Contains(pri))
+                        wordInfo.Priorities.Add(pri);
+                }
+            }
+
+            if (reader.NodeType != XmlNodeType.EndElement) continue;
+            if (reader.Name != "k_ele") continue;
+
+            break;
+        }
+
+        return wordInfo;
+    }
+
+    private static async Task<JmDictWord> ParseNameREle(XmlReader reader, JmDictWord wordInfo)
+    {
+        if (reader.Name != "r_ele") return wordInfo;
+
+        string reb = "";
+        List<string> restrictions = new List<string>();
+        bool isObsolete = false;
+
+        while (await reader.ReadAsync())
+        {
+            if (reader.NodeType == XmlNodeType.Element)
+            {
+                if (reader.Name == "reb")
+                {
+                    reb = await reader.ReadElementContentAsStringAsync();
+                }
+
+                if (reader.Name == "re_restr")
+                {
+                    restrictions.Add(await reader.ReadElementContentAsStringAsync());
+                }
+
+                if (reader.Name == "re_inf")
+                {
+                    var inf = await reader.ReadElementContentAsStringAsync();
+                    if (inf.ToLower() == "&ok")
+                        isObsolete = true;
+                }
+
+                if (reader.Name == "re_pri")
+                {
+                    var pri = await reader.ReadElementContentAsStringAsync();
+                    if (!wordInfo.Priorities.Contains(pri))
+                        wordInfo.Priorities.Add(pri);
+                }
+            }
+
+            if (reader.NodeType != XmlNodeType.EndElement) continue;
+            if (reader.Name != "r_ele") continue;
+
+            if (restrictions.Count == 0 || wordInfo.Readings.Any(reading => restrictions.Contains(reading)))
+            {
+                if (isObsolete)
+                {
+                    wordInfo.ObsoleteReadings?.Add(reb);
+                }
+                else
+                {
+                    wordInfo.Readings.Add(reb);
+                    wordInfo.ReadingTypes.Add(JmDictReadingType.KanaReading);
+                }
+            }
+
+            break;
+        }
+
+        return wordInfo;
+    }
+
+    private static async Task<JmDictWord> ParseNameTrans(XmlReader reader, JmDictWord wordInfo)
+    {
+        if (reader.Name != "trans") return wordInfo;
+
+        var definition = new JmDictDefinition();
+
+        while (await reader.ReadAsync())
+        {
+            if (reader.NodeType == XmlNodeType.Element)
+            {
+                if (reader.Name == "name_type")
+                {
+                    var nameType = await reader.ReadElementContentAsStringAsync();
+                    definition.PartsOfSpeech.Add(ElToPos(nameType));
+                }
+
+                if (reader.Name == "trans_det")
+                    definition.EnglishMeanings.Add(await reader.ReadElementContentAsStringAsync());
+            }
+
+            if (reader.NodeType != XmlNodeType.EndElement) continue;
+            if (reader.Name != "trans") continue;
+
+            // Add a general "name" part of speech if no specific type was provided
+            if (definition.PartsOfSpeech.Count == 0)
+                definition.PartsOfSpeech.Add("name");
+
+            // Add the definition only if it has translations
+            if (definition.EnglishMeanings.Count > 0 ||
+                definition.DutchMeanings.Count > 0 ||
+                definition.FrenchMeanings.Count > 0 ||
+                definition.GermanMeanings.Count > 0 ||
+                definition.SpanishMeanings.Count > 0 ||
+                definition.HungarianMeanings.Count > 0 ||
+                definition.RussianMeanings.Count > 0 ||
+                definition.SlovenianMeanings.Count > 0)
+            {
+                wordInfo.Definitions.Add(definition);
+            }
+
+            break;
+        }
+
+        return wordInfo;
     }
 
     private static async Task<JmDictWord> ParseKEle(XmlReader reader, JmDictWord wordInfo)

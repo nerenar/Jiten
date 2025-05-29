@@ -46,6 +46,9 @@ namespace Jiten.Core.Migrations
                     b.Property<int>("DeckOrder")
                         .HasColumnType("integer");
 
+                    b.Property<float>("DialoguePercentage")
+                        .HasColumnType("real");
+
                     b.Property<int>("Difficulty")
                         .HasColumnType("integer");
 

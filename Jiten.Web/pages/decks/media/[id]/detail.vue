@@ -3,9 +3,14 @@
   import type { Deck, DeckDetail } from '~/types';
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
+  import Button from 'primevue/button';
+  import { useJitenStore } from '~/stores/jitenStore';
 
   const route = useRoute();
   const deckId = computed(() => route.params.id as string);
+
+  const store = useJitenStore();
+  const displayAdminFunctions = computed(() => store.displayAdminFunctions);
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
@@ -104,7 +109,7 @@
           <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" :is-compact="true" />
         </div>
       </div>
-<!--      <div v-else class="pt-4">This deck has no subdecks</div>-->
+      <!--      <div v-else class="pt-4">This deck has no subdecks</div>-->
     </div>
   </div>
 </template>

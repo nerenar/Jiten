@@ -49,4 +49,14 @@ public static class StringExtensions
 
         return result.ToString();
     }
+    
+    public static bool IsAsciiOrFullWidthLetter(this string input)
+    {
+        var c = input[0];
+        
+        return c is >= 'a' and <= 'z' ||
+               c is >= 'A' and <= 'Z' ||
+               c is >= 'ａ' and <= 'ｚ' ||
+               c is >= 'Ａ' and <= 'Ｚ';
+    }
 }

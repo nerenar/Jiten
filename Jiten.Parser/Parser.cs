@@ -134,7 +134,7 @@ public class Parser
         ("よう", "に", PartOfSpeech.Expression),
         ("ん", "です", PartOfSpeech.Expression),
         ("ん", "だ", PartOfSpeech.Expression),
-        ("です", "か", PartOfSpeech.Expression)
+        ("です", "か", PartOfSpeech.Expression),
     ];
 
     private static readonly List<string> HonorificsSuffixes = ["さん", "ちゃん", "くん"];
@@ -149,7 +149,7 @@ public class Parser
                             .AddEnvironmentVariables()
                             .Build();
 
-        // Build dictionary  sudachi ubuild Y:\CODE\Jiten\Shared\resources\user_dic.xml -s F:\00_RawJap\sudachi.rs\resources\system_full.dic -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"
+        // Build dictionary  sudachi ubuild Y:\CODE\Jiten\Shared\resources\user_dic.xml -s S:\Jiten\sudachi.rs\resources\system_full.dic -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"
 
         // Preprocess the text to remove invalid characters
         PreprocessText(ref text);
@@ -293,8 +293,27 @@ public class Parser
                 i++;
                 continue;
             }
-            // I'm not sure why this happens, but sudachi thinks those words are proper nouns
 
+            if (w1.Text == "絶対無理")
+            {
+                var zettai = new WordInfo
+                             {
+                                 Text = "絶対", DictionaryForm = "絶対", PartOfSpeech = PartOfSpeech.Adverb,
+                                 PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "ぜったい"
+                             };
+                var muri = new WordInfo
+                           {
+                               Text = "無理", DictionaryForm = "無理", PartOfSpeech = PartOfSpeech.NaAdjective,
+                               PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "むり"
+                           };
+
+                newList.Add(zettai);
+                newList.Add(muri);
+                i++;
+                continue;
+            }
+
+            // I'm not sure why this happens, but sudachi thinks those words are proper nouns
             if (w1.Text == "俺の")
             {
                 var ore = new WordInfo
@@ -310,9 +329,48 @@ public class Parser
 
                 newList.Add(ore);
                 newList.Add(no);
-                i += 2;
+                i += 1;
                 continue;
             }
+
+            if (w1.Text == "風使い")
+            {
+                var kaze = new WordInfo
+                           {
+                               Text = "風", DictionaryForm = "風", PartOfSpeech = PartOfSpeech.Noun,
+                               PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun, Reading = "かぜ"
+                           };
+                var tsukai = new WordInfo
+                             {
+                                 Text = "使い", PartOfSpeech = PartOfSpeech.Noun, PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun,
+                                 Reading = "つかい", DictionaryForm = "使い"
+                             };
+
+                newList.Add(kaze);
+                newList.Add(tsukai);
+                i += 1;
+                continue;
+            }
+
+            if (w1.Text == "能力者")
+            {
+                var nouryoku = new WordInfo
+                               {
+                                   Text = "能力", DictionaryForm = "能力", PartOfSpeech = PartOfSpeech.Noun,
+                                   PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun, Reading = "のうりょく"
+                               };
+                var sha = new WordInfo
+                          {
+                              Text = "者", PartOfSpeech = PartOfSpeech.Suffix, PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun,
+                              Reading = "しゃ", DictionaryForm = "者"
+                          };
+
+                newList.Add(nouryoku);
+                newList.Add(sha);
+                i += 1;
+                continue;
+            }
+
 
             if (w1.Text == "泣きながら")
             {
@@ -329,7 +387,7 @@ public class Parser
 
                 newList.Add(naki);
                 newList.Add(nagara);
-                i += 2;
+                i += 1;
                 continue;
             }
 
@@ -384,8 +442,9 @@ public class Parser
                  currentWord.HasPartOfSpeechSection(PartOfSpeechSection.Numeral)) &&
                 AmountCombinations.Combinations.Contains((currentWord.Text, nextWord.Text)))
             {
+                var text = currentWord.Text + nextWord.Text;
                 currentWord = new WordInfo(nextWord);
-                currentWord.Text += nextWord.Text;
+                currentWord.Text = text;
                 currentWord.PartOfSpeech = PartOfSpeech.Noun;
             }
             else
@@ -676,6 +735,7 @@ public class Parser
 
             if (currentWord.Text == "な" &&
                 (previousWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleNaAdjective) ||
+                 previousWord.HasPartOfSpeechSection(PartOfSpeechSection.NaAdjectiveLike) ||
                  previousWord.PartOfSpeech == PartOfSpeech.NaAdjective))
             {
                 previousWord.Text += currentWord.Text;
@@ -736,10 +796,10 @@ public class Parser
             var nextWord = wordInfos[i];
 
             if ((wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
-                && wordInfos[i].DictionaryForm != "っぽい" && wordInfos[i].DictionaryForm != "にくい" &&
-                wordInfos[i].DictionaryForm != "事" && wordInfos[i].DictionaryForm != "っぷり" &&
-                wordInfos[i].DictionaryForm != "ごと" &&
-                (wordInfos[i].DictionaryForm != "たち" || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun))
+                && (wordInfos[i].DictionaryForm == "っこ"
+                    || wordInfos[i].DictionaryForm == "さ"
+                    || ((wordInfos[i].DictionaryForm == "たち" || wordInfos[i].DictionaryForm == "ら") &&
+                        wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun)))
             {
                 currentWord.Text += nextWord.Text;
             }

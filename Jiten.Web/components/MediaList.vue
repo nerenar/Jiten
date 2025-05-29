@@ -1,10 +1,13 @@
 <script setup lang="ts">
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
-  import { type Deck, MediaType, SortOrder, type Word } from '~/types';
+  import { type Deck, MediaType, SortOrder, type Word, DisplayStyle } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
   import InputText from 'primevue/inputtext';
   import { debounce } from 'perfect-debounce';
+  import { useDisplayStyleStore } from '~/stores/displayStyleStore';
+  import MediaDeckCompactView from '~/components/MediaDeckCompactView.vue';
+  import MediaDeckTableView from '~/components/MediaDeckTableView.vue';
 
   const props = defineProps<{
     word?: Word;
@@ -16,7 +19,9 @@
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const mediaType = computed(() => (route.query.mediaType ? route.query.mediaType : null));
 
-  const titleFilter = ref(route.query.title ? route.query.title : null);
+  const titleFilter = ref(
+    route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null
+  );
   const debouncedTitleFilter = ref(titleFilter.value);
 
   const sortByOptions = ref([
@@ -34,7 +39,13 @@
 
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
 
-  const updateDebounced = debounce(async (newValue) => {
+  if (props.word != null) {
+    sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
+    sortBy.value = 'occurrences';
+    sortOrder.value = SortOrder.Descending;
+  }
+
+  const updateDebounced = debounce(async (newValue: string | null) => {
     debouncedTitleFilter.value = newValue;
     await router.replace({
       query: {
@@ -110,6 +121,9 @@
     });
   };
 
+  const displayStyleStore = useDisplayStyleStore();
+  const displayStyle = computed(() => displayStyleStore.displayStyle);
+
   const mediaTypeOptions = [
     { type: null, label: 'All' },
     { type: MediaType.Anime, label: 'Anime' },
@@ -162,8 +176,8 @@
           <label for="sortBy">Sort by</label>
         </FloatLabel>
         <Button
-          @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending"
           class="w-12"
+          @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending"
         >
           <Icon
             v-if="sortOrder == SortOrder.Descending"
@@ -183,6 +197,10 @@
           <Icon name="material-symbols:close" />
         </InputIcon>
       </IconField>
+
+      <div class="flex flex-row gap-2 items-center">
+        <DisplayStyleSelector />
+      </div>
     </div>
     <div>
       <div class="flex flex-col gap-1">
@@ -215,24 +233,35 @@
 
         <div v-else-if="error">Error: {{ error }}</div>
 
-        <div v-else class="flex flex-col gap-2">
+        <!-- Card View -->
+        <div v-else-if="displayStyle === DisplayStyle.Card" class="flex flex-col gap-2">
           <MediaDeckCard v-for="deck in response.data" :key="deck.id" :deck="deck" />
+        </div>
+
+        <!-- Compact View -->
+        <div v-else-if="displayStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center">
+          <MediaDeckCompactView v-for="deck in response.data" :key="deck.id" :deck="deck" />
+        </div>
+
+        <!-- Table View -->
+        <div v-else-if="displayStyle === DisplayStyle.Table" class="flex flex-col gap-0.5">
+          <MediaDeckTableView v-for="deck in response.data" :key="deck.id" :deck="deck" />
         </div>
       </div>
       <div class="flex gap-8 pl-2">
         <NuxtLink
           :to="previousLink"
           :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''"
-          @click="scrollToTop"
           no-rel
+          @click="scrollToTop"
         >
           Previous
         </NuxtLink>
         <NuxtLink
           :to="nextLink"
           :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
-          @click="scrollToTop"
           no-rel
+          @click="scrollToTop"
         >
           Next
         </NuxtLink>

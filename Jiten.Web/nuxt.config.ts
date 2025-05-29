@@ -101,6 +101,7 @@ export default defineNuxtConfig({
     id: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID || '',
     host: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL || '',
     autoTrack: true,
-    proxy: 'cloak'
+    proxy: 'cloak',
+    ignoreLocalhost: true,
   },
 });

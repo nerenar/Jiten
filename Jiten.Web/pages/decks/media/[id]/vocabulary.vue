@@ -155,7 +155,6 @@
         :key="word.wordId"
         :word="word"
         :is-compact="true"
-        @click="scrollToTop"
       />
     </div>
     <div class="flex gap-8 pl-2">

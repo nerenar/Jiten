@@ -19,7 +19,7 @@ public static class JitenHelper
             var existingDeck =
                 await context.Decks
                              .Include(d => d.DeckWords)
-                             .Include(d => d.Children)
+                             .Include(d => d.Children).ThenInclude(d => d.DeckWords)
                              .Include(d => d.RawText)
                              .FirstOrDefaultAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType);
 
@@ -47,7 +47,14 @@ public static class JitenHelper
 
                 await context.SaveChangesAsync();
 
-                var coverUrl = await BunnyCdnHelper.UploadFile(cover, $"{deck.DeckId}/cover.jpg");
+                using var coverOptimized = new ImageMagick.MagickImage(cover);
+
+                coverOptimized.Resize(400, 400);
+                coverOptimized.Strip();
+                coverOptimized.Quality = 85;
+                coverOptimized.Format = ImageMagick.MagickFormat.Jpeg;
+                
+                var coverUrl = await BunnyCdnHelper.UploadFile(coverOptimized.ToByteArray(), $"{deck.DeckId}/cover.jpg");
                 deck.CoverName = coverUrl;
                 context.Entry(deck).State = EntityState.Modified;
             }
@@ -78,6 +85,8 @@ public static class JitenHelper
         existingDeck.UniqueKanjiCount = deck.UniqueKanjiCount;
         existingDeck.UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
         existingDeck.SentenceCount = deck.SentenceCount;
+        existingDeck.Difficulty = deck.Difficulty;
+        existingDeck.DialoguePercentage = deck.DialoguePercentage;
         existingDeck.RawText = deck.RawText;
 
         context.DeckWords.RemoveRange(existingDeck.DeckWords);
@@ -142,6 +151,8 @@ public static class JitenHelper
                 newChildDeck.UniqueKanjiCount = child.UniqueKanjiCount;
                 newChildDeck.SentenceCount = child.SentenceCount;
                 newChildDeck.WordCount = child.WordCount;
+                newChildDeck.Difficulty = child.Difficulty;
+                newChildDeck.DialoguePercentage = child.DialoguePercentage;
                 newChildDeck.RawText = child.RawText;
 
                 foreach (var dw in child.DeckWords)
@@ -411,6 +422,9 @@ public static class JitenHelper
     /// </summary>
     public static async Task ComputeDifficulty(DbContextOptions<JitenDbContext> options, bool verbose, MediaType mediaType)
     {
+        Console.WriteLine("Legacy method, difficulty is done during parsing now");
+        return;
+        
         int averageWordDifficultyWeight = 25;
         int peakWordDifficultyWeight = 15;
         int characterCountWeight = 0;

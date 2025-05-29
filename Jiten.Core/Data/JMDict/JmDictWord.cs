@@ -19,6 +19,12 @@ public class JmDictWord
             return 0;
 
         int score = 0;
+
+        // Special priority for common words that get the wrong reading by default
+        // i.e. 秋, 陽, etc 
+        if (Priorities.Contains("jiten"))
+            score += 100;
+        
         if (Priorities.Contains("ichi1"))
             score += 20;
 

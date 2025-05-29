@@ -1,14 +1,20 @@
-/// Reimplementation from https://github.com/wareya/nazeka/blob/master/background-script.js
-/// Original code is licenced under Apache 2.0 https://www.apache.org/licenses/LICENSE-2.0
-
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Runtime.CompilerServices;
 
 namespace Jiten.Parser;
 
 public class Deconjugator
 {
     public List<DeconjugationRule> Rules = new();
+    
+    // Cache virtual rules to avoid recreating them
+    private readonly Dictionary<DeconjugationRule, DeconjugationVirtualRule[]> _virtualRulesCache = new();
+    
+    // Object pools for frequently allocated collections
+    private static readonly ConcurrentQueue<List<string>> _tagListPool = new();
+    private static readonly ConcurrentQueue<List<string>> _processListPool = new();
+    private static readonly ConcurrentQueue<HashSet<string>> _seenTextPool = new();
 
     private static readonly bool UseCache = false;
 
@@ -18,65 +24,132 @@ public class Deconjugator
     public Deconjugator()
     {
         var options = new JsonSerializerOptions
-                      {
-                          AllowTrailingCommas = true,
-                          ReadCommentHandling = JsonCommentHandling.Skip,
-                          Converters = { new StringArrayConverter() }
-                      };
-        var rules =
-            JsonSerializer
-                .Deserialize<
-                    List<DeconjugationRule>>(File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "deconjugator.json")),
-                                             options);
-        foreach (var rule in rules)
+        {
+            AllowTrailingCommas = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            Converters = { new StringArrayConverter() }
+        };
+        
+        var rules = JsonSerializer
+            .Deserialize<List<DeconjugationRule>>(
+                File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "deconjugator.json")),
+                options);
+        
+        foreach (var rule in rules!)
         {
             Rules.Add(rule);
+            // Pre-cache virtual rules
+            CacheVirtualRules(rule);
         }
+    }
+
+    private void CacheVirtualRules(DeconjugationRule rule)
+    {
+        if (rule.DecEnd.Length <= 1) return;
+
+        var virtualRules = new DeconjugationVirtualRule[rule.DecEnd.Length];
+        for (int i = 0; i < rule.DecEnd.Length; i++)
+        {
+            virtualRules[i] = new DeconjugationVirtualRule(
+                rule.DecEnd.ElementAtOrDefault(i) ?? rule.DecEnd[0],
+                rule.ConEnd.ElementAtOrDefault(i) ?? rule.ConEnd[0],
+                rule.DecTag?.ElementAtOrDefault(i) ?? rule.DecTag?[0],
+                rule.ConTag?.ElementAtOrDefault(i) ?? rule.ConTag?[0],
+                rule.Detail
+            );
+        }
+        _virtualRulesCache[rule] = virtualRules;
+    }
+
+    // Object pool helpers
+    private static List<string> RentTagList()
+    {
+        if (_tagListPool.TryDequeue(out var list))
+        {
+            list.Clear();
+            return list;
+        }
+        return new List<string>();
+    }
+
+    private static void ReturnTagList(List<string> list)
+    {
+        if (list.Capacity <= 16) // Don't pool overly large lists
+            _tagListPool.Enqueue(list);
+    }
+
+    private static List<string> RentProcessList()
+    {
+        if (_processListPool.TryDequeue(out var list))
+        {
+            list.Clear();
+            return list;
+        }
+        return new List<string>();
+    }
+
+    private static void ReturnProcessList(List<string> list)
+    {
+        if (list.Capacity <= 16)
+            _processListPool.Enqueue(list);
+    }
+
+    private static HashSet<string> RentSeenTextSet()
+    {
+        if (_seenTextPool.TryDequeue(out var set))
+        {
+            set.Clear();
+            return set;
+        }
+        return new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    private static void ReturnSeenTextSet(HashSet<string> set)
+    {
+        if (set.Count <= 16)
+            _seenTextPool.Enqueue(set);
     }
 
     public HashSet<DeconjugationForm> Deconjugate(string text)
     {
         if (UseCache && DeconjugationCache.TryGetValue(text, out var cached))
         {
-            return new HashSet<DeconjugationForm>(cached); // Return copy to prevent modification
+            return new HashSet<DeconjugationForm>(cached);
         }
 
-        var processed = new HashSet<DeconjugationForm>();
+        var processed = new HashSet<DeconjugationForm>(Math.Min(text.Length * 2, 100));
 
         if (string.IsNullOrEmpty(text))
             return processed;
 
-        var novel = new HashSet<DeconjugationForm>();
-
-        var startForm = new DeconjugationForm(text: text, originalText: text, tags: new List<string>(), seenText: new HashSet<string>(),
-                                              process: new List<string>());
-
+        var novel = new HashSet<DeconjugationForm>(20);
+        var startForm = CreateInitialForm(text);
         novel.Add(startForm);
+
+        // Use arrays for better performance in inner loops
+        var ruleArray = Rules.ToArray();
+        var ruleCount = ruleArray.Length;
 
         while (novel.Count > 0)
         {
-            var newNovel = new HashSet<DeconjugationForm>();
-            foreach (DeconjugationForm form in novel)
+            var newNovel = new HashSet<DeconjugationForm>(novel.Count * 2);
+            
+            foreach (var form in novel)
             {
-                foreach (var rule in Rules)
+                if (ShouldSkipForm(form)) 
+                    continue;
+
+                // Use for loop instead of foreach for better performance
+                for (int i = 0; i < ruleCount; i++)
                 {
-                    var newForm = rule.Type switch
-                    {
-                        "stdrule" => StdRuleDeconjugate(form, rule),
-                        "rewriterule" => RewriteRuleDeconjugate(form, rule),
-                        "onlyfinalrule" => OnlyFinalRuleDeconjugate(form, rule),
-                        "neverfinalrule" => NeverFinalRuleDeconjugate(form, rule),
-                        "contextrule" => ContextRuleDeconjugate(form, rule),
-                        "substitution" => SubstitutionDeconjugate(form, rule),
-                        _ => null
-                    };
+                    var rule = ruleArray[i];
+                    var newForms = ApplyRule(form, rule);
 
-                    if (newForm == null)
-                        continue;
+                    if (newForms == null) continue;
 
-                    foreach (var f in newForm)
+                    foreach (var f in newForms)
                     {
-                        if (f != null && !processed.Contains(f) && !novel.Contains(f) && !newNovel.Contains(f))
+                        if (!processed.Contains(f) && !novel.Contains(f) && !newNovel.Contains(f))
                             newNovel.Add(f);
                     }
                 }
@@ -86,8 +159,6 @@ public class Deconjugator
             novel = newNovel;
         }
 
-        // processed.Remove(startForm);
-
         if (UseCache && text.Length <= 20 && processed.Count < 55 && DeconjugationCache.Count < 250000)
         {
             DeconjugationCache[text] = new HashSet<DeconjugationForm>(processed);
@@ -96,51 +167,69 @@ public class Deconjugator
         return processed;
     }
 
+    private DeconjugationForm CreateInitialForm(string text)
+    {
+        var tags = RentTagList();
+        var seenText = RentSeenTextSet();
+        var process = RentProcessList();
+        
+        return new DeconjugationForm(text, text, tags, seenText, process);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private HashSet<DeconjugationForm>? ApplyRule(DeconjugationForm form, DeconjugationRule rule)
+    {
+        return rule.Type switch
+        {
+            "stdrule" => StdRuleDeconjugate(form, rule),
+            "rewriterule" => RewriteRuleDeconjugate(form, rule),
+            "onlyfinalrule" => OnlyFinalRuleDeconjugate(form, rule),
+            "neverfinalrule" => NeverFinalRuleDeconjugate(form, rule),
+            "contextrule" => ContextRuleDeconjugate(form, rule),
+            "substitution" => SubstitutionDeconjugate(form, rule),
+            _ => null
+        };
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool ShouldSkipForm(DeconjugationForm form)
+    {
+        return string.IsNullOrEmpty(form.Text) ||
+               form.Text.Length > form.OriginalText.Length + 10 ||
+               form.Tags.Count > form.OriginalText.Length + 6;
+    }
+
     private HashSet<DeconjugationForm>? StdRuleDeconjugate(DeconjugationForm form, DeconjugationRule rule)
     {
-        // can't deconjugate nothingness
-        if (string.IsNullOrEmpty(form.Text))
-            return null;
-
-        // deconjugated form too much longer than conjugated form
-        if (form.Text.Length > form.OriginalText.Length + 10)
-            return null;
-
-        // impossibly information-dense
-        if (form.Tags.Count > form.OriginalText.Length + 6)
-            return null;
-
-        // blank detail mean it can't be the last (first applied, but rightmost) rule
         if (string.IsNullOrEmpty(rule.Detail) && form.Tags.Count == 0)
             return null;
 
-        string[]? array = rule.DecEnd;
-        if (array.Length == 1)
+        if (rule.DecEnd.Length == 1)
         {
-            DeconjugationVirtualRule virtualRule = new(rule.DecEnd[0],
-                                                       rule.ConEnd[0],
-                                                       rule.DecTag![0],
-                                                       rule.ConTag![0],
-                                                       rule.Detail
-                                                      );
+            var virtualRule = new DeconjugationVirtualRule(
+                rule.DecEnd[0],
+                rule.ConEnd[0],
+                rule.DecTag?[0],
+                rule.ConTag?[0],
+                rule.Detail
+            );
 
             if (StdRuleDeconjugateInner(form, virtualRule) is { } hit)
-                return [hit];
+                return new HashSet<DeconjugationForm>(1) { hit };
 
             return null;
         }
 
-        var collection = new HashSet<DeconjugationForm>();
-        for (int i = 0; i < array.Length; i++)
-        {
-            var virtualRule = new DeconjugationVirtualRule(rule.DecEnd.ElementAtOrDefault(i) ?? rule.DecEnd[0],
-                                                           rule.ConEnd.ElementAtOrDefault(i) ?? rule.ConEnd[0],
-                                                           rule.DecTag!.ElementAtOrDefault(i) ?? rule.DecTag![0],
-                                                           rule.ConTag!.ElementAtOrDefault(i) ?? rule.ConTag![0],
-                                                           rule.Detail);
+        if (!_virtualRulesCache.TryGetValue(rule, out var cachedVirtualRules))
+            return null;
 
+        HashSet<DeconjugationForm>? collection = null;
+        
+        foreach (var virtualRule in cachedVirtualRules)
+        {
             if (StdRuleDeconjugateInner(form, virtualRule) is { } hit)
             {
+                collection ??= new HashSet<DeconjugationForm>(cachedVirtualRules.Length);
                 collection.Add(hit);
             }
         }
@@ -156,20 +245,41 @@ public class Deconjugator
         if (form.Tags.Count > 0 && form.Tags[^1] != rule.ConTag)
             return null;
 
+        var prefixLength = form.Text.Length - rule.ConEnd.Length;
+        
+        // Use stackalloc for small strings to avoid heap allocation
+        Span<char> buffer = stackalloc char[prefixLength + rule.DecEnd.Length];
+        form.Text.AsSpan(0, prefixLength).CopyTo(buffer);
+        rule.DecEnd.AsSpan().CopyTo(buffer[prefixLength..]);
+        var newText = new string(buffer);
 
-        var newText = form.Text[..^rule.ConEnd.Length] + rule.DecEnd;
-
-        if (newText == form.OriginalText)
+        if (newText.Equals(form.OriginalText, StringComparison.Ordinal))
             return null;
 
-        DeconjugationForm newForm = new(text: newText, originalText: form.OriginalText, tags: form.Tags.ToList(),
-                                        seenText: [..form.SeenText], process: form.Process.ToList());
-        newForm.Process.Add(rule.Detail);
+        return CreateNewForm(form, newText, rule.ConTag, rule.DecTag, rule.Detail);
+    }
 
-        if (newForm.Tags.Count == 0)
-            newForm.Tags.Add(rule.ConTag!);
+    private DeconjugationForm CreateNewForm(DeconjugationForm form, string newText, string? conTag, string? decTag, string detail)
+    {
+        var newTags = RentTagList();
+        newTags.AddRange(form.Tags);
+        
+        var newSeenText = RentSeenTextSet();
+        foreach (var item in form.SeenText)
+            newSeenText.Add(item);
+        
+        var newProcess = RentProcessList();
+        newProcess.AddRange(form.Process);
 
-        newForm.Tags.Add(rule.DecTag!);
+        var newForm = new DeconjugationForm(newText, form.OriginalText, newTags, newSeenText, newProcess);
+
+        newForm.Process.Add(detail);
+
+        if (newForm.Tags.Count == 0 && conTag != null)
+            newForm.Tags.Add(conTag);
+
+        if (decTag != null)
+            newForm.Tags.Add(decTag);
 
         if (newForm.SeenText.Count == 0)
             newForm.SeenText.Add(form.Text);
@@ -181,54 +291,57 @@ public class Deconjugator
 
     private HashSet<DeconjugationForm>? SubstitutionDeconjugate(DeconjugationForm form, DeconjugationRule rule)
     {
-        if (form.Process.Count != 0)
+        if (form.Process.Count != 0 || string.IsNullOrEmpty(form.Text))
             return null;
 
-        // can't deconjugate nothingness
-        if (string.IsNullOrEmpty(form.Text))
-            return null;
-
-
-        string[] array = rule.DecEnd;
-        if (array.Length is 1)
+        if (rule.DecEnd.Length == 1)
         {
-            if (SubstitutionInner(form, rule) is { } hit)
-                return [hit];
-
+            if (SubstitutionInnerOptimized(form, rule.ConEnd[0], rule.DecEnd[0], rule.Detail) is { } hit)
+                return new HashSet<DeconjugationForm>(1) { hit };
             return null;
         }
 
-        var collection = new HashSet<DeconjugationForm>();
-        for (int i = 0; i < array.Length; i++)
+        HashSet<DeconjugationForm>? collection = null;
+        
+        for (int i = 0; i < rule.DecEnd.Length; i++)
         {
-            var newRule = new DeconjugationRule(
-                                                rule.Type,
-                                                null,
-                                                [rule.DecEnd.ElementAtOrDefault(i) ?? rule.DecEnd[0]],
-                                                [rule.ConEnd.ElementAtOrDefault(i) ?? rule.ConEnd[0]],
-                                                null,
-                                                null,
-                                                rule.Detail
-                                               );
-
-            if (SubstitutionInner(form, newRule) is { } ret)
+            var decEnd = rule.DecEnd.ElementAtOrDefault(i) ?? rule.DecEnd[0];
+            var conEnd = rule.ConEnd.ElementAtOrDefault(i) ?? rule.ConEnd[0];
+            
+            if (SubstitutionInnerOptimized(form, conEnd, decEnd, rule.Detail) is { } ret)
+            {
+                collection ??= new HashSet<DeconjugationForm>(rule.DecEnd.Length);
                 collection.Add(ret);
+            }
         }
 
         return collection;
     }
 
-    private DeconjugationForm SubstitutionInner(DeconjugationForm form, DeconjugationRule rule)
+    private DeconjugationForm? SubstitutionInnerOptimized(DeconjugationForm form, string conEnd, string decEnd, string detail)
     {
-        if (form.Text.Contains(rule.ConEnd[0]))
+        if (!form.Text.Contains(conEnd, StringComparison.Ordinal))
             return null;
 
-        var newText = form.Text.Replace(rule.ConEnd[0], rule.DecEnd[0]);
+        var newText = form.Text.Replace(conEnd, decEnd, StringComparison.Ordinal);
+        return CreateSubstitutionForm(form, newText, detail);
+    }
 
-        DeconjugationForm newForm = new(text: newText, originalText: form.OriginalText, tags: form.Tags.ToList(),
-                                        seenText: [..form.SeenText], process: form.Process.ToList());
+    private DeconjugationForm CreateSubstitutionForm(DeconjugationForm form, string newText, string detail)
+    {
+        var newSeenText = RentSeenTextSet();
+        foreach (var item in form.SeenText)
+            newSeenText.Add(item);
+        
+        var newProcess = RentProcessList();
+        newProcess.AddRange(form.Process);
+        
+        var newTags = RentTagList();
+        newTags.AddRange(form.Tags);
 
-        newForm.Process.Add(rule.Detail);
+        var newForm = new DeconjugationForm(newText, form.OriginalText, newTags, newSeenText, newProcess);
+
+        newForm.Process.Add(detail);
 
         if (newForm.SeenText.Count == 0)
             newForm.SeenText.Add(form.Text);
@@ -239,31 +352,22 @@ public class Deconjugator
 
     private HashSet<DeconjugationForm>? RewriteRuleDeconjugate(DeconjugationForm form, DeconjugationRule rule)
     {
-        if (form.Text != rule.ConEnd[0])
-            return null;
-
-        return StdRuleDeconjugate(form, rule);
+        return form.Text.Equals(rule.ConEnd[0], StringComparison.Ordinal) ? StdRuleDeconjugate(form, rule) : null;
     }
 
     private HashSet<DeconjugationForm>? OnlyFinalRuleDeconjugate(DeconjugationForm form, DeconjugationRule rule)
     {
-        if (form.Tags.Count != 0)
-            return null;
-
-        return StdRuleDeconjugate(form, rule);
+        return form.Tags.Count == 0 ? StdRuleDeconjugate(form, rule) : null;
     }
 
     private HashSet<DeconjugationForm>? NeverFinalRuleDeconjugate(DeconjugationForm form, DeconjugationRule rule)
     {
-        if (form.Tags.Count == 0)
-            return null;
-
-        return StdRuleDeconjugate(form, rule);
+        return form.Tags.Count != 0 ? StdRuleDeconjugate(form, rule) : null;
     }
 
     private HashSet<DeconjugationForm>? ContextRuleDeconjugate(DeconjugationForm form, DeconjugationRule rule)
     {
-        if (rule.ContextRule == "v1inftrap" && !V1InfTrapCheck(form, rule))
+        if (rule.ContextRule == "v1inftrap" && !V1InfTrapCheck(form))
             return null;
 
         if (rule.ContextRule == "saspecial" && !SaSpecialCheck(form, rule))
@@ -272,28 +376,21 @@ public class Deconjugator
         return StdRuleDeconjugate(form, rule);
     }
 
-    private bool V1InfTrapCheck(DeconjugationForm form, DeconjugationRule rule)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool V1InfTrapCheck(DeconjugationForm form)
     {
-        if (form.Tags.Count != 1)
-            return true;
-
-        if (form.Tags[0] == "stem-ren")
-            return false;
-
-        return true;
+        return form.Tags is not ["stem-ren"];
     }
 
-    private bool SaSpecialCheck(DeconjugationForm form, DeconjugationRule rule)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool SaSpecialCheck(DeconjugationForm form, DeconjugationRule rule)
     {
-        if (form.Text == "")
-            return false;
+        if (form.Text.Length == 0) return false;
 
-        if (!form.Text.EndsWith(rule.ConEnd[0]))
-            return false;
+        var conEnd = rule.ConEnd[0];
+        if (!form.Text.EndsWith(conEnd, StringComparison.Ordinal)) return false;
 
-        if (form.Text.Substring(0, form.Text.Length - rule.ConEnd[0].Length).EndsWith("さ"))
-            return false;
-
-        return true;
+        var prefixLength = form.Text.Length - conEnd.Length;
+        return prefixLength <= 0 || !form.Text.AsSpan(prefixLength - 1, 1).SequenceEqual("さ".AsSpan());
     }
 }

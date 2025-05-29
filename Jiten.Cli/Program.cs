@@ -6,11 +6,17 @@ using System.Text.RegularExpressions;
 using System.Text.Unicode;
 using CommandLine;
 using Jiten.Cli;
+using Jiten.Cli.ML;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.Authentication;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Data.Providers;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using WanaKanaShaapu;
 
 // ReSharper disable MethodSupportsCancellation
@@ -42,6 +48,9 @@ public class Program
 
         [Option("dic", Required = false, HelpText = "Path to the JMdict dictionary file.")]
         public string DictionaryPath { get; set; }
+
+        [Option("namedic", Required = false, HelpText = "Path to the JMNedict dictionary file.")]
+        public string NameDictionaryPath { get; set; }
 
         [Option("furi", Required = false, HelpText = "Path to the JMDict Furigana dictionary file.")]
         public string FuriganaPath { get; set; }
@@ -101,6 +110,21 @@ public class Program
 
         [Option(longName: "import-pitch-accents", Required = false, HelpText = "Import pitch accents from a yomitan dictinoary directory.")]
         public string ImportPitchAccents { get; set; }
+
+        [Option(longName: "extract-features", Required = false, HelpText = "Extract features from directory for ML.")]
+        public string ExtractFeatures { get; set; }
+
+        [Option(longName: "register-admin", Required = false, HelpText = "Register an admin, requires --email --username --password.")]
+        public bool RegisterAdmin { get; set; }
+
+        [Option(longName: "email", Required = false, HelpText = "Email for the admin.")]
+        public string Email { get; set; }
+
+        [Option(longName: "username", Required = false, HelpText = "Username for the admin.")]
+        public string Username { get; set; }
+
+        [Option(longName: "password", Required = false, HelpText = "Password for the admin.")]
+        public string Password { get; set; }
     }
 
     static async Task Main(string[] args)
@@ -141,6 +165,7 @@ public class Program
 
                             Console.WriteLine("Importing JMdict...");
                             await JmDictHelper.Import(_dbOptions, o.XmlPath, o.DictionaryPath, o.FuriganaPath);
+                            await JmDictHelper.ImportJMNedict(_dbOptions, o.NameDictionaryPath);
                         }
 
                         if (o.ExtractFilePath != null)
@@ -218,10 +243,19 @@ public class Program
 
                         if (o.ApplyMigrations)
                         {
-                            Console.WriteLine("Applying migrations to the database.");
+                            Console.WriteLine("Applying migrations to the Jiten database.");
                             await using var context = new JitenDbContext(_dbOptions);
                             await context.Database.MigrateAsync();
-                            Console.WriteLine("Migrations applied.");
+                            Console.WriteLine("Migrations applied to the Jiten database.");
+
+                            Console.WriteLine("Applying migrations to the User database.");
+                            var userOptionsBuilder = new DbContextOptionsBuilder<UserDbContext>();
+                            userOptionsBuilder.UseNpgsql(connectionString,
+                                                         o => { o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery); });
+                            _dbOptions = optionsBuilder.Options;
+                            await using var userContext = new UserDbContext(userOptionsBuilder.Options);
+                            await userContext.Database.MigrateAsync();
+                            Console.WriteLine("Migrations applied to the User database.");
                         }
 
                         if (!string.IsNullOrEmpty(o.ImportPitchAccents))
@@ -229,6 +263,20 @@ public class Program
                             Console.WriteLine("Importing pitch accents...");
                             await JmDictHelper.ImportPitchAccents(o.Verbose, _dbOptions, o.ImportPitchAccents);
                             Console.WriteLine("Pitch accents imported.");
+                        }
+
+                        if (!string.IsNullOrEmpty(o.ExtractFeatures))
+                        {
+                            Console.WriteLine("Extracting features...");
+                            var featureExtractor = new FeatureExtractor(_dbOptions);
+                            await featureExtractor.ExtractFeatures(Jiten.Parser.Program.ParseTextToDeck, o.ExtractFeatures);
+                            Console.WriteLine("All features extracted.");
+                        }
+
+                        if (o.RegisterAdmin && !string.IsNullOrEmpty(o.Email) && !string.IsNullOrEmpty(o.Username) &&
+                            !string.IsNullOrEmpty(o.Password))
+                        {
+                            await RegisterAdmin(configuration, o.Email, o.Username, o.Password);
                         }
 
                         if (o.Verbose)
@@ -425,7 +473,8 @@ public class Program
                     }
                 }
 
-                deck = await Jiten.Parser.Program.ParseTextToDeck(context, string.Join(Environment.NewLine, lines), _storeRawText);
+                deck = await Jiten.Parser.Program.ParseTextToDeck(context, string.Join(Environment.NewLine, lines), _storeRawText, true,
+                                                                  deckType);
                 deck.ParentDeck = parentDeck;
                 deck.DeckOrder = deckOrder;
                 deck.OriginalTitle = metadata.OriginalTitle;
@@ -769,6 +818,126 @@ public class Program
                 await File.AppendAllLinesAsync(userDicPath, linesToWrite);
                 Console.WriteLine($"Wrote {linesToWrite.Count} lines to file");
             }
+        }
+    }
+
+    private static async Task RegisterAdmin(IConfigurationRoot config, string email, string username, string password)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<UserDbContext>(options => options.UseNpgsql(config.GetConnectionString("JitenDatabase"),
+                                                                          o =>
+                                                                          {
+                                                                              o.UseQuerySplittingBehavior(QuerySplittingBehavior
+                                                                                  .SplitQuery);
+                                                                          }));
+
+        services.AddLogging(configure => configure.AddConsole());
+
+        var roleName = nameof(UserRole.Administrator);
+
+        services.AddIdentity<User, IdentityRole>(options =>
+                {
+                    options.Password.RequireDigit = true;
+                    options.Password.RequireLowercase = true;
+                    options.Password.RequireUppercase = true;
+                    options.Password.RequireNonAlphanumeric = false;
+                    options.Password.RequiredLength = 10;
+
+                    options.User.RequireUniqueEmail = true;
+                })
+                .AddEntityFrameworkStores<UserDbContext>()
+                .AddDefaultTokenProviders();
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            Console.WriteLine($"Attempting to create user: {username} ({email}) with role: {roleName}");
+
+            if (!await roleManager.RoleExistsAsync(roleName))
+            {
+                Console.WriteLine($"Role '{roleName}' does not exist. Creating it...");
+                var roleResult = await roleManager.CreateAsync(new IdentityRole(roleName));
+                if (!roleResult.Succeeded)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"Failed to create role '{roleName}':");
+                    foreach (var error in roleResult.Errors)
+                    {
+                        Console.WriteLine($"- {error.Description}");
+                    }
+
+                    Console.ResetColor();
+                    return;
+                }
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"Role '{roleName}' created successfully.");
+                Console.ResetColor();
+            }
+
+            // Check if user already exists
+            var existingUserByUsername = await userManager.FindByNameAsync(username);
+            if (existingUserByUsername != null)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"User with username '{username}' already exists.");
+                Console.ResetColor();
+                return;
+            }
+
+            var existingUserByEmail = await userManager.FindByEmailAsync(email);
+            if (existingUserByEmail != null)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"User with email '{email}' already exists.");
+                Console.ResetColor();
+                return;
+            }
+
+            var user = new User() { UserName = username, Email = email, EmailConfirmed = true, SecurityStamp = Guid.NewGuid().ToString() };
+
+            var createUserResult = await userManager.CreateAsync(user, password);
+
+            if (!createUserResult.Succeeded)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Failed to create user '{username}':");
+                foreach (var error in createUserResult.Errors)
+                {
+                    Console.WriteLine($"- {error.Description}");
+                }
+
+                Console.ResetColor();
+                return;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"User '{username}' created successfully with ID: {user.Id}");
+            Console.ResetColor();
+
+            // Add user to role
+            var addToRoleResult = await userManager.AddToRoleAsync(user, roleName);
+            if (!addToRoleResult.Succeeded)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Failed to add user '{username}' to role '{roleName}':");
+                foreach (var error in addToRoleResult.Errors)
+                {
+                    Console.WriteLine($"- {error.Description}");
+                }
+
+                Console.ResetColor();
+                return;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"User '{username}' successfully added to role '{roleName}'.");
+            Console.ResetColor();
         }
     }
 }

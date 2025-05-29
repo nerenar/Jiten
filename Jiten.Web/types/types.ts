@@ -1,4 +1,4 @@
-import type {MediaType, ReadingType} from '~/types';
+import type { MediaType, ReadingType } from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -19,6 +19,8 @@ export interface Deck {
   deckWords: DeckWord[];
   links: Link[];
   childrenDeckCount: number;
+  selectedWordOccurrences: number;
+  dialoguePercentage: number;
 }
 
 export interface DeckDetail {
@@ -112,4 +114,30 @@ export interface GlobalStats {
   mediaByType: Record<MediaType, number>;
   totalMojis: number;
   totalMedia: number;
+}
+
+export interface Metadata {
+  originalTitle: string;
+  romajiTitle: string;
+  englishTitle: string;
+  image: string;
+  releaseDate: string;
+  links: Link[];
+}
+
+export interface Issues {
+  missingRomajiTitles: number[];
+  missingLinks: number[];
+  zeroCharacters: number[];
+}
+
+export interface LoginRequest {
+  usernameOrEmail: string;
+  password: string;
+}
+
+export interface TokenResponse {
+  accessToken: string;
+  accessTokenExpiration: Date;
+  refreshToken: string;
 }

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
@@ -86,9 +87,24 @@ public class Deck
     public float AverageSentenceLength => SentenceCount == 0 ? 0 : (float)CharacterCount / SentenceCount;
 
     /// <summary>
-    /// Parent deck, null if no parent
+    /// Percentage of dialogue in the whole text
     /// </summary>
-    public int? ParentDeckId { get; set; }
+    public float DialoguePercentage
+    {
+        get
+        {
+            if (MediaType is MediaType.Anime or MediaType.Drama or MediaType.Movie or MediaType.Manga or MediaType.VideoGame)
+                return 100;
+
+            return _dialoguePercentage;
+        }
+        set => _dialoguePercentage = value;
+    }
+
+    /// <summary>
+        /// Parent deck, null if no parent
+        /// </summary>
+        public int? ParentDeckId { get; set; }
 
     /// <summary>
     /// Parent deck, null if no parent
@@ -114,11 +130,13 @@ public class Deck
     /// List of links to external websites
     /// </summary>
     public List<Link> Links { get; set; } = new List<Link>();
-    
+
     /// <summary>
     /// Raw text from which the deck was parsed with
     /// </summary>
     public DeckRawText? RawText { get; set; }
+
+    private float _dialoguePercentage;
 
     public async Task AddChildDeckWords(JitenDbContext context)
     {
@@ -141,12 +159,8 @@ public class Deck
                 {
                     DeckWords.Add(new DeckWord
                                   {
-                                      DeckId = DeckId,
-                                      WordId = childDeckWord.WordId,
-                                      ReadingIndex = childDeckWord.ReadingIndex,
-                                      Occurrences = childDeckWord.Occurrences,
-                                      OriginalText = childDeckWord.OriginalText,
-                                      Deck = this
+                                      DeckId = DeckId, WordId = childDeckWord.WordId, ReadingIndex = childDeckWord.ReadingIndex,
+                                      Occurrences = childDeckWord.Occurrences, OriginalText = childDeckWord.OriginalText, Deck = this
                                   });
                 }
             }
@@ -157,6 +171,8 @@ public class Deck
         UniqueWordCount = DeckWords.Select(dw => dw.WordId).Distinct().Count();
         UniqueWordUsedOnceCount = DeckWords.Where(dw => dw.Occurrences == 1).Select(dw => dw.WordId).Distinct().Count();
         SentenceCount = Children.Sum(c => c.SentenceCount);
+        Difficulty = (int)Math.Round(Children.Average(c => c.Difficulty));
+        DialoguePercentage = Children.Sum(c => c.DialoguePercentage) / Children.Count;
 
         // Not the most efficient or elegant way to do it, rebuilding the text, but it works and I don't have a better idea for now
 

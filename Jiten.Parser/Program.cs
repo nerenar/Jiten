@@ -1,9 +1,13 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using Jiten.Cli.ML;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using WanaKanaShaapu;
@@ -27,7 +31,7 @@ namespace Jiten.Parser
         public static async Task Main(string[] args)
         {
             // var text = "「あそこ美味しいよねー。早くお祭り終わって欲しいなー。ノンビリ遊びに行きたーい」";
-            var text = await File.ReadAllTextAsync("Y:\\00_JapaneseStudy\\JL\\Backlogs\\Default_2024.12.28_10.52.47-2024.12.28_19.58.40.txt");
+            // var text = await File.ReadAllTextAsync("Y:\\00_JapaneseStudy\\JL\\Backlogs\\Default_2024.12.28_10.52.47-2024.12.28_19.58.40.txt");
 
             var configuration = new ConfigurationBuilder()
                                 .SetBasePath(Directory.GetCurrentDirectory())
@@ -42,7 +46,20 @@ namespace Jiten.Parser
 
             await using var context = new JitenDbContext(optionsBuilder.Options);
 
-            await ParseTextToDeck(context, text);
+            Console.InputEncoding = Encoding.UTF8;
+            Console.OutputEncoding = Encoding.UTF8;
+
+            while (true)
+            {
+                var text = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(text))
+                    return;
+
+                var deck = await ParseTextToDeck(context, text);
+                Console.WriteLine(JsonSerializer.Serialize(deck));
+                Console.WriteLine();
+            }
         }
 
         public static async Task InitDictionaries()
@@ -100,7 +117,9 @@ namespace Jiten.Parser
                    .ToList();
         }
 
-        public static async Task<Deck> ParseTextToDeck(JitenDbContext context, string text, bool storeRawText = false)
+        public static async Task<Deck> ParseTextToDeck(JitenDbContext context, string text, bool storeRawText = false,
+                                                       bool predictDifficulty = true,
+                                                       MediaType mediatype = MediaType.Novel)
         {
             _dbContext = context;
             if (!_initialized)
@@ -228,15 +247,42 @@ namespace Jiten.Parser
             // Time for 1million characters
             Console.WriteLine($"Time per 1 million characters: {(totalTime / characterCount * 1000000):0.0}ms");
 
-            return new Deck
-                   {
-                       CharacterCount = characterCount, WordCount = wordInfos.Count, UniqueWordCount = processedWords.Length,
-                       UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
-                       UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(c => WanaKana.IsKanji(c.ToString())),
-                       UniqueKanjiUsedOnceCount = wordInfos.SelectMany(w => w.Text).GroupBy(c => c)
-                                                           .Count(g => g.Count() == 1 && WanaKana.IsKanji(g.Key.ToString())),
-                       SentenceCount = sentences.Length, DeckWords = processedWords, RawText = storeRawText ? new DeckRawText(text) : null,
-                   };
+            var textWithoutDialogues = Regex.Replace(text, @"[「『].{0,200}?[」』]", "", RegexOptions.Singleline);
+            textWithoutDialogues = Regex.Replace(textWithoutDialogues,
+                                                 "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
+                                                 "");
+            var textWithoutPunctuation = Regex.Replace(text,
+                                                       "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
+                                                       "");
+
+            int dialogueCharacterCount = textWithoutPunctuation.Length - textWithoutDialogues.Length;
+            float dialoguePercentage = (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f;
+
+            Console.WriteLine($"Dialogue percentage: {dialoguePercentage:0.0}%");
+
+            var deck = new Deck
+                       {
+                           CharacterCount = characterCount, WordCount = wordInfos.Count, UniqueWordCount = processedWords.Length,
+                           UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
+                           UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(c => WanaKana.IsKanji(c.ToString())),
+                           UniqueKanjiUsedOnceCount = wordInfos.SelectMany(w => w.Text).GroupBy(c => c)
+                                                               .Count(g => g.Count() == 1 && WanaKana.IsKanji(g.Key.ToString())),
+                           SentenceCount = sentences.Length, DialoguePercentage = dialoguePercentage, DeckWords = processedWords,
+                           RawText = storeRawText ? new DeckRawText(text) : null,
+                       };
+
+            if (predictDifficulty)
+            {
+                // Predict difficulty
+                DifficultyPredictor difficultyPredictor =
+                    new(_dbContext.DbOptions,
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "difficulty_prediction_model.onnx"));
+                deck.Difficulty = (int)Math.Round(await difficultyPredictor.PredictDifficulty(deck, mediatype));
+                Console.WriteLine($"Predicted difficulty: {deck.Difficulty}");
+            }
+
+
+            return deck;
         }
 
         private static async Task<DeckWord?> ProcessWord((WordInfo wordInfo, int occurrences) wordData, Deconjugator deconjugator)
@@ -319,11 +365,29 @@ namespace Jiten.Parser
 
         private static bool DeconjugateWord((WordInfo wordInfo, int occurrences) wordData, out DeckWord? processedWord)
         {
-            var textInHiragana =
-                WanaKana.ToHiragana(wordData.wordInfo.Text,
-                                    new DefaultOptions { ConvertLongVowelMark = false });
+            string text = wordData.wordInfo.Text;
 
-            if (_lookups.TryGetValue(textInHiragana, out List<int> candidates))
+            // Exclude full digits or single latin character
+            if (text.All(char.IsDigit) || (text.Length == 1 && text.IsAsciiOrFullWidthLetter()))
+            {
+                processedWord = null;
+                return false;
+            }
+
+            _lookups.TryGetValue(text, out List<int>? candidates);
+            var textInHiragana = WanaKana.ToHiragana(wordData.wordInfo.Text, new DefaultOptions { ConvertLongVowelMark = false });
+            _lookups.TryGetValue(textInHiragana, out var candidatesHiragana);
+
+            // Add candidatesInHiragana to candidates, deduplicate 
+            if (candidatesHiragana is { Count: not 0 })
+            {
+                candidates ??= new List<int>();
+                var newCandidates = new List<int>(candidates);
+                newCandidates.AddRange(candidatesHiragana);
+                candidates = newCandidates.Distinct().ToList();
+            }
+
+            if (candidates is { Count: not 0 })
             {
                 candidates = candidates.OrderBy(c => c).ToList();
 
@@ -355,9 +419,17 @@ namespace Jiten.Parser
                     bestMatch = matches[0];
 
                 var normalizedReadings =
-                    bestMatch.Readings.Select(r => WanaKana.ToHiragana(r, new DefaultOptions() { ConvertLongVowelMark = false }))
-                             .ToList();
-                byte readingIndex = (byte)normalizedReadings.IndexOf(textInHiragana);
+                    bestMatch.Readings.ToList();
+                byte readingIndex = (byte)normalizedReadings.IndexOf(text);
+
+                // not found, try with hiragana form
+                if (readingIndex == 255)
+                {
+                    var normalizedHiraganaReadings =
+                        bestMatch.Readings.Select(r => WanaKana.ToHiragana(r, new DefaultOptions() { ConvertLongVowelMark = false }))
+                                 .ToList();
+                    readingIndex = (byte)normalizedHiraganaReadings.IndexOf(textInHiragana);
+                }
 
                 // not found, try with converting the long vowel mark
                 if (readingIndex == 255)
@@ -365,6 +437,13 @@ namespace Jiten.Parser
                     normalizedReadings =
                         bestMatch.Readings.Select(r => WanaKana.ToHiragana(r)).ToList();
                     readingIndex = (byte)normalizedReadings.IndexOf(textInHiragana);
+                }
+
+                // Still not found, skip the word completely
+                if (readingIndex == 255)
+                {
+                    processedWord = null;
+                    return false;
                 }
 
                 DeckWord deckWord = new()

@@ -41,5 +41,18 @@ export const useJitenStore = defineStore('jiten', () => {
     darkModeCookie.value = newValue;
   });
 
-  return { titleLanguage, displayFurigana, darkMode };
+  const displayAdminFunctionsCookie = useCookie<boolean>('jiten-display-admin-functions', {
+    default: () => false,
+    watch: true,
+    maxAge: 60 * 60 * 24 * 365, // 1 year
+    path: '/',
+  });
+
+  const displayAdminFunctions = ref<boolean>(displayAdminFunctionsCookie.value);
+
+  watch(displayAdminFunctions, (newValue) => {
+    displayAdminFunctionsCookie.value = newValue;
+  });
+
+  return { titleLanguage, displayFurigana, darkMode, displayAdminFunctions };
 });
