@@ -19,7 +19,7 @@ public static class JitenHelper
             var existingDeck =
                 await context.Decks
                              .Include(d => d.DeckWords)
-                             .Include(d => d.Children).ThenInclude(d => d.DeckWords)
+                             .Include(d => d.Children).ThenInclude(d => d.DeckWords).OrderBy(d => d.DeckOrder)
                              .Include(d => d.RawText)
                              .FirstOrDefaultAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType);
 
@@ -53,10 +53,14 @@ public static class JitenHelper
                 coverOptimized.Strip();
                 coverOptimized.Quality = 85;
                 coverOptimized.Format = ImageMagick.MagickFormat.Jpeg;
-                
+
                 var coverUrl = await BunnyCdnHelper.UploadFile(coverOptimized.ToByteArray(), $"{deck.DeckId}/cover.jpg");
                 deck.CoverName = coverUrl;
                 context.Entry(deck).State = EntityState.Modified;
+
+                await BulkInsertDeckWords(context, deck.DeckWords, deck.DeckId);
+
+                await InsertChildDecks(context, deck.Children, deck.DeckId);
             }
 
             await context.SaveChangesAsync();
@@ -66,6 +70,33 @@ public static class JitenHelper
         {
             await transaction.RollbackAsync();
             Console.WriteLine($"Error inserting deck: {ex.Message}");
+        }
+    }
+
+    private static async Task BulkInsertDeckWords(JitenDbContext context, ICollection<DeckWord> deckWords, int deckId)
+    {
+        if (!deckWords.Any()) return;
+
+        const int batchSize = 5000;
+        var batches = deckWords.Chunk(batchSize);
+
+        foreach (var batch in batches)
+        {
+            var sql = $@"
+                        INSERT INTO jiten.""DeckWords"" (""WordId"", ""ReadingIndex"", ""Occurrences"", ""DeckId"") VALUES " +
+                      "";
+            var parameters = new List<object>();
+            var values = new List<string>();
+
+            for (int i = 0; i < batch.Length; i++)
+            {
+                var dw = batch[i];
+                values.Add($"({{{parameters.Count}}}, {{{parameters.Count + 1}}}, {{{parameters.Count + 2}}}, {{{parameters.Count + 3}}})");
+                parameters.AddRange([dw.WordId, dw.ReadingIndex, dw.Occurrences, deckId]);
+            }
+
+            sql += string.Join(", ", values);
+            await context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
         }
     }
 
@@ -89,39 +120,54 @@ public static class JitenHelper
         existingDeck.DialoguePercentage = deck.DialoguePercentage;
         existingDeck.RawText = deck.RawText;
 
-        context.DeckWords.RemoveRange(existingDeck.DeckWords);
-        foreach (var dw in deck.DeckWords)
+        await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {{0}}", deckId);
+
+        await BulkInsertDeckWords(context, deck.DeckWords, deckId);
+        await UpdateChildDecks(context, existingDeck, deck.Children);
+    }
+
+    private static async Task InsertChildDecks(JitenDbContext context, ICollection<Deck> children, int parentDeckId)
+    {
+        if (!children.Any()) return;
+
+        foreach (var child in children)
         {
-            var newDeckWord = new DeckWord
-                              {
-                                  WordId = dw.WordId, ReadingIndex = dw.ReadingIndex, Occurrences = dw.Occurrences, DeckId = deckId,
-                                  Deck = existingDeck
-                              };
-            existingDeck.DeckWords.Add(newDeckWord);
+            child.ParentDeckId = parentDeckId;
+            child.CreationDate = DateTime.UtcNow;
+            child.LastUpdate = DateTimeOffset.UtcNow;
+            context.Decks.Add(child);
         }
 
-        await UpdateChildDecks(context, existingDeck, deck.Children);
+        await context.SaveChangesAsync();
+
+        foreach (var child in children)
+        {
+            await BulkInsertDeckWords(context, child.DeckWords, child.DeckId);
+        }
     }
 
     private static async Task UpdateChildDecks(JitenDbContext context, Deck existingDeck, ICollection<Deck> children)
     {
+        var existingChildren = await context.Decks
+                                            .Where(d => d.ParentDeckId == existingDeck.DeckId)
+                                            .ToListAsync();
+
         var newChildren = children.ToDictionary(c => c.OriginalTitle);
-        var existingChildren = existingDeck.Children.ToList();
+        var existingChildrenDict = existingChildren.ToDictionary(c => c.OriginalTitle);
 
         foreach (var child in children)
         {
             var key = child.OriginalTitle;
-            Deck? existingChild = existingChildren.FirstOrDefault(c => c.OriginalTitle == key);
 
-            if (existingChild != null)
+            if (existingChildrenDict.TryGetValue(key, out var existingChild))
             {
                 Console.WriteLine("Updating child deck " + key);
+
                 try
                 {
-                    var rawTextReference =
-                        context.Entry(existingChild)
-                               .Reference(nameof(existingChild.RawText)); // Or the actual navigation property name if different
-                    await rawTextReference.LoadAsync();
+                    await context.Entry(existingChild)
+                                 .Reference(nameof(existingChild.RawText))
+                                 .LoadAsync();
                 }
                 catch (Exception loadEx)
                 {
@@ -130,55 +176,49 @@ public static class JitenHelper
                 }
 
                 await UpdateDeck(context, existingChild, child);
-                newChildren.Remove(key);
             }
             else
             {
                 Console.WriteLine("Inserting new child deck " + key);
 
-                var newChildDeck = new Deck();
-                newChildDeck.ParentDeckId = existingDeck.DeckId;
-                newChildDeck.ParentDeck = existingDeck;
-                newChildDeck.CreationDate = DateTime.UtcNow;
-                newChildDeck.LastUpdate = DateTimeOffset.UtcNow;
-                newChildDeck.MediaType = existingDeck.MediaType;
-                newChildDeck.OriginalTitle = child.OriginalTitle;
-                newChildDeck.RomajiTitle = child.RomajiTitle;
-                newChildDeck.EnglishTitle = child.EnglishTitle;
-                newChildDeck.DeckOrder = child.DeckOrder;
-                newChildDeck.CharacterCount = child.CharacterCount;
-                newChildDeck.UniqueWordCount = child.UniqueWordCount;
-                newChildDeck.UniqueKanjiCount = child.UniqueKanjiCount;
-                newChildDeck.SentenceCount = child.SentenceCount;
-                newChildDeck.WordCount = child.WordCount;
-                newChildDeck.Difficulty = child.Difficulty;
-                newChildDeck.DialoguePercentage = child.DialoguePercentage;
-                newChildDeck.RawText = child.RawText;
-
-                foreach (var dw in child.DeckWords)
-                {
-                    var newDeckWord = new DeckWord
-                                      {
-                                          WordId = dw.WordId, ReadingIndex = dw.ReadingIndex, Occurrences = dw.Occurrences, Deck = child
-                                      };
-                    newChildDeck.DeckWords.Add(newDeckWord);
-                }
+                var newChildDeck = new Deck
+                                   {
+                                       ParentDeckId = existingDeck.DeckId, ParentDeck = existingDeck, CreationDate = DateTime.UtcNow,
+                                       LastUpdate = DateTimeOffset.UtcNow, MediaType = existingDeck.MediaType,
+                                       OriginalTitle = child.OriginalTitle, RomajiTitle = child.RomajiTitle,
+                                       EnglishTitle = child.EnglishTitle, DeckOrder = child.DeckOrder,
+                                       CharacterCount = child.CharacterCount, UniqueWordCount = child.UniqueWordCount,
+                                       UniqueKanjiCount = child.UniqueKanjiCount, SentenceCount = child.SentenceCount,
+                                       WordCount = child.WordCount, Difficulty = child.Difficulty,
+                                       DialoguePercentage = child.DialoguePercentage, RawText = child.RawText
+                                   };
 
                 context.Decks.Add(newChildDeck);
-                newChildren.Remove(key);
+                await context.SaveChangesAsync(); // Save to get the ID
+
+                await BulkInsertDeckWords(context, child.DeckWords, newChildDeck.DeckId);
             }
         }
 
+        // Bulk delete removed children
         var childrenToDelete = existingChildren
                                .Where(ec => children.All(c => c.OriginalTitle != ec.OriginalTitle))
+                               .Select(c => c.DeckId)
                                .ToList();
 
-
-        foreach (var childToDelete in childrenToDelete)
+        if (childrenToDelete.Any())
         {
-            Console.WriteLine($"Deleting child deck {childToDelete.OriginalTitle}.");
-            context.DeckWords.RemoveRange(childToDelete.DeckWords);
-            context.Decks.Remove(childToDelete);
+            // Delete DeckWords first (foreign key constraint)
+            await context.Database.ExecuteSqlRawAsync(
+                                                      $@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" IN ({string.Join(",", childrenToDelete.Select((_, i) => $"{{{i}}}"))})",
+                                                      childrenToDelete.Cast<object>().ToArray());
+
+            // Delete the decks
+            await context.Database.ExecuteSqlRawAsync(
+                                                      $@"DELETE FROM jiten.""Decks"" WHERE ""DeckId"" IN ({string.Join(",", childrenToDelete.Select((_, i) => $"{{{i}}}"))})",
+                                                      childrenToDelete.Cast<object>().ToArray());
+
+            Console.WriteLine($"Deleted {childrenToDelete.Count} child decks.");
         }
     }
 
@@ -424,7 +464,7 @@ public static class JitenHelper
     {
         Console.WriteLine("Legacy method, difficulty is done during parsing now");
         return;
-        
+
         int averageWordDifficultyWeight = 25;
         int peakWordDifficultyWeight = 15;
         int characterCountWeight = 0;
@@ -445,7 +485,8 @@ public static class JitenHelper
 
         var allFrequencies = await context.JmDictWordFrequencies.AsNoTracking().ToListAsync();
         var wordFrequencies = allFrequencies.ToDictionary(f => f.WordId, f => f);
-        var allJmDictWords = await context.JMDictWords.AsNoTracking().Select(w => new {w.WordId, w.ReadingTypes}).ToDictionaryAsync(x => x.WordId, x => x.ReadingTypes);
+        var allJmDictWords = await context.JMDictWords.AsNoTracking().Select(w => new { w.WordId, w.ReadingTypes })
+                                          .ToDictionaryAsync(x => x.WordId, x => x.ReadingTypes);
 
         Dictionary<int, double> wordDifficultiesTotal = new();
         Dictionary<int, double> peakWordDifficulties = new();
@@ -527,7 +568,7 @@ public static class JitenHelper
                 foreach (var peakEntry in peakWordEntries)
                 {
                     var nRank = peakEntry.rank / 1000;
-                    
+
                     // If the word is in kana, we take the rank of the vocabulary instead
                     if (allJmDictWords[peakEntry.word.WordId][peakEntry.word.ReadingIndex] == JmDictReadingType.KanaReading)
                         nRank = wordFrequencies[peakEntry.word.WordId].FrequencyRank / 1000;

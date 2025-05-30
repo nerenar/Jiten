@@ -145,7 +145,7 @@ public class Deck
 
         DeckWords = new List<DeckWord>();
 
-        foreach (var child in Children)
+        foreach (var child in Children.OrderBy(c => c.DeckOrder))
         {
             foreach (var childDeckWord in child.DeckWords)
             {

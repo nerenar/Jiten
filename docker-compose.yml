@@ -28,7 +28,7 @@ services:
     depends_on:
       - postgres
     environment:
-      - ConnectionStrings__JitenDatabase=Host=${DB_HOST:-postgres};Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password}
+      - ConnectionStrings__JitenDatabase=Host=${DB_HOST:-postgres};Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password};Timeout=300;CommandTimeout=300
       - JwtSettings_Secret=${JWT_SECRET:-VERY_STRONG_KEY_AT_LEAST_32_CHARS}
       - JwtSettings_Issuer=${JWT_ISSUER:-https://api.jiten.moe}
       - JwtSettings_Audience=${JWT_AUDIENCE:-https://jiten.moe}
