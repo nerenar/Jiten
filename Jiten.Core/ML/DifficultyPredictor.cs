@@ -40,7 +40,7 @@ public class DifficultyPredictor
 
         // Load the model
         var onnxScoringEstimator = _mlContext.Transforms.ApplyOnnxModel(
-                                                                        outputColumnNames: ["label", "probabilities"],
+                                                                        outputColumnNames: ["variable"],
                                                                         inputColumnNames: ["float_input"],
                                                                         modelFile: modelPath,
                                                                         fallbackToCpu: true
@@ -158,7 +158,14 @@ public class DifficultyPredictor
 
         // 4. Predict
         var prediction = _predictionEngine.Predict(predictorInput);
-        return prediction.PredictedDifficultyClass;
+        var predictedDifficulty = prediction.PredictedDifficulty[0];
+        
+        Console.WriteLine("Predicted difficulty (not rounded): " + predictedDifficulty + "");
+        
+        var rounded = (float)Math.Clamp(Math.Round(predictedDifficulty), 0, 5);
+
+        
+        return rounded;
     }
 
     private Dictionary<string, double> GetFeatureMap(ExtractedFeatures features)
