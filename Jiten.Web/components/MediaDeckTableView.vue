@@ -17,7 +17,7 @@
       <div class="flex flex-row items-center">
         <!-- Title and Media Type -->
         <div class="flex-grow">
-          <div class="font-bold">{{ localiseTitle(deck) }}</div>
+          <div class="font-bold">{{ localiseTitle(deck).substring(0,50) }}</div>
           <div class="text-xs text-gray-500">{{ getMediaTypeText(deck.mediaType) }}</div>
         </div>
 
@@ -50,7 +50,12 @@
 
           <div v-if="deck.difficulty != 0" class="flex flex-col items-center">
             <div class="text-xs text-gray-600 dark:text-gray-300">Difficulty</div>
-            <div class="font-medium tabular-nums">{{ deck.difficulty }}</div>
+            <div v-if="deck.difficulty == 0" class="tabular-nums text-green-700 dark:text-green-300"> ★☆☆☆☆☆ </div>
+            <div v-else-if="deck.difficulty == 1" class="font-medium tabular-nums text-green-500"> ★★☆☆☆☆ </div>
+            <div v-else-if="deck.difficulty == 2" class="font-medium tabular-nums text-yellow-600"> ★★★☆☆☆ </div>
+            <div v-else-if="deck.difficulty == 3" class="font-medium tabular-nums text-amber-600"> ★★★★☆☆ </div>
+            <div v-else-if="deck.difficulty == 4" class="font-medium tabular-nums text-orange-600"> ★★★★★☆ </div>
+            <div v-else-if="deck.difficulty == 5" class="font-medium tabular-nums text-red-600"> ★★★★★★ </div>
           </div>
         </div>
 
