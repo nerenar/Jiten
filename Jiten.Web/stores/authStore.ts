@@ -6,17 +6,24 @@ import type { LoginRequest, TokenResponse } from '~/types/types';
 export const useAuthStore = defineStore('auth', () => {
   const tokenCookie = useCookie('token', {
     watch: true,
-    maxAge: 60 * 60 * 24 * 15,
+    maxAge: 60 * 30,
+    path: '/',
+  });
+
+  const refreshTokenCookie = useCookie('refreshToken', {
+    watch: true,
+    maxAge: 60 * 60 * 24 * 30,
     path: '/',
   });
 
   const accessToken = ref<string | null>(tokenCookie.value || null);
-  const refreshToken = ref<string | null>(null);
+  const refreshToken = ref<string | null>(refreshTokenCookie.value || null);
   const user = ref<any | null>(null);
   const isLoading = ref<boolean>(false);
   const error = ref<string | null>(null);
   const requiresTwoFactor = ref<boolean>(false);
   const userIdFor2fa = ref<string | null>(null);
+  const isRefreshing = ref<boolean>(false);
 
   const isAuthenticated = computed(() => !!accessToken.value);
   const isAdmin = computed(() => user.value?.roles?.includes('Administrator') || false);
@@ -29,6 +36,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Set the token cookie for the API plugin
     tokenCookie.value = newAccessToken;
+    refreshTokenCookie.value = newRefreshToken;
   }
 
   function clearAuthData() {
@@ -38,8 +46,82 @@ export const useAuthStore = defineStore('auth', () => {
     requiresTwoFactor.value = false;
     userIdFor2fa.value = null;
 
-    // Clear the token cookie
     tokenCookie.value = null;
+    refreshTokenCookie.value = null;
+  }
+
+  // Check if token is expired or about to expire (within 5 minutes)
+  function isTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      // Consider token expired if it expires within 5 minutes (300 seconds)
+      return payload.exp < currentTime + 300;
+    } catch (error) {
+      console.error('Error parsing token:', error);
+      return true; // Treat invalid tokens as expired
+    }
+  }
+
+  async function refreshAccessToken(): Promise<boolean> {
+    if (isRefreshing.value) {
+      // Wait for ongoing refresh to complete
+      while (isRefreshing.value) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return !!accessToken.value;
+    }
+
+    if (!refreshToken.value) {
+      console.log('No refresh token available');
+      clearAuthData();
+      return false;
+    }
+
+    isRefreshing.value = true;
+
+    try {
+      const data = await $api<TokenResponse>('/auth/refresh', {
+        method: 'POST',
+        body: {
+          accessToken: accessToken.value,
+          refreshToken: refreshToken.value,
+        },
+      });
+
+      if (data.accessToken && data.refreshToken) {
+        setTokens(data.accessToken, data.refreshToken);
+        console.log('Token refreshed successfully');
+        return true;
+      } else {
+        throw new Error('Invalid refresh response');
+      }
+    } catch (err) {
+      console.error('Token refresh failed:', err);
+      clearAuthData();
+
+      // Navigate to login page
+      const router = useRouter();
+      router.push('/login');
+
+      return false;
+    } finally {
+      isRefreshing.value = false;
+    }
+  }
+
+  // Ensure we have a valid token before making API calls
+  async function ensureValidToken(): Promise<boolean> {
+    if (!accessToken.value) {
+      return false;
+    }
+
+    if (isTokenExpired(accessToken.value)) {
+      console.log('Token expired, attempting to refresh...');
+      return await refreshAccessToken();
+    }
+
+    return true;
   }
 
   async function login(credentials: LoginRequest) {
@@ -58,7 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
       //   requiresTwoFactor.value = true;
       //   userIdFor2fa.value = data.value.userId;
       // } else
-      if ('accessToken' in data) {
+      if ('accessToken' in data && 'refreshToken' in data) {
         setTokens(data.accessToken, data.refreshToken);
         //wait 500ms for timing
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -114,16 +196,28 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchCurrentUser() {
-    if (!accessToken.value) return;
+    if (!(await ensureValidToken())) {
+      return;
+    }
 
     try {
       const data = await $api('/auth/me');
-      user.value = data.value;
-    } catch (err) {
+      user.value = data;
+    } catch (err: any) {
       console.error('Failed to fetch current user:', err);
-      // Potentially clear auth if token is invalid (e.g., on 401)
       if (err.status === 401) {
-        logout(); // Or a more specific token invalidation action
+        // Try to refresh token once more
+        if (await refreshAccessToken()) {
+          // Retry fetching user after refresh
+          try {
+            const data = await $api('/auth/me');
+            user.value = data;
+            return;
+          } catch (retryErr) {
+            console.error('Failed to fetch user after token refresh:', retryErr);
+          }
+        }
+        await logout();
       }
       user.value = null;
     }
@@ -134,30 +228,34 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       if (accessToken.value) {
-        // Optional: Call the backend revoke endpoint
         await $api('/auth/revoke-token', {
           method: 'POST',
         });
       }
     } catch (err) {
       console.error('Error revoking token:', err.data?.message || err.message);
-      // Still proceed with client-side logout
     } finally {
       clearAuthData();
       isLoading.value = false;
-      // Navigate to the login page after logout
       const router = useRouter();
       router.push('/login');
     }
   }
 
-  // Action to initialize store from persisted state (e.g., on app load)
   function initializeAuth() {
-    // If the store is rehydrated with an access token, fetch the user
-    if (accessToken.value) {
-      // Set the token cookie for the API plugin
-      tokenCookie.value = accessToken.value;
-      fetchCurrentUser();
+    if (tokenCookie.value && refreshTokenCookie.value) {
+      accessToken.value = tokenCookie.value;
+      refreshToken.value = refreshTokenCookie.value;
+
+      if (isTokenExpired(accessToken.value)) {
+        refreshAccessToken().then((success) => {
+          if (success) {
+            fetchCurrentUser();
+          }
+        });
+      } else {
+        fetchCurrentUser();
+      }
     }
   }
 
@@ -174,6 +272,7 @@ export const useAuthStore = defineStore('auth', () => {
     // getters
     isAuthenticated,
     isAdmin,
+    isRefreshing,
 
     // actions
     setTokens,
@@ -183,5 +282,7 @@ export const useAuthStore = defineStore('auth', () => {
     fetchCurrentUser,
     logout,
     initializeAuth,
+    refreshAccessToken,
+    ensureValidToken,
   };
 });

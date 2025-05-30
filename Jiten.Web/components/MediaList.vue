@@ -111,6 +111,7 @@
       ? { query: { ...route.query, offset: response.value.previousOffset } }
       : null;
   });
+
   const nextLink = computed(() => {
     return response.value?.hasNextPage ? { query: { ...route.query, offset: response.value.nextOffset } } : null;
   });

@@ -158,7 +158,7 @@ public class AuthController : ControllerBase
         if (result.IsLockedOut)
             return Unauthorized(new { message = "Account locked due to too many failed login attempts. Please try again later." });
 
-        if (result.IsNotAllowed) // e.g., email not confirmed
+        if (result.IsNotAllowed)
         {
             if (!await _userManager.IsEmailConfirmedAsync(user))
             {
@@ -170,8 +170,6 @@ public class AuthController : ControllerBase
 
         if (result.RequiresTwoFactor)
         {
-            // For Nuxt: return an indicator that 2FA is needed.
-            // The client should then prompt for the 2FA code and call LoginWith2fa.
             return Ok(new { requiresTwoFactor = true, userId = user.Id });
         }
 
@@ -194,11 +192,9 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid request." });
         }
 
-        // The "Authenticator" provider is the default for TOTP apps like Google Authenticator
         var authenticatorCode = model.TwoFactorCode.Replace(" ", string.Empty).Replace("-", string.Empty);
         var result = await _signInManager.TwoFactorAuthenticatorSignInAsync(authenticatorCode, model.RememberMachine,
                                                                             rememberClient: false);
-        // `rememberClient: false` because JWTs are stateless. `RememberMachine` might be used by frontend to skip 2FA prompt for a period.
 
         if (result.IsLockedOut)
             return Unauthorized(new { message = "Account locked out." });
@@ -218,7 +214,6 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest model)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        // ... (Refresh logic as previously defined, ensure SaveChangesAsync is called for new refresh token)
         var principal = _tokenService.GetPrincipalFromExpiredToken(model.AccessToken);
         if (principal == null) return BadRequest(new { message = "Invalid access token or refresh token." });
 
@@ -233,29 +228,18 @@ public class AuthController : ControllerBase
 
         if (oldRefreshToken == null || oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
         {
-            // Potential token theft if an old or used token is presented.
-            // Consider revoking all active refresh tokens for this user as a security measure.
             if (oldRefreshToken != null && (oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked))
             {
                 _context.RefreshTokens.Remove(oldRefreshToken); // Clean up if already invalid
                 await _context.SaveChangesAsync();
             }
-            // Optionally, revoke all user's refresh tokens if a compromised one is detected.
-            // var userTokens = await _context.RefreshTokens.Where(rt => rt.UserId == userId && !rt.IsRevoked).ToListAsync();
-            // foreach(var t in userTokens) t.IsRevoked = true;
-            // _context.RefreshTokens.UpdateRange(userTokens);
-            // await _context.SaveChangesAsync();
 
             return BadRequest(new { message = "Invalid or expired refresh token." });
         }
 
-        // Mark old refresh token as used
         oldRefreshToken.IsUsed = true;
         _context.RefreshTokens.Update(oldRefreshToken);
-        // Do NOT save changes yet, do it atomically with the new token generation.
-
-        // Generate new tokens
-        // Determine if the original login was via 2FA for the 'amr' claim
+     
         bool wasTwoFactorLogin = principal.Claims.Any(c => c.Type == "amr" && c.Value == "mfa");
         var newTokens = await _tokenService.GenerateTokensAsync(user, wasTwoFactorLogin);
 

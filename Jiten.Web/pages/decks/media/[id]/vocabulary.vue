@@ -57,10 +57,13 @@
   const end = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
 
   const previousLink = computed(() => {
-    return response.value?.hasPreviousPage ? { query: { offset: response.value.previousOffset } } : null;
+    return response.value?.hasPreviousPage
+      ? { query: { ...route.query, offset: response.value.previousOffset } }
+      : null;
   });
+
   const nextLink = computed(() => {
-    return response.value?.hasNextPage ? { query: { offset: response.value.nextOffset } } : null;
+    return response.value?.hasNextPage ? { query: { ...route.query, offset: response.value.nextOffset } } : null;
   });
 
   const deckId = computed(() => {
