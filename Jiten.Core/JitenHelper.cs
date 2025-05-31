@@ -43,6 +43,10 @@ public static class JitenHelper
                 deck.SetParentsAndDeckWordDeck(deck);
                 deck.ParentDeckId = null;
 
+                // Prevent efcore from inserting the deckwords as we will do it with an optimized method later
+                var deckWordsToInsert = deck.DeckWords.ToList();
+                deck.DeckWords.Clear(); 
+                
                 context.Decks.Add(deck);
 
                 await context.SaveChangesAsync();
@@ -56,13 +60,14 @@ public static class JitenHelper
 
                 var coverUrl = await BunnyCdnHelper.UploadFile(coverOptimized.ToByteArray(), $"{deck.DeckId}/cover.jpg");
                 deck.CoverName = coverUrl;
-                context.Entry(deck).State = EntityState.Modified;
 
-                await BulkInsertDeckWords(context, deck.DeckWords, deck.DeckId);
+                await BulkInsertDeckWords(context, deckWordsToInsert, deck.DeckId);
 
                 await InsertChildDecks(context, deck.Children, deck.DeckId);
             }
 
+            context.Entry(deck).State = EntityState.Modified;
+            
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
         }
@@ -135,7 +140,8 @@ public static class JitenHelper
             child.ParentDeckId = parentDeckId;
             child.CreationDate = DateTime.UtcNow;
             child.LastUpdate = DateTimeOffset.UtcNow;
-            context.Decks.Add(child);
+
+            context.Entry(child).State = child.DeckId == 0 ? EntityState.Added : EntityState.Modified;
         }
 
         await context.SaveChangesAsync();

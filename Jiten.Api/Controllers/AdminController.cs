@@ -33,6 +33,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
 
     [HttpPost("add-deck")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(254857600)]
     public async Task<IActionResult> AddMediaDeck([FromForm] AddMediaRequest model)
     {
         if (!ModelState.IsValid)
@@ -183,6 +184,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
 
     [HttpPost("update-deck")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(254857600)]
     public async Task<IActionResult> UpdateMediaDeck([FromForm] UpdateMediaRequest model)
     {
         if (!ModelState.IsValid)

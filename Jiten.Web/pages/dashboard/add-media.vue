@@ -423,6 +423,7 @@
                 <template
                   v-else-if="selectedMediaType === MediaType.Novel || selectedMediaType === MediaType.NonFiction"
                 >
+                  <Button label="Anilist" @click="searchAPI('AnilistNovel')" />
                   <Button label="Google Books" @click="searchAPI('GoogleBooks')" />
                 </template>
                 <template v-else-if="selectedMediaType === MediaType.VideoGame">
