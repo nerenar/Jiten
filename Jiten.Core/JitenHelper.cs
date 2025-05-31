@@ -45,7 +45,7 @@ public static class JitenHelper
 
                 // Prevent efcore from inserting the deckwords as we will do it with an optimized method later
                 var deckWordsToInsert = deck.DeckWords.ToList();
-                deck.DeckWords.Clear(); 
+                deck.DeckWords = new List<DeckWord>();
                 
                 context.Decks.Add(deck);
 
