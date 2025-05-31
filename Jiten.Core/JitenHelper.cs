@@ -64,9 +64,9 @@ public static class JitenHelper
                 await BulkInsertDeckWords(context, deckWordsToInsert, deck.DeckId);
 
                 await InsertChildDecks(context, deck.Children, deck.DeckId);
+                
+                context.Entry(deck).State = EntityState.Modified;
             }
-
-            context.Entry(deck).State = EntityState.Modified;
             
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
