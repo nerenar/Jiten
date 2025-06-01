@@ -51,6 +51,8 @@
   });
   const editingLink = ref<{ index: number; url: string; linkType: LinkType } | null>(null);
 
+  const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
+
   const availableLinkTypes = computed(() => {
     return Object.values(LinkType)
       .filter((value) => typeof value === 'number')
@@ -95,10 +97,9 @@
     }
   });
 
-  const { data : response, status, error } = await useApiFetch<DeckDetail>(`admin/deck/${mediaId}`);
+  const { data: response, status, error } = await useApiFetch<DeckDetail>(`admin/deck/${mediaId}`);
 
   watchEffect(() => {
-
     if (error.value) {
       throw new Error(error.value.message || 'Failed to fetch deck data');
     }
@@ -140,24 +141,30 @@
 
   function handleSubdeckFileUpload(event: { files: File[] }, subdeckId: number) {
     if (event.files && event.files.length > 0) {
-      const file = event.files[0];
-      const subdeck = subdecks.value.find((sd) => sd.id === subdeckId);
-      if (subdeck) {
-        subdeck.file = file;
+      for (const file of event.files) {
+        const subdeck = subdecks.value.find((sd) => sd.id === subdeckId);
+        if (subdeck) {
+          subdeck.file = file;
+        }
       }
     }
   }
 
   function handleNewSubdeckFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
-      const file = event.files[0];
+      for (const file of event.files) {
 
-      const newSubdeckNumber = subdecks.value.length + 1;
-      subdecks.value.push({
-        id: nextSubdeckId++,
-        originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
-        file: file,
-      });
+        const newSubdeckNumber = subdecks.value.length + 1;
+        subdecks.value.push({
+          id: nextSubdeckId++,
+          originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
+          file: file,
+        });
+      }
+      // Explicitly clear the FileUpload component's selection
+      if (newSubdeckUploaderRef.value) {
+        newSubdeckUploaderRef.value.clear();
+      }
     }
   }
 
@@ -363,11 +370,7 @@
                   <label class="block text-sm font-medium mb-1">Cover Image</label>
                   <!-- Show image preview if available (either from URL or local file) -->
                   <div v-if="coverImageUrl || coverImageObjectUrl" class="flex items-center mb-2">
-                    <img
-                      :src="coverImageUrl || coverImageObjectUrl"
-                      alt="Cover Preview"
-                      class="h-48 w-auto mr-2 object-contain border"
-                    />
+                    <img :src="coverImageUrl || coverImageObjectUrl" alt="Cover Preview" class="h-48 w-auto mr-2 object-contain border" />
                   </div>
                   <FileUpload
                     mode="advanced"
@@ -401,9 +404,7 @@
                     <p><strong>Character Count:</strong> {{ response.mainDeck.characterCount }}</p>
                     <p><strong>Unique Kanji:</strong> {{ response.mainDeck.uniqueKanjiCount }}</p>
                     <p><strong>Difficulty:</strong> {{ response.mainDeck.difficulty.toFixed(2) }}</p>
-                    <p>
-                      <strong>Avg. Sentence Length:</strong> {{ response.mainDeck.averageSentenceLength.toFixed(2) }}
-                    </p>
+                    <p><strong>Avg. Sentence Length:</strong> {{ response.mainDeck.averageSentenceLength.toFixed(2) }}</p>
                   </div>
                 </div>
               </div>
@@ -419,17 +420,11 @@
                 </Button>
               </div>
 
-              <div v-if="links.length === 0" class="p-4 border rounded text-center text-gray-500">
-                No links available. Click "Add Link" to add one.
-              </div>
+              <div v-if="links.length === 0" class="p-4 border rounded text-center text-gray-500">No links available. Click "Add Link" to add one.</div>
 
               <div v-else class="mb-4">
                 <ul class="list-none p-0">
-                  <li
-                    v-for="(link, index) in links"
-                    :key="index"
-                    class="flex justify-between items-center p-2 border-b"
-                  >
+                  <li v-for="(link, index) in links" :key="index" class="flex justify-between items-center p-2 border-b">
                     <div>
                       <span class="font-medium">{{ getLinkTypeText(parseInt(link.linkType)) }}:</span>
                       <a :href="link.url" target="_blank" class="ml-2 text-blue-500 hover:underline">{{ link.url }}</a>
@@ -519,10 +514,7 @@
               <Column field="difficulty" header="Difficulty" :sortable="true" />
               <Column header="Actions">
                 <template #body="slotProps">
-                  <Button
-                    class="p-button-text p-button-sm"
-                    @click="navigateTo(`/dashboard/media/${slotProps.data.deckId}`)"
-                  >
+                  <Button class="p-button-text p-button-sm" @click="navigateTo(`/dashboard/media/${slotProps.data.deckId}`)">
                     <Icon name="material-symbols-light:edit" size="1.5em" />
                   </Button>
                 </template>
@@ -581,10 +573,11 @@
             </template>
             <template #content>
               <FileUpload
+                ref="newSubdeckUploaderRef"
                 mode="advanced"
                 :auto="true"
                 choose-label="Select File to Add Subdeck"
-                :multiple="false"
+                :multiple="true"
                 class="w-full subdeck-file-upload"
                 :custom-upload="true"
                 :show-upload-button="false"
@@ -594,10 +587,7 @@
               >
                 <template #empty>
                   <div class="flex items-center justify-center flex-col">
-                    <Icon
-                      name="material-symbols-light:arrow-upload-progress"
-                      class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color"
-                    />
+                    <Icon name="material-symbols-light:arrow-upload-progress" class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color" />
                     <p class="mt-6 mb-0">Drag and drop file to here to upload.</p>
                   </div>
                 </template>

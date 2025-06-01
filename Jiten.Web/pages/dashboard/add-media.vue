@@ -47,6 +47,8 @@
   const showSearchResultsDialog = ref(false);
   const selectedMetadata = ref<Metadata | null>(null);
 
+  const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
+
   const subdecks = ref<
     Array<{
       id: number;
@@ -126,31 +128,39 @@
 
   function handleNewSubdeckFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
-      const file = event.files[0];
+      let mainFileConvertedInThisBatch = false;
 
-      // If this is the first subdeck, convert the main file to the first subdeck
-      if (subdecks.value.length === 0 && selectedFile.value) {
-        // Add the main file as the first subdeck
-        subdecks.value.push({
-          id: nextSubdeckId++,
-          originalTitle: `${subdeckDefaultName.value} 1`,
-          file: selectedFile.value,
-        });
+      for (const file of event.files) {
+        // If this is the first subdeck, convert the main file to the first subdeck
+        if (subdecks.value.length === 0 && selectedFile.value && !mainFileConvertedInThisBatch) {
+          // Add the main file as the first subdeck
+          subdecks.value.push({
+            id: nextSubdeckId++,
+            originalTitle: `${subdeckDefaultName.value} 1`,
+            file: selectedFile.value,
+          });
+          mainFileConvertedInThisBatch = true;
 
-        // Add the new file as the second subdeck
-        subdecks.value.push({
-          id: nextSubdeckId++,
-          originalTitle: `${subdeckDefaultName.value} 2`,
-          file: file,
-        });
-      } else {
-        // If not the first subdeck, just add the new subdeck as before
-        const newSubdeckNumber = subdecks.value.length + 1;
-        subdecks.value.push({
-          id: nextSubdeckId++,
-          originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
-          file: file,
-        });
+          // Add the new file as the second subdeck
+          subdecks.value.push({
+            id: nextSubdeckId++,
+            originalTitle: `${subdeckDefaultName.value} 2`,
+            file: file,
+          });
+        } else {
+          // If not the first subdeck, just add the new subdeck as before
+          const newSubdeckNumber = subdecks.value.length + 1;
+          subdecks.value.push({
+            id: nextSubdeckId++,
+            originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
+            file: file,
+          });
+        }
+      }
+      
+      // Explicitly clear the FileUpload component's selection
+      if (newSubdeckUploaderRef.value) {
+        newSubdeckUploaderRef.value.clear();
       }
     }
   }
@@ -279,11 +289,7 @@
     <Toast />
     <div class="container mx-auto p-4">
       <div class="flex items-center mb-6">
-        <Button
-          icon="pi pi-arrow-left"
-          class="p-button-text mr-2"
-          @click="navigateTo('/dashboard')"
-        />
+        <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard')" />
         <h1 class="text-3xl font-bold">Add Media</h1>
       </div>
 
@@ -326,10 +332,7 @@
             >
               <template #empty>
                 <div class="flex items-center justify-center flex-col">
-                  <Icon
-                    name="material-symbols-light:arrow-upload-progress"
-                    class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color"
-                  />
+                  <Icon name="material-symbols-light:arrow-upload-progress" class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color" />
                   <p class="mt-6 mb-0">Drag and drop file to here to upload.</p>
                 </div>
               </template>
@@ -370,11 +373,7 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Cover Image</label>
                   <div v-if="coverImageUrl || coverImageObjectUrl" class="flex items-center mb-2">
-                    <img
-                      :src="coverImageUrl || coverImageObjectUrl"
-                      alt="Cover Preview"
-                      class="h-48 w-auto mr-2 object-contain border"
-                    />
+                    <img :src="coverImageUrl || coverImageObjectUrl" alt="Cover Preview" class="h-48 w-auto mr-2 object-contain border" />
                     <Button class="p-button-text p-button-sm" @click="clearCoverImage">
                       <Icon name="material-symbols-light:close" class="w-full" size="1.5em" />
                     </Button>
@@ -420,9 +419,7 @@
                 <template v-else-if="selectedMediaType === MediaType.Movie || selectedMediaType === MediaType.Drama">
                   <Button label="TMDB" @click="searchAPI('Tmdb')" />
                 </template>
-                <template
-                  v-else-if="selectedMediaType === MediaType.Novel || selectedMediaType === MediaType.NonFiction"
-                >
+                <template v-else-if="selectedMediaType === MediaType.Novel || selectedMediaType === MediaType.NonFiction">
                   <Button label="Anilist" @click="searchAPI('AnilistNovel')" />
                   <Button label="Google Books" @click="searchAPI('GoogleBooks')" />
                 </template>
@@ -484,10 +481,11 @@
             </template>
             <template #content>
               <FileUpload
+                ref="newSubdeckUploaderRef"
                 mode="advanced"
                 :auto="true"
                 choose-label="Select File to Add Subdeck"
-                :multiple="false"
+                :multiple="true"
                 class="w-full subdeck-file-upload"
                 :custom-upload="true"
                 :show-upload-button="false"
@@ -497,10 +495,7 @@
               >
                 <template #empty>
                   <div class="flex items-center justify-center flex-col">
-                    <Icon
-                      name="material-symbols-light:arrow-upload-progress"
-                      class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color"
-                    />
+                    <Icon name="material-symbols-light:arrow-upload-progress" class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color" />
                     <p class="mt-6 mb-0">Drag and drop file to here to upload.</p>
                   </div>
                 </template>
@@ -510,12 +505,7 @@
         </div>
 
         <div v-if="selectedFile" class="mt-6 flex justify-center">
-          <Button
-            label="Submit"
-            class="p-button-lg p-button-success"
-            :disabled="!originalTitle.trim() || (!coverImage && !coverImageUrl)"
-            @click="submitMedia"
-          >
+          <Button label="Submit" class="p-button-lg p-button-success" :disabled="!originalTitle.trim() || (!coverImage && !coverImageUrl)" @click="submitMedia">
             <Icon name="material-symbols-light:check-circle" class="w-full" size="2em" />
             Submit
           </Button>
