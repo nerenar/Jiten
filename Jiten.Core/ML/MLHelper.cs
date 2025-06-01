@@ -48,7 +48,10 @@ public static class MLHelper
         context = new JitenDbContext(context.DbOptions);
         if (!deckWords.Any()) return;
 
-        var wordIds = deckWords.Select(dw => dw.WordId).Distinct().ToList();
+        var wordIdsToExclude = context.JMDictWords.Where(w => w.Priorities != null && w.Priorities.Contains("name")).Select(w => w.WordId).ToList();
+        var wordIds = deckWords.Select(dw => dw.WordId).Where(w => !wordIdsToExclude.Contains(w)).Distinct();
+
+
         if (!wordIds.Any()) return;
 
         var freqDataMap = context.JmDictWordFrequencies
