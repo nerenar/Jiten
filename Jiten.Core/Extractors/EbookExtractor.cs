@@ -9,6 +9,11 @@ namespace Jiten.Core;
 
 public class EbookExtractor
 {
+    private List<string> _bannedChapterNames =
+    [
+        "cover", "toc", "fmatter", "credit", "illust", "colophon", "cover", "toc", "fmatter"
+    ];
+    
     public async Task<string> ExtractTextFromEbook(string? filePath)
     {
         try
@@ -21,10 +26,11 @@ public class EbookExtractor
             // I'm not sure if all epub files have this format, but it works for now
             // I keep having to add new ones, help me
             Regex regex =
-                new(@"\b(part\d{4,5}\.x?html|p-\d{3}\.x?html|\d{4}\.x?html)|text\d{4,5}\.x?html|index_split_\d{3}\.x?html|a_\d_\d{2}.x?html|k\d+_\d{4}.x?html\b|kd\d+_\d{4}.x?html\b|part\d{3,4}_split_\d{3,4}\.x?html|OB\d{4,5}\.x?html");
+                new(@"\b.*?\d{1,6}.*?\.x?html\b");
 
             var filteredChapters = book.ReadingOrder
-                                       .Where(chapter => regex.IsMatch(chapter.Key));
+                                       .Where(chapter => regex.IsMatch(chapter.Key) &&
+                                                         !_bannedChapterNames.Any(bannedName => chapter.Key.Contains(bannedName, StringComparison.OrdinalIgnoreCase)));
 
 
             if (!filteredChapters.Any())

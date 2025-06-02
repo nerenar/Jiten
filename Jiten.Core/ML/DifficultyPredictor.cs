@@ -115,7 +115,7 @@ public class DifficultyPredictor
 
             var deckWords = deck.DeckWords.ToList();
 
-            MLHelper.ExtractCharacterCounts(deck.RawText.RawText, extractedFeatures); // Pass raw text for char counts
+            MLHelper.ExtractCharacterCounts(deck.RawText.RawText, extractedFeatures);
             await MLHelper.ExtractFrequencyStats(context, deckWords, extractedFeatures);
             MLHelper.ExtractConjugationStats(deckWords, extractedFeatures);
         }

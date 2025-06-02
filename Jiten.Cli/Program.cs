@@ -677,6 +677,23 @@ public class Program
                 }
 
                 break;
+
+            case "brute" or "bruteforce":
+                result = await new BruteforceExtractor().Extract(o.ExtractFilePath, "SHIFT-JIS", o.Verbose);
+                if (o.Output != null)
+                {
+                    await File.WriteAllTextAsync(o.Output, result);
+                }
+                break;
+            
+            case "brute-utf8" or "bruteforce-utf8":
+                result = await new BruteforceExtractor().Extract(o.ExtractFilePath, "UTF-8", o.Verbose);
+                if (o.Output != null)
+                {
+                    await File.WriteAllTextAsync(o.Output, result);
+                }
+                break;
+            
             case "mokuro":
                 var directories = Directory.GetDirectories(o.ExtractFilePath).ToList();
                 for (var i = 0; i < directories.Count; i++)
