@@ -83,8 +83,8 @@
                     <span v-if="deck.difficulty == 0" class="ml-8 tabular-nums text-green-700 dark:text-green-300"> Beginner </span>
                     <span v-else-if="deck.difficulty == 1" class="ml-8 tabular-nums text-green-500 dark:text-green-200"> Easy </span>
                     <span v-else-if="deck.difficulty == 2" class="ml-8 tabular-nums text-yellow-600 dark:text-yellow-300"> Moderate </span>
-                    <span v-else-if="deck.difficulty == 3" class="ml-8 tabular-nums text-amber-600 dark:text-amber-300"> Challenging </span>
-                    <span v-else-if="deck.difficulty == 4" class="ml-8 tabular-nums text-orange-600 dark:text-orange-300"> Advanced </span>
+                    <span v-else-if="deck.difficulty == 3" class="ml-8 tabular-nums text-amber-600 dark:text-amber-300"> Hard </span>
+                    <span v-else-if="deck.difficulty == 4" class="ml-8 tabular-nums text-orange-600 dark:text-orange-300"> Very hard </span>
                     <span v-else-if="deck.difficulty == 5" class="ml-8 tabular-nums text-red-600 dark:text-red-300"> Expert </span>
                   </div>
                 </div>

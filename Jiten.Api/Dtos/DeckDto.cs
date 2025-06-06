@@ -5,6 +5,7 @@ namespace Jiten.Api.Dtos;
 public class DeckDto
 {
     public int DeckId { get; set; }
+    public DateTimeOffset CreationDate { get; set; }
     public string CoverName { get; set; } = "nocover.jpg";
     public MediaType MediaType { get; set; } = new();
     public string OriginalTitle { get; set; } = "Unknown";
@@ -30,6 +31,7 @@ public class DeckDto
     public DeckDto(Deck deck, int occurrences)
     {
         DeckId = deck.DeckId;
+        CreationDate = deck.CreationDate;
         CoverName = deck.CoverName;
         MediaType = deck.MediaType;
         OriginalTitle = deck.OriginalTitle;
@@ -54,6 +56,7 @@ public class DeckDto
     public DeckDto(Deck deck)
     {
         DeckId = deck.DeckId;
+        CreationDate = deck.CreationDate;
         CoverName = deck.CoverName;
         MediaType = deck.MediaType;
         OriginalTitle = deck.OriginalTitle;

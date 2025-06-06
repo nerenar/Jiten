@@ -2,6 +2,7 @@ import type { MediaType, ReadingType } from '~/types';
 
 export interface Deck {
   deckId: number;
+  creationDate: Date;
   coverName?: string;
   mediaType: MediaType;
   originalTitle: string;

@@ -76,7 +76,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             // Then use the in-memory collection for filtering
             query = query.Where(d => deckIds.Contains(d.DeckId));
         }
-        
+
         if (string.IsNullOrEmpty(sortBy))
             sortBy = "title";
 
@@ -146,10 +146,10 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         else
         {
             var paginatedDecks = await query
-                                 .Skip(offset ?? 0)
-                                 .Take(pageSize)
-                                 .AsSplitQuery()
-                                 .ToListAsync(); // Execute the query against the database
+                                       .Skip(offset ?? 0)
+                                       .Take(pageSize)
+                                       .AsSplitQuery()
+                                       .ToListAsync(); // Execute the query against the database
 
             dtos = new List<DeckDto>();
             foreach (var deck in paginatedDecks)
@@ -157,7 +157,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 dtos.Add(new DeckDto(deck));
             }
         }
-        
+
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
     }
 
@@ -497,7 +497,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
                     if (excludeKana && WanaKana.IsKana(reading))
                         continue;
-                    
+
                     txtSb.AppendLine(reading);
                 }
 
@@ -547,5 +547,37 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         var count = query.Count();
 
         return Results.Ok(count);
+    }
+
+    /// <summary>
+    /// Gets decks from sliding 30-day windows based on offset for display in the update log
+    /// </summary>
+    /// <param name="offset">Window offset: 0 = last 30 days, 1 = days 30-60 ago, 2 = days 60-90 ago, etc.</param>
+    /// <returns>Deck information for the specified 30-day window</returns>
+    [HttpGet("media-update-log")]
+    [ResponseCache(Duration = 60 * 10, VaryByQueryKeys = ["offset"])]
+    public async Task<PaginatedResponse<List<DeckDto>>> GetDecksForUpdateLog(int? offset = 0)
+    {
+        int offsetValue = offset ?? 0;
+        var endDate = DateTimeOffset.UtcNow.AddDays(-30 * offsetValue);
+        var startDate = endDate.AddDays(-30);
+
+        var query = context.Decks.AsNoTracking()
+                           .Where(d => d.ParentDeckId == null &&
+                                       d.CreationDate >= startDate &&
+                                       d.CreationDate < endDate)
+                           .OrderByDescending(d => d.CreationDate);
+
+        int totalCount = await query.CountAsync();
+
+        var decks = await query.ToListAsync();
+
+        var dtos = decks.Select(d => new DeckDto
+                                     {
+                                         DeckId = d.DeckId, CreationDate = d.CreationDate, OriginalTitle = d.OriginalTitle,
+                                         RomajiTitle = d.RomajiTitle!, EnglishTitle = d.EnglishTitle!, MediaType = d.MediaType
+                                     }).ToList();
+
+        return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, decks.Count, offsetValue);
     }
 }

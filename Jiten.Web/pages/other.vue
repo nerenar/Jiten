@@ -35,6 +35,11 @@
   <div>
     <div>A global frequency list of all the words</div>
     <Button @click="downloadFile">Download Frequency List</Button>
+
+    <div class="flex space-x-4">
+      <NuxtLink to="/media-updates" no-rel>View a log of new media updates </NuxtLink>
+    </div>
+
     <div v-if="status === 'success'" class="pt-2">
       <div class="text-2xl font-bold">Global Stats</div>
       <b>{{ response.totalMojis?.toLocaleString() }}</b> characters in

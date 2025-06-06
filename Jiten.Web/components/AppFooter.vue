@@ -12,7 +12,9 @@
           <Icon name="ic:baseline-discord" size="2em" class="text-white" />
         </a>
       </div>
-      <div class="flex space-x-4"></div>
+      <div class="flex space-x-4">
+        <NuxtLink to="/media-updates" class="!text-white" no-rel>New media updates </NuxtLink>
+      </div>
     </div>
   </footer>
 </template>
