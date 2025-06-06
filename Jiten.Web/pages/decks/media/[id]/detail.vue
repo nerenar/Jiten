@@ -10,7 +10,6 @@
   const deckId = computed(() => route.params.id as string);
 
   const store = useJitenStore();
-  const displayAdminFunctions = computed(() => store.displayAdminFunctions);
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
@@ -19,7 +18,7 @@
     data: response,
     status,
     error,
-  } = await useApiFetchPaginated<DeckDetail[]>(url, {
+  } = await useApiFetchPaginated<DeckDetail>(url, {
     query: {
       offset: offset,
     },
