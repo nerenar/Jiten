@@ -21,6 +21,7 @@ public static class JitenHelper
                              .Include(d => d.DeckWords)
                              .Include(d => d.Children).ThenInclude(d => d.DeckWords).OrderBy(d => d.DeckOrder)
                              .Include(d => d.RawText)
+                             .Include(d => d.ExampleSentences)
                              .FirstOrDefaultAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType);
 
             if (existingDeck != null)
@@ -47,6 +48,11 @@ public static class JitenHelper
                 var deckWordsToInsert = deck.DeckWords.ToList();
                 deck.DeckWords = new List<DeckWord>();
                 
+                // Do the same for example sentences to prevent EF Core from inserting them prematurely
+                var exampleSentencesToInsert = deck.ExampleSentences?.ToList() ?? new List<ExampleSentence>();
+                if (deck.ExampleSentences != null)
+                    deck.ExampleSentences = new List<ExampleSentence>();
+                
                 context.Decks.Add(deck);
 
                 await context.SaveChangesAsync();
@@ -63,6 +69,11 @@ public static class JitenHelper
 
                 await BulkInsertDeckWords(context, deckWordsToInsert, deck.DeckId);
 
+                if (deck.ExampleSentences != null && exampleSentencesToInsert.Any())
+                {
+                    await BulkInsertExampleSentences(context, exampleSentencesToInsert, deck.DeckId);
+                }
+                
                 await InsertChildDecks(context, deck.Children, deck.DeckId);
                 
                 context.Entry(deck).State = EntityState.Modified;
@@ -104,6 +115,79 @@ public static class JitenHelper
             await context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
         }
     }
+    
+    private static async Task BulkInsertExampleSentences(JitenDbContext context, ICollection<ExampleSentence> exampleSentences, int deckId)
+    {
+        if (!exampleSentences.Any()) return;
+    
+        const int batchSize = 1000;
+        var batches = exampleSentences.Chunk(batchSize);
+        var sentenceIdMapping = new Dictionary<ExampleSentence, int>();
+        
+        // First, insert all example sentences and keep track of their generated IDs
+        foreach (var batch in batches)
+        {
+            var sql = $@"
+                        INSERT INTO jiten.""ExampleSentences"" (""Text"", ""Position"", ""DeckId"") 
+                        VALUES {string.Join(", ", Enumerable.Range(0, batch.Length).Select(i => $"({{{i * 3}}}, {{{i * 3 + 1}}}, {{{i * 3 + 2}}})"))}
+                        RETURNING ""SentenceId""";
+                        
+            var parameters = new List<object>();
+            
+            foreach (var sentence in batch)
+            {
+                parameters.Add(sentence.Text);
+                parameters.Add(sentence.Position);
+                parameters.Add(deckId);
+            }
+            
+            var sentenceIds = await context.Database.SqlQueryRaw<int>(sql, parameters.ToArray()).ToListAsync();
+            
+            // Store the mapping between sentences and their IDs
+            for (int i = 0; i < batch.Length; i++)
+            {
+                sentenceIdMapping[batch[i]] = sentenceIds[i];
+                // Update the entity with the generated ID
+                batch[i].SentenceId = sentenceIds[i];
+                batch[i].DeckId = deckId;
+            }
+        }
+        
+        // Then, insert all example sentence words using the generated sentence IDs
+        var allWords = new List<ExampleSentenceWord>();
+        
+        foreach (var sentence in exampleSentences)
+        {
+            foreach (var word in sentence.Words)
+            {
+                word.ExampleSentenceId = sentence.SentenceId;
+                allWords.Add(word);
+            }
+        }
+        
+        if (!allWords.Any()) return;
+        
+        var wordBatches = allWords.Chunk(batchSize);
+        
+        foreach (var batch in wordBatches)
+        {
+            var sql = $@"
+                        INSERT INTO jiten.""ExampleSentenceWords"" (""ExampleSentenceId"", ""WordId"", ""ReadingIndex"", ""Position"", ""Length"") VALUES " +
+                      "";
+            var parameters = new List<object>();
+            var values = new List<string>();
+    
+            for (int i = 0; i < batch.Length; i++)
+            {
+                var word = batch[i];
+                values.Add($"({{{parameters.Count}}}, {{{parameters.Count + 1}}}, {{{parameters.Count + 2}}}, {{{parameters.Count + 3}}}, {{{parameters.Count + 4}}})");
+                parameters.AddRange([word.ExampleSentenceId, word.WordId, word.ReadingIndex, word.Position, word.Length]);
+            }
+    
+            sql += string.Join(", ", values);
+            await context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
+        }
+    }
 
     private static async Task UpdateDeck(JitenDbContext context, Deck existingDeck, Deck deck)
     {
@@ -127,7 +211,16 @@ public static class JitenHelper
 
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {{0}}", deckId);
 
+        // Delete existing example sentences (cascade will delete their words too)
+        await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""ExampleSentences"" WHERE ""DeckId"" = {{0}}", deckId);
+    
         await BulkInsertDeckWords(context, deck.DeckWords, deckId);
+        
+        if (deck.ExampleSentences != null && deck.ExampleSentences.Any())
+        {
+            await BulkInsertExampleSentences(context, deck.ExampleSentences, deckId);
+        }
+        
         await UpdateChildDecks(context, existingDeck, deck.Children);
     }
 
@@ -297,40 +390,66 @@ public static class JitenHelper
             }
         }
 
+        // Apply logarithmic scaling + document frequency formula
+        foreach (var word in wordFrequencies.Values)
+        {
+            // Store the raw count in ObservedFrequency temporarily
+            word.ObservedFrequency = word.FrequencyRank;
+            
+            // Apply the formula: Score = log(1 + TotalOccurrences) * UsedInMediaAmount
+            double score = Math.Log(1 + word.FrequencyRank) * word.UsedInMediaAmount;
+            word.FrequencyRank = (int)Math.Round(score * 100); // Scale up for better ranking precision
+            
+            // Apply the same formula to readings
+            for (int j = 0; j < word.ReadingsFrequencyRank.Count; j++)
+            {
+                // Store the raw count in ReadingsObservedFrequency temporarily
+                word.ReadingsObservedFrequency[j] = word.ReadingsFrequencyRank[j];
+                
+                // Apply the formula: Score = log(1 + TotalOccurrences) * UsedInMediaAmount
+                double readingScore = Math.Log(1 + word.ReadingsFrequencyRank[j]) * word.ReadingsUsedInMediaAmount[j];
+                word.ReadingsFrequencyRank[j] = (int)Math.Round(readingScore * 100); // Scale up for better ranking precision
+            }
+        }
+        
+        // Sort by the new scores (descending)
         var sortedWordFrequencies = wordFrequencies.Values
-                                                   .OrderByDescending(w => w
-                                                                          .FrequencyRank)
+                                                   .OrderByDescending(w => w.FrequencyRank)
                                                    .ToList();
-
-
-        long totalOccurrences = sortedWordFrequencies.Sum(w => (long)w.FrequencyRank);
-
+        
+        // Calculate total occurrences based on raw counts (stored temporarily in ObservedFrequency)
+        long totalOccurrences = sortedWordFrequencies.Sum(w => (long)w.ObservedFrequency);
+        
         int currentRank = 0;
-        int previousRawFrequency = -1;
+        int previousScore = -1;
         int rankStep = 0;
-
+        
         for (int i = 0; i < sortedWordFrequencies.Count; i++)
         {
             var word = sortedWordFrequencies[i];
-
-            int wordRawFrequencyCount = word.FrequencyRank;
-
+            
+            int wordRawFrequencyCount = (int)word.ObservedFrequency;
+            int wordScore = word.FrequencyRank;
+        
             for (int j = 0; j < word.ReadingsObservedFrequency.Count; j++)
             {
+                // Calculate reading frequency percentage based on raw counts
+                double readingRawCount = word.ReadingsObservedFrequency[j];
+                
                 // Prevent division by zero
                 if (totalOccurrences > 0)
-                    word.ReadingsObservedFrequency[j] = word.ReadingsFrequencyRank[j] / (double)totalOccurrences;
+                    word.ReadingsObservedFrequency[j] = readingRawCount / (double)totalOccurrences;
                 else
                     word.ReadingsObservedFrequency[j] = 0;
-
+        
                 // Prevent division by zero
                 if (wordRawFrequencyCount > 0)
-                    word.ReadingsFrequencyPercentage[j] = (word.ReadingsFrequencyRank[j] / (double)wordRawFrequencyCount) * 100.0;
+                    word.ReadingsFrequencyPercentage[j] = (readingRawCount / (double)wordRawFrequencyCount) * 100.0;
                 else
                     word.ReadingsFrequencyPercentage[j] = 0;
             }
-
-            // Prevent division by zero
+        
+            // Calculate observed frequency based on raw counts
             if (totalOccurrences > 0)
             {
                 word.ObservedFrequency = wordRawFrequencyCount / (double)totalOccurrences;
@@ -339,18 +458,20 @@ public static class JitenHelper
             {
                 word.ObservedFrequency = 0;
             }
-
-            if (wordRawFrequencyCount != previousRawFrequency)
+        
+            // Assign ranks based on the new scores
+            if (wordScore != previousScore)
             {
                 currentRank += rankStep;
                 rankStep = 1;
-                previousRawFrequency = wordRawFrequencyCount;
+                previousScore = wordScore;
             }
             else
             {
                 rankStep++;
             }
-
+        
+            // Store the final rank
             word.FrequencyRank = currentRank + 1;
         }
 
@@ -358,16 +479,15 @@ public static class JitenHelper
 
         foreach (var wordFreq in sortedWordFrequencies)
         {
-            foreach (int readingRawFreq in wordFreq.ReadingsFrequencyRank)
+            foreach (int readingScore in wordFreq.ReadingsFrequencyRank)
             {
-                if (readingRawFreq <= 0) continue;
-
-                readingFrequencyCounts.TryGetValue(readingRawFreq, out int currentCount);
-                readingFrequencyCounts[readingRawFreq] = currentCount + 1;
+                if (readingScore <= 0) continue;
+        
+                readingFrequencyCounts.TryGetValue(readingScore, out int currentCount);
+                readingFrequencyCounts[readingScore] = currentCount + 1;
             }
         }
-
-
+        
         // Sort frequencies descending and calculate ranks
         var sortedReadingFrequencies = readingFrequencyCounts.OrderByDescending(kvp => kvp.Key).ToList();
         var readingFrequencyFinalRanks = new Dictionary<int, int>();
@@ -377,20 +497,20 @@ public static class JitenHelper
             readingFrequencyFinalRanks.Add(kvp.Key, currentRank);
             currentRank += kvp.Value; // Increment rank by the number of readings sharing this frequency
         }
-
+        
         int zeroReadingRank = currentRank;
-
+        
         // Assign the calculated ranks back to the readings
         foreach (var wordFreq in sortedWordFrequencies)
         {
             for (int i = 0; i < wordFreq.ReadingsFrequencyRank.Count; i++)
             {
-                int readingRawFreq = wordFreq.ReadingsFrequencyRank[i];
-
-                // Check if this reading had a non-zero frequency and find its rank
-                if (readingRawFreq > 0 && readingFrequencyFinalRanks.TryGetValue(readingRawFreq, out int finalRank))
+                int readingScore = wordFreq.ReadingsFrequencyRank[i];
+        
+                // Check if this reading had a non-zero score and find its rank
+                if (readingScore > 0 && readingFrequencyFinalRanks.TryGetValue(readingScore, out int finalRank))
                 {
-                    // Overwrite raw count with final rank
+                    // Overwrite score with final rank
                     wordFreq.ReadingsFrequencyRank[i] = finalRank;
                 }
                 else

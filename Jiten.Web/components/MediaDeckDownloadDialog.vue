@@ -3,11 +3,14 @@
   import { Accordion, AccordionPanel, AccordionHeader, AccordionContent, SelectButton } from 'primevue';
   import { debounce } from 'perfect-debounce';
   import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
+  import { useJitenStore } from '~/stores/jitenStore';
 
   const props = defineProps<{
     deck: Deck;
     visible: boolean;
   }>();
+
+  const store = useJitenStore();
 
   const emit = defineEmits(['update:visible']);
 
@@ -86,10 +89,7 @@
   const currentCardAmount = computed(() => {
     if (downloadType.value == DeckDownloadType.Full) {
       return props.deck.uniqueWordCount;
-    } else if (
-      downloadType.value == DeckDownloadType.TopDeckFrequency ||
-      downloadType.value == DeckDownloadType.TopChronological
-    ) {
+    } else if (downloadType.value == DeckDownloadType.TopDeckFrequency || downloadType.value == DeckDownloadType.TopChronological) {
       return frequencyRange.value![1] - frequencyRange.value![0];
     } else if (downloadType.value == DeckDownloadType.TopGlobalFrequency) {
       return debouncedCurrentCardAmount;
@@ -100,22 +100,34 @@
 
   const excludeFullWidthDigits = ref(true);
   const excludeKana = ref(false);
+  const excludeKnownWords = ref(false);
+  const excludeExampleSentences = ref(false);
 
   const downloadFile = async () => {
     try {
       downloading.value = true;
       localVisible.value = false;
+      const knownWordIds = excludeKnownWords.value ? store.getKnownWordIds() || [] : [];
+
       const response = await $api<File>(url, {
-        query: {
+        method: "POST",
+        body: {
           format: format.value,
           downloadType: downloadType.value,
           order: deckOrder.value,
           minFrequency: frequencyRange.value![0],
           maxFrequency: frequencyRange.value![1],
           excludeKana: excludeKana.value,
+          excludeKnownWords: excludeKnownWords.value,
+          excludeExampleSentences: excludeExampleSentences.value,
+          knownWordIds: knownWordIds
         },
-        responseType: 'blob'
+        headers: {
+          "Content-Type": "application/json",
+        },
+        responseType: "blob"
       });
+
       if (response) {
         const blobUrl = window.URL.createObjectURL(response);
         const link = document.createElement('a');
@@ -156,12 +168,7 @@
 </script>
 
 <template>
-  <Dialog
-    v-model:visible="localVisible"
-    modal
-    :header="`Download deck ${localiseTitle(deck)}`"
-    :style="{ width: '30rem' }"
-  >
+  <Dialog v-model:visible="localVisible" modal :header="`Download deck ${localiseTitle(deck)}`" :style="{ width: '30rem' }">
     <div class="flex flex-col gap-2">
       <div>
         <div class="text-gray-500 text-sm">Format</div>
@@ -180,13 +187,7 @@
       </span>
       <div>
         <div class="text-gray-500 text-sm">Filter type</div>
-        <Select
-          v-model="downloadType"
-          :options="downloadTypes"
-          option-value="value"
-          option-label="label"
-          size="small"
-        />
+        <Select v-model="downloadType" :options="downloadTypes" option-value="value" option-label="label" size="small" />
       </div>
       <div>
         <div class="text-gray-500 text-sm">Sort order</div>
@@ -203,13 +204,7 @@
             class="max-w-20 flex-shrink-0"
             @update:model-value="updateMinFrequency"
           />
-          <Slider
-            v-model="frequencyRange"
-            range
-            :min="0"
-            :max="currentSliderMax"
-            class="flex-grow mx-2 flex-basis-auto"
-          />
+          <Slider v-model="frequencyRange" range :min="0" :max="currentSliderMax" class="flex-grow mx-2 flex-basis-auto" />
           <InputNumber
             :model-value="frequencyRange?.[1] ?? 0"
             show-buttons
@@ -221,17 +216,23 @@
         </div>
       </div>
       <Accordion>
-        <AccordionPanel value="0" >
-          <AccordionHeader>
-            Advanced
-          </AccordionHeader>
+        <AccordionPanel value="0">
+          <AccordionHeader> Advanced </AccordionHeader>
           <AccordionContent>
             <div class="flex flex-col gap-2">
-          <div class="text-sm text-gray-500">These options might not be reflected in the card count below.</div>
-            <div class="flex items-center gap-2">
-              <Checkbox v-model="excludeKana" input-id="excludeKana" name="kanaOnly" :binary="true" />
-              <label for="excludeKana">Exclude kana-only vocabulary</label>
-            </div>
+              <div class="text-sm text-gray-500">These options might not be reflected in the card count below.</div>
+              <div class="flex items-center gap-2">
+                <Checkbox v-model="excludeKana" input-id="excludeKana" name="kanaOnly" :binary="true" />
+                <label for="excludeKana">Exclude kana-only vocabulary</label>
+              </div>
+              <div class="flex items-center gap-2">
+                <Checkbox v-model="excludeExampleSentences" input-id="excludeExampleSentences" name="noExampleSentences" :binary="true" />
+                <label for="excludeKana">Don't include example sentences</label>
+              </div>
+              <div class="flex items-center gap-2">
+                <Checkbox v-model="excludeKnownWords" input-id="excludeKnownWords" name="excludeKnownWords" :binary="true" />
+                <label for="excludeKnownWords">Don't download known words</label>
+              </div>
             </div>
           </AccordionContent>
         </AccordionPanel>
@@ -248,13 +249,7 @@
 
   <div v-if="downloading" class="!fixed top-1/3 left-1/3 text-center" style="z-index: 9999">
     <div class="text-white font-bold text-lg">Preparing your deck, please wait a few seconds…</div>
-    <ProgressSpinner
-      style="width: 50px; height: 50px"
-      stroke-width="8"
-      fill="transparent"
-      animation-duration=".5s"
-      aria-label="Creating your deck"
-    />
+    <ProgressSpinner style="width: 50px; height: 50px" stroke-width="8" fill="transparent" animation-duration=".5s" aria-label="Creating your deck" />
   </div>
   <BlockUI :blocked="downloading" full-screen />
 </template>

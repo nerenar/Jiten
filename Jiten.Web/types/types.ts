@@ -15,6 +15,7 @@ export interface Deck {
   uniqueKanjiCount: number;
   uniqueKanjiUsedOnceCount: number;
   difficulty: number;
+  difficultyRaw: number;
   averageSentenceLength: number;
   parentDeckId: number;
   deckWords: DeckWord[];
@@ -141,4 +142,22 @@ export interface TokenResponse {
   accessToken: string;
   accessTokenExpiration: Date;
   refreshToken: string;
+}
+
+export interface DeckCoverage {
+  deckId: number;
+  totalWordCount: number;
+  knownWordsOccurrences: number;
+  knownUniqueWordCount: number;
+  uniqueWordCount: number;
+  knownWordPercentage: number;
+  knownUniqueWordPercentage: number;
+}
+
+export interface ExampleSentence {
+  text: string;
+  wordPosition: number;
+  wordLength: number;
+  sourceDeck: Deck;
+  sourceDeckParent: Deck;
 }

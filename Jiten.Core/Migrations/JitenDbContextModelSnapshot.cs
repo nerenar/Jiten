@@ -49,8 +49,8 @@ namespace Jiten.Core.Migrations
                     b.Property<float>("DialoguePercentage")
                         .HasColumnType("real");
 
-                    b.Property<int>("Difficulty")
-                        .HasColumnType("integer");
+                    b.Property<float>("Difficulty")
+                        .HasColumnType("real");
 
                     b.Property<string>("EnglishTitle")
                         .HasMaxLength(200)
@@ -162,6 +162,57 @@ namespace Jiten.Core.Migrations
                     b.ToTable("DeckWords", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>
+                {
+                    b.Property<int>("SentenceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SentenceId"));
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("SentenceId");
+
+                    b.HasIndex("DeckId")
+                        .HasDatabaseName("IX_ExampleSentence_DeckId");
+
+                    b.ToTable("ExampleSentences", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentenceWord", b =>
+                {
+                    b.Property<int>("ExampleSentenceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("Position")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("Length")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("ExampleSentenceId", "WordId", "Position");
+
+                    b.HasIndex("WordId", "ReadingIndex")
+                        .HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex");
+
+                    b.ToTable("ExampleSentenceWords", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictDefinition", b =>
                 {
                     b.Property<int>("DefinitionId")
@@ -236,6 +287,9 @@ namespace Jiten.Core.Migrations
 
                     b.PrimitiveCollection<List<string>>("ObsoleteReadings")
                         .HasColumnType("text[]");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("int");
 
                     b.PrimitiveCollection<List<string>>("PartsOfSpeech")
                         .IsRequired()
@@ -356,6 +410,36 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithMany("ExampleSentences")
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentenceWord", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.ExampleSentence", "ExampleSentence")
+                        .WithMany("Words")
+                        .HasForeignKey("ExampleSentenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.JMDict.JmDictWord", "Word")
+                        .WithMany()
+                        .HasForeignKey("WordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExampleSentence");
+
+                    b.Navigation("Word");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictDefinition", b =>
                 {
                     b.HasOne("Jiten.Core.Data.JMDict.JmDictWord", null)
@@ -400,9 +484,16 @@ namespace Jiten.Core.Migrations
 
                     b.Navigation("DeckWords");
 
+                    b.Navigation("ExampleSentences");
+
                     b.Navigation("Links");
 
                     b.Navigation("RawText");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>
+                {
+                    b.Navigation("Words");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWord", b =>

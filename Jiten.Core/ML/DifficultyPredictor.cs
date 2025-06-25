@@ -14,20 +14,17 @@ using System.Threading.Tasks;
 
 public class DifficultyPredictor
 {
-    private readonly FeatureExtractor _featureExtractor;
     private readonly MLContext _mlContext;
     private readonly PredictionEngine<PredictorInput, PredictorOutput> _predictionEngine;
     private readonly DbContextOptions<JitenDbContext> _dbOptions;
 
     private readonly List<string> _featureOrder;
-    private readonly string[] _classNames = { "Beginner", "Upper Beginner", "Lower Intermediate", "Upper Intermediate", "Advanced", "Expert" };
 
     public DifficultyPredictor(
         DbContextOptions<JitenDbContext> dbOptions,
         string modelPath)
     {
         _dbOptions = dbOptions;
-        _featureExtractor = new FeatureExtractor(dbOptions);
 
         _mlContext = new MLContext(seed: 0);
 
@@ -56,15 +53,19 @@ public class DifficultyPredictor
     {
         var orderedNames = new List<string>
                            {
-                               "Ttr", "AverageSentenceLength", "DialoguePercentage", "KanjiRatio", "KanjiToKanaRatio", "AvgLogFreqRank",
-                               "MedianLogFreqRank", "StdLogFreqRank", "MaxFreqRank", "AvgLogObsFreq", "MedianLogObsFreq", "StdLogObsFreq",
-                               "MinObsFreq", "MaxObsFreq", "LowFreqRankPerc", /*"LowFreqObsPerc",*/ "AvgReadingFreqRank",
-                               "MedianReadingFreqRank", "AvgReadingObsFreq", "MedianReadingObsFreq", "AvgReadingFreqPerc",
-                               "MedianReadingFreqPerc", "AvgCustomScorePerWord", "MedianCustomWordScore", "StdCustomWordScore",
-                               "MaxCustomWordScore", "PercCustomScoreAboveSoftcapStart", "ratio_negative_conj", "ratio_polite_conj",
-                               "ratio_conditional_conj", "ratio_passive_causative_conj", "ratio_potential_conj", "ratio_volitional_conj",
-                               "ratio_imperative_conj", "ratio_te_form_conj", "ratio_past_conj", "ratio_stem_conj", "ratio_other_conj",
-                               "RatioConjugations"
+                               "Ttr", "AverageSentenceLength", "LogSentenceLength", "DialoguePercentage", "KanjiRatio", "KanjiToKanaRatio",
+                               "KangoPercentage", "WagoPercentage", "GairaigoPercentage", "VerbPercentage", "ParticlePercentage",
+                               "AvgWordPerSentence", "ReadabilityScore", "AvgLogFreqRank", "AvgFreqRank", "MedianLogFreqRank",
+                               "StdLogFreqRank", "MaxFreqRank", "AvgLogObsFreq", "MedianLogObsFreq", "StdLogObsFreq", "MinObsFreq",
+                               "MaxObsFreq", "LowFreqRankPerc", "AvgReadingFreqRank", "MedianReadingFreqRank", "AvgReadingObsFreq",
+                               "MedianReadingObsFreq", "AvgReadingFreqPerc", "MedianReadingFreqPerc", "AvgCustomScorePerWord",
+                               "MedianCustomWordScore", "StdCustomWordScore", "MaxCustomWordScore", "PercCustomScoreAboveSoftcapStart",
+                               "ratio_negative_conj", "ratio_polite_conj", "ratio_conditional_conj", "ratio_passive_causative_conj",
+                               "ratio_potential_conj", "ratio_volitional_conj", "ratio_imperative_conj", "ratio_te_form_conj",
+                               "ratio_past_conj", "ratio_stem_conj", "ratio_garu_conj", "ratio_seemingness_conj", "ratio_shimau_conj",
+                               "ratio_contracted_conj", "ratio_other_conj", "RatioConjugations", "ratio_noun_pos", "ratio_verb_pos",
+                               "ratio_adj_pos", "ratio_adv_pos", "ratio_part_pos", "ratio_conjunc_pos", "ratio_aux_pos", "ratio_inter_pos",
+                               "ratio_fix_pos", "ratio_filler_pos", "ratio_name_pos", "ratio_pn_pos", "ratio_exp_pos", "ratio_other_pos"
                            };
         return orderedNames;
     }
@@ -118,8 +119,8 @@ public class DifficultyPredictor
             MLHelper.ExtractCharacterCounts(deck.RawText.RawText, extractedFeatures);
             await MLHelper.ExtractFrequencyStats(context, deckWords, extractedFeatures);
             MLHelper.ExtractConjugationStats(deckWords, extractedFeatures);
+            MLHelper.ExtractReadabilityScore(deckWords, extractedFeatures);;
         }
-
 
         // 3. Convert ExtractedFeatures to float[] in the correct order
         var featureVector = new float[_featureOrder.Count];
@@ -159,13 +160,11 @@ public class DifficultyPredictor
         // 4. Predict
         var prediction = _predictionEngine.Predict(predictorInput);
         var predictedDifficulty = prediction.PredictedDifficulty[0];
-        
-        Console.WriteLine("Predicted difficulty (not rounded): " + predictedDifficulty + "");
-        
-        var rounded = (float)Math.Clamp(Math.Round(predictedDifficulty), 0, 5);
 
-        
-        return rounded;
+        Console.WriteLine("Predicted difficulty (not rounded): " + predictedDifficulty + "");
+        Console.WriteLine("Predicted difficulty (rounded): " + (float)Math.Clamp(Math.Round(predictedDifficulty), 0, 5) + "");
+
+        return predictedDifficulty;
     }
 
     private Dictionary<string, double> GetFeatureMap(ExtractedFeatures features)
@@ -176,18 +175,23 @@ public class DifficultyPredictor
                       { "UniqueWordCount", features.UniqueWordCount }, { "UniqueWordOnceCount", features.UniqueWordOnceCount },
                       { "UniqueKanjiCount", features.UniqueKanjiCount }, { "UniqueKanjiOnceCount", features.UniqueKanjiOnceCount },
                       { "SentenceCount", features.SentenceCount }, { "Ttr", features.Ttr },
-                      { "AverageSentenceLength", features.AverageSentenceLength }, { "DialoguePercentage", features.DialoguePercentage },
-                      { "TotalCount", features.TotalCount }, { "KanjiCount", features.KanjiCount },
-                      { "HiraganaCount", features.HiraganaCount }, { "KatakanaCount", features.KatakanaCount },
-                      { "OtherCount", features.OtherCount }, { "KanjiRatio", features.KanjiRatio },
-                      { "HiraganaRatio", features.HiraganaRatio }, { "KatakanaRatio", features.KatakanaRatio },
-                      { "OtherRatio", features.OtherRatio }, { "KanjiToKanaRatio", features.KanjiToKanaRatio },
-                      { "AvgLogFreqRank", features.AvgLogFreqRank }, { "MedianLogFreqRank", features.MedianLogFreqRank },
-                      { "StdLogFreqRank", features.StdLogFreqRank }, { "MinFreqRank", features.MinFreqRank },
-                      { "MaxFreqRank", features.MaxFreqRank }, { "AvgLogObsFreq", features.AvgLogObsFreq },
-                      { "MedianLogObsFreq", features.MedianLogObsFreq }, { "StdLogObsFreq", features.StdLogObsFreq },
-                      { "MinObsFreq", features.MinObsFreq }, { "MaxObsFreq", features.MaxObsFreq },
-                      { "LowFreqRankPerc", features.LowFreqRankPerc },/* { "LowFreqObsPerc", features.LowFreqObsPerc },*/
+                      { "AverageSentenceLength", features.AverageSentenceLength }, { "LogSentenceLength", features.LogSentenceLength },
+                      { "DialoguePercentage", features.DialoguePercentage }, { "TotalCount", features.TotalCount },
+                      { "KanjiCount", features.KanjiCount }, { "HiraganaCount", features.HiraganaCount },
+                      { "KatakanaCount", features.KatakanaCount }, { "OtherCount", features.OtherCount },
+                      { "KanjiRatio", features.KanjiRatio }, { "HiraganaRatio", features.HiraganaRatio },
+                      { "KatakanaRatio", features.KatakanaRatio }, { "OtherRatio", features.OtherRatio },
+                      { "KanjiToKanaRatio", features.KanjiToKanaRatio }, { "KangoPercentage", features.KangoPercentage },
+                      { "WagoPercentage", features.WagoPercentage }, { "GairaigoPercentage", features.GairaigoPercentage },
+                      { "VerbPercentage", features.VerbPercentage }, { "ParticlePercentage", features.ParticlePercentage },
+                      { "AvgWordPerSentence", features.AvgWordPerSentence }, { "ReadabilityScore", features.ReadabilityScore },
+                      { "AvgLogFreqRank", features.AvgLogFreqRank }, { "AvgFreqRank", features.AvgFreqRank },
+                      { "MedianLogFreqRank", features.MedianLogFreqRank }, { "StdLogFreqRank", features.StdLogFreqRank },
+                      { "MinFreqRank", features.MinFreqRank }, { "MaxFreqRank", features.MaxFreqRank },
+                      { "AvgLogObsFreq", features.AvgLogObsFreq }, { "MedianLogObsFreq", features.MedianLogObsFreq },
+                      { "StdLogObsFreq", features.StdLogObsFreq }, { "MinObsFreq", features.MinObsFreq },
+                      { "MaxObsFreq", features.MaxObsFreq },
+                      { "LowFreqRankPerc", features.LowFreqRankPerc }, /* { "LowFreqObsPerc", features.LowFreqObsPerc },*/
                       { "AvgReadingFreqRank", features.AvgReadingFreqRank }, { "MedianReadingFreqRank", features.MedianReadingFreqRank },
                       { "AvgReadingObsFreq", features.AvgReadingObsFreq }, { "MedianReadingObsFreq", features.MedianReadingObsFreq },
                       { "AvgReadingFreqPerc", features.AvgReadingFreqPerc }, { "MedianReadingFreqPerc", features.MedianReadingFreqPerc },
@@ -209,6 +213,16 @@ public class DifficultyPredictor
         }
 
         map["RatioConjugations"] = features.RatioConjugations;
+
+        foreach (var kvp in features.PosCategoryCounts)
+        {
+            map[kvp.Key] = kvp.Value;
+        }
+
+        foreach (var kvp in features.PosCategoryRatios)
+        {
+            map[kvp.Key] = kvp.Value;
+        }
 
         return map;
     }

@@ -5,12 +5,12 @@ namespace Jiten.Parser.Tests;
 using Xunit;
 using FluentAssertions;
 
-public class ParserTests
+public class MorphologicalAnalyserTests
 {
     private async Task<IEnumerable<WordInfo>> Parse(string text)
     {
-        var parser = new Parser();
-        return await parser.Parse(text);
+        var parser = new MorphologicalAnalyser();
+        return (await parser.Parse(text)).First().Words.Select(w => w.word);
     }
 
     [Theory]

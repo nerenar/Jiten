@@ -1,9 +1,10 @@
 <script setup lang="ts">
-  import type { Deck } from '~/types';
+  import { type Deck, MediaType, type DeckCoverage } from '~/types';
   import Card from 'primevue/card';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import { useJitenStore } from '~/stores/jitenStore';
+  import CoverageDialog from '~/components/CoverageDialog.vue';
 
   const props = defineProps<{
     deck: Deck;
@@ -11,10 +12,16 @@
   }>();
 
   const showDownloadDialog = ref(false);
+  const showCoverageDialog = ref(false);
+  const isLoadingCoverage = ref(false);
+  const coverageData = ref<DeckCoverage | null>(null);
 
   const store = useJitenStore();
+  const { $api } = useNuxtApp();
 
   const displayAdminFunctions = computed(() => store.displayAdminFunctions);
+  const readingSpeed = computed(() => store.readingSpeed);
+  const readingDuration = computed(() => Math.round(props.deck.characterCount / readingSpeed.value));
 
   const sortedLinks = computed(() => {
     return [...props.deck.links].sort((a, b) => {
@@ -23,6 +30,29 @@
       return textA.localeCompare(textB);
     });
   });
+
+  const fetchCoverage = async () => {
+    isLoadingCoverage.value = true;
+    try {
+      const wordIds = store.getKnownWordIds();
+
+      const bodyPayload = wordIds || [];
+
+      const data = await $api<DeckCoverage>(`media-deck/${props.deck.deckId}/coverage`, {
+        method: 'POST',
+        body: JSON.stringify(bodyPayload),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      coverageData.value = data;
+      showCoverageDialog.value = true;
+    } catch (error) {
+      console.error('Error fetching coverage data:', error);
+    } finally {
+      isLoadingCoverage.value = false;
+    }
+  };
 </script>
 
 <template>
@@ -80,24 +110,38 @@
                       Difficulty
                       <span class="text-purple-500 text-xs align-super"> beta </span>
                     </span>
-                    <span v-if="deck.difficulty == 0" class="ml-8 tabular-nums text-green-700 dark:text-green-300"> Beginner </span>
-                    <span v-else-if="deck.difficulty == 1" class="ml-8 tabular-nums text-green-500 dark:text-green-200"> Easy </span>
-                    <span v-else-if="deck.difficulty == 2" class="ml-8 tabular-nums text-yellow-600 dark:text-yellow-300"> Moderate </span>
-                    <span v-else-if="deck.difficulty == 3" class="ml-8 tabular-nums text-amber-600 dark:text-amber-300"> Hard </span>
-                    <span v-else-if="deck.difficulty == 4" class="ml-8 tabular-nums text-orange-600 dark:text-orange-300"> Very hard </span>
-                    <span v-else-if="deck.difficulty == 5" class="ml-8 tabular-nums text-red-600 dark:text-red-300"> Expert </span>
+                    <span v-tooltip="'1/6'" v-if="deck.difficulty == 0" class="ml-8 tabular-nums text-green-700 dark:text-green-300"> Beginner </span>
+                    <span v-tooltip="'2/6'" v-else-if="deck.difficulty == 1" class="ml-8 tabular-nums text-green-500 dark:text-green-200"> Easy </span>
+                    <span v-tooltip="'3/6'" v-else-if="deck.difficulty == 2" class="ml-8 tabular-nums text-yellow-600 dark:text-yellow-300"> Moderate </span>
+                    <span v-tooltip="'4/6'" v-else-if="deck.difficulty == 3" class="ml-8 tabular-nums text-amber-600 dark:text-amber-300"> Hard </span>
+                    <span v-tooltip="'5/6'" v-else-if="deck.difficulty == 4" class="ml-8 tabular-nums text-orange-600 dark:text-orange-300"> Very hard </span>
+                    <span v-tooltip="'6/6'" v-else-if="deck.difficulty == 5" class="ml-8 tabular-nums text-red-600 dark:text-red-300"> Expert </span>
                   </div>
                 </div>
 
                 <div class="w-full md:w-50">
                   <div v-if="deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100" class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Dialogue (%)</span>
-                    <span class="ml-8 tabular-nums">{{ deck.dialoguePercentage.toFixed(1) }}</span>
+                    <span class="text-gray-600 dark:text-gray-300">Dialogue</span>
+                    <span class="ml-8 tabular-nums">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
                   </div>
 
                   <div v-if="deck.childrenDeckCount != 0" class="flex justify-between mb-2">
                     <span class="text-gray-600 dark:text-gray-300">{{ getChildrenCountText(deck.mediaType) }}</span>
                     <span class="ml-8 tabular-nums">{{ deck.childrenDeckCount.toLocaleString() }}</span>
+                  </div>
+
+                  <div
+                    v-if="
+                      deck.mediaType == MediaType.Novel ||
+                      deck.mediaType == MediaType.NonFiction ||
+                      deck.mediaType == MediaType.VisualNovel ||
+                      deck.mediaType == MediaType.WebNovel
+                    "
+                    v-tooltip="'Based on your reading speed in the settings:\n ' + readingSpeed + ' characters per hour.'"
+                    class="flex justify-between mb-2"
+                  >
+                    <span class="text-gray-600 dark:text-gray-300">Duration <i class="pi pi-info-circle cursor-pointer text-primary-500"></i></span>
+                    <span class="ml-8 tabular-nums">{{ readingDuration > 0 ? readingDuration : '<1' }} h</span>
                   </div>
 
                   <div v-if="deck.selectedWordOccurrences != 0" class="flex justify-between mb-2">
@@ -115,7 +159,8 @@
                   <Button as="router-link" :to="`/decks/media/${deck.deckId}/detail`" label="View details" class="" />
                   <Button as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" label="View vocabulary" class="" />
                   <Button @click="showDownloadDialog = true" label="Download deck" class="" />
-                  <Button v-if="displayAdminFunctions" as="router-link" :to="`/dashboard/media/${deck.deckId}`" label="Edit" class="" />
+                  <Button v-if="!isCompact" @click="fetchCoverage" label="Coverage" class="" />
+                  <Button v-if="!isCompact && displayAdminFunctions" as="router-link" :to="`/dashboard/media/${deck.deckId}`" label="Edit" class="" />
                 </div>
               </div>
             </div>
@@ -126,6 +171,15 @@
   </Card>
 
   <MediaDeckDownloadDialog :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+  <CoverageDialog :visible="showCoverageDialog" :coverage="coverageData" :deck="deck" @update:visible="showCoverageDialog = $event" />
+
+  <!-- Loading overlay -->
+  <div v-if="isLoadingCoverage" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+    <div class="text-center">
+      <i class="pi pi-spin pi-spinner text-white text-5xl"></i>
+      <div class="text-white mt-4 text-xl">Getting your coverage, this could take a few seconds...</div>
+    </div>
+  </div>
 </template>
 
 <style scoped></style>

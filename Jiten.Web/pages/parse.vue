@@ -62,7 +62,7 @@
     <span v-for="word in words" :key="word.wordId" class="pr-1.5 font-noto-sans">
       <span
         v-if="word.wordId != 0"
-        class="text-purple-600 text-lg underline underline-offset-4 cursor-pointer hover:font-bold"
+        class="text-purple-600 dark:text-purple-400 text-lg underline underline-offset-4 cursor-pointer hover:font-bold"
         @click="handleWordClick(word)"
       >
         {{ word.originalText }}

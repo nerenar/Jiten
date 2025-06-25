@@ -12,6 +12,7 @@ public class JmDictWord
     public List<JmDictLookup> Lookups { get; set; } = new();
     public List<int>? PitchAccents { get; set; } = new();
     public List<string>? Priorities { get; set; } = new();
+    public WordOrigin Origin { get; set; } = WordOrigin.Unknown;
 
     public int GetPriorityScore(bool isKana)
     {

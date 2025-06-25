@@ -8,7 +8,7 @@ public class ReparseJob(JitenDbContext context)
 {
     public async Task Reparse(int deckId)
     {
-        var deck = await context.Decks.AsNoTracking().Include(d => d.RawText).Include(d => d.Children).ThenInclude(deck => deck.RawText)
+        var deck = await context.Decks.AsNoTracking().Include(d => d.RawText).Include(d => d.ExampleSentences).Include(d => d.Children).ThenInclude(deck => deck.RawText).Include(deck => deck.ExampleSentences)
                                 .FirstOrDefaultAsync(d => d.DeckId == deckId);
         if (deck == null)
             throw new Exception($"Deck with ID {deckId} not found.");
@@ -20,7 +20,7 @@ public class ReparseJob(JitenDbContext context)
 
         if (deck.Children.Count == 0)
         {
-            Deck newDeck = await Parser.Program.ParseTextToDeck(context, deck.RawText.RawText, true, true, deck.MediaType);
+            Deck newDeck = await Parser.Parser.ParseTextToDeck(context, deck.RawText.RawText, true, true, deck.MediaType);
             deck.CharacterCount = newDeck.CharacterCount;
             deck.WordCount = newDeck.WordCount;
             deck.UniqueWordCount = newDeck.UniqueWordCount;
@@ -29,6 +29,7 @@ public class ReparseJob(JitenDbContext context)
             deck.UniqueKanjiUsedOnceCount = newDeck.UniqueKanjiUsedOnceCount;
             deck.SentenceCount = newDeck.SentenceCount;
             deck.DeckWords = newDeck.DeckWords;
+            deck.ExampleSentences = newDeck.ExampleSentences;
             deck.Difficulty = newDeck.Difficulty;
             deck.DialoguePercentage = newDeck.DialoguePercentage;
 
@@ -43,7 +44,7 @@ public class ReparseJob(JitenDbContext context)
                 if (child.RawText == null)
                     throw new Exception($"Child deck with ID {child.DeckId} has no raw text to reparse.");
 
-                Deck newDeck = await Parser.Program.ParseTextToDeck(context, child.RawText.RawText, true, true, child.MediaType);
+                Deck newDeck = await Parser.Parser.ParseTextToDeck(context, child.RawText.RawText, true, true, child.MediaType);
 
                 children[i].CharacterCount = newDeck.CharacterCount;
                 children[i].WordCount = newDeck.WordCount;
@@ -53,6 +54,7 @@ public class ReparseJob(JitenDbContext context)
                 children[i].UniqueKanjiUsedOnceCount = newDeck.UniqueKanjiUsedOnceCount;
                 children[i].SentenceCount = newDeck.SentenceCount;
                 children[i].DeckWords = newDeck.DeckWords;
+                children[i].ExampleSentences = newDeck.ExampleSentences;
                 children[i].Difficulty = newDeck.Difficulty;
                 children[i].DialoguePercentage = newDeck.DialoguePercentage;
 

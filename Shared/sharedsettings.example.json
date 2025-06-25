@@ -1,6 +1,7 @@
 {
   "ConnectionStrings": {
-      "JitenDatabase": "Host=localhost;Database=jiten;Username=postgres;Password=password"
+      "JitenDatabase": "Host=localhost;Database=jiten;Username=postgres;Password=password",
+      "Redis" : "localhost:6379"
   },
   "JwtSettings": {
     "Secret": "YOUR_VERY_STRONG_AND_SECRET_KEY_THAT_IS_AT_LEAST_32_CHARS_LONG_AND_NOT_THIS_ONE",

@@ -14,7 +14,8 @@ public class KiriKiriExtractor
         "if",
         "kag",
         "f.",
-        "["
+        "[",
+        "*"
     };
     
     public async Task<string> Extract(string? filePath, bool verbose)

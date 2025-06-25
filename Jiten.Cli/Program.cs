@@ -54,7 +54,7 @@ public class Program
 
         [Option("furi", Required = false, HelpText = "Path to the JMDict Furigana dictionary file.")]
         public string FuriganaPath { get; set; }
-
+        
         [Option('e', "extract", Required = false, HelpText = "Extract text from a file or a folder and all its subfolders.")]
         public string ExtractFilePath { get; set; }
 
@@ -111,8 +111,15 @@ public class Program
         [Option(longName: "import-pitch-accents", Required = false, HelpText = "Import pitch accents from a yomitan dictinoary directory.")]
         public string ImportPitchAccents { get; set; }
 
+        [Option("import-vocabulary-origin", Required = false, HelpText = "Path to the VocabularyOrigin CSV file.")]
+        public string ImportVocabularyOrigin { get; set; }
+        
         [Option(longName: "extract-features", Required = false, HelpText = "Extract features from directory for ML.")]
         public string ExtractFeatures { get; set; }
+
+        [Option(longName: "extract-morphemes", Required = false,
+                HelpText = "Extract morphemes from words in the directionary and add them to the database.")]
+        public bool ExtractMorphemes { get; set; }
 
         [Option(longName: "register-admin", Required = false, HelpText = "Register an admin, requires --email --username --password.")]
         public bool RegisterAdmin { get; set; }
@@ -265,12 +272,27 @@ public class Program
                             Console.WriteLine("Pitch accents imported.");
                         }
 
+                        if (!string.IsNullOrEmpty(o.ImportVocabularyOrigin))
+                        {
+                            Console.WriteLine("Importing vocabulary origin...");
+                            await JmDictHelper.ImportVocabularyOrigin(o.Verbose, _dbOptions, o.ImportVocabularyOrigin);
+                            Console.WriteLine("Vocabulary origin imported.");
+                        }
+
                         if (!string.IsNullOrEmpty(o.ExtractFeatures))
                         {
                             Console.WriteLine("Extracting features...");
                             var featureExtractor = new FeatureExtractor(_dbOptions);
-                            await featureExtractor.ExtractFeatures(Jiten.Parser.Program.ParseTextToDeck, o.ExtractFeatures);
+                            await featureExtractor.ExtractFeatures(Jiten.Parser.Parser.ParseTextToDeck, o.ExtractFeatures);
                             Console.WriteLine("All features extracted.");
+                        }
+
+                        if (o.ExtractMorphemes)
+                        {
+                            Console.WriteLine("This function is not supported at this time.");
+                            // Console.WriteLine("Extracting morphemes...");
+                            // await ExtractMorphemes();
+                            // Console.WriteLine("All morphemes extracted.");
                         }
 
                         if (o.RegisterAdmin && !string.IsNullOrEmpty(o.Email) && !string.IsNullOrEmpty(o.Username) &&
@@ -473,8 +495,8 @@ public class Program
                     }
                 }
 
-                deck = await Jiten.Parser.Program.ParseTextToDeck(context, string.Join(Environment.NewLine, lines), _storeRawText, true,
-                                                                  deckType);
+                deck = await Jiten.Parser.Parser.ParseTextToDeck(context, string.Join(Environment.NewLine, lines), _storeRawText, true,
+                                                                 deckType);
                 deck.ParentDeck = parentDeck;
                 deck.DeckOrder = deckOrder;
                 deck.OriginalTitle = metadata.OriginalTitle;
@@ -684,16 +706,27 @@ public class Program
                 {
                     await File.WriteAllTextAsync(o.Output, result);
                 }
+
                 break;
-            
+
             case "brute-utf8" or "bruteforce-utf8":
                 result = await new BruteforceExtractor().Extract(o.ExtractFilePath, "UTF-8", o.Verbose);
                 if (o.Output != null)
                 {
                     await File.WriteAllTextAsync(o.Output, result);
                 }
+
                 break;
-            
+
+            case "brute-utf16" or "bruteforce-utf16":
+                result = await new BruteforceExtractor().Extract(o.ExtractFilePath, "UTF-16", o.Verbose);
+                if (o.Output != null)
+                {
+                    await File.WriteAllTextAsync(o.Output, result);
+                }
+
+                break;
+
             case "mokuro":
                 var directories = Directory.GetDirectories(o.ExtractFilePath).ToList();
                 for (var i = 0; i < directories.Count; i++)
@@ -749,7 +782,7 @@ public class Program
     {
         var file = filePath;
         var lines = await File.ReadAllLinesAsync(file);
-        var parser = new Jiten.Parser.Parser();
+        var parser = new Jiten.Parser.MorphologicalAnalyser();
         var startLine = 0;
         var batchSize = 1000;
         var xmlLines = new System.Collections.Concurrent.ConcurrentBag<string>();
@@ -956,5 +989,109 @@ public class Program
             Console.WriteLine($"User '{username}' successfully added to role '{roleName}'.");
             Console.ResetColor();
         }
+    }
+
+
+    /// <summary>
+    /// TODO: fix, doesn't work correctly
+    /// </summary>
+    /// <returns></returns>
+    private static async Task<bool> ExtractMorphemes()
+    {
+        var context = new JitenDbContext(_dbOptions);
+        var allWords = await context.JMDictWords.Select(w => new { w.WordId, w.Readings, w.ReadingTypes }).ToListAsync();
+        int error = 0;
+        int noMorphemes = 0;
+        int multipleMorphemes = 0;
+
+        List<(int wordId, string reading, List<int> morphemes)> parsedMorphemes = new();
+        foreach (var word in allWords)
+        {
+            string reading = "";
+            for (int i = 0; i < word.Readings.Count; i++)
+            {
+                if (word.ReadingTypes[i] == JmDictReadingType.Reading)
+                {
+                    reading = word.Readings[i];
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(reading))
+            {
+                Console.WriteLine($"Error: haven't found reading for word id {word.WordId}");
+                continue;
+            }
+
+            parsedMorphemes.Add((word.WordId, reading, new List<int>()));
+        }
+
+        // Process morphemes in batches of 10,000 words to avoid memory issues
+        const int BATCH_SIZE = 10000;
+        int totalProcessed = 0;
+
+
+        for (int batchStart = 0; batchStart < parsedMorphemes.Count; batchStart += BATCH_SIZE)
+        {
+            int currentBatchSize = Math.Min(BATCH_SIZE, parsedMorphemes.Count - batchStart);
+            Console.WriteLine($"Processing batch {batchStart / BATCH_SIZE + 1} of {(parsedMorphemes.Count + BATCH_SIZE - 1) / BATCH_SIZE} ({batchStart}-{batchStart + currentBatchSize - 1})");
+
+
+            var batchReadings = parsedMorphemes
+                                .Skip(batchStart)
+                                .Take(currentBatchSize)
+                                .Select(p => p.reading);
+            var batchText = String.Join(" \n", batchReadings);
+
+
+            var results = await Jiten.Parser.Parser.ParseMorphenes(context, batchText);
+
+            int currentMorphemeIndex = batchStart;
+            bool lastWasNull = false;
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (results[i] != null)
+                {
+                    parsedMorphemes[currentMorphemeIndex].morphemes.Add(results[i]!.WordId);
+                    lastWasNull = false;
+                }
+                else
+                {
+                    // No word found for this morpheme, we skip to avoid running out of bounds
+                    if (lastWasNull)
+                        continue;
+                    
+                    lastWasNull = true;
+                    currentMorphemeIndex++;
+                }
+            }
+
+            totalProcessed += currentBatchSize;
+            Console.WriteLine($"Processed {totalProcessed} of {parsedMorphemes.Count} words ({totalProcessed * 100 / parsedMorphemes.Count}%)");
+        }
+
+        foreach (var morpheme in parsedMorphemes)
+        {
+            if (morpheme.morphemes.Count == 0)
+            {
+                Console.WriteLine($"Error: haven't found any results for reading {morpheme.reading}");
+                error++;
+            }
+            else if (morpheme.morphemes.Count == 1)
+            {
+                noMorphemes++;
+            }
+            else
+            {
+                multipleMorphemes++;
+            }
+        }
+
+        Console.WriteLine($"Error: {error}");
+        Console.WriteLine($"No morphemes: {noMorphemes}");
+        Console.WriteLine($"Multiple morphemes: {multipleMorphemes}");
+        var totalMorphenes = parsedMorphemes.Select(p => p.morphemes.Count).Sum() + error + noMorphemes;
+        Console.WriteLine($"Total: {totalMorphenes} for {parsedMorphemes.Count} words (Average: {totalMorphenes / parsedMorphemes.Count:0.00)}");
+        return true;
     }
 }

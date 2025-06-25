@@ -1,3 +1,5 @@
+using Jiten.Core.Data;
+
 namespace Jiten.Cli.ML;
 
 public static class MLConfig
@@ -5,7 +7,7 @@ public static class MLConfig
     public const string DifficultyCsvFile = "difficulty.csv";
     public const string OutputCsvPath = "linguistic_features_csharp.csv";
 
-    public const int SaveInterval = 100;
+    public const int SaveInterval = 25;
     public const int NumThreads = 8;
     public const int ChunkProcessingTimeoutSeconds = 60;
 
@@ -20,112 +22,120 @@ public static class MLConfig
     public const int RankHardcap = 115000;
     public static readonly double ScoreHardcapValue;
 
-    public static readonly Dictionary<string, List<string>> ConjugationCategories = new Dictionary<string, List<string>>
+    public static readonly Dictionary<string, List<string>> ConjugationCategories = new()
                                                                                     {
                                                                                         {
-                                                                                            "negative",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "negative", [
                                                                                                 "negative", "slurred negative",
                                                                                                 "adverbial negative", "without doing so",
                                                                                                 "archaic negative", "formal negative",
                                                                                                 "formal negative past", "negative polite",
                                                                                                 "past negative polite"
-                                                                                            }
+                                                                                            ]
                                                                                         },
                                                                                         {
-                                                                                            "polite",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "polite", [
                                                                                                 "polite", "negative polite", "past polite",
                                                                                                 "te polite", "past negative polite",
                                                                                                 "polite volitional", "formal conditional",
                                                                                                 "polite request", "kind request",
                                                                                                 "casual kind request"
-                                                                                            }
+                                                                                            ]
                                                                                         },
                                                                                         {
-                                                                                            "conditional",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "conditional", [
                                                                                                 "conditional", "formal conditional",
                                                                                                 "provisional conditional"
-                                                                                            }
+                                                                                            ]
                                                                                         },
                                                                                         {
-                                                                                            "passive_causative",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "passive_causative", [
                                                                                                 "passive", "passive/potential",
                                                                                                 "short causative", "causative"
-                                                                                            }
+                                                                                            ]
                                                                                         },
-                                                                                        {
-                                                                                            "potential",
-                                                                                            new List<string>
-                                                                                            {
-                                                                                                "potential", "passive/potential"
-                                                                                            }
-                                                                                        },
+                                                                                        { "potential", ["potential", "passive/potential"] },
                                                                                         {
                                                                                             "volitional",
-                                                                                            new List<string>
-                                                                                            {
-                                                                                                "volitional", "polite volitional"
-                                                                                            }
+                                                                                            ["volitional", "polite volitional"]
                                                                                         },
                                                                                         {
-                                                                                            "imperative",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "imperative", [
                                                                                                 "imperative", "kind request",
                                                                                                 "casual kind request"
-                                                                                            }
+                                                                                            ]
                                                                                         },
                                                                                         {
-                                                                                            "te_form",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "te_form", [
                                                                                                 "(te form)", "teiru", "teru (teiru)",
                                                                                                 "teoru", "toru (teoru)", "tearu", "teiku",
                                                                                                 "teku (teiku)", "tekuru"
-                                                                                            }
+                                                                                            ]
                                                                                         },
                                                                                         {
-                                                                                            "past",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "past", [
                                                                                                 "past", "formal negative past",
                                                                                                 "past polite", "past negative polite",
                                                                                                 "tari"
-                                                                                            }
+                                                                                            ]
                                                                                         },
                                                                                         {
-                                                                                            "stem",
-                                                                                            new List<string>
-                                                                                            {
+                                                                                            "stem", [
                                                                                                 "('a' stem)", "(adverbial stem)",
                                                                                                 "(ka stem)", "(ke stem)", "(stem)",
                                                                                                 "(izenkei)", "(mizenkei)",
                                                                                                 "(unstressed infinitive)", "(infinitive)"
-                                                                                            }
+                                                                                            ]
                                                                                         },
+                                                                                        { "garu", ["garu"] },
+                                                                                        { "seemingness", ["seemingness"] },
+                                                                                        { "shimau", ["finish/completely/end up"] },
+                                                                                        { "contracted", ["contracted", "slurred"] },
                                                                                         {
-                                                                                            "other",
-                                                                                            new List<string>
-                                                                                            {
-                                                                                                "excess", "seemingness", "garu",
-                                                                                                "noun form", "finish/completely/end up",
+                                                                                            "other", [
+                                                                                                "excess",
+                                                                                                "noun form",
                                                                                                 "do for someone", "for now",
                                                                                                 "toku (for now)", "topic/condition",
-                                                                                                "while", "want", "too much", "contracted",
-                                                                                                "slurred", "(unstressed infinitive)",
+                                                                                                "while", "want", "too much",
+                                                                                                "(unstressed infinitive)",
                                                                                                 "(infinitive)", ""
-                                                                                            }
+                                                                                            ]
                                                                                         }
                                                                                     };
 
+    public static readonly Dictionary<string, List<PartOfSpeech>> PosCategories = new()
+                                                                                  {
+                                                                                      {
+                                                                                          "noun",
+                                                                                          [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]
+                                                                                      },
+                                                                                      { "verb", [PartOfSpeech.Verb] },
+                                                                                      {
+                                                                                          "adj", [
+                                                                                              PartOfSpeech.IAdjective,
+                                                                                              PartOfSpeech.NaAdjective,
+                                                                                              PartOfSpeech.Adnominal,
+                                                                                              PartOfSpeech.NominalAdjective,
+                                                                                              PartOfSpeech.PrenounAdjectival
+                                                                                          ]
+                                                                                      },
+                                                                                      { "adv", [PartOfSpeech.Adverb] },
+                                                                                      { "part", [PartOfSpeech.Particle] },
+                                                                                      { "conjunc", [PartOfSpeech.Conjunction] },
+                                                                                      { "aux", [PartOfSpeech.Auxiliary] },
+                                                                                      { "inter", [PartOfSpeech.Interjection] },
+                                                                                      { "fix", [PartOfSpeech.Prefix, PartOfSpeech.Suffix] },
+                                                                                      { "filler", [PartOfSpeech.Filler] },
+                                                                                      { "name", [PartOfSpeech.Name] },
+                                                                                      { "pn", [PartOfSpeech.Pronoun] },
+                                                                                      { "exp", [PartOfSpeech.Expression] },
+                                                                                      { "other", [PartOfSpeech.Unknown] }
+                                                                                  };
+
+
     public static readonly Dictionary<string, string> ConjugationDetailToCategory;
+    public static readonly Dictionary<PartOfSpeech, string> PosDetailToCategory;
 
     static MLConfig()
     {
@@ -173,13 +183,21 @@ public static class MLConfig
 
         ScoreHardcapValue = scoreAtHardcap;
 
-        // Initialize ConjugationDetailToCategory
         ConjugationDetailToCategory = new Dictionary<string, string>();
         foreach (var kvp in ConjugationCategories)
         {
             foreach (var detail in kvp.Value)
             {
                 ConjugationDetailToCategory[detail] = kvp.Key;
+            }
+        }
+
+        PosDetailToCategory = new Dictionary<PartOfSpeech, string>();
+        foreach (var kvp in PosCategories)
+        {
+            foreach (var detail in kvp.Value)
+            {
+                PosDetailToCategory[detail] = kvp.Key;
             }
         }
     }

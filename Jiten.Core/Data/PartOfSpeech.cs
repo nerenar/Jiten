@@ -121,6 +121,11 @@ public static class PartOfSpeechExtension
             _ => PartOfSpeech.Unknown
         };
     }
+    
+    public static List<PartOfSpeech> ToPartOfSpeech(this List<string> pos)
+    {
+        return pos.Select(p => p.ToPartOfSpeech()).ToList();
+    }
 
     public static PartOfSpeechSection ToPartOfSpeechSection(this string pos)
     {

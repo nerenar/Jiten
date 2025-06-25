@@ -1,10 +1,8 @@
 <script setup lang="ts">
   import Button from 'primevue/button';
 
-  // retrieve dakr mode from the stroe on mounted
-  // and set it to the document element
-
   import { useJitenStore } from '~/stores/jitenStore';
+
   const store = useJitenStore();
   const tokenCookie = useCookie('token');
 
@@ -37,6 +35,11 @@
     set: (value) => (store.displayFurigana = value),
   });
 
+  const displayAllNsfw = computed({
+    get: () => store.displayAllNsfw,
+    set: (value) => (store.displayAllNsfw = value),
+  });
+
   const isAdmin = computed(() => {
     return tokenCookie.value !== null && tokenCookie.value !== undefined && tokenCookie.value !== '';
   });
@@ -44,6 +47,11 @@
   const displayAdminFunctions = computed({
     get: () => store.displayAdminFunctions,
     set: (value) => (store.displayAdminFunctions = value),
+  });
+
+  const readingSpeed = computed({
+    get: () => store.readingSpeed,
+    set: (value) => (store.readingSpeed = value),
   });
 
   const isOverSettings = ref(false);
@@ -76,9 +84,7 @@
     <div class="bg-indigo-900">
       <div class="flex justify-between items-center mb-6 mx-auto p-4 max-w-6xl">
         <NuxtLink to="/" class="!no-underline">
-          <h1 class="text-2xl font-bold text-white">
-            Jiten <span class="text-red-600 text-xs align-super">beta</span>
-          </h1>
+          <h1 class="text-2xl font-bold text-white">Jiten <span class="text-red-600 text-xs align-super">beta</span></h1>
         </NuxtLink>
         <nav class="space-x-6">
           <nuxt-link to="/" class="!text-white">Home</nuxt-link>
@@ -121,9 +127,28 @@
         <label for="titleLanguage">Titles Language</label>
       </FloatLabel>
 
+      <Divider class="!m-2" />
+
+      <div class="flex flex-col gap-4">
+        <label for="readingSpeed" class="text-sm font-medium">Reading Speed (chars/hour)</label>
+        <div class="w-full">
+          <InputNumber v-model="readingSpeed" show-buttons :min="100" :max="100000" :step="100" size="small" class="w-full" />
+        </div>
+        <div class="w-full">
+          <Slider v-model="readingSpeed" :min="100" :max="100000" :step="100" class="w-full" />
+        </div>
+      </div>
+
+      <Divider class="!m-2" />
+
       <div class="flex items-center gap-2">
         <Checkbox v-model="displayFurigana" input-id="displayFurigana" name="furigana" :binary="true" />
         <label for="displayFurigana">Display Furigana</label>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <Checkbox v-model="displayAllNsfw" input-id="displayAllNsfw" name="nsfw" :binary="true" />
+        <label for="displayAllNsfw">Unblur all NSFW sentences</label>
       </div>
 
       <div v-if="isAdmin" class="flex items-center gap-2">

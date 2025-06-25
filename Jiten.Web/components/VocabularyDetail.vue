@@ -1,8 +1,9 @@
 <script setup lang="ts">
-  import type { MediaType, Word } from '~/types';
+  import type { ExampleSentence, MediaType, Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { convertToRuby } from '~/utils/convertToRuby';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
 
   const props = defineProps({
     wordId: {
@@ -20,26 +21,20 @@
     conjugations: {
       type: Array as PropType<string[]>,
       default: () => [],
-      required: false
-    }
+      required: false,
+    },
   });
 
   const emit = defineEmits(['mainReadingTextChanged', 'readingSelected']);
+  const { $api } = useNuxtApp();
 
   const currentReadingIndex = ref(props.readingIndex);
   const url = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}`);
 
-  const {
-    data: response,
-    status,
-    error,
-    refresh,
-  } = await useAsyncData(() => useApiFetch<Word>(url.value), { immediate: true, watch: false });
+  const { data: response, status, error, refresh } = await useAsyncData(() => useApiFetch<Word>(url.value), { immediate: true, watch: false });
 
   const getSortedReadings = () => {
-    return (
-      response.value?.data?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || []
-    );
+    return response.value?.data?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
   };
 
   const sortedReadings = computed(() => getSortedReadings());
@@ -47,17 +42,24 @@
   const mediaAmountUrl = 'media-deck/decks-count';
   const { data: mediaAmountResponse } = await useApiFetch<Record<MediaType, number>>(mediaAmountUrl);
 
+  const switchReadingOrWord = async () => {
+    exampleSentences.value = [];
+    canLoadExampleSentences.value = true;
+    getRandomExampleSentences();
+    await refresh();
+  }
+
   const selectReading = async (index: number) => {
     emit('readingSelected', index);
     currentReadingIndex.value = index;
-    await refresh();
+    switchReadingOrWord();
   };
 
   watch(
     [() => props.wordId, () => props.readingIndex],
     async ([newWordId, newReadingIndex]) => {
       currentReadingIndex.value = newReadingIndex;
-      await refresh();
+      switchReadingOrWord();
     },
     { immediate: false }
   );
@@ -70,16 +72,36 @@
     { immediate: true }
   );
 
-const conjugationString = computed(() =>{
-  let conjugations = [...props.conjugations];
-  conjugations = conjugations.filter(conj => !conj.startsWith('(')).filter(conj => conj != "");
-  conjugations.reverse();
+  const conjugationString = computed(() => {
+    let conjugations = [...props.conjugations];
+    conjugations = conjugations.filter((conj) => !conj.startsWith('(')).filter((conj) => conj != '');
+    conjugations.reverse();
 
-  if (conjugations.length == 0)
-    return null;
+    if (conjugations.length == 0) return null;
 
-  return conjugations.join(' ; ')
-});
+    return conjugations.join(' ; ');
+  });
+
+  const exampleSentences = ref<ExampleSentence[]>([]);
+  const canLoadExampleSentences = ref(true);
+  onMounted(() => {
+    getRandomExampleSentences();
+  });
+
+  async function getRandomExampleSentences() {
+    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
+    const results = await $api<ExampleSentence[]>(`vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences`, {
+      method: 'POST',
+      body: alreadyLoaded,
+    });
+
+    if (results.length == 0) {
+      canLoadExampleSentences.value = false;
+      return;
+    }
+
+    exampleSentences.value.push(...results);
+  }
 </script>
 
 <template>
@@ -89,21 +111,13 @@ const conjugationString = computed(() =>{
         <div class="flex flex-col gap-4 max-w-2xl">
           <div class="flex justify-between">
             <div>
-              <div v-if="conjugationString != null" class="text-gray-500 text-xs font-noto-sans">
-                (Conjugation: {{conjugationString}})
-              </div>
-            <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
-              <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)" />
-            </NuxtLink>
-            <div
-              v-if="!showRedirect"
-              class="text-3xl font-noto-sans"
-              v-html="convertToRuby(response.data.mainReading.text)"
-            />
+              <div v-if="conjugationString != null" class="text-gray-500 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
+              <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
+                <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)" />
+              </NuxtLink>
+              <div v-if="!showRedirect" class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)" />
             </div>
-            <div class="text-gray-500 dark:text-gray-300 text-right md:hidden">
-              Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}
-            </div>
+            <div class="text-gray-500 dark:text-gray-300 text-right md:hidden">Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}</div>
           </div>
 
           <div>
@@ -118,10 +132,7 @@ const conjugationString = computed(() =>{
             <div class="pl-2 flex flex-row flex-wrap gap-8">
               <span v-for="reading in sortedReadings" :key="reading.readingIndex">
                 <div :class="reading.readingIndex === currentReadingIndex ? 'font-bold !text-purple-500' : ' text-blue-500'">
-                  <div
-                    class="text-center font-noto-sans cursor-pointer hover:underline"
-                    @click="selectReading(reading.readingIndex)"
-                  >
+                  <div class="text-center font-noto-sans cursor-pointer hover:underline" @click="selectReading(reading.readingIndex)">
                     {{ reading.text }}
                     <div class="text-xs">({{ formatPercentageApprox(reading.frequencyPercentage) }})</div>
                   </div>
@@ -144,9 +155,7 @@ const conjugationString = computed(() =>{
           </ClientOnly>
         </div>
         <div class="min-w-64">
-          <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
-            Rank #{{ response.data.mainReading.frequencyRank }}
-          </div>
+          <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">Rank #{{ response.data.mainReading.frequencyRank }}</div>
           <div class="md:text-right pt-4">
             Appears in <b>{{ response.data.mainReading.usedInMediaAmount }} media</b>
           </div>
@@ -162,19 +171,39 @@ const conjugationString = computed(() =>{
               <tr v-for="(amount, mediaType) in response.data.mainReading.usedInMediaAmountByType" :key="mediaType">
                 <th class="text-right p-0.5 !font-bold">{{ getMediaTypeText(Number(mediaType)) }}</th>
                 <th class="text-right p-0.5">{{ amount }}</th>
-                <th class="text-right p-0.5">
-                  {{
-                    mediaAmountResponse
-                      ? ((amount / mediaAmountResponse[mediaType as MediaType]) * 100).toFixed(0)
-                      : '0'
-                  }}%
-                </th>
+                <th class="text-right p-0.5">{{ mediaAmountResponse ? ((amount / mediaAmountResponse[mediaType as MediaType]) * 100).toFixed(0) : '0' }}%</th>
               </tr>
             </table>
           </ClientOnly>
         </div>
       </div>
-      <Accordion value="0" lazy>
+
+      <ClientOnly>
+        <div v-if="exampleSentences != null && exampleSentences.length > 0">
+          <Accordion value="1" lazy>
+            <AccordionPanel value="1">
+              <AccordionHeader>
+                <div class="cursor-pointer">Example sentences</div>
+              </AccordionHeader>
+              <AccordionContent>
+                <div class="text-xs pb-2">Quotations belong to their original creators and are presented here for educational purposes only, as per the
+                <NuxtLink
+                  :to="`/terms`"
+                  target="_blank"
+                  class="hover:underline text-primary-600"
+                >
+                terms of service.
+                </NuxtLink>
+                </div>
+                <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" />
+                <Button @click="getRandomExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>
+              </AccordionContent>
+            </AccordionPanel>
+          </Accordion>
+        </div>
+      </ClientOnly>
+
+      <Accordion v-if="response.data.mainReading.usedInMediaAmount > 0" value="0" lazy>
         <AccordionPanel value="1">
           <AccordionHeader>
             <div class="cursor-pointer">

@@ -29,6 +29,7 @@
       <PackageReference Include="Microsoft.ML.OnnxTransformer" Version="5.0.0-preview.1.25127.4" />
       <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
       <PackageReference Include="Sirus.Anki.NET" Version="2.1.3" />
+      <PackageReference Include="StackExchange.Redis" Version="2.8.41" />
       <PackageReference Include="VersOne.Epub" Version="3.3.4" />
       <PackageReference Include="WanaKanaShaapu" Version="2.0.2" />
     </ItemGroup>

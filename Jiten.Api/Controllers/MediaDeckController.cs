@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using AnkiNet;
 using Jiten.Api.Dtos;
+using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Enums;
 using Jiten.Api.Helpers;
 using Jiten.Core;
@@ -91,6 +92,9 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             "sentenceLength" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0)
                 : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0),
+            "dialoguePercentage" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(d => d.DialoguePercentage).Where(d => d.DialoguePercentage != 0 && d.DialoguePercentage != 100)
+                : query.OrderByDescending(d => d.DialoguePercentage).Where(d => d.DialoguePercentage != 0 && d.DialoguePercentage != 100),
             "wordCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.WordCount)
                 : query.OrderByDescending(d => d.WordCount),
@@ -160,6 +164,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
     }
+
 
     [HttpGet("{id}/vocabulary")]
     [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
@@ -302,10 +307,9 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         return new PaginatedResponse<DeckDetailDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
-    [HttpGet("{id}/download")]
+    [HttpPost("{id}/download")]
     [EnableRateLimiting("download")]
-    public async Task<IResult> DownloadDeck(int id, DeckFormat format, DeckDownloadType downloadType, DeckOrder order,
-                                            int minFrequency = 0, int maxFrequency = 0, bool excludeKana = false)
+    public async Task<IResult> DownloadDeck(int id, [FromBody] DeckDownloadRequest request)
     {
         var deck = context.Decks.AsNoTracking().FirstOrDefault(d => d.DeckId == id);
 
@@ -316,7 +320,10 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
         IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == id);
 
-        switch (downloadType)
+        if (request.ExcludeKnownWords && request.KnownWordIds != null)
+            deckWordsQuery = deckWordsQuery.Where(dw => !request.KnownWordIds.Contains(dw.WordId));
+
+        switch (request.DownloadType)
         {
             case DeckDownloadType.Full:
                 break;
@@ -325,28 +332,30 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 // Get the words between frequency rank minFrequency and maxFrequency
                 deckWordsQuery = deckWordsQuery.Where(dw => context.JmDictWordFrequencies
                                                                    .Any(f => f.WordId == dw.WordId &&
-                                                                             f.ReadingsFrequencyRank[dw.ReadingIndex] >= minFrequency &&
-                                                                             f.ReadingsFrequencyRank[dw.ReadingIndex] <= maxFrequency));
+                                                                             f.ReadingsFrequencyRank[dw.ReadingIndex] >=
+                                                                             request.MinFrequency &&
+                                                                             f.ReadingsFrequencyRank[dw.ReadingIndex] <=
+                                                                             request.MaxFrequency));
                 break;
 
             case DeckDownloadType.TopDeckFrequency:
                 deckWordsQuery = deckWordsQuery
                                  .OrderByDescending(dw => dw.Occurrences)
-                                 .Skip(minFrequency)
-                                 .Take(maxFrequency - minFrequency);
+                                 .Skip(request.MinFrequency)
+                                 .Take(request.MaxFrequency - request.MinFrequency);
                 break;
 
             case DeckDownloadType.TopChronological:
                 deckWordsQuery = deckWordsQuery
                                  .OrderBy(dw => dw.DeckWordId)
-                                 .Skip(minFrequency)
-                                 .Take(maxFrequency - minFrequency);
+                                 .Skip(request.MinFrequency)
+                                 .Take(request.MaxFrequency - request.MinFrequency);
                 break;
             default:
                 return Results.BadRequest();
         }
 
-        switch (order)
+        switch (request.Order)
         {
             case DeckOrder.Chronological:
                 deckWordsQuery = deckWordsQuery.OrderBy(dw => dw.DeckWordId);
@@ -377,7 +386,27 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         var frequencies = context.JmDictWordFrequencies.Where(f => wordIds.Contains(f.WordId))
                                  .ToDictionary(f => f.WordId, f => f);
 
-        switch (format)
+        var exampleSentences = await context.ExampleSentences
+                                            .AsNoTracking()
+                                            .Where(es => es.DeckId == id)
+                                            .Include(es => es.Words.Where(w => wordIds.Contains(w.WordId)))
+                                            .ToListAsync();
+
+        var wordToSentencesMap = new Dictionary<(int WordId, byte ReadingIndex), List<(string Text, byte Position, byte Length)>>();
+
+        foreach (var sentence in exampleSentences)
+        {
+            foreach (var word in sentence.Words.Where(w => wordIds.Contains(w.WordId)))
+            {
+                var key = (word.WordId, word.ReadingIndex);
+                if (!wordToSentencesMap.ContainsKey(key))
+                    wordToSentencesMap[key] = new List<(string, byte, byte)>();
+
+                wordToSentencesMap[key].Add((sentence.Text, word.Position, word.Length));
+            }
+        }
+
+        switch (request.Format)
         {
             case DeckFormat.Anki:
 
@@ -394,7 +423,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 {
                     string expression = jmdictWords[word.WordId].Readings[word.ReadingIndex];
 
-                    if (excludeKana && WanaKana.IsKana(expression))
+                    if (request.ExcludeKana && WanaKana.IsKana(expression))
                         continue;
 
 
@@ -417,6 +446,24 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                             "</ul>";
                     string definitionPicture = "";
                     string sentence = "";
+
+                    if (!request.ExcludeExampleSentences &&
+                        wordToSentencesMap.TryGetValue((word.WordId, word.ReadingIndex), out var sentences) && sentences.Count > 0)
+                    {
+                        var exampleSentence = sentences.First();
+                        int position = exampleSentence.Position;
+                        int length = exampleSentence.Length;
+
+                        string originalText = exampleSentence.Text;
+                        if (position >= 0 && position + length <= originalText.Length)
+                        {
+                            sentence = originalText.Substring(0, position) +
+                                       "<span style=\"font-weight: 700; color: rgb(168, 85, 247);\">" +
+                                       originalText.Substring(position, length) + "</span>" +
+                                       originalText.Substring(position + length);
+                        }
+                    }
+
                     string sentenceFurigana = "";
                     string sentenceAudio = "";
                     string picture = "";
@@ -466,7 +513,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 {
                     string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
 
-                    if (excludeKana && WanaKana.IsKana(reading))
+                    if (request.ExcludeKana && WanaKana.IsKana(reading))
                         continue;
 
 
@@ -495,7 +542,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 foreach (var word in deckWords)
                 {
                     string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
-                    if (excludeKana && WanaKana.IsKana(reading))
+                    if (request.ExcludeKana && WanaKana.IsKana(reading))
                         continue;
 
                     txtSb.AppendLine(reading);
@@ -508,7 +555,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 foreach (var word in deckWords)
                 {
                     string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
-                    if (excludeKana && WanaKana.IsKana(reading))
+                    if (request.ExcludeKana && WanaKana.IsKana(reading))
                         continue;
 
                     for (int i = 0; i < word.Occurrences; i++)
@@ -520,6 +567,46 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             default:
                 return Results.BadRequest();
         }
+    }
+
+    [HttpPost("{id}/coverage")]
+    public async Task<ActionResult<DeckCoverageResponse>> GetCoverage(int id, [FromBody] List<int>? wordIds)
+    {
+        if (wordIds == null || !wordIds.Any())
+        {
+            return BadRequest("Please provide a valid list of words");
+        }
+
+        var deck = await context.Decks.AsNoTracking()
+                                .FirstOrDefaultAsync(d => d.DeckId == id);
+
+        if (deck == null)
+        {
+            return NotFound($"Deck with ID {id} not found");
+        }
+
+        var deckWords = await context.DeckWords.AsNoTracking()
+                                     .Where(dw => dw.DeckId == id)
+                                     .ToListAsync();
+
+        var knownUniqueWords = deckWords
+                               .Where(dw => wordIds.Contains(dw.WordId)).ToList();
+
+        int knownWordsOccurrences = knownUniqueWords
+            .Sum(dw => dw.Occurrences);
+
+        double knownWordPercentage = Math.Round((double)knownWordsOccurrences / deck.WordCount * 100, 2);
+
+        double knownUniqueWordPercentage = Math.Round((double)knownUniqueWords.Count() / deck.UniqueWordCount * 100, 2);
+
+        var response = new DeckCoverageResponse
+                       {
+                           DeckId = id, TotalWordCount = deck.WordCount, KnownUniqueWordCount = knownUniqueWords.Count(),
+                           UniqueWordCount = deck.UniqueWordCount, KnownWordsOccurrences = knownWordsOccurrences,
+                           KnownWordPercentage = knownWordPercentage, KnownUniqueWordPercentage = knownUniqueWordPercentage
+                       };
+
+        return Ok(response);
     }
 
     [HttpGet("decks-count")]
@@ -579,5 +666,40 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                      }).ToList();
 
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, decks.Count, offsetValue);
+    }
+
+    [HttpGet("by-link-id/{linkType}/{id}")]
+    [ResponseCache(Duration = 600, VaryByQueryKeys = ["id"])]
+    public async Task<List<int>> GetMediaDeckIdsByLinkId(LinkType linkType, string id)
+    {
+        var links = await context.Decks
+                                 .Include(d => d.Links)
+                                 .Where(d => d.Links.Any(l => l.LinkType == linkType))
+                                 .SelectMany(d => d.Links.Where(l => l.LinkType == linkType)
+                                                   .Select(l => new { DeckId = d.DeckId, Url = l.Url }))
+                                 .ToListAsync();
+
+        var result = new List<int>();
+
+        foreach (var link in links)
+        {
+            // Remove trailing slash if present
+            var url = link.Url.TrimEnd('/');
+
+            // Get the last part of the URL (after the last slash)
+            var lastSlashIndex = url.LastIndexOf('/');
+            if (lastSlashIndex == -1)
+                continue;
+
+            var urlId = url.Substring(lastSlashIndex + 1);
+
+            // If the extracted ID matches the provided ID, add the deck ID to the result
+            if (urlId.Equals(id, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(link.DeckId);
+            }
+        }
+
+        return result;
     }
 }

@@ -19,6 +19,9 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
     public DbSet<JmDictDefinition> Definitions { get; set; }
     public DbSet<JmDictLookup> Lookups { get; set; }
+    
+    public DbSet<ExampleSentence> ExampleSentences { get; set; }
+    public DbSet<ExampleSentenceWord> ExampleSentenceWords { get; set; }
 
     public JitenDbContext()
     {
@@ -137,6 +140,9 @@ public class JitenDbContext : DbContext
             entity.Property(e => e.PitchAccents)
                   .HasColumnType("int[]")
                   .IsRequired(false);
+            
+            entity.Property(e => e.Origin)
+                  .HasColumnType("int");
         });
 
         modelBuilder.Entity<JmDictDefinition>(entity =>
@@ -183,6 +189,37 @@ public class JitenDbContext : DbContext
                   .HasForeignKey(f => f.WordId);
         });
 
+        modelBuilder.Entity<ExampleSentence>(entity =>
+        {
+            entity.ToTable("ExampleSentences", "jiten");
+            entity.HasKey(e => e.SentenceId);
+            entity.Property(e => e.SentenceId).ValueGeneratedOnAdd();
+            entity.Property(e => e.Text).IsRequired();
+            
+            entity.HasIndex(e => e.DeckId).HasDatabaseName("IX_ExampleSentence_DeckId");
+            
+            entity.HasOne(e => e.Deck)
+                  .WithMany(d => d.ExampleSentences)
+                  .HasForeignKey(e => e.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasMany(e => e.Words)
+                  .WithOne(w => w.ExampleSentence)
+                  .HasForeignKey(w => w.ExampleSentenceId);
+        });
+        
+        modelBuilder.Entity<ExampleSentenceWord>(entity =>
+        {
+            entity.ToTable("ExampleSentenceWords", "jiten");
+            entity.HasKey(e => new { e.ExampleSentenceId, e.WordId, e.Position });
+            
+            entity.HasIndex(dw => new { dw.WordId, dw.ReadingIndex }).HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex");
+            
+            entity.HasOne(e => e.Word)
+                  .WithMany()
+                  .HasForeignKey(e => e.WordId);
+        });
+        
         base.OnModelCreating(modelBuilder);
     }
 }

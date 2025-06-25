@@ -15,9 +15,10 @@ public class DeckDto
     public int WordCount { get; set; }
     public int UniqueWordCount { get; set; }
     public int UniqueWordUsedOnceCount { get; set; }
-    public int UniqueKanjiCount { get; set; } // Unique Kanji count
+    public int UniqueKanjiCount { get; set; }
     public int UniqueKanjiUsedOnceCount { get; set; }
     public int Difficulty { get; set; }
+    public float DifficultyRaw { get; set; }
     public int SentenceCount { get; set; }
     public float AverageSentenceLength { get; set; }
     public int? ParentDeckId { get; set; }
@@ -26,7 +27,9 @@ public class DeckDto
     public int SelectedWordOccurrences { get; set; }
     public float DialoguePercentage { get; set; }
 
-    public DeckDto(){}
+    public DeckDto()
+    {
+    }
 
     public DeckDto(Deck deck, int occurrences)
     {
@@ -43,7 +46,8 @@ public class DeckDto
         UniqueWordUsedOnceCount = deck.UniqueWordUsedOnceCount;
         UniqueKanjiCount = deck.UniqueKanjiCount;
         UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
-        Difficulty = deck.Difficulty;
+        Difficulty = MapDifficulty(deck.Difficulty);
+        DifficultyRaw = deck.Difficulty;
         SentenceCount = deck.SentenceCount;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
@@ -68,12 +72,39 @@ public class DeckDto
         UniqueWordUsedOnceCount = deck.UniqueWordUsedOnceCount;
         UniqueKanjiCount = deck.UniqueKanjiCount;
         UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
-        Difficulty = deck.Difficulty;
+        Difficulty = MapDifficulty(deck.Difficulty);
+        DifficultyRaw = deck.Difficulty;
         SentenceCount = deck.SentenceCount;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
         Links = deck.Links;
         ChildrenDeckCount = deck.Children.Count;
         DialoguePercentage = deck.DialoguePercentage;
+    }
+
+    /// <summary>
+    /// Remap the difficulty to an int while taking into account the biases of the model
+    /// This is subject to change with a different training
+    /// </summary>
+    /// <param name="difficulty"></param>
+    /// <returns></returns>
+    private int MapDifficulty(float difficulty)
+    {
+        if (difficulty < 1.20)
+            return 0;
+        
+        if (difficulty < 1.75)
+            return 1;
+
+        if (difficulty < 2.6)
+            return 2;
+
+        if (difficulty < 3.6)
+            return 3;
+
+        if (difficulty < 4.2)
+            return 4;
+
+        return 5;
     }
 }

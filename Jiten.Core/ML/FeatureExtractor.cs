@@ -77,7 +77,7 @@ public class FeatureExtractor
 
 
                     if (currentCompleted % MLConfig.SaveInterval == 0 || currentCompleted == itemsToProcess.Count)
-                        await SaveResultsAsync(MLConfig.OutputCsvPath, currentCompleted == itemsToProcess.Count);
+                        await SaveResults(Path.Combine(inputDirectory, MLConfig.OutputCsvPath), currentCompleted == itemsToProcess.Count);
                 }
             });
         }
@@ -96,7 +96,7 @@ public class FeatureExtractor
             if (_allFeaturesList.Count > _lastSaveCount)
             {
                 Console.WriteLine("Performing final save...");
-                await SaveResultsAsync(MLConfig.OutputCsvPath, true);
+                await SaveResults(Path.Combine(inputDirectory, MLConfig.OutputCsvPath), true);
             }
 
             mainStopwatch.Stop();
@@ -109,7 +109,8 @@ public class FeatureExtractor
     }
 
 
-    public async Task<ExtractedFeatures> ProcessFileAsync(MLInputData mlInput, Func<JitenDbContext, string, bool, bool, MediaType, Task<Deck>> parseFunction)
+    public async Task<ExtractedFeatures> ProcessFileAsync(MLInputData mlInput,
+                                                          Func<JitenDbContext, string, bool, bool, MediaType, Task<Deck>> parseFunction)
     {
         var features = new ExtractedFeatures { Filename = mlInput.OriginalFileName, DifficultyRating = mlInput.DifficultyScore };
 
@@ -137,10 +138,10 @@ public class FeatureExtractor
         features.UniqueWordOnceCount = deck.UniqueWordUsedOnceCount;
         features.UniqueKanjiCount = deck.UniqueKanjiCount;
         features.UniqueKanjiOnceCount = deck.UniqueKanjiUsedOnceCount;
-        
+
         if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
             deck.SentenceCount = 0;
-        
+
         features.SentenceCount = deck.SentenceCount;
         features.AverageSentenceLength = deck.AverageSentenceLength;
         features.DialoguePercentage = deck.DialoguePercentage;
@@ -149,14 +150,13 @@ public class FeatureExtractor
         deckWords = deck.DeckWords.ToList();
 
         MLHelper.ExtractCharacterCounts(content, features);
-
-        await MLHelper.ExtractFrequencyStats(_context,deckWords, features);
-
+        await MLHelper.ExtractFrequencyStats(_context, deckWords, features);
         MLHelper.ExtractConjugationStats(deckWords, features);
+        MLHelper.ExtractReadabilityScore(deckWords, features);
 
         return features;
     }
-  
+
     private static List<MLInputData> LoadInputData(string inputDirectory)
     {
         var data = new List<MLInputData>();
@@ -174,7 +174,7 @@ public class FeatureExtractor
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 var parts = line.Split(',');
-                if (parts.Length == 3 &&
+                if (parts.Length >= 3 &&
                     double.TryParse(parts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out double score) &&
                     !string.IsNullOrWhiteSpace(parts[1]) &&
                     int.TryParse(parts[2], out int mediaType))
@@ -208,7 +208,7 @@ public class FeatureExtractor
         return data;
     }
 
-    private static async Task SaveResultsAsync(string outputPath, bool isFinalSave)
+    private static async Task SaveResults(string outputPath, bool isFinalSave)
     {
         Console.WriteLine($"Attempting to save {(_allFeaturesList.Count - _lastSaveCount)} new results (total {_allFeaturesList.Count})...");
         if (!_allFeaturesList.Any()) return;
@@ -233,6 +233,7 @@ public class FeatureExtractor
                 record["SentenceCount"] = feature.SentenceCount;
                 record["Ttr"] = feature.Ttr;
                 record["AverageSentenceLength"] = feature.AverageSentenceLength;
+                record["LogSentenceLength"] = feature.LogSentenceLength;
                 record["DialoguePercentage"] = feature.DialoguePercentage;
 
                 record["TotalCount"] = feature.TotalCount;
@@ -246,7 +247,16 @@ public class FeatureExtractor
                 record["OtherRatio"] = feature.OtherRatio;
                 record["KanjiToKanaRatio"] = feature.KanjiToKanaRatio;
 
+                record["KangoPercentage"] = feature.KangoPercentage;
+                record["WagoPercentage"] = feature.WagoPercentage;
+                record["GairaigoPercentage"] = feature.GairaigoPercentage;
+                record["VerbPercentage"] = feature.VerbPercentage;
+                record["ParticlePercentage"] = feature.ParticlePercentage;
+                record["AvgWordPerSentence"] = feature.AvgWordPerSentence;
+                record["ReadabilityScore"] = feature.ReadabilityScore;
+
                 record["AvgLogFreqRank"] = feature.AvgLogFreqRank;
+                record["AvgFreqRank"] = feature.AvgFreqRank;
                 record["MedianLogFreqRank"] = feature.MedianLogFreqRank;
                 record["StdLogFreqRank"] = feature.StdLogFreqRank;
                 record["MinFreqRank"] = feature.MinFreqRank;
@@ -282,6 +292,16 @@ public class FeatureExtractor
                 }
 
                 record["RatioConjugations"] = feature.RatioConjugations;
+
+                foreach (var kvp in feature.PosCategoryCounts)
+                {
+                    record[kvp.Key] = kvp.Value;
+                }
+
+                foreach (var kvp in feature.PosCategoryRatios)
+                {
+                    record[kvp.Key] = kvp.Value;
+                }
 
                 recordsForCsv.Add(record);
             }

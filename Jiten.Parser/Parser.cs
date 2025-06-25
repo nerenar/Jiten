@@ -1,937 +1,642 @@
-using System.Runtime.InteropServices;
-using System.Text;
+﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Jiten.Cli.ML;
+using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.JMDict;
 using Jiten.Core.Utils;
+using Jiten.Parser.Data.Redis;
 using Microsoft.Extensions.Configuration;
 using WanaKanaShaapu;
 
-namespace Jiten.Parser;
-
-class SudachiInterop
+namespace Jiten.Parser
 {
-    private delegate IntPtr RunCliFfiDelegate(string configPath, string filePath, string dictionaryPath, string outputPath);
-
-    private delegate IntPtr ProcessTextFfiDelegate(string configPath, IntPtr inputText, string dictionaryPath, char mode, bool printAll,
-                                                   bool wakati);
-
-    private delegate void FreeStringDelegate(IntPtr ptr);
-
-    private static RunCliFfiDelegate _runCliFfi;
-    private static ProcessTextFfiDelegate _processTextFfi;
-    private static FreeStringDelegate _freeString;
-
-    private static readonly IntPtr _libHandle;
-
-    private static string GetSudachiLibPath()
+    public static class Parser
     {
-        string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources");
+        private static bool _initialized = false;
+        private static readonly SemaphoreSlim _initSemaphore = new SemaphoreSlim(1, 1);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return Path.Combine(basePath, "sudachi_lib.dll");
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return Path.Combine(basePath, "libsudachi_lib.so");
-        else
-            throw new PlatformNotSupportedException("Unsupported platform");
-    }
+        private static readonly bool UseCache = true;
+        private static IDeckWordCache DeckWordCache;
+        private static IJmDictCache JmDictCache;
 
-    static SudachiInterop()
-    {
-        // Load the appropriate native library for the current platform
-        _libHandle = NativeLibrary.Load(GetSudachiLibPath());
-
-        // Get function pointers
-        IntPtr runCliFfiPtr = NativeLibrary.GetExport(_libHandle, "run_cli_ffi");
-        IntPtr processTextFfiPtr = NativeLibrary.GetExport(_libHandle, "process_text_ffi");
-        IntPtr freeStringPtr = NativeLibrary.GetExport(_libHandle, "free_string");
-
-        // Create delegates from function pointers
-        _runCliFfi = Marshal.GetDelegateForFunctionPointer<RunCliFfiDelegate>(runCliFfiPtr);
-        _processTextFfi = Marshal.GetDelegateForFunctionPointer<ProcessTextFfiDelegate>(processTextFfiPtr);
-        _freeString = Marshal.GetDelegateForFunctionPointer<FreeStringDelegate>(freeStringPtr);
-    }
-
-    private static readonly object ProcessTextLock = new object();
+        private static JitenDbContext _dbContext;
+        private static Dictionary<string, List<int>> _lookups;
 
 
-    public static string RunCli(string configPath, string filePath, string dictionaryPath, string outputPath)
-    {
-        // Call the FFI function
-        IntPtr resultPtr = _runCliFfi(configPath, filePath, dictionaryPath, outputPath);
-
-        // Convert the result to a C# string
-        string result = Marshal.PtrToStringAnsi(resultPtr) ?? string.Empty;
-
-        // Free the string allocated in Rust
-        _freeString(resultPtr);
-
-        return result;
-    }
-
-    public static string ProcessText(string configPath, string inputText, string dictionaryPath, char mode = 'C', bool printAll = true,
-                                     bool wakati = false)
-    {
-        lock (ProcessTextLock)
+        private static async Task InitDictionaries()
         {
-            // Clean up text
-            inputText = inputText.ToFullWidthDigits();
-            inputText = Regex.Replace(inputText,
-                                      "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500() 」]",
-                                      "");
+            var configuration = new ConfigurationBuilder()
+                                .SetBasePath(Directory.GetCurrentDirectory())
+                                .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"),
+                                             optional: true,
+                                             reloadOnChange: true)
+                                .AddJsonFile("sharedsettings.json", optional: true, reloadOnChange: true)
+                                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                                .AddEnvironmentVariables()
+                                .Build();
 
-            // if there's no kanas or kanjis, abort
-            if (WanaKana.IsRomaji(inputText))
-                return "";
+            DeckWordCache = new RedisDeckWordCache(configuration);
+            JmDictCache = new RedisJmDictCache(configuration, _dbContext);
 
-            byte[] inputBytes = Encoding.UTF8.GetBytes(inputText + "\0");
-            IntPtr inputTextPtr = Marshal.AllocHGlobal(inputBytes.Length);
-            Marshal.Copy(inputBytes, 0, inputTextPtr, inputBytes.Length);
+            _lookups = await JmDictHelper.LoadLookupTable(_dbContext);
 
-            IntPtr resultPtr = _processTextFfi(configPath, inputTextPtr, dictionaryPath, mode, printAll, wakati);
-            string result = Marshal.PtrToStringUTF8(resultPtr) ?? string.Empty;
-
-            _freeString(resultPtr);
-
-            Marshal.FreeHGlobal(inputTextPtr);
-
-            return result;
-        }
-    }
-}
-
-public class Parser
-{
-    private static HashSet<(string, string, string, PartOfSpeech?)> SpecialCases3 =
-    [
-        ("な", "の", "で", PartOfSpeech.Expression),
-        ("で", "は", "ない", PartOfSpeech.Expression),
-        ("それ", "で", "も", PartOfSpeech.Conjunction),
-        ("なく", "なっ", "た", PartOfSpeech.Verb)
-    ];
-
-    private static HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
-    [
-        ("じゃ", "ない", PartOfSpeech.Expression),
-        ("に", "しろ", PartOfSpeech.Expression),
-        ("だ", "けど", PartOfSpeech.Conjunction),
-        ("だ", "が", PartOfSpeech.Conjunction),
-        ("で", "さえ", PartOfSpeech.Expression),
-        ("で", "すら", PartOfSpeech.Expression),
-        ("と", "いう", PartOfSpeech.Expression),
-        ("と", "か", PartOfSpeech.Conjunction),
-        ("だ", "から", PartOfSpeech.Conjunction),
-        ("これ", "まで", PartOfSpeech.Expression),
-        ("それ", "も", PartOfSpeech.Conjunction),
-        ("それ", "だけ", PartOfSpeech.Noun),
-        ("くせ", "に", PartOfSpeech.Conjunction),
-        ("の", "で", PartOfSpeech.Particle),
-        ("誰", "も", PartOfSpeech.Expression),
-        ("誰", "か", PartOfSpeech.Expression),
-        ("すぐ", "に", PartOfSpeech.Adverb),
-        ("なん", "か", PartOfSpeech.Particle),
-        ("だっ", "た", PartOfSpeech.Expression),
-        ("だっ", "たら", PartOfSpeech.Conjunction),
-        ("よう", "に", PartOfSpeech.Expression),
-        ("ん", "です", PartOfSpeech.Expression),
-        ("ん", "だ", PartOfSpeech.Expression),
-        ("です", "か", PartOfSpeech.Expression),
-    ];
-
-    private static readonly List<string> HonorificsSuffixes = ["さん", "ちゃん", "くん"];
-
-    public async Task<List<WordInfo>> Parse(string text)
-    {
-        var configuration = new ConfigurationBuilder()
-                            .SetBasePath(Directory.GetCurrentDirectory())
-                            .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true)
-                            .AddJsonFile("sharedsettings.json", optional: true)
-                            .AddJsonFile("appsettings.json", optional: true)
-                            .AddEnvironmentVariables()
-                            .Build();
-
-        // Build dictionary  sudachi ubuild Y:\CODE\Jiten\Shared\resources\user_dic.xml -s S:\Jiten\sudachi.rs\resources\system_full.dic -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"
-
-        // Preprocess the text to remove invalid characters
-        PreprocessText(ref text);
-
-        var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi.json");
-        var dic = configuration.GetValue<string>("DictionaryPath");
-
-        var output = SudachiInterop.ProcessText(configPath, text, dic).Split("\n");
-
-        List<WordInfo> wordInfos = new();
-
-        foreach (var line in output)
-        {
-            if (line == "EOS") continue;
-
-            var wi = new WordInfo(line);
-            if (!wi.IsInvalid)
-                wordInfos.Add(wi);
-        }
-
-        wordInfos = ProcessSpecialCases(wordInfos);
-        wordInfos = CombineConjunctiveParticle(wordInfos);
-        wordInfos = CombinePrefixes(wordInfos);
-
-        wordInfos = CombineAmounts(wordInfos);
-        wordInfos = CombineTte(wordInfos);
-        wordInfos = CombineAuxiliaryVerbStem(wordInfos);
-        wordInfos = CombineVerbDependant(wordInfos);
-        wordInfos = CombineAdverbialParticle(wordInfos);
-        wordInfos = CombineSuffix(wordInfos);
-        wordInfos = CombineAuxiliary(wordInfos);
-        wordInfos = CombineParticles(wordInfos);
-
-        wordInfos = CombineFinal(wordInfos);
-
-        wordInfos = SeparateSuffixHonorifics(wordInfos);
-
-        return wordInfos;
-    }
-
-    private void PreprocessText(ref string text)
-    {
-        text = text.Replace("<", " ");
-        text = text.Replace(">", " ");
-    }
-
-    /// <summary>
-    /// Handle special cases that could not be covered by the other rules
-    /// </summary>
-    /// <param name="wordInfos"></param>
-    /// <returns></returns>
-    private List<WordInfo> ProcessSpecialCases(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count == 0)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
-
-
-        for (int i = 0; i < wordInfos.Count;)
-        {
-            WordInfo w1 = wordInfos[i];
-
-            if (i < wordInfos.Count - 2)
+            // Check if cache is already initialized
+            if (!await JmDictCache.IsCacheInitializedAsync())
             {
-                WordInfo w2 = wordInfos[i + 1];
-                WordInfo w3 = wordInfos[i + 2];
+                // Cache not initialized, load from database and populate Redis
+                var allWords = await JmDictHelper.LoadAllWords(_dbContext);
 
-                // surukudasai
-                if (w1.DictionaryForm == "する" && w2.Text == "て" && w3.DictionaryForm == "くださる")
+                const int BATCH_SIZE = 10000;
+
+                // // Store lookups in Redis
+                // for (int i = 0; i < _lookups.Count; i += BATCH_SIZE)
+                // {
+                //     var lookupsBatch = _lookups.Skip(i).Take(BATCH_SIZE).ToDictionary(x => x.Key, x => x.Value);
+                //     await JmDictCache.SetLookupIdsAsync(lookupsBatch);
+                // }
+
+                // Store words in Redis using batching
+                for (int i = 0; i < allWords.Count; i += BATCH_SIZE)
                 {
-                    var newWord = new WordInfo(w1);
-                    newWord.Text = w1.Text + w2.Text + w3.Text;
-
-                    newList.Add(newWord);
-                    i += 3;
-
-                    continue;
+                    var wordsBatch = allWords.Skip(i).Take(BATCH_SIZE)
+                                             .ToDictionary(w => w.WordId, w => w);
+                    await JmDictCache.SetWordsAsync(wordsBatch);
                 }
 
-                bool found = false;
-                foreach (var sc in SpecialCases3)
+                // Mark cache as initialized
+                await JmDictCache.SetCacheInitializedAsync();
+            }
+        }
+
+        public static async Task<List<DeckWord>> ParseText(JitenDbContext context, string text)
+        {
+            _dbContext = context;
+            if (!_initialized)
+            {
+                await _initSemaphore.WaitAsync();
+                try
                 {
-                    if (w1.Text == sc.Item1 && w2.Text == sc.Item2 && w3.Text == sc.Item3)
+                    if (!_initialized) // Double-check to avoid race conditions
                     {
-                        var newWord = new WordInfo(w1);
-                        newWord.Text = w1.Text + w2.Text + w3.Text;
-
-                        if (sc.Item4 != null)
-                        {
-                            newWord.PartOfSpeech = sc.Item4.Value;
-                        }
-
-                        newList.Add(newWord);
-                        i += 3;
-                        found = true;
-                        break;
+                        await InitDictionaries();
+                        _initialized = true;
                     }
                 }
-
-                if (found)
-                    continue;
+                finally
+                {
+                    _initSemaphore.Release();
+                }
             }
 
-            if (i < wordInfos.Count - 1)
+            var parser = new MorphologicalAnalyser();
+            var sentences = await parser.Parse(text);
+            var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
+
+            // Only keep kanjis, kanas, digits,full width digits, latin characters, full width latin characters
+            foreach (WordInfo wi in wordInfos)
             {
-                WordInfo w2 = wordInfos[i + 1];
+                wi.Text = Regex.Replace(wi.Text,
+                                        "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
+                                        "");
+            }
 
-                bool found = false;
-                foreach (var sc in SpecialCases2)
+            // Remove empty lines
+            wordInfos.RemoveAll(x => string.IsNullOrWhiteSpace(x.Text));
+
+            // Filter bad lines that cause exceptions
+            wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
+
+            Deconjugator deconjugator = new Deconjugator();
+
+            const int BATCH_SIZE = 1000;
+            List<DeckWord> allProcessedWords = new List<DeckWord>();
+
+            for (int i = 0; i < wordInfos.Count; i += BATCH_SIZE)
+            {
+                var batch = wordInfos.Skip(i).Take(BATCH_SIZE).ToList();
+                var processBatch = batch.Select(word => ProcessWord((word, 0), deconjugator)).ToList();
+                var batchResults = await Task.WhenAll(processBatch);
+
+                allProcessedWords.AddRange(batchResults.Where(result => result != null).Select(result => result!));
+            }
+
+            return allProcessedWords;
+        }
+
+        public static async Task<Deck> ParseTextToDeck(JitenDbContext context, string text,
+                                                       bool storeRawText = false,
+                                                       bool predictDifficulty = true,
+                                                       MediaType mediatype = MediaType.Novel)
+        {
+            _dbContext = context;
+            if (!_initialized)
+            {
+                await _initSemaphore.WaitAsync();
+                try
                 {
-                    if (w1.Text == sc.Item1 && w2.Text == sc.Item2)
+                    if (!_initialized) // Double-check to avoid race conditions
                     {
-                        var newWord = new WordInfo(w1);
-                        newWord.Text = w1.Text + w2.Text;
-
-                        if (sc.Item3 != null)
-                        {
-                            newWord.PartOfSpeech = sc.Item3.Value;
-                        }
-
-                        newList.Add(newWord);
-                        i += 2;
-                        found = true;
-                        break;
+                        await InitDictionaries();
+                        _initialized = true;
                     }
                 }
-
-                if (found)
-                    continue;
+                finally
+                {
+                    _initSemaphore.Release();
+                }
             }
 
-            // This word is (sometimes?) parsed as auxiliary for some reason
-            if (w1.Text == "でしょう")
-            {
-                var newWord = new WordInfo(w1);
-                newWord.PartOfSpeech = PartOfSpeech.Expression;
-                newWord.PartOfSpeechSection1 = PartOfSpeechSection.None;
+            var timer = new Stopwatch();
+            timer.Start();
+            var parser = new MorphologicalAnalyser();
+            var sentences = await parser.Parse(text);
+            var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
-                newList.Add(newWord);
-                i++;
-                continue;
+            // TODO: support elongated vowels ふ～ -> ふう
+
+            // Only keep kanjis, kanas, digits,full width digits, latin characters, full width latin characters 
+            wordInfos.ForEach(x => x.Text =
+                                  Regex.Replace(x.Text,
+                                                "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
+                                                ""));
+            // Remove empty lines
+            wordInfos = wordInfos.Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
+
+            // Filter bad lines that cause exceptions
+            // wordInfos.RemoveAll(w => w.Text is "ッー");
+            wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
+
+            Deconjugator deconjugator = new Deconjugator();
+
+            var uniqueWords = new List<(WordInfo wordInfo, int occurrences)>();
+            var wordCount = new Dictionary<(string, PartOfSpeech), int>();
+
+            foreach (var word in wordInfos)
+            {
+                if (!wordCount.TryAdd((word.Text, word.PartOfSpeech), 1))
+                    wordCount[(word.Text, word.PartOfSpeech)]++;
+                else
+                    uniqueWords.Add((word, 1));
             }
 
-            if (w1.Text == "絶対無理")
+            for (int i = 0; i < uniqueWords.Count; i++)
             {
-                var zettai = new WordInfo
-                             {
-                                 Text = "絶対", DictionaryForm = "絶対", PartOfSpeech = PartOfSpeech.Adverb,
-                                 PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "ぜったい"
-                             };
-                var muri = new WordInfo
+                uniqueWords[i] = (uniqueWords[i].wordInfo, wordCount[(uniqueWords[i].wordInfo.Text, uniqueWords[i].wordInfo.PartOfSpeech)]);
+            }
+
+            timer.Stop();
+            double mecabTime = timer.Elapsed.TotalMilliseconds;
+
+            timer.Restart();
+
+            const int BATCH_SIZE = 1000;
+            List<DeckWord> allProcessedWords = new List<DeckWord>();
+
+            for (int i = 0; i < uniqueWords.Count; i += BATCH_SIZE)
+            {
+                var batch = uniqueWords.Skip(i).Take(BATCH_SIZE).ToList();
+                var processBatch = batch.Select(word => ProcessWord(word, deconjugator)).ToList();
+                var batchResults = await Task.WhenAll(processBatch);
+
+                allProcessedWords.AddRange(batchResults.Where(result => result != null).Select(result => result!));
+            }
+
+            var processedWords = allProcessedWords.ToArray();
+
+            processedWords = processedWords
+                             .Select(result => result)
+                             .ToArray();
+
+            // Assign the occurences for each word
+            foreach (var deckWord in processedWords)
+            {
+                // Remove one since we already counted it at the start
+                deckWord.Occurrences--;
+                deckWord.Occurrences +=
+                    processedWords.Count(x => x.WordId == deckWord.WordId && x.ReadingIndex == deckWord.ReadingIndex);
+            }
+
+            // deduplicate deconjugated words
+            processedWords = processedWords
+                             .GroupBy(x => new { x.WordId, x.ReadingIndex })
+                             .Select(x => x.First())
+                             .ToArray();
+
+            List<ExampleSentence>? exampleSentences = null;
+
+            if (mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
+                exampleSentences = ExampleSentenceExtractor.ExtractSentences(sentences, processedWords);
+
+            // Split into sentences
+            // string[] sentences = Regex.Split(text, @"(?<=[。！？」）])|(?<=[…])\r\n");
+            // sentences = sentences.Select(sentence =>
+            // {
+            //     // Find the first Japanese character
+            //     Match match = Regex.Match(sentence, @"[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]");
+            //     if (match.Success)
+            //     {
+            //         int startIndex = match.Index;
+            //         // Remove all special characters
+            //         return Regex.Replace(sentence.Substring(startIndex),
+            //                              "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005]",
+            //                              "");
+            //     }
+            //
+            //     return "";
+            // }).Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+            timer.Stop();
+
+            double deconjugationTime = timer.Elapsed.TotalMilliseconds;
+
+            double totalTime = mecabTime + deconjugationTime;
+
+            Console.WriteLine("Total words found : " + wordInfos.Count);
+
+            // Console.WriteLine("Unique words found before deconjugation : " + uniqueWordInfos.Count);
+            Console.WriteLine("Unique words found after deconjugation : " + processedWords.Length);
+
+            var characterCount = wordInfos.Sum(x => x.Text.Length);
+            Console.WriteLine($"Time elapsed: {totalTime:0.0}ms");
+            Console.WriteLine($"Mecab time: {mecabTime:0.0}ms ({(mecabTime / totalTime * 100):0}%), Deconjugation time: {deconjugationTime:0.0}ms ({(deconjugationTime / totalTime * 100):0}%)");
+
+            // Character count
+            Console.WriteLine("Character count: " + characterCount);
+            // Time for 10000 characters
+            Console.WriteLine($"Time per 10000 characters: {(totalTime / characterCount * 10000):0.0}ms");
+            // Time for 1million characters
+            Console.WriteLine($"Time per 1 million characters: {(totalTime / characterCount * 1000000):0.0}ms");
+
+            var textWithoutDialogues = Regex.Replace(text, @"[「『].{0,200}?[」』]", "", RegexOptions.Singleline);
+            textWithoutDialogues = Regex.Replace(textWithoutDialogues,
+                                                 "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
+                                                 "");
+            var textWithoutPunctuation = Regex.Replace(text,
+                                                       "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
+                                                       "");
+
+            int dialogueCharacterCount = textWithoutPunctuation.Length - textWithoutDialogues.Length;
+            float dialoguePercentage = (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f;
+
+            Console.WriteLine($"Dialogue percentage: {dialoguePercentage:0.0}%");
+
+            var deck = new Deck
+                       {
+                           CharacterCount = characterCount, WordCount = wordInfos.Count, UniqueWordCount = processedWords.Length,
+                           UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
+                           UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(c => WanaKana.IsKanji(c.ToString())),
+                           UniqueKanjiUsedOnceCount = wordInfos.SelectMany(w => w.Text).GroupBy(c => c)
+                                                               .Count(g => g.Count() == 1 && WanaKana.IsKanji(g.Key.ToString())),
+                           SentenceCount = sentences.Count, DialoguePercentage = dialoguePercentage, DeckWords = processedWords,
+                           RawText = storeRawText ? new DeckRawText(text) : null, ExampleSentences = exampleSentences
+                       };
+
+            if (predictDifficulty)
+            {
+                DifficultyPredictor difficultyPredictor =
+                    new(_dbContext.DbOptions,
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "difficulty_prediction_model.onnx"));
+                deck.Difficulty = await difficultyPredictor.PredictDifficulty(deck, mediatype);
+                Console.WriteLine($"Predicted difficulty: {deck.Difficulty}");
+            }
+
+
+            return deck;
+        }
+
+        public static async Task<List<DeckWord?>> ParseMorphenes(JitenDbContext context, string text)
+        {
+            _dbContext = context;
+            if (!_initialized)
+            {
+                await _initSemaphore.WaitAsync();
+                try
+                {
+                    if (!_initialized) // Double-check to avoid race conditions
+                    {
+                        await InitDictionaries();
+                        _initialized = true;
+                    }
+                }
+                finally
+                {
+                    _initSemaphore.Release();
+                }
+            }
+
+            var parser = new MorphologicalAnalyser();
+            var sentences = await parser.Parse(text, morphemesOnly: true);
+            var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
+
+            // Filter bad lines that cause exceptions
+            wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
+
+            Deconjugator deconjugator = new Deconjugator();
+
+            const int BATCH_SIZE = 1000;
+            List<DeckWord?> allProcessedWords = new();
+
+            for (int i = 0; i < wordInfos.Count; i += BATCH_SIZE)
+            {
+                var batch = wordInfos.Skip(i).Take(BATCH_SIZE).ToList();
+                var processBatch = batch.Select(word => ProcessWord((word, 0), deconjugator)).ToList();
+                var batchResults = await Task.WhenAll(processBatch);
+
+                allProcessedWords.AddRange(batchResults);
+            }
+
+            return allProcessedWords;
+        }
+
+        private static async Task<DeckWord?> ProcessWord((WordInfo wordInfo, int occurrences) wordData, Deconjugator deconjugator)
+        {
+            var cacheKey = new DeckWordCacheKey(
+                                                wordData.wordInfo.Text,
+                                                wordData.wordInfo.PartOfSpeech,
+                                                wordData.wordInfo.DictionaryForm
+                                               );
+
+            if (UseCache)
+            {
+                var cachedWord = await DeckWordCache.GetAsync(cacheKey);
+
+                if (cachedWord != null)
+                {
+                    return new DeckWord
                            {
-                               Text = "無理", DictionaryForm = "無理", PartOfSpeech = PartOfSpeech.NaAdjective,
-                               PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "むり"
+                               WordId = cachedWord.WordId, OriginalText = wordData.wordInfo.Text, ReadingIndex = cachedWord.ReadingIndex,
+                               Occurrences = wordData.occurrences, Conjugations = cachedWord.Conjugations,
+                               PartsOfSpeech = cachedWord.PartsOfSpeech, Origin = cachedWord.Origin
                            };
-
-                newList.Add(zettai);
-                newList.Add(muri);
-                i++;
-                continue;
-            }
-
-            // I'm not sure why this happens, but sudachi thinks those words are proper nouns
-            if (w1.Text == "俺の")
-            {
-                var ore = new WordInfo
-                          {
-                              Text = "俺", DictionaryForm = "俺", PartOfSpeech = PartOfSpeech.Pronoun,
-                              PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "おれ"
-                          };
-                var no = new WordInfo
-                         {
-                             Text = "の", PartOfSpeech = PartOfSpeech.Particle,
-                             PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "の", DictionaryForm = "の"
-                         };
-
-                newList.Add(ore);
-                newList.Add(no);
-                i += 1;
-                continue;
-            }
-
-            if (w1.Text == "風使い")
-            {
-                var kaze = new WordInfo
-                           {
-                               Text = "風", DictionaryForm = "風", PartOfSpeech = PartOfSpeech.Noun,
-                               PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun, Reading = "かぜ"
-                           };
-                var tsukai = new WordInfo
-                             {
-                                 Text = "使い", PartOfSpeech = PartOfSpeech.Noun, PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun,
-                                 Reading = "つかい", DictionaryForm = "使い"
-                             };
-
-                newList.Add(kaze);
-                newList.Add(tsukai);
-                i += 1;
-                continue;
-            }
-
-            if (w1.Text == "能力者")
-            {
-                var nouryoku = new WordInfo
-                               {
-                                   Text = "能力", DictionaryForm = "能力", PartOfSpeech = PartOfSpeech.Noun,
-                                   PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun, Reading = "のうりょく"
-                               };
-                var sha = new WordInfo
-                          {
-                              Text = "者", PartOfSpeech = PartOfSpeech.Suffix, PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun,
-                              Reading = "しゃ", DictionaryForm = "者"
-                          };
-
-                newList.Add(nouryoku);
-                newList.Add(sha);
-                i += 1;
-                continue;
-            }
-
-
-            if (w1.Text == "泣きながら")
-            {
-                var naki = new WordInfo
-                           {
-                               Text = "泣き", DictionaryForm = "泣き", PartOfSpeech = PartOfSpeech.Noun,
-                               PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "なき"
-                           };
-                var nagara = new WordInfo
-                             {
-                                 Text = "ながら", PartOfSpeech = PartOfSpeech.Particle,
-                                 PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "ながら", DictionaryForm = "ながら"
-                             };
-
-                newList.Add(naki);
-                newList.Add(nagara);
-                i += 1;
-                continue;
-            }
-
-            newList.Add(w1);
-            i++;
-        }
-
-        return newList;
-    }
-
-    private List<WordInfo> CombinePrefixes(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
-        var currentWord = new WordInfo(wordInfos[0]);
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            var nextWord = wordInfos[i];
-            if (currentWord.PartOfSpeech == PartOfSpeech.Prefix)
-            {
-                var newText = currentWord.Text + nextWord.Text;
-                currentWord = new WordInfo(nextWord);
-                currentWord.Text = newText;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-
-        return newList;
-    }
-
-    private List<WordInfo> CombineAmounts(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
-        var currentWord = new WordInfo(wordInfos[0]);
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            var nextWord = wordInfos[i];
-
-            if ((currentWord.HasPartOfSpeechSection(PartOfSpeechSection.Amount) ||
-                 currentWord.HasPartOfSpeechSection(PartOfSpeechSection.Numeral)) &&
-                AmountCombinations.Combinations.Contains((currentWord.Text, nextWord.Text)))
-            {
-                var text = currentWord.Text + nextWord.Text;
-                currentWord = new WordInfo(nextWord);
-                currentWord.Text = text;
-                currentWord.PartOfSpeech = PartOfSpeech.Noun;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-
-        return newList;
-    }
-
-    private List<WordInfo> CombineTte(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
-        var currentWord = new WordInfo(wordInfos[0]);
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            WordInfo nextWord = wordInfos[i];
-
-            if (currentWord.Text.EndsWith("っ") && nextWord.Text.StartsWith("て"))
-            {
-                currentWord.Text += nextWord.Text;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-
-        return newList;
-    }
-
-    private List<WordInfo> CombineVerbDependant(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        wordInfos = CombineVerbDependants(wordInfos);
-        wordInfos = CombineVerbPossibleDependants(wordInfos);
-        wordInfos = CombineVerbDependantsSuru(wordInfos);
-        wordInfos = CombineVerbDependantsTeiru(wordInfos);
-
-        return wordInfos;
-    }
-
-    private List<WordInfo> CombineVerbDependants(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            WordInfo nextWord = wordInfos[i];
-
-            if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) &&
-                currentWord.PartOfSpeech == PartOfSpeech.Verb)
-            {
-                currentWord.Text += nextWord.Text;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-        return newList;
-    }
-
-    private List<WordInfo> CombineVerbPossibleDependants(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            WordInfo nextWord = wordInfos[i];
-
-            // Condition uses accumulator (verb) and next word (possible dependant + specific forms)
-            if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
-                currentWord.PartOfSpeech == PartOfSpeech.Verb &&
-                (nextWord.DictionaryForm == "得る" ||
-                 nextWord.DictionaryForm == "する" ||
-                 nextWord.DictionaryForm == "しまう" ||
-                 nextWord.DictionaryForm == "おる" ||
-                 nextWord.DictionaryForm == "きる" ||
-                 nextWord.DictionaryForm == "こなす" ||
-                 nextWord.DictionaryForm == "いく" ||
-                 nextWord.DictionaryForm == "貰う" ||
-                 nextWord.DictionaryForm == "いる"
-                ))
-            {
-                currentWord.Text += nextWord.Text;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-        return newList;
-    }
-
-    private List<WordInfo> CombineVerbDependantsSuru(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        int i = 0;
-        while (i < wordInfos.Count)
-        {
-            WordInfo currentWord = wordInfos[i];
-
-            if (i + 1 < wordInfos.Count)
-            {
-                WordInfo nextWord = wordInfos[i + 1];
-                if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) &&
-                    nextWord.DictionaryForm == "する" && nextWord.Text != "する" && nextWord.Text != "しない")
-                {
-                    WordInfo combinedWord = new WordInfo(currentWord);
-                    combinedWord.Text += nextWord.Text;
-                    combinedWord.PartOfSpeech = PartOfSpeech.Verb;
-                    newList.Add(combinedWord);
-                    i += 2;
-                    continue;
                 }
             }
 
-            newList.Add(new WordInfo(currentWord));
-            i++;
-        }
+            DeckWord? processedWord = null;
+            bool isProcessed = false;
 
-        return newList;
-    }
-
-    private List<WordInfo> CombineVerbDependantsTeiru(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 3)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        int i = 0;
-        while (i < wordInfos.Count)
-        {
-            WordInfo currentWord = wordInfos[i];
-
-            if (i + 2 < wordInfos.Count)
+            do
             {
-                WordInfo nextWord1 = wordInfos[i + 1];
-                WordInfo nextWord2 = wordInfos[i + 2];
-
-                if (currentWord.PartOfSpeech == PartOfSpeech.Verb &&
-                    nextWord1.DictionaryForm == "て" &&
-                    nextWord2.DictionaryForm == "いる")
+                if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+                        or PartOfSpeech.NaAdjective || wordData.wordInfo.PartOfSpeechSection1 is PartOfSpeechSection.Adjectival)
                 {
-                    WordInfo combinedWord = new WordInfo(currentWord);
-                    combinedWord.Text += nextWord1.Text + nextWord2.Text;
-                    newList.Add(combinedWord);
-                    i += 3;
-                    continue;
+                    // Try to deconjugate as verb or adjective
+                    var verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
+                    if (!verbResult.success || verbResult.word == null)
+                    {
+                        // The word might be a noun misparsed as a verb/adjective like お祭り
+                        var nounResult = await DeconjugateWord(wordData);
+                        processedWord = nounResult.word;
+                    }
+                    else
+                    {
+                        processedWord = verbResult.word;
+                    }
+                }
+                else
+                {
+                    var result = await DeconjugateWord(wordData);
+                    processedWord = result.word;
+                }
+
+                if (processedWord != null) break;
+
+                // We haven't found a match, let's try to remove the last character if it's a っ, a ー or a duplicate
+                if (wordData.wordInfo.Text.Length > 2 &&
+                    (wordData.wordInfo.Text[^1] == 'っ' || wordData.wordInfo.Text[^1] == 'ー' ||
+                     wordData.wordInfo.Text[^2] == wordData.wordInfo.Text[^1]))
+                {
+                    wordData.wordInfo.Text = wordData.wordInfo.Text[..^1];
+                }
+                // Let's try to remove any honorifics in front of the word
+                else if (wordData.wordInfo.Text.StartsWith("お"))
+                {
+                    wordData.wordInfo.Text = wordData.wordInfo.Text[1..];
+                }
+                // Let's try without any long vowel mark
+                else if (wordData.wordInfo.Text.Contains("ー"))
+                {
+                    wordData.wordInfo.Text = wordData.wordInfo.Text.Replace("ー", "");
+                }
+                else
+                {
+                    isProcessed = true;
+                }
+            } while (!isProcessed);
+
+            if (processedWord != null)
+            {
+                processedWord.Occurrences = wordData.occurrences;
+
+                if (UseCache)
+                {
+                    await DeckWordCache.SetAsync(cacheKey,
+                                                 new DeckWord
+                                                 {
+                                                     WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
+                                                     ReadingIndex = processedWord.ReadingIndex, Conjugations = processedWord.Conjugations,
+                                                     PartsOfSpeech = processedWord.PartsOfSpeech, Origin = processedWord.Origin
+                                                 });
                 }
             }
 
-            newList.Add(new WordInfo(currentWord));
-            i++;
+            return processedWord;
         }
 
-        return newList;
-    }
-
-    private List<WordInfo> CombineAdverbialParticle(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
-
-        for (int i = 1; i < wordInfos.Count; i++)
+        private static async Task<(bool success, DeckWord? word)> DeconjugateWord((WordInfo wordInfo, int occurrences) wordData)
         {
-            WordInfo nextWord = wordInfos[i];
+            string text = wordData.wordInfo.Text;
 
-            // i.e　だり, たり
-            if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AdverbialParticle) &&
-                (nextWord.DictionaryForm == "だり" || nextWord.DictionaryForm == "たり") &&
-                currentWord.PartOfSpeech == PartOfSpeech.Verb)
-
+            // Exclude full digits or single latin character
+            if (text.All(char.IsDigit) || (text.Length == 1 && text.IsAsciiOrFullWidthLetter()))
             {
-                currentWord.Text += nextWord.Text;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-
-        return newList;
-    }
-
-    private List<WordInfo> CombineConjunctiveParticle(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = [wordInfos[0]];
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            WordInfo currentWord = wordInfos[i];
-            WordInfo previousWord = newList[^1];
-            bool combined = false;
-
-            if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) &&
-                currentWord.Text is "て" or "で" or "ながら" or "ちゃ" or "ば" &&
-                previousWord.PartOfSpeech == PartOfSpeech.Verb)
-            {
-                previousWord.Text += currentWord.Text;
-                combined = true;
+                return (false, null);
             }
 
-            if (!combined)
+            _lookups.TryGetValue(text, out List<int>? candidates);
+            var textInHiragana = WanaKana.ToHiragana(wordData.wordInfo.Text, new DefaultOptions { ConvertLongVowelMark = false });
+            _lookups.TryGetValue(textInHiragana, out var candidatesHiragana);
+
+            // Add candidatesInHiragana to candidates, deduplicate 
+            if (candidatesHiragana is { Count: not 0 })
             {
-                newList.Add(currentWord);
-            }
-        }
-
-        return newList;
-    }
-
-    private List<WordInfo> CombineAuxiliary(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList =
-        [
-            wordInfos[0]
-        ];
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            WordInfo currentWord = wordInfos[i];
-            WordInfo previousWord = newList[^1];
-            bool combined = false;
-
-            if (currentWord.PartOfSpeech != PartOfSpeech.Auxiliary)
-            {
-                newList.Add(currentWord);
-                continue;
+                candidates ??= new List<int>();
+                var newCandidates = new List<int>(candidates);
+                newCandidates.AddRange(candidatesHiragana);
+                candidates = newCandidates.Distinct().ToList();
             }
 
-            if (previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
-                && currentWord.Text != "な"
-                && currentWord.Text != "に"
-                && currentWord.DictionaryForm != "です"
-                && currentWord.DictionaryForm != "らしい"
-                && currentWord.Text != "なら"
-                && currentWord.DictionaryForm != "べし"
-                && currentWord.DictionaryForm != "ようだ"
-                && currentWord.Text != "だろう"
-               )
+            if (candidates is { Count: not 0 })
             {
-                previousWord.Text += currentWord.Text;
-                combined = true;
-            }
+                candidates = candidates.OrderBy(c => c).ToList();
 
-            if (currentWord.Text == "な" &&
-                (previousWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleNaAdjective) ||
-                 previousWord.HasPartOfSpeechSection(PartOfSpeechSection.NaAdjectiveLike) ||
-                 previousWord.PartOfSpeech == PartOfSpeech.NaAdjective))
-            {
-                previousWord.Text += currentWord.Text;
-                previousWord.PartOfSpeech = PartOfSpeech.NaAdjective;
-                combined = true;
-            }
+                List<JmDictWord> matches = new();
+                JmDictWord? bestMatch = null;
 
-            if (!combined)
-            {
-                newList.Add(currentWord);
-            }
-        }
-
-        return newList;
-    }
-
-    private List<WordInfo> CombineAuxiliaryVerbStem(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            var nextWord = wordInfos[i];
-
-            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) &&
-                wordInfos[i].Text != "ように" &&
-                wordInfos[i].Text != "よう" &&
-                (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.IAdjective))
-            {
-                currentWord.Text += nextWord.Text;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-
-        return newList;
-    }
-
-    private List<WordInfo> CombineSuffix(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            var nextWord = wordInfos[i];
-
-            if ((wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
-                && (wordInfos[i].DictionaryForm == "っこ"
-                    || wordInfos[i].DictionaryForm == "さ"
-                    || ((wordInfos[i].DictionaryForm == "たち" || wordInfos[i].DictionaryForm == "ら") &&
-                        wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun)))
-            {
-                currentWord.Text += nextWord.Text;
-            }
-            else
-            {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
-            }
-        }
-
-        newList.Add(currentWord);
-        return newList;
-    }
-
-    private List<WordInfo> CombineParticles(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        int i = 0;
-        while (i < wordInfos.Count)
-        {
-            WordInfo currentWord = wordInfos[i];
-
-            if (i + 1 < wordInfos.Count)
-            {
-                WordInfo nextWord = wordInfos[i + 1];
-                string combinedText = "";
-
-                if (currentWord.Text == "に" && nextWord.Text == "は") combinedText = "には";
-                else if (currentWord.Text == "と" && nextWord.Text == "は") combinedText = "とは";
-                else if (currentWord.Text == "で" && nextWord.Text == "は") combinedText = "では";
-                else if (currentWord.Text == "の" && nextWord.Text == "に") combinedText = "のに";
-
-                if (!string.IsNullOrEmpty(combinedText))
+                foreach (var id in candidates)
                 {
-                    WordInfo combinedWord = new WordInfo(currentWord);
-                    combinedWord.Text = combinedText;
-                    newList.Add(combinedWord);
-                    i += 2;
-                    continue;
+                    var word = await JmDictCache.GetWordAsync(id);
+                    if (word == null) continue;
+
+                    List<PartOfSpeech> pos = word.PartsOfSpeech.ToPartOfSpeech();
+                    if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
+
+                    matches.Add(word);
+                }
+
+                if (matches.Count == 0)
+                {
+                    bestMatch = await JmDictCache.GetWordAsync(candidates[0]);
+                    if (bestMatch == null)
+                    {
+                        return (true, null);
+                    }
+                }
+                else if (matches.Count > 1)
+                    bestMatch = matches.OrderByDescending(m => m.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text))).First();
+                else
+                    bestMatch = matches[0];
+
+                var normalizedReadings =
+                    bestMatch.Readings.ToList();
+                byte readingIndex = (byte)normalizedReadings.IndexOf(text);
+
+                // not found, try with hiragana form
+                if (readingIndex == 255)
+                {
+                    var normalizedHiraganaReadings =
+                        bestMatch.Readings.Select(r => WanaKana.ToHiragana(r, new DefaultOptions() { ConvertLongVowelMark = false }))
+                                 .ToList();
+                    readingIndex = (byte)normalizedHiraganaReadings.IndexOf(textInHiragana);
+                }
+
+                // not found, try with converting the long vowel mark
+                if (readingIndex == 255)
+                {
+                    normalizedReadings =
+                        bestMatch.Readings.Select(r => WanaKana.ToHiragana(r)).ToList();
+                    readingIndex = (byte)normalizedReadings.IndexOf(textInHiragana);
+                }
+
+                // Still not found, skip the word completely
+                if (readingIndex == 255)
+                {
+                    return (false, null);
+                }
+
+                DeckWord deckWord = new()
+                                    {
+                                        WordId = bestMatch.WordId, OriginalText = wordData.wordInfo.Text, ReadingIndex = readingIndex,
+                                        Occurrences = wordData.occurrences, PartsOfSpeech = bestMatch.PartsOfSpeech.ToPartOfSpeech(),
+                                        Origin = bestMatch.Origin
+                                    };
+                return (true, deckWord);
+            }
+
+            return (false, null);
+        }
+
+        private static async Task<(bool success, DeckWord? word)> DeconjugateVerbOrAdjective(
+            (WordInfo wordInfo, int occurrences) wordData, Deconjugator deconjugator)
+        {
+            var deconjugated = deconjugator.Deconjugate(WanaKana.ToHiragana(wordData.wordInfo.Text))
+                                           .OrderByDescending(d => d.Text.Length).ToList();
+
+            List<(DeconjugationForm form, List<int> ids)> candidates = new();
+            foreach (var form in deconjugated)
+            {
+                if (_lookups.TryGetValue(form.Text, out List<int> lookup))
+                {
+                    candidates.Add((form, lookup));
                 }
             }
 
-            newList.Add(new WordInfo(currentWord));
-            i++;
-        }
-
-        return newList;
-    }
-
-    /// <summary>
-    /// Tries to separate the honorifics from the proper names
-    /// This still doesn't work for all cases
-    /// </summary>
-    /// <param name="wordInfos"></param>
-    /// <returns></returns>
-    private List<WordInfo> SeparateSuffixHonorifics(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-
-        for (var i = 0; i < wordInfos.Count; i++)
-        {
-            WordInfo currentWord = new WordInfo(wordInfos[i]);
-            bool separated = false;
-            foreach (var honorific in HonorificsSuffixes)
+            if (candidates.Count == 0)
             {
-                if (!currentWord.Text.EndsWith(honorific) || currentWord.Text.Length <= honorific.Length ||
-                    (!currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PersonName) &&
-                     !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ProperNoun))) continue;
-
-                currentWord.Text = currentWord.Text.Substring(0, currentWord.Text.Length - honorific.Length);
-                if (currentWord.DictionaryForm.EndsWith(honorific))
-                {
-                    currentWord.DictionaryForm =
-                        currentWord.DictionaryForm.Substring(0, currentWord.DictionaryForm.Length - honorific.Length);
-                }
-
-                var suffix = new WordInfo()
-                             {
-                                 Text = honorific, PartOfSpeech = PartOfSpeech.Suffix, Reading = honorific, DictionaryForm = honorific
-                             };
-                newList.Add(currentWord);
-                newList.Add(suffix);
-                separated = true;
-
-                break;
+                return (true, null);
             }
 
-            if (!separated)
-                newList.Add(currentWord);
-        }
-
-        return wordInfos;
-    }
-
-    /// <summary>
-    /// Cleanup method / 2nd pass for some cases
-    /// </summary>
-    /// <param name="wordInfos"></param>
-    /// <returns></returns>
-    /// <exception cref="NotImplementedException"></exception>
-    private List<WordInfo> CombineFinal(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            var nextWord = wordInfos[i];
-
-            if (wordInfos[i].Text == "ば" &&
-                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
+            // if there's a candidate that's the same as the base word, put it first in the list
+            var baseDictionaryWord = WanaKana.ToHiragana(wordData.wordInfo.DictionaryForm);
+            var baseDictionaryWordIndex = candidates.FindIndex(c => c.form.Text == baseDictionaryWord);
+            if (baseDictionaryWordIndex != -1)
             {
-                currentWord.Text += nextWord.Text;
+                var baseDictionaryWordCandidate = candidates[baseDictionaryWordIndex];
+                candidates.RemoveAt(baseDictionaryWordIndex);
+                candidates.Insert(0, baseDictionaryWordCandidate);
+            }
+
+            // if there's a candidate that's the same as the base word, put it first in the list
+            var baseWord = WanaKana.ToHiragana(wordData.wordInfo.Text);
+            var baseWordIndex = candidates.FindIndex(c => c.form.Text == baseWord);
+            if (baseWordIndex != -1)
+            {
+                var baseWordCandidate = candidates[baseWordIndex];
+                candidates.RemoveAt(baseWordIndex);
+                candidates.Insert(0, baseWordCandidate);
+            }
+
+            List<(JmDictWord word, DeconjugationForm form)> matches = new();
+            (JmDictWord word, DeconjugationForm form) bestMatch;
+
+            foreach (var candidate in candidates)
+            {
+                foreach (var id in candidate.ids)
+                {
+                    var currentId = id;
+                    var word = await JmDictCache.GetWordAsync(currentId);
+                    if (word == null) continue;
+
+                    List<PartOfSpeech> pos = word.PartsOfSpeech.ToPartOfSpeech();
+                    if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
+
+                    matches.Add((word, candidate.form));
+                }
+            }
+
+            if (matches.Count == 0)
+            {
+                return (false, null);
+            }
+
+            if (matches.Count > 1)
+            {
+                bestMatch = matches.OrderByDescending(m => m.Item1.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text))).First();
+
+                if (!WanaKana.IsKana(wordData.wordInfo.NormalizedForm))
+                {
+                    foreach (var match in matches)
+                    {
+                        if (match.word.Readings.Any(r => r == wordData.wordInfo.NormalizedForm))
+                        {
+                            bestMatch = match;
+                            break;
+                        }
+                    }
+                }
             }
             else
+                bestMatch = matches[0];
+
+            var normalizedReadings =
+                bestMatch.word.Readings.Select(r => WanaKana.ToHiragana(r, new DefaultOptions() { ConvertLongVowelMark = false })).ToList();
+            byte readingIndex = (byte)normalizedReadings.IndexOf(bestMatch.form.Text);
+
+            // not found, try with converting the long vowel mark
+            if (readingIndex == 255)
             {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
+                normalizedReadings =
+                    bestMatch.word.Readings.Select(r => WanaKana.ToHiragana(r)).ToList();
+                readingIndex = (byte)normalizedReadings.IndexOf(bestMatch.form.Text);
             }
+
+            DeckWord deckWord = new()
+                                {
+                                    WordId = bestMatch.word.WordId, OriginalText = wordData.wordInfo.Text, ReadingIndex = readingIndex,
+                                    Occurrences = wordData.occurrences, Conjugations = bestMatch.form.Process,
+                                    PartsOfSpeech = bestMatch.word.PartsOfSpeech.ToPartOfSpeech(), Origin = bestMatch.word.Origin
+                                };
+            return (true, deckWord);
         }
-
-        newList.Add(currentWord);
-
-        return newList;
     }
 }

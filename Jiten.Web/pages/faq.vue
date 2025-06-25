@@ -34,7 +34,7 @@
       Subtitles from <a href="https://www.jimaku.cc" target="_blank" rel="noopener noreferrer">Jimaku</a> <br />
       Game scripts from <a href="https://sites.google.com/view/jo-mako/resources/resources-list?authuser=0" target="_blank" rel="noopener noreferrer">Jo-Mako</a> <br />
       Some VN scripts from <a href="http://wiki.wareya.moe/Stats" target="_blank" rel="noopener noreferrer">Wareya</a>.<br />
-      Everything else comes from me or our generous contributors on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>: Zakamutt, 人木, Zwansanwan, Rock, Usagi, 櫻子, Armory`,
+      Everything else comes from me or our generous contributors on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>: Zakamutt, 人木, Zwansanwan, Rock, Usagi, 櫻子, Armory, Sixsixsixsixsix, Pissolati`,
     },
     {
       question: "What's next for the website?",

@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -1111,6 +1110,93 @@ public static class JmDictHelper
             Console.WriteLine($"Updated pitch accents for {wordsUpdated} words. Saving to database...");
 
         await context.SaveChangesAsync();
+        return true;
+    }
+
+    public static async Task<bool> ImportVocabularyOrigin(bool verbose, DbContextOptions<JitenDbContext> options,
+                                                          string vocabularyOriginFilePath)
+    {
+        if (!File.Exists(vocabularyOriginFilePath))
+        {
+            Console.WriteLine($"File {vocabularyOriginFilePath} does not exist.");
+            return false;
+        }
+
+        var wordOriginMap = new Dictionary<string, WordOrigin>();
+
+        using (var reader = new StreamReader(vocabularyOriginFilePath))
+        using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+        {
+            var anonymousTypeDefinition = new { word = string.Empty, origin = string.Empty };
+            var records = csv.GetRecords(anonymousTypeDefinition);
+
+            foreach (var record in records)
+            {
+                WordOrigin origin = WordOrigin.Unknown;
+
+                switch (record.origin.Trim().ToLowerInvariant())
+                {
+                    case "和":
+                        origin = WordOrigin.Wago;
+                        break;
+                    case "漢":
+                        origin = WordOrigin.Kango;
+                        break;
+                    case "外":
+                        origin = WordOrigin.Gairaigo;
+                        break;
+                }
+
+                wordOriginMap[record.word] = origin;
+            }
+        }
+
+        if (verbose)
+            Console.WriteLine($"Loaded {wordOriginMap.Count} word origins from CSV file");
+
+        var context = new JitenDbContext(options);
+        var jmdictWords = await context.JMDictWords.ToListAsync();
+        int updatedCount = 0;
+
+        foreach (var word in jmdictWords)
+        {
+            string? matchedReading = null;
+
+            // Try kanji readings first
+            foreach (var reading in word.Readings)
+            {
+                if (!wordOriginMap.ContainsKey(reading) ||
+                    word.ReadingTypes[word.Readings.IndexOf(reading)] != JmDictReadingType.Reading) continue;
+                matchedReading = reading;
+                break;
+            }
+
+            // If no kanji reading matched, try kana readings
+            if (matchedReading == null)
+            {
+                foreach (var reading in word.Readings)
+                {
+                    if (!wordOriginMap.ContainsKey(reading)) continue;
+
+                    matchedReading = reading;
+                    break;
+                }
+            }
+
+            if (matchedReading == null) continue;
+
+            word.Origin = wordOriginMap[matchedReading];
+            updatedCount++;
+
+            if (verbose && updatedCount % 1000 == 0)
+                Console.WriteLine($"Updated {updatedCount} words so far");
+        }
+
+        if (verbose)
+            Console.WriteLine($"Updated origins for {updatedCount} words. Saving changes to database...");
+
+        await context.SaveChangesAsync();
+
         return true;
     }
 }

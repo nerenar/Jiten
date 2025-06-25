@@ -403,7 +403,7 @@
                   <div>
                     <p><strong>Character Count:</strong> {{ response.mainDeck.characterCount }}</p>
                     <p><strong>Unique Kanji:</strong> {{ response.mainDeck.uniqueKanjiCount }}</p>
-                    <p><strong>Difficulty:</strong> {{ response.mainDeck.difficulty.toFixed(2) }}</p>
+                    <p><strong>Difficulty:</strong> {{ response.mainDeck.difficultyRaw.toFixed(2) }}</p>
                     <p><strong>Avg. Sentence Length:</strong> {{ response.mainDeck.averageSentenceLength.toFixed(2) }}</p>
                   </div>
                 </div>
@@ -511,7 +511,7 @@
               <Column field="characterCount" header="Chars" :sortable="true" />
               <Column field="wordCount" header="Words" :sortable="true" />
               <Column field="uniqueWordCount" header="Unique Words" :sortable="true" />
-              <Column field="difficulty" header="Difficulty" :sortable="true" />
+              <Column field="difficultyRaw" header="Difficulty" :sortable="true" />
               <Column header="Actions">
                 <template #body="slotProps">
                   <Button class="p-button-text p-button-sm" @click="navigateTo(`/dashboard/media/${slotProps.data.deckId}`)">

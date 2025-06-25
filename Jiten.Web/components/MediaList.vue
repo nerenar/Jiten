@@ -29,6 +29,7 @@
     { label: 'Difficulty', value: 'difficulty' },
     { label: 'Character Count', value: 'charCount' },
     { label: 'Average Sentence Length', value: 'sentenceLength' },
+    { label: 'Dialogue Percentage', value: 'dialoguePercentage' },
     { label: 'Word Count', value: 'wordCount' },
     { label: 'Unique Kanji', value: 'uKanji' },
     { label: 'Unique Word Count', value: 'uWordCount' },

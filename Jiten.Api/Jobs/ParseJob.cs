@@ -35,7 +35,7 @@ public class ParseJob(JitenDbContext context)
                 text = await File.ReadAllTextAsync(filePath);
             }
 
-            deck = await Parser.Program.ParseTextToDeck(context, text, storeRawText, true, deckType);
+            deck = await Parser.Parser.ParseTextToDeck(context, text, storeRawText, true, deckType);
         }
 
         // Process children recursively
@@ -101,7 +101,7 @@ public class ParseJob(JitenDbContext context)
                 text = await File.ReadAllTextAsync(filePath);
             }
 
-            deck = await Parser.Program.ParseTextToDeck(context, text, storeRawText, true, deckType);
+            deck = await Parser.Parser.ParseTextToDeck(context, text, storeRawText, true, deckType);
             deck.ParentDeck = parentDeck;
             deck.DeckOrder = deckOrder;
             deck.OriginalTitle = metadata.OriginalTitle;

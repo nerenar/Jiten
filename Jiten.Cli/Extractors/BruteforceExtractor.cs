@@ -33,6 +33,7 @@ public class BruteforceExtractor
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         string regexPattern = @"[" +
+                              @"…" +
                               @"\p{IsHiragana}" + // Hiragana
                               @"\p{IsKatakana}" + // Katakana
                               @"\p{IsCJKUnifiedIdeographs}" + // Basic Kanji
@@ -47,26 +48,27 @@ public class BruteforceExtractor
 
         foreach (var file in files)
         {
-            var lines = await File.ReadAllLinesAsync(file, Encoding.GetEncoding(encoding));
-
-            foreach (var line in lines)
+            using (var streamReader = new StreamReader(file, Encoding.GetEncoding(encoding)))
             {
-                string trimmedLine = line.Trim();
-
-                bool atLeastOneMatch = false;
-                if (!string.IsNullOrWhiteSpace(trimmedLine))
+                while (await streamReader.ReadLineAsync() is { } line)
                 {
-                    MatchCollection matches = regex.Matches(trimmedLine);
+                    string trimmedLine = line.Trim();
 
-                    foreach (Match match in matches)
+                    bool atLeastOneMatch = false;
+                    if (!string.IsNullOrWhiteSpace(trimmedLine))
                     {
-                        atLeastOneMatch = true;
-                        extractedText.Append(match.Value);
-                    }
-                }
+                        MatchCollection matches = regex.Matches(trimmedLine);
 
-                if (atLeastOneMatch)
-                    extractedText.AppendLine();
+                        foreach (Match match in matches)
+                        {
+                            atLeastOneMatch = true;
+                            extractedText.Append(match.Value);
+                        }
+                    }
+
+                    if (atLeastOneMatch)
+                        extractedText.AppendLine();
+                }
             }
         }
 

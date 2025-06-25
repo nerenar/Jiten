@@ -15,6 +15,7 @@ public class ExtractedFeatures
     public double SentenceCount { get; set; }
     public double Ttr { get; set; }
     public double AverageSentenceLength { get; set; }
+    public double LogSentenceLength { get; set; }
     public double DialoguePercentage { get; set; }
 
     // Calculated counts Counts
@@ -28,10 +29,18 @@ public class ExtractedFeatures
     public double KatakanaRatio { get; set; }
     public double OtherRatio { get; set; }
     public double KanjiToKanaRatio { get; set; }
-
+    
+    public double KangoPercentage { get; set; }
+    public double WagoPercentage { get; set; }
+    public double GairaigoPercentage { get; set; }
+    public double VerbPercentage { get; set; }
+    public double ParticlePercentage { get; set; }
+    public double AvgWordPerSentence { get; set; }
+    public double ReadabilityScore { get; set; }
 
     // Frequency Stats
     public double AvgLogFreqRank { get; set; }
+    public double AvgFreqRank { get; set; }
     public double MedianLogFreqRank { get; set; }
     public double StdLogFreqRank { get; set; }
     public double MinFreqRank { get; set; }
@@ -60,6 +69,8 @@ public class ExtractedFeatures
     public Dictionary<string, int> ConjugationCategoryCounts { get; set; } = new Dictionary<string, int>();
     public Dictionary<string, double> ConjugationCategoryRatios { get; set; } = new Dictionary<string, double>();
     public double RatioConjugations { get; set; }
+    public Dictionary<string, int> PosCategoryCounts { get; set; } = new Dictionary<string, int>();
+    public Dictionary<string, double> PosCategoryRatios { get; set; } = new Dictionary<string, double>();
 
     public ExtractedFeatures()
     {
@@ -77,6 +88,7 @@ public class ExtractedFeatures
         DialoguePercentage = 0;
 
         AvgLogFreqRank = double.NaN;
+        AvgFreqRank = double.NaN;
         MedianLogFreqRank = double.NaN;
         StdLogFreqRank = double.NaN;
         MinFreqRank = double.NaN;
@@ -101,6 +113,12 @@ public class ExtractedFeatures
         {
             ConjugationCategoryCounts[$"conj_{cat}_count"] = 0;
             ConjugationCategoryRatios[$"ratio_{cat}_conj"] = 0;
+        }
+        
+        foreach (var cat in MLConfig.PosCategories.Keys)
+        {
+            PosCategoryCounts[$"pos_{cat}_count"] = 0;
+            PosCategoryRatios[$"ratio_{cat}_pos"] = 0;
         }
     }
 }

@@ -48,7 +48,8 @@ public static class MLHelper
         context = new JitenDbContext(context.DbOptions);
         if (!deckWords.Any()) return;
 
-        var wordIdsToExclude = context.JMDictWords.Where(w => w.Priorities != null && w.Priorities.Contains("name")).Select(w => w.WordId).ToList();
+        var wordIdsToExclude = context.JMDictWords.Where(w => w.Priorities != null && w.Priorities.Contains("name")).Select(w => w.WordId)
+                                      .ToList();
         var wordIds = deckWords.Select(dw => dw.WordId).Where(w => !wordIdsToExclude.Contains(w)).Distinct();
 
 
@@ -105,14 +106,16 @@ public static class MLHelper
         if (totalWordOccurrences == 0) return;
 
         // Log transform and calculate stats
-        var logFreqRanks = freqRanks.Any() ? freqRanks.Select(r => Math.Log(r + 1e-9)).ToList() : new List<double>();
-        var logObsFreqs = obsFreqs.Any() ? obsFreqs.Select(f => Math.Log(f + 1e-9)).ToList() : new List<double>();
+        var logFreqRanks = freqRanks.Any() ? freqRanks.Select(r => Math.Log(r + 1)).ToList() : new List<double>();
+        var logObsFreqs = obsFreqs.Any() ? obsFreqs.Select(f => Math.Log(f + 1)).ToList() : new List<double>();
         // Npgsql might return int[] for rank arrays, ensure they are double for log.
-        var logReadingFreqRanks = readingFreqRanks.Any() ? readingFreqRanks.Select(r => Math.Log(r + 1e-9)).ToList() : new List<double>();
-        var logReadingObsFreqs = readingObsFreqs.Any() ? readingObsFreqs.Select(f => Math.Log(f + 1e-9)).ToList() : new List<double>();
+        var logReadingFreqRanks = readingFreqRanks.Any() ? readingFreqRanks.Select(r => Math.Log(r + 1)).ToList() : new List<double>();
+        var logReadingObsFreqs = readingObsFreqs.Any() ? readingObsFreqs.Select(f => Math.Log(f + 1)).ToList() : new List<double>();
 
 
+        features.LogSentenceLength = features.AverageSentenceLength != 0 ? Math.Log(features.AverageSentenceLength) : double.NaN;
         features.AvgLogFreqRank = SafeAverage(logFreqRanks);
+        features.AvgFreqRank = SafeAverage(freqRanks);
         features.MedianLogFreqRank = SafeMedian(logFreqRanks);
         features.StdLogFreqRank = SafeStdDev(logFreqRanks);
         features.MinFreqRank = freqRanks.Any() ? freqRanks.Min() : double.NaN;
@@ -153,26 +156,48 @@ public static class MLHelper
 
         int totalConjugations = 0;
 
+        var posCounts = new Dictionary<string, int>();
+        foreach (var cat in MLConfig.PosCategories.Keys)
+        {
+            posCounts[cat] = 0;
+        }
+
         foreach (var dw in deckWords)
         {
             if (dw.Conjugations.Count == 0) continue;
             foreach (var conjDetail in dw.Conjugations)
             {
                 totalConjugations += dw.Occurrences;
-                string category = MLConfig.ConjugationDetailToCategory.TryGetValue(conjDetail, out var catVal) ? catVal : "other";
+                string category = MLConfig.ConjugationDetailToCategory.GetValueOrDefault(conjDetail, "other");
                 categoryCounts[category] += dw.Occurrences;
+            }
+
+            foreach (var pos in dw.PartsOfSpeech)
+            {
+                string category = MLConfig.PosDetailToCategory.GetValueOrDefault(pos, "other");
+                posCounts[category] += dw.Occurrences;
             }
         }
 
         features.TotalConjugations = totalConjugations;
-        foreach (var cat in MLConfig.ConjugationCategories.Keys) // Use defined categories to ensure all are present
+        foreach (var cat in MLConfig.ConjugationCategories.Keys)
         {
-            string countKey = $"conj_{cat.Replace("/", "_")}_count"; // Sanitize key for CsvHelper
+            string countKey = $"conj_{cat.Replace("/", "_")}_count";
             string ratioKey = $"ratio_{cat.Replace("/", "_")}_conj";
 
             features.ConjugationCategoryCounts[countKey] = categoryCounts.GetValueOrDefault(cat, 0);
             features.ConjugationCategoryRatios[ratioKey] =
-                totalConjugations > 0 ? (double)features.ConjugationCategoryCounts[countKey] / totalConjugations : 0;
+                features.WordCount > 0 ? (double)features.ConjugationCategoryCounts[countKey] / features.WordCount : 0;
+        }
+
+        foreach (var cat in MLConfig.PosCategories.Keys)
+        {
+            string countKey = $"pos_{cat.Replace("/", "_")}_count";
+            string ratioKey = $"ratio_{cat.Replace("/", "_")}_pos";
+
+            features.PosCategoryCounts[countKey] = posCounts.GetValueOrDefault(cat, 0);
+            features.PosCategoryRatios[ratioKey] =
+                features.WordCount > 0 ? (double)features.PosCategoryCounts[countKey] / features.WordCount : 0;
         }
 
         if (features.WordCount > 0)
@@ -240,5 +265,36 @@ public static class MLHelper
         }
 
         return score;
+    }
+
+    /// <summary>
+    /// Implementation of https://github.com/joshdavham/jreadability/tree/main
+    /// </summary>
+    /// <param name="deckWords"></param>
+    /// <param name="features"></param>
+    public static void ExtractReadabilityScore(List<DeckWord> deckWords, ExtractedFeatures features)
+    {
+        var wordCount = features.WordCount;
+        var kangoOccurrenceSum = deckWords.Where(dw => dw.Origin == WordOrigin.Kango).Sum(dw => dw.Occurrences);
+        var wagoOccurrenceSum = deckWords.Where(dw => dw.Origin == WordOrigin.Wago).Sum(dw => dw.Occurrences);
+        var gairaigoOccurrenceSum = deckWords.Where(dw => dw.Origin == WordOrigin.Gairaigo).Sum(dw => dw.Occurrences);
+        var verbOccurrenceSum = deckWords.Where(dw => dw.PartsOfSpeech.Contains(PartOfSpeech.Verb)).Sum(dw => dw.Occurrences);
+        var particleOccurrenceSum = deckWords.Where(dw => dw.PartsOfSpeech.Contains(PartOfSpeech.Particle)).Sum(dw => dw.Occurrences);
+        
+        var kangoPercentage = 100d * kangoOccurrenceSum / wordCount;
+        var wagoPercentage = 100d * wagoOccurrenceSum / wordCount;
+        var gairaigoPercentage = 100d * gairaigoOccurrenceSum / wordCount;
+        var verbPercentage = 100d * verbOccurrenceSum / wordCount;
+        var particlePercentage = particleOccurrenceSum / wordCount;
+        var avgWordPerSentence = features.SentenceCount > 0 ? wordCount / features.SentenceCount : 5;
+        var readabilityScore = avgWordPerSentence * -0.056 + kangoPercentage * -0.126 + wagoPercentage * -0.042 + verbPercentage * -0.145 + particlePercentage * -0.044 + 11.724;
+        
+        features.KangoPercentage = kangoPercentage;
+        features.WagoPercentage = wagoPercentage;
+        features.GairaigoPercentage = gairaigoPercentage;
+        features.VerbPercentage = verbPercentage;
+        features.ParticlePercentage = particlePercentage;
+        features.AvgWordPerSentence = avgWordPerSentence;
+        features.ReadabilityScore = readabilityScore;
     }
 }

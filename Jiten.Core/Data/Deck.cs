@@ -74,7 +74,7 @@ public class Deck
     /// <summary>
     ///  Difficulty rating from 0 to 100
     /// </summary>
-    public int Difficulty { get; set; }
+    public float Difficulty { get; set; }
 
     /// <summary>
     /// Amount of sentences
@@ -135,6 +135,11 @@ public class Deck
     /// Raw text from which the deck was parsed with
     /// </summary>
     public DeckRawText? RawText { get; set; }
+    
+    /// <summary>
+    /// Example sentences in this deck
+    /// </summary>
+    public ICollection<ExampleSentence>? ExampleSentences { get; set; } = new List<ExampleSentence>();
 
     private float _dialoguePercentage;
 
@@ -171,7 +176,7 @@ public class Deck
         UniqueWordCount = DeckWords.Select(dw => dw.WordId).Distinct().Count();
         UniqueWordUsedOnceCount = DeckWords.Where(dw => dw.Occurrences == 1).Select(dw => dw.WordId).Distinct().Count();
         SentenceCount = Children.Sum(c => c.SentenceCount);
-        Difficulty = (int)Math.Round(Children.Average(c => c.Difficulty));
+        Difficulty = Children.Average(c => c.Difficulty);
         DialoguePercentage = Children.Sum(c => c.DialoguePercentage) / Children.Count;
 
         // Not the most efficient or elegant way to do it, rebuilding the text, but it works and I don't have a better idea for now

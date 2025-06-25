@@ -11,6 +11,10 @@
         <ProjectReference Include="..\Jiten.Core\Jiten.Core.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Data\Redis\" />
+    </ItemGroup>
+
     <Target Name="CopySharedFiles" AfterTargets="Build">
         <ItemGroup>
             <SharedFiles Include="..\Shared\**\*.*"/>
