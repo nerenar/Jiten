@@ -336,14 +336,16 @@
         <h3 class="text-lg font-semibold">Add Words by Frequency Range</h3>
       </template>
       <template #content>
+        <!-- TODO: INVESTIGATE WHY THIS DOESNT RENDER THE SAME IN PROD -->
         <div class="flex flex-col gap-4">
-          <div class="flex flex-row flex-wrap gap-2 items-center">
+          <div class="flex flex-row flex-wrap gap-2 items-center" style="align-self: center; width:80%">
             <InputNumber
               :model-value="frequencyRange?.[0] ?? 0"
               show-buttons
               fluid
               size="small"
               class="max-w-20 flex-shrink-0"
+              style="left:0.25em;"
               @update:model-value="updateMinFrequency"
             />
             <Slider v-model="frequencyRange" range :min="0" :max="50000" class="flex-grow mx-2 flex-basis-auto" />
@@ -353,6 +355,7 @@
               fluid
               size="small"
               class="max-w-20 flex-shrink-0"
+              style="left:1em;"
               @update:model-value="updateMaxFrequency"
             />
           </div>

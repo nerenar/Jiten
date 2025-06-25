@@ -129,10 +129,11 @@
 
       <Divider class="!m-2" />
 
+      <!-- TODO: INVESTIGATE WHY THIS DOESNT RENDER THE SAME IN PROD -->
       <div class="flex flex-col gap-4">
         <label for="readingSpeed" class="text-sm font-medium">Reading Speed (chars/hour)</label>
         <div class="w-full">
-          <InputNumber v-model="readingSpeed" show-buttons :min="100" :max="100000" :step="100" size="small" class="w-full" />
+          <InputNumber v-model="readingSpeed" show-buttons :min="100" :max="100000" :step="100" size="small" class="w-full" style="margin-left:5em; margin-right:-5em;" />
         </div>
         <div class="w-full">
           <Slider v-model="readingSpeed" :min="100" :max="100000" :step="100" class="w-full" />
