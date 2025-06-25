@@ -102,6 +102,7 @@ services:
     image: redis:latest
     ports:
       - "6379:6379"
+    command: ["redis-server", "--maxmemory", "5gb", "--maxmemory-policy", "allkeys-lru"]
 
 volumes:
   postgres_data:

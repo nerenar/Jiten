@@ -45,3 +45,7 @@ a:not(.p-button) {
 .fade-leave-to {
     opacity: 0;
 }
+
+.p-inputnumber {
+    inset-inline-end: auto;
+}
