@@ -315,7 +315,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                 .AsNoTracking()
                                 .Include(d => d.Children)
                                 .FirstOrDefaultAsync(d => d.DeckId == id);
-        
+
         if (deck == null)
         {
             return Results.NotFound();
@@ -610,6 +610,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
         int knownWordsOccurrences = knownUniqueWords
             .Sum(dw => dw.Occurrences);
+
+        knownUniqueWords = knownUniqueWords.DistinctBy(w => w.WordId).ToList();
 
         double knownWordPercentage = Math.Round((double)knownWordsOccurrences / deck.WordCount * 100, 2);
 

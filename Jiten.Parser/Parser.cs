@@ -234,24 +234,8 @@ namespace Jiten.Parser
             if (mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
                 exampleSentences = ExampleSentenceExtractor.ExtractSentences(sentences, processedWords);
 
-            // Split into sentences
-            // string[] sentences = Regex.Split(text, @"(?<=[。！？」）])|(?<=[…])\r\n");
-            // sentences = sentences.Select(sentence =>
-            // {
-            //     // Find the first Japanese character
-            //     Match match = Regex.Match(sentence, @"[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]");
-            //     if (match.Success)
-            //     {
-            //         int startIndex = match.Index;
-            //         // Remove all special characters
-            //         return Regex.Replace(sentence.Substring(startIndex),
-            //                              "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005]",
-            //                              "");
-            //     }
-            //
-            //     return "";
-            // }).Where(s => !string.IsNullOrEmpty(s)).ToArray();
-
+            var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
+            
             timer.Stop();
 
             double deconjugationTime = timer.Elapsed.TotalMilliseconds;
@@ -286,10 +270,10 @@ namespace Jiten.Parser
             float dialoguePercentage = (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f;
 
             Console.WriteLine($"Dialogue percentage: {dialoguePercentage:0.0}%");
-
+            
             var deck = new Deck
                        {
-                           CharacterCount = characterCount, WordCount = wordInfos.Count, UniqueWordCount = processedWords.Length,
+                           CharacterCount = characterCount, WordCount = totalWordCount, UniqueWordCount = processedWords.Length,
                            UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
                            UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(c => WanaKana.IsKanji(c.ToString())),
                            UniqueKanjiUsedOnceCount = wordInfos.SelectMany(w => w.Text).GroupBy(c => c)
