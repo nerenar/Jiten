@@ -31,11 +31,11 @@ public class RedisDeckWordCache : IDeckWordCache
         return JsonSerializer.Deserialize<DeckWord>(json!, _jsonOptions);
     }
 
-    public async Task SetAsync(DeckWordCacheKey key, DeckWord word)
+    public async Task SetAsync(DeckWordCacheKey key, DeckWord word, CommandFlags flags = CommandFlags.None)
     {
         var redisKey = BuildRedisKey(key);
         var json = JsonSerializer.Serialize(word, _jsonOptions);
 
-        await _redisDb.StringSetAsync(redisKey, json, expiry: TimeSpan.FromDays(30));
+        await _redisDb.StringSetAsync(redisKey, json, expiry: TimeSpan.FromDays(30), flags: flags);
     }
 }

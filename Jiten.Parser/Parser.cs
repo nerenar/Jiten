@@ -8,6 +8,7 @@ using Jiten.Core.Utils;
 using Jiten.Parser.Data.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using StackExchange.Redis;
 using WanaKanaShaapu;
 
 namespace Jiten.Parser
@@ -40,7 +41,7 @@ namespace Jiten.Parser
             var optionsBuilder = new DbContextOptionsBuilder<JitenDbContext>();
             optionsBuilder.UseNpgsql(_dbContext.Database.GetConnectionString());
 
-            
+
             DeckWordCache = new RedisDeckWordCache(configuration);
             JmDictCache = new RedisJmDictCache(configuration, optionsBuilder.Options);
 
@@ -435,13 +436,21 @@ namespace Jiten.Parser
 
                 if (UseCache)
                 {
-                    await DeckWordCache.SetAsync(cacheKey,
-                                                 new DeckWord
-                                                 {
-                                                     WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
-                                                     ReadingIndex = processedWord.ReadingIndex, Conjugations = processedWord.Conjugations,
-                                                     PartsOfSpeech = processedWord.PartsOfSpeech, Origin = processedWord.Origin
-                                                 });
+                    try
+                    {
+                        await DeckWordCache.SetAsync(cacheKey,
+                                                     new DeckWord
+                                                     {
+                                                         WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
+                                                         ReadingIndex = processedWord.ReadingIndex,
+                                                         Conjugations = processedWord.Conjugations,
+                                                         PartsOfSpeech = processedWord.PartsOfSpeech, Origin = processedWord.Origin
+                                                     }, CommandFlags.FireAndForget);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Warning] Failed to write to DeckWordCache: {ex.Message}");
+                    }
                 }
             }
 
@@ -476,7 +485,7 @@ namespace Jiten.Parser
                 candidates = candidates.OrderBy(c => c).ToList();
 
                 var wordCache = await JmDictCache.GetWordsAsync(candidates);
-                
+
                 List<JmDictWord> matches = new();
                 JmDictWord? bestMatch = null;
 
@@ -497,7 +506,7 @@ namespace Jiten.Parser
                     else
                         return (true, null);
                 }
-                
+
                 else if (matches.Count > 1)
                     bestMatch = matches.OrderByDescending(m => m.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text))).First();
                 else
@@ -581,14 +590,14 @@ namespace Jiten.Parser
                 candidates.RemoveAt(baseWordIndex);
                 candidates.Insert(0, baseWordCandidate);
             }
-            
+
             var allCandidateIds = candidates.SelectMany(c => c.ids).Distinct().ToList();
 
             if (!allCandidateIds.Any())
                 return (false, null);
 
             var wordCache = await JmDictCache.GetWordsAsync(allCandidateIds);
-            
+
             List<(JmDictWord word, DeconjugationForm form)> matches = new();
             (JmDictWord word, DeconjugationForm form) bestMatch;
 
