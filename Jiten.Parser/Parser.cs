@@ -339,106 +339,150 @@ namespace Jiten.Parser
             return allProcessedWords;
         }
 
+        // Limit how many concurrent operations we perform to prevent overwhelming the system
+        private static readonly SemaphoreSlim _processSemaphore = new SemaphoreSlim(50, 50);
+        
         private static async Task<DeckWord?> ProcessWord((WordInfo wordInfo, int occurrences) wordData, Deconjugator deconjugator)
         {
-            var cacheKey = new DeckWordCacheKey(
-                                                wordData.wordInfo.Text,
-                                                wordData.wordInfo.PartOfSpeech,
-                                                wordData.wordInfo.DictionaryForm
-                                               );
-
-            if (UseCache)
+            // Try to acquire semaphore with timeout to prevent deadlock
+            if (!await _processSemaphore.WaitAsync(TimeSpan.FromSeconds(5)))
             {
-                var cachedWord = await DeckWordCache.GetAsync(cacheKey);
-
-                if (cachedWord != null)
-                {
-                    return new DeckWord
-                           {
-                               WordId = cachedWord.WordId, OriginalText = wordData.wordInfo.Text, ReadingIndex = cachedWord.ReadingIndex,
-                               Occurrences = wordData.occurrences, Conjugations = cachedWord.Conjugations,
-                               PartsOfSpeech = cachedWord.PartsOfSpeech, Origin = cachedWord.Origin
-                           };
-                }
+                // If we can't get the semaphore in a reasonable time, just return null
+                // This is better than hanging indefinitely
+                return null;
             }
-
-            DeckWord? processedWord = null;
-            bool isProcessed = false;
-
-            do
+            
+            try
             {
-                if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
-                        or PartOfSpeech.NaAdjective || wordData.wordInfo.PartOfSpeechSection1 is PartOfSpeechSection.Adjectival)
-                {
-                    // Try to deconjugate as verb or adjective
-                    var verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
-                    if (!verbResult.success || verbResult.word == null)
-                    {
-                        // The word might be a noun misparsed as a verb/adjective like お祭り
-                        var nounResult = await DeconjugateWord(wordData);
-                        processedWord = nounResult.word;
-                    }
-                    else
-                    {
-                        processedWord = verbResult.word;
-                    }
-                }
-                else
-                {
-                    var result = await DeconjugateWord(wordData);
-                    processedWord = result.word;
-                }
-
-                if (processedWord != null) break;
-
-                // We haven't found a match, let's try to remove the last character if it's a っ, a ー or a duplicate
-                if (wordData.wordInfo.Text.Length > 2 &&
-                    (wordData.wordInfo.Text[^1] == 'っ' || wordData.wordInfo.Text[^1] == 'ー' ||
-                     wordData.wordInfo.Text[^2] == wordData.wordInfo.Text[^1]))
-                {
-                    wordData.wordInfo.Text = wordData.wordInfo.Text[..^1];
-                }
-                // Let's try to remove any honorifics in front of the word
-                else if (wordData.wordInfo.Text.StartsWith("お"))
-                {
-                    wordData.wordInfo.Text = wordData.wordInfo.Text[1..];
-                }
-                // Let's try without any long vowel mark
-                else if (wordData.wordInfo.Text.Contains("ー"))
-                {
-                    wordData.wordInfo.Text = wordData.wordInfo.Text.Replace("ー", "");
-                }
-                else
-                {
-                    isProcessed = true;
-                }
-            } while (!isProcessed);
-
-            if (processedWord != null)
-            {
-                processedWord.Occurrences = wordData.occurrences;
-
+                var cacheKey = new DeckWordCacheKey(
+                                                    wordData.wordInfo.Text,
+                                                    wordData.wordInfo.PartOfSpeech,
+                                                    wordData.wordInfo.DictionaryForm
+                                                   );
+        
                 if (UseCache)
                 {
                     try
                     {
-                        await DeckWordCache.SetAsync(cacheKey,
-                                                     new DeckWord
-                                                     {
-                                                         WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
-                                                         ReadingIndex = processedWord.ReadingIndex,
-                                                         Conjugations = processedWord.Conjugations,
-                                                         PartsOfSpeech = processedWord.PartsOfSpeech, Origin = processedWord.Origin
-                                                     }, CommandFlags.FireAndForget);
+                        var cachedWord = await DeckWordCache.GetAsync(cacheKey);
+        
+                        if (cachedWord != null)
+                        {
+                            return new DeckWord
+                                   {
+                                       WordId = cachedWord.WordId, OriginalText = wordData.wordInfo.Text, ReadingIndex = cachedWord.ReadingIndex,
+                                       Occurrences = wordData.occurrences, Conjugations = cachedWord.Conjugations,
+                                       PartsOfSpeech = cachedWord.PartsOfSpeech, Origin = cachedWord.Origin
+                                   };
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[Warning] Failed to write to DeckWordCache: {ex.Message}");
+                        // Log but continue - we'll just process the word directly
+                        Console.WriteLine($"[Warning] Failed to read from DeckWordCache: {ex.Message}");
                     }
                 }
+        
+                DeckWord? processedWord = null;
+                bool isProcessed = false;
+                int attemptCount = 0;
+                const int maxAttempts = 3; // Limit how many attempts we make to prevent infinite loops
+        
+                do
+                {
+                    attemptCount++;
+                    try
+                    {
+                        if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+                                or PartOfSpeech.NaAdjective || wordData.wordInfo.PartOfSpeechSection1 is PartOfSpeechSection.Adjectival)
+                        {
+                            // Try to deconjugate as verb or adjective
+                            var verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
+                            if (!verbResult.success || verbResult.word == null)
+                            {
+                                // The word might be a noun misparsed as a verb/adjective like お祭り
+                                var nounResult = await DeconjugateWord(wordData);
+                                processedWord = nounResult.word;
+                            }
+                            else
+                            {
+                                processedWord = verbResult.word;
+                            }
+                        }
+                        else
+                        {
+                            var result = await DeconjugateWord(wordData);
+                            processedWord = result.word;
+                        }
+        
+                        if (processedWord != null) break;
+        
+                        // We haven't found a match, let's try to remove the last character if it's a っ, a ー or a duplicate
+                        if (wordData.wordInfo.Text.Length > 2 &&
+                            (wordData.wordInfo.Text[^1] == 'っ' || wordData.wordInfo.Text[^1] == 'ー' ||
+                             wordData.wordInfo.Text[^2] == wordData.wordInfo.Text[^1]))
+                        {
+                            wordData.wordInfo.Text = wordData.wordInfo.Text[..^1];
+                        }
+                        // Let's try to remove any honorifics in front of the word
+                        else if (wordData.wordInfo.Text.StartsWith("お"))
+                        {
+                            wordData.wordInfo.Text = wordData.wordInfo.Text[1..];
+                        }
+                        // Let's try without any long vowel mark
+                        else if (wordData.wordInfo.Text.Contains("ー"))
+                        {
+                            wordData.wordInfo.Text = wordData.wordInfo.Text.Replace("ー", "");
+                        }
+                        else
+                        {
+                            isProcessed = true;
+                        }
+                        
+                        // Also stop if we've made too many attempts
+                        if (attemptCount >= maxAttempts)
+                        {
+                            isProcessed = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log and consider this word processed to avoid infinite loop
+                        Console.WriteLine($"[Error] Failed to process word '{wordData.wordInfo.Text}': {ex.Message}");
+                        isProcessed = true;
+                    }
+                } while (!isProcessed);
+        
+                if (processedWord != null)
+                {
+                    processedWord.Occurrences = wordData.occurrences;
+        
+                    if (UseCache)
+                    {
+                        try
+                        {
+                            await DeckWordCache.SetAsync(cacheKey,
+                                                         new DeckWord
+                                                         {
+                                                             WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
+                                                             ReadingIndex = processedWord.ReadingIndex,
+                                                             Conjugations = processedWord.Conjugations,
+                                                             PartsOfSpeech = processedWord.PartsOfSpeech, Origin = processedWord.Origin
+                                                         }, CommandFlags.FireAndForget);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Warning] Failed to write to DeckWordCache: {ex.Message}");
+                        }
+                    }
+                }
+        
+                return processedWord;
             }
-
-            return processedWord;
+            finally
+            {
+                _processSemaphore.Release();
+            }
         }
 
         private static async Task<(bool success, DeckWord? word)> DeconjugateWord((WordInfo wordInfo, int occurrences) wordData)
@@ -468,29 +512,45 @@ namespace Jiten.Parser
             {
                 candidates = candidates.OrderBy(c => c).ToList();
 
-                var wordCache = await JmDictCache.GetWordsAsync(candidates);
-
+                Dictionary<int, JmDictWord> wordCache;
+                try
+                {
+                    wordCache = await JmDictCache.GetWordsAsync(candidates);
+                }
+                catch (Exception ex)
+                {
+                    // If we hit an exception when retrieving from cache, return a failure
+                    // but don't crash the entire process
+                    Console.WriteLine($"Error retrieving word cache: {ex.Message}");
+                    return (false, null);
+                }
+        
+                // Early return if we got no words from cache to avoid NullReferenceException
+                if (wordCache.Count == 0)
+                {
+                    return (false, null);
+                }
+        
                 List<JmDictWord> matches = new();
                 JmDictWord? bestMatch = null;
-
+        
                 foreach (var id in candidates)
                 {
                     if (!wordCache.TryGetValue(id, out var word)) continue;
-
+        
                     List<PartOfSpeech> pos = word.PartsOfSpeech.ToPartOfSpeech();
                     if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
-
+        
                     matches.Add(word);
                 }
-
+        
                 if (matches.Count == 0)
                 {
-                    if (wordCache.TryGetValue(candidates[0], out var fallbackWord))
+                    if (candidates.Count > 0 && wordCache.TryGetValue(candidates[0], out var fallbackWord))
                         bestMatch = fallbackWord;
                     else
                         return (true, null);
                 }
-
                 else if (matches.Count > 1)
                     bestMatch = matches.OrderByDescending(m => m.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text))).First();
                 else
@@ -580,7 +640,24 @@ namespace Jiten.Parser
             if (!allCandidateIds.Any())
                 return (false, null);
 
-            var wordCache = await JmDictCache.GetWordsAsync(allCandidateIds);
+            Dictionary<int, JmDictWord> wordCache;
+            try
+            {
+                wordCache = await JmDictCache.GetWordsAsync(allCandidateIds);
+                
+                // Check if we got any results
+                if (wordCache.Count == 0)
+                {
+                    return (false, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                // If we hit an exception when retrieving from cache, return a failure
+                // but don't crash the entire process
+                Console.WriteLine($"Error retrieving verb/adjective word cache: {ex.Message}");
+                return (false, null);
+            }
 
             List<(JmDictWord word, DeconjugationForm form)> matches = new();
             (JmDictWord word, DeconjugationForm form) bestMatch;

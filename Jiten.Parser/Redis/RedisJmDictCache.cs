@@ -15,6 +15,10 @@ public class RedisJmDictCache : IJmDictCache
     private const string InitializedKey = "jmdict:initialized";
     private readonly DbContextOptions<JitenDbContext> _dbOptions;
 
+    // Semaphore to limit concurrent database access
+    private static readonly SemaphoreSlim DbSemaphore = new SemaphoreSlim(10, 10);
+    private static readonly Random Jitter = new Random();
+    
     public RedisJmDictCache(IConfiguration configuration, DbContextOptions<JitenDbContext> dbOptions)
     {
         var connection = ConnectionMultiplexer.Connect(configuration.GetConnectionString("Redis")!);
@@ -150,6 +154,7 @@ public class RedisJmDictCache : IJmDictCache
         return JsonSerializer.Deserialize<JmDictWord>(json!, _jsonOptions);
     }
     
+    
     public async Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds)
     {
         var uniqueIds = wordIds.Distinct().ToList();
@@ -157,18 +162,18 @@ public class RedisJmDictCache : IJmDictCache
         {
             return new Dictionary<int, JmDictWord>();
         }
-
+    
         var redisKeys = uniqueIds.Select(id => (RedisKey)BuildWordKey(id)).ToArray();
         var redisValues = await _redisDb.StringGetAsync(redisKeys);
-
+    
         var results = new Dictionary<int, JmDictWord>();
         var missedIds = new List<int>();
-
+    
         for (int i = 0; i < redisKeys.Length; i++)
         {
             var id = uniqueIds[i];
             var value = redisValues[i];
-
+    
             if (value.IsNullOrEmpty)
             {
                 missedIds.Add(id);
@@ -182,27 +187,78 @@ public class RedisJmDictCache : IJmDictCache
                 }
             }
         }
-
+    
         if (missedIds.Any())
         {
-            await using var dbContext = new JitenDbContext(_dbOptions);
-
-            var dbWords = await dbContext.JMDictWords
-                                         .AsNoTracking()
-                                         .Where(w => missedIds.Contains(w.WordId))
-                                         .ToListAsync();
-
-            if (dbWords.Any())
+            // Process missed IDs in batches to avoid overwhelming the database
+            const int batchSize = 1000;
+            
+            for (int i = 0; i < missedIds.Count; i += batchSize)
             {
-                var cacheBatch = _redisDb.CreateBatch();
-                foreach (var word in dbWords)
+                var batchIds = missedIds.Skip(i).Take(batchSize).ToList();
+                
+                // Try to acquire semaphore with timeout
+                if (!await DbSemaphore.WaitAsync(TimeSpan.FromSeconds(5)))
                 {
-                    results[word.WordId] = word;
-                    var redisKey = BuildWordKey(word.WordId);
-                    var json = JsonSerializer.Serialize(word, _jsonOptions);
-                    cacheBatch.StringSetAsync(redisKey, json, expiry: _cacheExpiry);
+                    // If semaphore acquisition times out, return what we have so far
+                    // This prevents blocking indefinitely and contributes to graceful degradation
+                    continue;
                 }
-                cacheBatch.Execute();
+                
+                try
+                {
+                    // Retry logic for database operations
+                    const int maxRetries = 3;
+                    for (int retry = 0; retry < maxRetries; retry++)
+                    {
+                        try
+                        {
+                            await using var dbContext = new JitenDbContext(_dbOptions);
+                            
+                            // Set a timeout for the command to avoid long-running queries
+                            dbContext.Database.SetCommandTimeout(TimeSpan.FromSeconds(5));
+                            
+                            var dbWords = await dbContext.JMDictWords
+                                .AsNoTracking()
+                                .Where(w => batchIds.Contains(w.WordId))
+                                .ToListAsync();
+    
+                            if (dbWords.Any())
+                            {
+                                // Cache the results in Redis
+                                var cacheBatch = _redisDb.CreateBatch();
+                                foreach (var word in dbWords)
+                                {
+                                    results[word.WordId] = word;
+                                    var redisKey = BuildWordKey(word.WordId);
+                                    var json = JsonSerializer.Serialize(word, _jsonOptions);
+                                    // Use FireAndForget to avoid waiting for Redis response
+                                    cacheBatch.StringSetAsync(redisKey, json, expiry: _cacheExpiry, flags: CommandFlags.FireAndForget);
+                                }
+                                cacheBatch.Execute();
+                            }
+                            
+                            // If we get here, the operation was successful, so break out of the retry loop
+                            break;
+                        }
+                        catch (Npgsql.PostgresException pgEx) when (pgEx.SqlState == "53300" && retry < maxRetries - 1)
+                        {
+                            // Connection limit reached, wait with exponential backoff before retrying
+                            var backoffMs = (int)Math.Pow(2, retry) * 100 + Jitter.Next(50);
+                            await Task.Delay(backoffMs);
+                        }
+                        catch (Exception ex) when (retry < maxRetries - 1)
+                        {
+                            // For other transient errors, also retry with backoff
+                            var backoffMs = (int)Math.Pow(2, retry) * 200 + Jitter.Next(100);
+                            await Task.Delay(backoffMs);
+                        }
+                    }
+                }
+                finally
+                {
+                    DbSemaphore.Release();
+                }
             }
         }
 
