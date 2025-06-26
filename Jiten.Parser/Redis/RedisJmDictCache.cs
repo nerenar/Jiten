@@ -149,6 +149,65 @@ public class RedisJmDictCache : IJmDictCache
 
         return JsonSerializer.Deserialize<JmDictWord>(json!, _jsonOptions);
     }
+    
+    public async Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds)
+    {
+        var uniqueIds = wordIds.Distinct().ToList();
+        if (!uniqueIds.Any())
+        {
+            return new Dictionary<int, JmDictWord>();
+        }
+
+        var redisKeys = uniqueIds.Select(id => (RedisKey)BuildWordKey(id)).ToArray();
+        var redisValues = await _redisDb.StringGetAsync(redisKeys);
+
+        var results = new Dictionary<int, JmDictWord>();
+        var missedIds = new List<int>();
+
+        for (int i = 0; i < redisKeys.Length; i++)
+        {
+            var id = uniqueIds[i];
+            var value = redisValues[i];
+
+            if (value.IsNullOrEmpty)
+            {
+                missedIds.Add(id);
+            }
+            else
+            {
+                var word = JsonSerializer.Deserialize<JmDictWord>(value!, _jsonOptions);
+                if (word != null)
+                {
+                    results[id] = word;
+                }
+            }
+        }
+
+        if (missedIds.Any())
+        {
+            await using var dbContext = new JitenDbContext(_dbOptions);
+
+            var dbWords = await dbContext.JMDictWords
+                                         .AsNoTracking()
+                                         .Where(w => missedIds.Contains(w.WordId))
+                                         .ToListAsync();
+
+            if (dbWords.Any())
+            {
+                var cacheBatch = _redisDb.CreateBatch();
+                foreach (var word in dbWords)
+                {
+                    results[word.WordId] = word;
+                    var redisKey = BuildWordKey(word.WordId);
+                    var json = JsonSerializer.Serialize(word, _jsonOptions);
+                    cacheBatch.StringSetAsync(redisKey, json, expiry: _cacheExpiry);
+                }
+                cacheBatch.Execute();
+            }
+        }
+
+        return results;
+    }
 
     public async Task<bool> SetLookupIdsAsync(Dictionary<string, List<int>> lookups)
     {

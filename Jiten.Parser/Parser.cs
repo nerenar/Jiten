@@ -475,13 +475,14 @@ namespace Jiten.Parser
             {
                 candidates = candidates.OrderBy(c => c).ToList();
 
+                var wordCache = await JmDictCache.GetWordsAsync(candidates);
+                
                 List<JmDictWord> matches = new();
                 JmDictWord? bestMatch = null;
 
                 foreach (var id in candidates)
                 {
-                    var word = await JmDictCache.GetWordAsync(id);
-                    if (word == null) continue;
+                    if (!wordCache.TryGetValue(id, out var word)) continue;
 
                     List<PartOfSpeech> pos = word.PartsOfSpeech.ToPartOfSpeech();
                     if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
@@ -491,12 +492,12 @@ namespace Jiten.Parser
 
                 if (matches.Count == 0)
                 {
-                    bestMatch = await JmDictCache.GetWordAsync(candidates[0]);
-                    if (bestMatch == null)
-                    {
+                    if (wordCache.TryGetValue(candidates[0], out var fallbackWord))
+                        bestMatch = fallbackWord;
+                    else
                         return (true, null);
-                    }
                 }
+                
                 else if (matches.Count > 1)
                     bestMatch = matches.OrderByDescending(m => m.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text))).First();
                 else
@@ -580,7 +581,14 @@ namespace Jiten.Parser
                 candidates.RemoveAt(baseWordIndex);
                 candidates.Insert(0, baseWordCandidate);
             }
+            
+            var allCandidateIds = candidates.SelectMany(c => c.ids).Distinct().ToList();
 
+            if (!allCandidateIds.Any())
+                return (false, null);
+
+            var wordCache = await JmDictCache.GetWordsAsync(allCandidateIds);
+            
             List<(JmDictWord word, DeconjugationForm form)> matches = new();
             (JmDictWord word, DeconjugationForm form) bestMatch;
 
@@ -588,9 +596,7 @@ namespace Jiten.Parser
             {
                 foreach (var id in candidate.ids)
                 {
-                    var currentId = id;
-                    var word = await JmDictCache.GetWordAsync(currentId);
-                    if (word == null) continue;
+                    if (!wordCache.TryGetValue(id, out var word)) continue;
 
                     List<PartOfSpeech> pos = word.PartsOfSpeech.ToPartOfSpeech();
                     if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
