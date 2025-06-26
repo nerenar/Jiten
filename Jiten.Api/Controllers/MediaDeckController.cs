@@ -311,8 +311,11 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     [EnableRateLimiting("download")]
     public async Task<IResult> DownloadDeck(int id, [FromBody] DeckDownloadRequest request)
     {
-        var deck = context.Decks.AsNoTracking().FirstOrDefault(d => d.DeckId == id);
-
+        var deck = await context.Decks
+                                .AsNoTracking()
+                                .Include(d => d.Children)
+                                .FirstOrDefaultAsync(d => d.DeckId == id);
+        
         if (deck == null)
         {
             return Results.NotFound();
@@ -386,9 +389,18 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         var frequencies = context.JmDictWordFrequencies.Where(f => wordIds.Contains(f.WordId))
                                  .ToDictionary(f => f.WordId, f => f);
 
+
+        var deckIds = new List<int> { id };
+
+        // If this deck has children, use sentences from the children instead
+        if (deck?.Children.Any() == true)
+        {
+            deckIds = deck.Children.Select(c => c.DeckId).ToList();
+        }
+
         var exampleSentences = await context.ExampleSentences
                                             .AsNoTracking()
-                                            .Where(es => es.DeckId == id)
+                                            .Where(es => deckIds.Contains(es.DeckId))
                                             .Include(es => es.Words.Where(w => wordIds.Contains(w.WordId)))
                                             .ToListAsync();
 
@@ -401,6 +413,10 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 var key = (word.WordId, word.ReadingIndex);
                 if (!wordToSentencesMap.ContainsKey(key))
                     wordToSentencesMap[key] = new List<(string, byte, byte)>();
+
+                // If this word already has a sentence and we're only collecting one per word, skip
+                if (wordToSentencesMap[key].Count > 0)
+                    continue;
 
                 wordToSentencesMap[key].Add((sentence.Text, word.Position, word.Length));
             }
