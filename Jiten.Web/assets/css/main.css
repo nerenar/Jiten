@@ -49,3 +49,7 @@ a:not(.p-button) {
 .p-inputnumber {
     inset-inline-end: auto;
 }
+
+.p-inputnumber-stacked {
+    inset-inline-end: auto;
+}

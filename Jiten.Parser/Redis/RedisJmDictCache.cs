@@ -130,7 +130,7 @@ public class RedisJmDictCache : IJmDictCache
         var json = await _redisDb.StringGetAsync(redisKey);
         if (json.IsNullOrEmpty)
         {
-            using var dbContext = new JitenDbContext(_dbContext.DbOptions);
+            await using var dbContext = new JitenDbContext(_dbContext.DbOptions);
 
             // Fetch the word from database
             var word = await dbContext.JMDictWords
