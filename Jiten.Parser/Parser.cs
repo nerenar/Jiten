@@ -6,6 +6,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Utils;
 using Jiten.Parser.Data.Redis;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using WanaKanaShaapu;
 
@@ -36,8 +37,12 @@ namespace Jiten.Parser
                                 .AddEnvironmentVariables()
                                 .Build();
 
+            var optionsBuilder = new DbContextOptionsBuilder<JitenDbContext>();
+            optionsBuilder.UseNpgsql(_dbContext.Database.GetConnectionString());
+
+            
             DeckWordCache = new RedisDeckWordCache(configuration);
-            JmDictCache = new RedisJmDictCache(configuration, _dbContext);
+            JmDictCache = new RedisJmDictCache(configuration, optionsBuilder.Options);
 
             _lookups = await JmDictHelper.LoadLookupTable(_dbContext);
 

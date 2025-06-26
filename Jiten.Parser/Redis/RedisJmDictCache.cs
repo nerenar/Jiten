@@ -13,13 +13,13 @@ public class RedisJmDictCache : IJmDictCache
     private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private readonly TimeSpan _cacheExpiry = TimeSpan.FromDays(30); // Long cache time for dictionary data
     private const string InitializedKey = "jmdict:initialized";
-    private readonly JitenDbContext _dbContext;
+    private readonly DbContextOptions<JitenDbContext> _dbOptions;
 
-    public RedisJmDictCache(IConfiguration configuration, JitenDbContext dbContext)
+    public RedisJmDictCache(IConfiguration configuration, DbContextOptions<JitenDbContext> dbOptions)
     {
         var connection = ConnectionMultiplexer.Connect(configuration.GetConnectionString("Redis")!);
         _redisDb = connection.GetDatabase();
-        _dbContext = dbContext;
+        _dbOptions = dbOptions;
     }
 
     private string BuildLookupKey(string lookupText)
@@ -38,7 +38,7 @@ public class RedisJmDictCache : IJmDictCache
         var json = await _redisDb.StringGetAsync(redisKey);
         if (json.IsNullOrEmpty)
         {
-            await using var dbContext = new JitenDbContext(_dbContext.DbOptions);
+            await using var dbContext = new JitenDbContext(_dbOptions);
             // Fetch the lookup from database
             var lookupIds = await dbContext.Lookups
                                            .AsNoTracking()
@@ -94,7 +94,7 @@ public class RedisJmDictCache : IJmDictCache
         // 3. If any keys were not in the cache, fetch them from the database in a single query
         if (missedKeys.Any())
         {
-            await using var dbContext = new JitenDbContext(_dbContext.DbOptions);
+            await using var dbContext = new JitenDbContext(_dbOptions);
 
             var dbLookups = await dbContext.Lookups
                                            .AsNoTracking()
@@ -130,7 +130,7 @@ public class RedisJmDictCache : IJmDictCache
         var json = await _redisDb.StringGetAsync(redisKey);
         if (json.IsNullOrEmpty)
         {
-            await using var dbContext = new JitenDbContext(_dbContext.DbOptions);
+            await using var dbContext = new JitenDbContext(_dbOptions);
 
             // Fetch the word from database
             var word = await dbContext.JMDictWords

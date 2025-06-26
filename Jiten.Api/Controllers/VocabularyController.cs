@@ -151,6 +151,9 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
             // Find the first word that ends with a tab
             var tabIndex = line.IndexOf('\t');
 
+            if (tabIndex <= 0)
+                tabIndex = line.IndexOf(',');
+
             if (tabIndex <= 0) continue;
 
             var word = line.Substring(0, tabIndex);
