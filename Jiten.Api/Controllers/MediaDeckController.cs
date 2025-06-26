@@ -189,14 +189,14 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 ? query.OrderBy(d => context.JmDictWordFrequencies
                                             .Where(f => f.WordId == d.WordId)
                                             .Select(f => f.ReadingsFrequencyRank[d.ReadingIndex])
-                                            .FirstOrDefault())
+                                            .FirstOrDefault()).ThenBy(d => d.DeckWordId)
                 : query.OrderByDescending(d => context.JmDictWordFrequencies
                                                       .Where(f => f.WordId == d.WordId)
                                                       .Select(f => f.ReadingsFrequencyRank[d.ReadingIndex])
-                                                      .FirstOrDefault()),
+                                                      .FirstOrDefault()).ThenBy(d => d.DeckWordId),
             "deckFreq" => sortOrder == SortOrder.Ascending
-                ? query.OrderByDescending(d => d.Occurrences)
-                : query.OrderBy(d => d.Occurrences),
+                ? query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId)
+                : query.OrderBy(d => d.Occurrences).ThenBy(d=> d.DeckWordId),
             "chrono" or _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.DeckWordId)
                 : query.OrderByDescending(d => d.DeckWordId),
