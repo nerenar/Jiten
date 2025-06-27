@@ -58,13 +58,14 @@
       try {
         const text = e.target?.result as string;
         const vids = Array.from(text.matchAll(vidRegex), (m) => Number(m[1]));
+        const validVids = vids.filter((vid) => vid > 0 && vid <= 2147483647);
 
-        if (vids.length > 0) {
-          store.addKnownWordIds(vids);
-          toast.add({ severity: 'success', summary: 'Added words', detail: `Found ${vids.length} word IDs.`, life: 5000 });
+        if (validVids.length > 0) {
+          store.addKnownWordIds(validVids);
+          toast.add({ severity: 'success', summary: 'Added words', detail: `Found ${validVids.length} word IDs.`, life: 5000 });
           await nextTick();
           knownWordIdsAmount.value = store.getKnownWordIds().length;
-          console.log(`Extracted VIDs: ${vids.length}`, vids);
+          console.log(`Extracted VIDs: ${validVids.length}`, validVids);
         } else {
           toast.add({ severity: 'info', summary: 'No words added', detail: 'No "vid" entries found in the file.', life: 5000 });
         }
