@@ -118,6 +118,13 @@ public class MorphologicalAnalyser
         // Force spaces and line breaks with some characters so sudachi doesn't try to include them as part of a word
         text = Regex.Replace(text, "「", "\n「 ");
         text = Regex.Replace(text, "」", " 」\n");
+        text = Regex.Replace(text, "〈", " \n〈 ");
+        text = Regex.Replace(text, "〉", " 〉\n");
+        text = Regex.Replace(text, "《", " \n《 ");
+        text = Regex.Replace(text, "》", " 》\n");    
+        text = Regex.Replace(text, "“", " \n“ ");
+        text = Regex.Replace(text, "”", " ”\n");
+        text = Regex.Replace(text, "―", " ― ");
     }
 
     /// <summary>
