@@ -114,17 +114,20 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text,
                              "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500()。！？「」）]",
                              "");
-        
+
         // Force spaces and line breaks with some characters so sudachi doesn't try to include them as part of a word
         text = Regex.Replace(text, "「", "\n「 ");
         text = Regex.Replace(text, "」", " 」\n");
         text = Regex.Replace(text, "〈", " \n〈 ");
         text = Regex.Replace(text, "〉", " 〉\n");
         text = Regex.Replace(text, "《", " \n《 ");
-        text = Regex.Replace(text, "》", " 》\n");    
+        text = Regex.Replace(text, "》", " 》\n");
         text = Regex.Replace(text, "“", " \n“ ");
         text = Regex.Replace(text, "”", " ”\n");
         text = Regex.Replace(text, "―", " ― ");
+        text = Regex.Replace(text, "。", " 。\n");
+        text = Regex.Replace(text, "！", " ！\n");
+        text = Regex.Replace(text, "？", " ？\n");
     }
 
     /// <summary>
@@ -873,7 +876,7 @@ public class MorphologicalAnalyser
 
         var sb = new StringBuilder();
         bool seenEnder = false;
-        
+
         // Need a flat text for the sentence to corresponds if they're cut between 2 lines
         text = text.Replace("\r", "").Replace("\n", "");
 
@@ -926,23 +929,60 @@ public class MorphologicalAnalyser
             if (string.IsNullOrEmpty(word.Text))
                 continue;
 
-            while (currentSentenceIndex < sentences.Count)
+            bool wordAssigned = false;
+            while (currentSentenceIndex < sentences.Count && !wordAssigned)
             {
-                var sentenceText = sentences[currentSentenceIndex].Text;
-                int wordIndex = sentenceText.IndexOf(word.Text, currentCharIndex, StringComparison.Ordinal);
+                var sentence = sentences[currentSentenceIndex];
+                int wordIndex = sentence.Text.IndexOf(word.Text, currentCharIndex, StringComparison.Ordinal);
 
                 if (wordIndex >= 0)
                 {
                     currentCharIndex = wordIndex + word.Text.Length;
                     sentences[currentSentenceIndex].Words.Add((word, (byte)wordIndex, (byte)word.Text.Length));
-                    break;
+                    wordAssigned = true;
                 }
+                else
+                {
+                    // Word not found, check if it spans across to the next sentence
+                    if (currentSentenceIndex + 1 < sentences.Count)
+                    {
+                        var remainingTextInCurrentSentence = currentCharIndex < sentence.Text.Length
+                            ? sentence.Text[currentCharIndex..]
+                            : string.Empty;
+                        var nextSentence = sentences[currentSentenceIndex + 1];
 
-                currentSentenceIndex++;
-                currentCharIndex = 0;
+                        for (int i = 1; i < word.Text.Length; i++)
+                        {
+                            string part1 = word.Text[..i];
+                            string part2 = word.Text[i..];
+                            if (!remainingTextInCurrentSentence.EndsWith(part1) || !nextSentence.Text.StartsWith(part2)) continue;
+
+                            // Word spans sentences, merge them
+                            sentence.Text += nextSentence.Text;
+                            sentences.RemoveAt(currentSentenceIndex + 1);
+
+                            // Retry finding the word in the merged sentence
+                            wordIndex = sentence.Text.IndexOf(word.Text, currentCharIndex, StringComparison.Ordinal);
+                            if (wordIndex >= 0)
+                            {
+                                currentCharIndex = wordIndex + word.Text.Length;
+                                sentence.Words.Add((word, (byte)wordIndex, (byte)word.Text.Length));
+                                wordAssigned = true;
+                            }
+
+                            break;
+                        }
+                    }
+
+                    if (wordAssigned) continue;
+
+                    currentSentenceIndex++;
+                    currentCharIndex = 0;
+                }
             }
         }
 
         return sentences;
+
     }
 }
