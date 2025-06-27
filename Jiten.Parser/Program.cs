@@ -10,7 +10,11 @@ public static class Program
     {
         // var text = "「あそこ美味しいよねー。早くお祭り終わって欲しいなー。ノンビリ遊びに行きたーい」";
         var text = await File.ReadAllTextAsync("Y:\\00_JapaneseStudy\\JL\\Backlogs\\Default_2024.12.28_10.52.47-2024.12.28_19.58.40.txt");
-
+        text = """
+               部屋の床が大きく崩れたのだ。
+               「……」「……」「……」「……！」
+               「！」「！」「！」「！」「！」「！」「！」「！」「！」「！」足場が抜けたことに、仕掛けた一人を除く十人がそれぞれ驚き、それぞれ落下しつつも、しかしそれぞれに対処する――すわ、これが第十二回十二大戦の幕開けだった。
+               """;
         var configuration = new ConfigurationBuilder()
                             .SetBasePath(Directory.GetCurrentDirectory())
                             .AddJsonFile("sharedsettings.json", optional: true, reloadOnChange: true)

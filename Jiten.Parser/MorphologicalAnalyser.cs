@@ -114,6 +114,10 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text,
                              "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500()。！？「」）]",
                              "");
+        
+        // Force spaces and line breaks with some characters so sudachi doesn't try to include them as part of a word
+        text = Regex.Replace(text, "「", "\n「 ");
+        text = Regex.Replace(text, "」", " 」\n");
     }
 
     /// <summary>

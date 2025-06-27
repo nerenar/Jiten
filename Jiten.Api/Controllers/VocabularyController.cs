@@ -73,7 +73,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
     [HttpGet("parse")]
     public async Task<IResult> Parse(string text)
     {
-        if (text.Length > 200)
+        if (text.Length > 500)
             return Results.BadRequest("Text is too long");
 
         var parsedWords = await Parser.Parser.ParseText(context, text);
