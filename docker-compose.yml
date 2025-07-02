@@ -100,8 +100,6 @@ services:
 
   redis:
     image: redis:latest
-    ports:
-      - "6379:6379"
     command: ["redis-server", "--maxmemory", "${REDIS_MAX_MEMORY:-2}gb", "--maxmemory-policy", "allkeys-lru"]
 
 volumes:
