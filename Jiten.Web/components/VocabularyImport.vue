@@ -17,7 +17,7 @@
   const { $api } = useNuxtApp();
   const confirm = useConfirm();
 
-  let knownWordIdsAmount = ref(0);
+  const knownWordIdsAmount = ref(0);
   knownWordIdsAmount.value = store.getKnownWordIds().length;
 
   function clearKnownWords() {
@@ -229,7 +229,7 @@
 </script>
 
 <template>
-  <div class="p-4">
+  <div class="">
     <ConfirmDialog />
     <Toast />
 
@@ -254,7 +254,7 @@
         </p>
 
         <div class="flex">
-          <Button @click="clearKnownWords" severity="danger" icon="pi pi-trash" label="Clear All Known Words" />
+          <Button severity="danger" icon="pi pi-trash" label="Clear All Known Words" @click="clearKnownWords" />
         </div>
       </template>
     </Card>
@@ -269,17 +269,17 @@
         </p>
 
         <div class="flex flex-col md:flex-row gap-3 mb-3">
-          <Button @click="downloadKnownWordIds" icon="pi pi-download" label="Export Word IDs" class="w-full md:w-auto" />
+          <Button icon="pi pi-download" label="Export Word IDs" class="w-full md:w-auto" @click="downloadKnownWordIds" />
 
           <FileUpload
             mode="basic"
             name="wordIdsFile"
             accept=".txt"
-            :customUpload="true"
-            @select="handleWordIdsFileSelect"
+            :custom-upload="true"
             :auto="true"
-            :chooseLabel="'Import Word IDs'"
+            :choose-label="'Import Word IDs'"
             class="w-full md:w-auto"
+            @select="handleWordIdsFileSelect"
           />
         </div>
       </template>
@@ -299,11 +299,11 @@
           mode="basic"
           name="jpdbFile"
           accept=".json"
-          :customUpload="true"
-          @select="handleJpdbFileSelect"
+          :custom-upload="true"
           :auto="true"
-          :chooseLabel="'Select reviews.json File'"
+          :choose-label="'Select reviews.json File'"
           class="mb-3"
+          @select="handleJpdbFileSelect"
         />
       </template>
     </Card>
@@ -323,11 +323,11 @@
           mode="basic"
           name="ankiFile"
           accept=".txt"
-          :customUpload="true"
-          @select="handleAnkiFileSelect"
+          :custom-upload="true"
           :auto="true"
-          :chooseLabel="'Select anki .txt File'"
+          :choose-label="'Select anki .txt File'"
           class="mb-3"
+          @select="handleAnkiFileSelect"
         />
       </template>
     </Card>
@@ -357,14 +357,14 @@
               @update:model-value="updateMaxFrequency"
             />
           </div>
-          <Button @click="getVocabularyByFrequency" icon="pi pi-plus" label="Add Words by Frequency" class="w-full md:w-auto" />
+          <Button icon="pi pi-plus" label="Add Words by Frequency" class="w-full md:w-auto" @click="getVocabularyByFrequency" />
         </div>
       </template>
     </Card>
 
     <!-- Loading overlay -->
     <div v-if="isLoading" class="loading-overlay">
-      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"/>
       <p>Processing Anki file...</p>
     </div>
   </div>

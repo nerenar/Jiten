@@ -57,9 +57,7 @@
   const end = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
 
   const previousLink = computed(() => {
-    return response.value?.hasPreviousPage
-      ? { query: { ...route.query, offset: response.value.previousOffset } }
-      : null;
+    return response.value?.hasPreviousPage ? { query: { ...route.query, offset: response.value.previousOffset } } : null;
   });
 
   const nextLink = computed(() => {
@@ -100,6 +98,11 @@
       window.scrollTo({ top: 0, behavior: 'instant' });
     });
   };
+
+  const hideKnownWords = computed({
+    get: () => store.hideVocabularyDefinitions,
+    set: (value) => (store.hideVocabularyDefinitions = value),
+  })
 </script>
 
 <template>
@@ -123,26 +126,21 @@
         />
         <label for="sortBy">Sort by</label>
       </FloatLabel>
-      <Button
-        @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending"
-        class="w-12"
-      >
+      <Button @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending" class="w-12">
         <Icon v-if="sortOrder == SortOrder.Descending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
         <Icon v-if="sortOrder == SortOrder.Ascending" name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
       </Button>
+      <div class="flex items-center gap-2">
+        <Checkbox v-model="hideKnownWords" input-id="hideKnownWords" name="hideKnownWords" :binary="true" />
+        <label for="hideKnownWords">Hide known words</label>
+      </div>
     </div>
     <div class="flex justify-between flex-col md:flex-row">
       <div class="flex gap-8 pl-2">
-        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
-          Previous
-        </NuxtLink>
-        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
-          Next
-        </NuxtLink>
+        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel> Previous </NuxtLink>
+        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel> Next </NuxtLink>
       </div>
-      <div class="text-gray-500 dark:text-gray-300">
-        viewing words {{ start }}-{{ end }} from {{ totalItems }} total
-      </div>
+      <div class="text-gray-500 dark:text-gray-300">viewing words {{ start }}-{{ end }} from {{ totalItems }} total</div>
     </div>
     <div v-if="status === 'pending'" class="flex flex-col gap-2">
       <Card v-for="i in 10" :key="i" class="p-2">
@@ -153,25 +151,11 @@
     </div>
     <div v-else-if="error">Error: {{ error }}</div>
     <div v-else class="flex flex-col gap-2">
-      <VocabularyEntry
-        v-for="word in response.data.words"
-        :key="word.wordId"
-        :word="word"
-        :is-compact="true"
-      />
+      <VocabularyEntry v-for="word in response.data.words" :key="word.wordId" :word="word" :is-compact="true" />
     </div>
     <div class="flex gap-8 pl-2">
-      <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
-        Previous
-      </NuxtLink>
-      <NuxtLink
-        :to="nextLink"
-        :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
-        @click="scrollToTop"
-        no-rel
-      >
-        Next
-      </NuxtLink>
+      <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel> Previous </NuxtLink>
+      <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" @click="scrollToTop" no-rel> Next </NuxtLink>
     </div>
   </div>
 </template>

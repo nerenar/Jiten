@@ -4,6 +4,8 @@
   import { convertToRuby } from '~/utils/convertToRuby';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
+  import Button from 'primevue/button';
+  import { useJitenStore } from '~/stores/jitenStore';
 
   const props = defineProps({
     wordId: {
@@ -28,6 +30,9 @@
   const emit = defineEmits(['mainReadingTextChanged', 'readingSelected']);
   const { $api } = useNuxtApp();
 
+  const store = useJitenStore();
+  const isWordKnown = ref(store.isWordKnown(props.wordId));
+
   const currentReadingIndex = ref(props.readingIndex);
   const url = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}`);
 
@@ -47,7 +52,7 @@
     canLoadExampleSentences.value = true;
     getRandomExampleSentences();
     await refresh();
-  }
+  };
 
   const selectReading = async (index: number) => {
     emit('readingSelected', index);
@@ -102,6 +107,15 @@
 
     exampleSentences.value.push(...results);
   }
+
+  const toggleWordKnown = () => {
+    if (isWordKnown.value) {
+      store.removeKnownWordId(props.wordId);
+    } else {
+      store.addKnownWordIds([props.wordId]);
+    }
+    isWordKnown.value = !isWordKnown.value;
+  };
 </script>
 
 <template>
@@ -117,7 +131,16 @@
               </NuxtLink>
               <div v-if="!showRedirect" class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)" />
             </div>
-            <div class="text-gray-500 dark:text-gray-300 text-right md:hidden">Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}</div>
+            <div class="flex flex-col md:flex-row items-end md:hidden">
+            <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}</div>
+            <div v-if="isWordKnown">
+              <span class="text-green-600 dark:text-green-300">Known</span>
+              <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
+            </div>
+            <div v-else>
+              <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
+            </div>
+            </div>
           </div>
 
           <div>
@@ -155,7 +178,18 @@
           </ClientOnly>
         </div>
         <div class="min-w-64">
-          <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">Rank #{{ response.data.mainReading.frequencyRank }}</div>
+          <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
+            <template v-if="isWordKnown">
+              <span class="text-green-600 dark:text-green-300">Known</span>
+              <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
+              |
+            </template>
+            <template v-else>
+              <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
+              |
+            </template>
+            Rank #{{ response.data.mainReading.frequencyRank }}
+          </div>
           <div class="md:text-right pt-4">
             Appears in <b>{{ response.data.mainReading.usedInMediaAmount }} media</b>
           </div>
@@ -186,14 +220,9 @@
                 <div class="cursor-pointer">Example sentences</div>
               </AccordionHeader>
               <AccordionContent>
-                <div class="text-xs pb-2">Quotations belong to their original creators and are presented here for educational purposes only, as per the
-                <NuxtLink
-                  :to="`/terms`"
-                  target="_blank"
-                  class="hover:underline text-primary-600"
-                >
-                terms of service.
-                </NuxtLink>
+                <div class="text-xs pb-2">
+                  Quotations belong to their original creators and are presented here for educational purposes only, as per the
+                  <NuxtLink :to="`/terms`" target="_blank" class="hover:underline text-primary-600"> terms of service.</NuxtLink>
                 </div>
                 <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" />
                 <Button @click="getRandomExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>

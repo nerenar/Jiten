@@ -383,8 +383,58 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         }
 
         var wordIds = await deckWordsQuery.Select(dw => dw.WordId).ToListAsync();
-        var deckWords = await deckWordsQuery.Select(dw => new { dw.WordId, dw.ReadingIndex, dw.Occurrences }).ToListAsync();
+        List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords = await deckWordsQuery
+                                                                                 .Select(dw => new ValueTuple<int, byte, int>(dw.WordId,
+                                                                                             dw.ReadingIndex, dw.Occurrences))
+                                                                                 .ToListAsync();
 
+        var bytes = await GenerateDeckDownload(id, request, wordIds, deck, deckWords);
+
+        if (bytes == null)
+            return Results.BadRequest();
+
+        return request.Format switch
+        {
+            DeckFormat.Anki => Results.File(bytes, "application/x-binary", $"{deck.OriginalTitle}.apkg"),
+            DeckFormat.Csv => Results.File(bytes, "text/csv", $"{deck.OriginalTitle}.csv"),
+            DeckFormat.Txt or DeckFormat.TxtRepeated => Results.File(bytes, "text/plain", $"{deck.OriginalTitle}.txt"),
+            _ => throw new ArgumentOutOfRangeException()
+        };
+    }
+
+    [HttpPost("parse-custom-deck")]
+    [EnableRateLimiting("download")]
+    [RequestSizeLimit(5_000_000)]
+    public async Task<IResult> ParseCustomDeck([FromBody] ParseCustomDeckRequest request)
+    {
+        if (request.Text.Length > 200000)
+            return Results.BadRequest();
+        ;
+
+        var deck = await Parser.Parser.ParseTextToDeck(context, storeRawText: true, text: request.Text);
+        deck.OriginalTitle = "Custom deck";
+        var deckDownloadRequest = new DeckDownloadRequest() { DownloadType = DeckDownloadType.Full, Format = DeckFormat.Anki };
+        var deckWords = deck.DeckWords.Select(dw => new ValueTuple<int, byte, int>(dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
+        var wordIds = deck.DeckWords.Select(dw => dw.WordId).ToList();
+
+        var fileResult = await GenerateDeckDownload(0, deckDownloadRequest, wordIds, deck, deckWords);
+        var deckDto = new DeckDto(deck);
+        var fileBase64 = Convert.ToBase64String(fileResult);
+
+        var result = new
+                     {
+                         Deck = deckDto, File = new
+                                                {
+                                                    ContentBase64 = fileBase64, ContentType = "application/x-binary", // Mime type for .apkg
+                                                    FileName = $"{deck.OriginalTitle}.apkg"
+                                                }
+                     };
+        return Results.Json(result);
+    }
+
+    private async Task<byte[]?> GenerateDeckDownload(int id, DeckDownloadRequest request, List<int> wordIds, Deck deck,
+                                                     List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords)
+    {
         var jmdictWords = await context.JMDictWords.AsNoTracking()
                                        .Include(w => w.Definitions)
                                        .Where(w => wordIds.Contains(w.WordId))
@@ -396,10 +446,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         var deckIds = new List<int> { id };
 
         // If this deck has children, use sentences from the children instead
-        if (deck?.Children.Any() == true)
-        {
+        if (deck.Children.Count != 0)
             deckIds = deck.Children.Select(c => c.DeckId).ToList();
-        }
 
         var exampleSentences = await context.ExampleSentences
                                             .AsNoTracking()
@@ -521,7 +569,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 await AnkiFileWriter.WriteToStreamAsync(stream, collection);
                 var bytes = stream.ToArray();
 
-                return Results.File(bytes, "application/x-binary", $"{deck.OriginalTitle}.apkg");
+                return bytes;
 
             case DeckFormat.Csv:
                 StringBuilder sb = new StringBuilder();
@@ -555,7 +603,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     sb.AppendLine($"\"{reading}\",\"{readingFurigana}\",\"{readingKana}\",\"{occurrences}\",\"{readingFrequency}\",\"{pitchPositions}\",\"{definitions}\"");
                 }
 
-                return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", $"{deck.OriginalTitle}.csv");
+                return Encoding.UTF8.GetBytes(sb.ToString());
             case DeckFormat.Txt:
                 StringBuilder txtSb = new StringBuilder();
                 foreach (var word in deckWords)
@@ -567,7 +615,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     txtSb.AppendLine(reading);
                 }
 
-                return Results.File(Encoding.UTF8.GetBytes(txtSb.ToString()), "text/plain", $"{deck.OriginalTitle}.txt");
+                return Encoding.UTF8.GetBytes(txtSb.ToString());
 
             case DeckFormat.TxtRepeated:
                 StringBuilder txtRepeatedSb = new StringBuilder();
@@ -581,10 +629,10 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                         txtRepeatedSb.AppendLine(reading);
                 }
 
-                return Results.File(Encoding.UTF8.GetBytes(txtRepeatedSb.ToString()), "text/plain", $"{deck.OriginalTitle}.txt");
+                return Encoding.UTF8.GetBytes(txtRepeatedSb.ToString());
 
             default:
-                return Results.BadRequest();
+                return null;
         }
     }
 

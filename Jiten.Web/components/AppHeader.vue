@@ -153,7 +153,7 @@
 
       <div class="flex items-center gap-2">
         <Checkbox v-model="hideVocabularyDefinitions" input-id="hideVocabularyDefinitions" name="hideVocabularyDefinitions" :binary="true" />
-        <label for="displayFurigana">Hide Vocabulary Definitions</label>
+        <label for="hideVocabularyDefinitions">Hide Vocabulary Definitions</label>
       </div>
 
       <div class="flex items-center gap-2">

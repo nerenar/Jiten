@@ -10,6 +10,7 @@
   const props = defineProps<{
     deck: Deck;
     isCompact?: boolean;
+    hideControl?: boolean;
   }>();
 
   const showDownloadDialog = ref(false);
@@ -126,7 +127,7 @@
                   </div>
                 </div>
 
-                <div class="w-full md:w-50">
+                <div class="w-full md:w-64">
                   <div v-if="deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100" class="flex justify-between mb-2">
                     <span class="text-gray-600 dark:text-gray-300">Dialogue</span>
                     <span class="ml-8 tabular-nums">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
@@ -170,7 +171,7 @@
               <div class="mt-4 flex flex-col md:flex-row gap-4">
                 <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{ getLinkTypeText(Number(link.linkType)) }}</a>
               </div>
-              <div class="mt-4">
+              <div v-if="!hideControl" class="mt-4">
                 <div class="flex flex-col md:flex-row gap-4">
                   <Button as="router-link" :to="`/decks/media/${deck.deckId}/detail`" label="View details" class="" />
                   <Button as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" label="View vocabulary" class="" />
