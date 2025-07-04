@@ -108,6 +108,9 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 ? query.OrderBy(d => d.UniqueKanjiUsedOnceCount)
                 : query.OrderByDescending(d => d.UniqueKanjiUsedOnceCount),
             "filter" => query.OrderBy(_ => 1), // Dummy ordering to avoid efcore warning, pgroonga_score handles the actual sort
+            "releaseDate" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(d => d.ReleaseDate)
+                : query.OrderByDescending(d => d.ReleaseDate),
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.RomajiTitle)
                 : query.OrderByDescending(d => d.RomajiTitle),
@@ -196,7 +199,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                                       .FirstOrDefault()).ThenBy(d => d.DeckWordId),
             "deckFreq" => sortOrder == SortOrder.Ascending
                 ? query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId)
-                : query.OrderBy(d => d.Occurrences).ThenBy(d=> d.DeckWordId),
+                : query.OrderBy(d => d.Occurrences).ThenBy(d => d.DeckWordId),
             "chrono" or _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.DeckWordId)
                 : query.OrderByDescending(d => d.DeckWordId),

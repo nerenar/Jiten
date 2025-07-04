@@ -7,4 +7,5 @@ public class VndbRequestResult
     public DateTime Released { get; set; }
     public List<VnTitle> Titles { get; set; }
     public VnImage? Image { get; set; }
+    public string? Description { get; set; }
 }

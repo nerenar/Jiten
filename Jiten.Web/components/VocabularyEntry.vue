@@ -36,8 +36,7 @@
     <template #title>
       <div class="flex justify-between">
         <div class="flex flex-row gap-4">
-          <router-link class="text-2xl" :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`" v-html="convertToRuby(word.mainReading.text)">
-          </router-link>
+          <router-link class="text-2xl" :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`" v-html="convertToRuby(word.mainReading.text)" />
           <Button text @click="toggleCompact">{{ isCompact ? 'Expand' : 'Compact' }}</Button>
         </div>
         <div class="text-gray-500 dark:text-gray-300 text-sm text-right">

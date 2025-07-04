@@ -50,6 +50,24 @@
       severity: 'danger',
       ids: issuesData.value?.zeroCharacters || [],
     },
+    {
+      id: 'missing-release-date',
+      name: 'Media Without Release Date',
+      count: issuesData.value?.missingReleaseDate?.length || 0,
+      icon: 'pi pi-exclamation-circle',
+      description: 'Media entries with no release date',
+      severity: 'warning',
+      ids: issuesData.value?.missingReleaseDate || [],
+    },
+    {
+      id: 'missing-description',
+      name: 'Media Without Description',
+      count: issuesData.value?.missingDescription?.length || 0,
+      icon: 'pi pi-exclamation-circle',
+      description: 'Media entries with no description',
+      severity: 'warning',
+      ids: issuesData.value?.missingDescription || [],
+    },
   ]);
 
   const totalIssues = computed(() => {
@@ -61,7 +79,7 @@
     datasets: [
       {
         data: issueTypes.value.map((issue) => issue.count),
-        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56'],
+        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#00AA00', '#AAAA00'],
       },
     ],
   }));

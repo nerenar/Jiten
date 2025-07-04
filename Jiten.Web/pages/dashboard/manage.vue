@@ -120,41 +120,27 @@
     }
   };
 
-  const confirmRecomputeDifficulties = () => {
-    confirm.require({
-      message: 'Are you sure you want to recompute all media difficulties? This operation may take a long time.',
-      header: 'Confirmation',
-      icon: 'pi pi-exclamation-triangle',
-      acceptClass: 'p-button-primary',
-      rejectClass: 'p-button-secondary',
-      accept: () => recomputeDifficulties(),
-      reject: () => {},
-    });
-  };
-
-  const recomputeDifficulties = async () => {
+  const fetchMissingMetadata = async () => {
     try {
-      isLoading.value.difficulties = true;
-      const data = await $api('/admin/recompute-difficulties', {
+      const data = await $api(`/admin/fetch-all-missing-metadata`, {
         method: 'POST',
       });
 
       toast.add({
         severity: 'success',
         summary: 'Success',
-        detail: 'Recomputing difficulties job has been queued',
+        detail: `Fetching missing metadata for ${data.count} decks`,
         life: 5000,
       });
     } catch (error) {
       toast.add({
         severity: 'error',
         summary: 'Error',
-        detail: 'Failed to recompute difficulties',
+        detail: 'Failed to fetch metadata',
         life: 5000,
       });
-      console.error('Error recomputing difficulties:', error);
+      console.error('Error fetching metadata:', error);
     } finally {
-      isLoading.value.difficulties = false;
     }
   };
 </script>
@@ -165,11 +151,7 @@
     <ConfirmDialog />
 
     <div class="flex items-center mb-6">
-      <Button
-        icon="pi pi-arrow-left"
-        class="p-button-text mr-2"
-        @click="navigateTo('/dashboard')"
-      />
+      <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard')" />
       <h1 class="text-3xl font-bold">Data Management</h1>
     </div>
 
@@ -177,9 +159,7 @@
       <Card class="shadow-md">
         <template #title>Reparse Media</template>
         <template #content>
-          <p class="mb-4">
-            Reparse all media of the selected type
-          </p>
+          <p class="mb-4">Reparse all media of the selected type</p>
           <div class="mb-4">
             <label for="mediaType" class="block text-sm font-medium mb-1">Media Type</label>
             <Select
@@ -209,9 +189,7 @@
       <Card class="shadow-md">
         <template #title>Recompute Frequencies</template>
         <template #content>
-          <p class="mb-4">
-            Recompute all vocabulary frequencies.
-          </p>
+          <p class="mb-4">Recompute all vocabulary frequencies.</p>
 
           <div class="flex justify-center">
             <Button
@@ -226,25 +204,23 @@
         </template>
       </Card>
 
-<!--      <Card class="shadow-md">-->
-<!--        <template #title>Recompute Difficulties</template>-->
-<!--        <template #content>-->
-<!--          <p class="mb-4">-->
-<!--            Recompute all media difficulties.-->
-<!--          </p>-->
+      <Card class="shadow-md">
+        <template #title>Fetch Missing Metadata</template>
+        <template #content>
+          <p class="mb-4">Check all decks for missing metadata (release date, description) and fetch them in the appropriate APIs.</p>
 
-<!--          <div class="flex justify-center">-->
-<!--            <Button-->
-<!--              label="Recompute Difficulties"-->
-<!--              icon="pi pi-chart-line"-->
-<!--              class="p-button-warning"-->
-<!--              :disabled="isLoading.difficulties"-->
-<!--              :loading="isLoading.difficulties"-->
-<!--              @click="confirmRecomputeDifficulties"-->
-<!--            />-->
-<!--          </div>-->
-<!--        </template>-->
-<!--      </Card>-->
+          <div class="flex justify-center">
+            <Button
+              label="Fetch Missing Metadata"
+              icon="pi pi-table"
+              class="p-button-warning"
+              @click="fetchMissingMetadata"
+            />
+          </div>
+        </template>
+      </Card>
+
+
     </div>
   </div>
 </template>

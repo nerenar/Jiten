@@ -132,6 +132,9 @@ public class Program
 
         [Option(longName: "password", Required = false, HelpText = "Password for the admin.")]
         public string Password { get; set; }
+        
+        [Option(longName:"compare-jmdict", Required=false, HelpText="Compare two JMDict XML.")]
+        public bool CompareJMDict { get; set; }
     }
 
     static async Task Main(string[] args)
@@ -299,6 +302,17 @@ public class Program
                             !string.IsNullOrEmpty(o.Password))
                         {
                             await RegisterAdmin(configuration, o.Email, o.Username, o.Password);
+                        }
+
+                        if (o.CompareJMDict)
+                        {
+                            if (o.XmlPath == "" || o.DictionaryPath == "" || o.Extra == null)
+                            {
+                                Console.WriteLine("Usage : -xml dtdPath -dic oldDictionaryPath -x newDictionaryPath");
+                                return;
+                            }
+                            
+                            await JmDictHelper.CompareJMDicts(o.XmlPath, o.DictionaryPath, o.Extra);
                         }
 
                         if (o.Verbose)

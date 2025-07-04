@@ -22,5 +22,7 @@ public class TmdbMovie
 
     [JsonPropertyName("release_date")] public DateTime ReleaseDate { get; set; }
 
-    [JsonPropertyName("poster_path")] public string PosterPath { get; set; }
+    [JsonPropertyName("poster_path")] public string? PosterPath { get; set; }
+    
+    [JsonPropertyName("overview")] public string Description { get; set; } 
 }

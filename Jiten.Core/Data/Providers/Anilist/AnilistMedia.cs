@@ -4,6 +4,7 @@ public class AnilistMedia
 {
     public int Id { get; set; }
     public int? IdMal { get; set; }
+    public string? Description { get; set; }
     public AnilistTitle Title { get; set; }
     public AnilistDate StartDate { get; set; }
     public string BannerImage { get; set; }

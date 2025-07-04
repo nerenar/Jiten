@@ -6,11 +6,13 @@ public class DeckDto
 {
     public int DeckId { get; set; }
     public DateTimeOffset CreationDate { get; set; }
+    public DateTime ReleaseDate { get; set; }
     public string CoverName { get; set; } = "nocover.jpg";
     public MediaType MediaType { get; set; } = new();
     public string OriginalTitle { get; set; } = "Unknown";
     public string RomajiTitle { get; set; } = "";
     public string EnglishTitle { get; set; } = "";
+    public string Description { get; set; } = "";
     public int CharacterCount { get; set; }
     public int WordCount { get; set; }
     public int UniqueWordCount { get; set; }
@@ -35,11 +37,13 @@ public class DeckDto
     {
         DeckId = deck.DeckId;
         CreationDate = deck.CreationDate;
+        ReleaseDate = deck.ReleaseDate.ToDateTime(new TimeOnly());
         CoverName = deck.CoverName;
         MediaType = deck.MediaType;
         OriginalTitle = deck.OriginalTitle;
         RomajiTitle = deck.RomajiTitle!;
         EnglishTitle = deck.EnglishTitle!;
+        Description = deck.Description ?? "";
         CharacterCount = deck.CharacterCount;
         WordCount = deck.WordCount;
         UniqueWordCount = deck.UniqueWordCount;
@@ -61,11 +65,13 @@ public class DeckDto
     {
         DeckId = deck.DeckId;
         CreationDate = deck.CreationDate;
+        ReleaseDate = deck.ReleaseDate.ToDateTime(new TimeOnly());
         CoverName = deck.CoverName;
         MediaType = deck.MediaType;
         OriginalTitle = deck.OriginalTitle;
         RomajiTitle = deck.RomajiTitle!;
         EnglishTitle = deck.EnglishTitle!;
+        Description = deck.Description ?? "";
         CharacterCount = deck.CharacterCount;
         WordCount = deck.WordCount;
         UniqueWordCount = deck.UniqueWordCount;

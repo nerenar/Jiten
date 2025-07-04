@@ -197,8 +197,42 @@ builder.Services.AddHangfire(configuration =>
                                                                         options.UseNpgsqlConnection(() => builder.Configuration
                                                                             .GetConnectionString("JitenDatabase"))));
 
-builder.Services.AddHangfireServer((options) => { options.WorkerCount = Environment.ProcessorCount / 4; });
+// Hangfire servers
+// Fetchers only have 1 worker to respect rate limits
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "AnilistServer";
+    options.Queues = ["anilist"];
+    options.WorkerCount = 1;
+});
 
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "TmdbServer";
+    options.Queues = ["tmdb"];
+    options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "VndbServer";
+    options.Queues = ["vndb"];
+    options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "GoogleBooksServer";
+    options.Queues = ["books"];
+    options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "DefaultServer";
+    options.Queues = ["default"];
+    options.WorkerCount = Environment.ProcessorCount / 4;
+});
 
 var app = builder.Build();
 

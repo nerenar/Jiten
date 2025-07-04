@@ -37,6 +37,8 @@
   const originalTitle = ref('');
   const romajiTitle = ref('');
   const englishTitle = ref('');
+  const releaseDate = ref<Date>();
+  const description = ref('');
 
   const coverImage = ref<File | null>(null);
   const coverImageUrl = ref<string | null>(null);
@@ -111,6 +113,8 @@
       originalTitle.value = mainDeck.originalTitle || '';
       romajiTitle.value = mainDeck.romajiTitle || '';
       englishTitle.value = mainDeck.englishTitle || '';
+      description.value = mainDeck.description || '';
+      releaseDate.value = new Date(mainDeck.releaseDate) || new Date();
 
       if (mainDeck.coverName) {
         coverImageUrl.value = `${mainDeck.coverName}`;
@@ -153,7 +157,6 @@
   function handleNewSubdeckFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
       for (const file of event.files) {
-
         const newSubdeckNumber = subdecks.value.length + 1;
         subdecks.value.push({
           id: nextSubdeckId++,
@@ -246,6 +249,30 @@
     links.value.splice(index, 1);
   }
 
+  async function fetchMetadata() {
+    try {
+      const data = await $api('admin/fetch-metadata/' + mediaId, {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Fetching metadata has been queued',
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to fetch metadata',
+        life: 5000,
+      });
+      console.error('Error fetching metadata:', error);
+    } finally {
+    }
+  }
+
   async function update(reparse: boolean = false) {
     if (!originalTitle.value.trim()) {
       showToast('warn', 'Validation Error', 'Original title is required');
@@ -265,6 +292,8 @@
       formData.append('originalTitle', originalTitle.value);
       formData.append('romajiTitle', romajiTitle.value);
       formData.append('englishTitle', englishTitle.value);
+      formData.append('releaseDate', formatDateAsYyyyMmDd(releaseDate.value));
+      formData.append('description', description.value);
 
       if (coverImage.value) {
         formData.append('coverImage', coverImage.value);
@@ -363,6 +392,14 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">English Title</label>
                   <InputText v-model="englishTitle" class="w-full" />
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Release Date</label>
+                  <DatePicker v-model="releaseDate" class="w-full" />
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Description</label>
+                  <Textarea v-model="description" class="w-full" />
                 </div>
               </div>
               <div>
@@ -606,6 +643,11 @@
           <Button label="Update" class="p-button-lg p-button-success" @click="update(true)">
             <Icon name="material-symbols-light:refresh" size="1.5em" />
             Update & Reparse
+          </Button>
+
+          <Button label="Update" class="p-button-lg p-button-success" @click="fetchMetadata()">
+            <Icon name="material-symbols-light:refresh" size="1.5em" />
+            Fetch missing metadata
           </Button>
         </div>
       </div>

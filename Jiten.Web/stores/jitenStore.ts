@@ -80,6 +80,19 @@ export const useJitenStore = defineStore('jiten', () => {
     displayAllNsfwCookie.value = newValue;
   });
 
+  const hideVocabularyDefinitionsCookie = useCookie<boolean>('jiten-hide-vocabulary-definitions', {
+    default: () => false,
+    watch: true,
+    maxAge: 60 * 60 * 24 * 365, // 1 year
+    path: '/',
+  });
+
+  const hideVocabularyDefinitions = ref<boolean>(hideVocabularyDefinitionsCookie.value);
+
+  watch(hideVocabularyDefinitions, (newValue) => {
+    hideVocabularyDefinitionsCookie.value = newValue;
+  });
+
   const getKnownWordIds = (): number[] => {
     if (import.meta.client) {
       try {
@@ -158,5 +171,6 @@ export const useJitenStore = defineStore('jiten', () => {
     readingSpeed,
     knownWordIds,
     displayAllNsfw,
+    hideVocabularyDefinitions
   };
 });

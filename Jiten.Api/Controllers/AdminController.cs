@@ -22,11 +22,11 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
     {
         return Results.Ok(provider switch
         {
-            "AnilistManga" => await MetadataProviderHelper.AnilistMangaApi(query),
-            "AnilistNovel" => await MetadataProviderHelper.AnilistNovelApi(query),
+            "AnilistManga" => await MetadataProviderHelper.AnilistMangaSearchApi(query),
+            "AnilistNovel" => await MetadataProviderHelper.AnilistNovelSearchApi(query),
             "GoogleBooks" =>
-                await MetadataProviderHelper.GoogleBooksApi(query + (!string.IsNullOrEmpty(author) ? $"+inauthor:{author}" : "")),
-            "Vndb" => await MetadataProviderHelper.VndbApi(query),
+                await MetadataProviderHelper.GoogleBooksSearchApi(query + (!string.IsNullOrEmpty(author) ? $"+inauthor:{author}" : "")),
+            "Vndb" => await MetadataProviderHelper.VndbSearchApi(query),
             _ => new List<Metadata>()
         });
     }
@@ -48,8 +48,9 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
             string? coverImagePathOrUrl = Path.Join(path, "cover.jpg");
             Metadata metadata = new()
                                 {
-                                    OriginalTitle = model.OriginalTitle.Trim(), RomajiTitle = model.RomajiTitle?.Trim(),
-                                    EnglishTitle = model.EnglishTitle?.Trim(), Image = coverImagePathOrUrl, Links = new List<Link>()
+                                    ReleaseDate = model.ReleaseDate.ToDateTime(new TimeOnly()), OriginalTitle = model.OriginalTitle.Trim(),
+                                    RomajiTitle = model.RomajiTitle?.Trim(), EnglishTitle = model.EnglishTitle?.Trim(),
+                                    Description = model.Description?.Trim(), Image = coverImagePathOrUrl, Links = new List<Link>()
                                 };
 
             // Parse links from form data
@@ -207,6 +208,8 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
         deck.OriginalTitle = model.OriginalTitle.Trim();
         deck.RomajiTitle = model.RomajiTitle?.Trim();
         deck.EnglishTitle = model.EnglishTitle?.Trim();
+        deck.ReleaseDate = model.ReleaseDate;
+        deck.Description = model.Description?.Trim();
 
         // Update cover image if provided
         if (model.CoverImage is { Length: > 0 })
@@ -369,12 +372,88 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
     {
         var decks = await dbContext.Decks.AsNoTracking().Include(d => d.Links).ToListAsync();
         var issues = new IssuesDto();
-        
+
         // If the original title is equal to the english title, then it probably means the original title is an english name too, so we don't need a romaji title
-        issues.MissingRomajiTitles = decks.Where(d => d.ParentDeckId == null).Where(d => string.IsNullOrEmpty(d.RomajiTitle) && d.OriginalTitle != d.EnglishTitle).Select(d => d.DeckId).ToList();
+        issues.MissingRomajiTitles = decks.Where(d => d.ParentDeckId == null)
+                                          .Where(d => string.IsNullOrEmpty(d.RomajiTitle) && d.OriginalTitle != d.EnglishTitle)
+                                          .Select(d => d.DeckId).ToList();
         issues.ZeroCharacters = decks.Where(d => d.CharacterCount == 0).Select(d => d.DeckId).ToList();
         issues.MissingLinks = decks.Where(d => d.ParentDeckId == null).Where(d => d.Links.Count == 0).Select(d => d.DeckId).ToList();
+        issues.MissingReleaseDate =
+            decks.Where(d => d.ParentDeckId == null).Where(d => d.ReleaseDate == default).Select(d => d.DeckId).ToList();
+        issues.MissingDescription = decks.Where(d => d.ParentDeckId == null).Where(d => string.IsNullOrEmpty(d.Description))
+                                         .Select(d => d.DeckId).ToList();
 
         return Ok(issues);
+    }
+
+    [HttpPost("fetch-metadata/{deckId}")]
+    public async Task<IActionResult> FetchMetadata(int deckId)
+    {
+        var deck = await dbContext.Decks.Include(d => d.Links).FirstOrDefaultAsync(d => d.DeckId == deckId);
+
+        if (deck == null)
+            return NotFound(new { Message = $"Deck {deckId} not found" });
+
+        switch (deck.MediaType)
+        {
+            case MediaType.Anime or MediaType.Manga:
+                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deckId));
+                break;
+            case MediaType.Drama or MediaType.Movie:
+                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchTmdbMissingMetadata(deckId));
+                break;
+            case MediaType.VisualNovel:
+                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchVndbMissingMetadata(deckId));
+                break;
+            case MediaType.Novel or MediaType.NonFiction:
+                if (deck.Links.Any(l => l.LinkType == LinkType.Anilist))
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deckId));
+                else
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deckId));
+                break;
+            default:
+                return NotFound("No fetch job for this media type.");
+        }
+
+        return Ok(new { Message = $"Fetching metadata for deck {deckId}" });
+    }
+
+    [HttpPost("fetch-all-missing-metadata")]
+    public async Task<IActionResult> FetchAllMissingMetadata()
+    {
+        var decks = await dbContext
+                          .Decks.Where(d => d.ParentDeck == null && (d.ReleaseDate == default || string.IsNullOrEmpty(d.Description)))
+                          .Include(deck => deck.Links).ToListAsync();
+        
+        foreach (var deck in decks)
+        {
+            switch (deck.MediaType)
+            {
+                case MediaType.Anime or MediaType.Manga:
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deck.DeckId));
+                    break;
+                case MediaType.Drama or MediaType.Movie:
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchTmdbMissingMetadata(deck.DeckId));
+                    break;
+                case MediaType.VisualNovel:
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchVndbMissingMetadata(deck.DeckId));
+                    break;
+                case MediaType.Novel or MediaType.NonFiction:
+                    if (deck.Links.Any(l => l.LinkType == LinkType.Anilist))
+                    {
+                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deck.DeckId));
+                    }
+                    else
+                    {
+                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deck.DeckId));
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return Ok(new { Message = $"Fetching missing metadata for {decks.Count} decks", Count = decks.Count });
     }
 }

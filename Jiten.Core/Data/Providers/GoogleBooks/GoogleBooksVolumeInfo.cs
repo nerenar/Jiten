@@ -7,7 +7,7 @@ public class GoogleBooksVolumeInfo
     public List<string> Authors { get; set; }
     public string Publisher { get; set; }
     public DateTime PublishedDate { get; set; }
-    public string Description { get; set; }
+    public string? Description { get; set; }
     public List<GoogleBooksIndustryIdentifier> IndustryIdentifiers { get; set; }
     public int PageCount { get; set; }
     public List<string> Categories { get; set; }

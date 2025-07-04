@@ -7,6 +7,13 @@
   }>();
 
   const definitions = unref(props.definitions);
+  const store = useJitenStore();
+  const hideDefinition = computed({
+    get: () => store.hideVocabularyDefinitions,
+    set: (value) => {
+      store.hideVocabularyDefinitions = value;
+    },
+  });
 
   const definitionsWithPartsOfSpeech = computed(() => {
     if (!Array.isArray(definitions)) {
@@ -35,7 +42,7 @@
     </ul>
   </div>
 
-  <div v-if="isCompact">
+  <div v-if="isCompact && !hideDefinition">
     <span v-for="definition in definitionsWithPartsOfSpeech.slice(0, 10)" :key="definition.index">
       {{ definition.meanings.join('; ') }}
       <span v-if="definition.index !== Math.min(definitionsWithPartsOfSpeech.length, 10)">; </span>

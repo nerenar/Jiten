@@ -40,6 +40,11 @@
     set: (value) => (store.displayAllNsfw = value),
   });
 
+  const hideVocabularyDefinitions = computed({
+    get: () => store.hideVocabularyDefinitions,
+    set: (value) => (store.hideVocabularyDefinitions = value),
+  })
+
   const isAdmin = computed(() => {
     return tokenCookie.value !== null && tokenCookie.value !== undefined && tokenCookie.value !== '';
   });
@@ -144,6 +149,11 @@
       <div class="flex items-center gap-2">
         <Checkbox v-model="displayFurigana" input-id="displayFurigana" name="furigana" :binary="true" />
         <label for="displayFurigana">Display Furigana</label>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <Checkbox v-model="hideVocabularyDefinitions" input-id="hideVocabularyDefinitions" name="hideVocabularyDefinitions" :binary="true" />
+        <label for="displayFurigana">Hide Vocabulary Definitions</label>
       </div>
 
       <div class="flex items-center gap-2">

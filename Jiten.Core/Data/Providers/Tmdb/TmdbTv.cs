@@ -20,5 +20,7 @@ public class TmdbTv
 
     [JsonPropertyName("first_air_date")] public DateTime FirstAirDate { get; set; }
 
-    [JsonPropertyName("poster_path")] public string PosterPath { get; set; }
+    [JsonPropertyName("poster_path")] public string? PosterPath { get; set; }
+    
+    [JsonPropertyName("overview")] public string Description { get; set; } 
 }

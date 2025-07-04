@@ -3,11 +3,13 @@ import type { MediaType, ReadingType } from '~/types';
 export interface Deck {
   deckId: number;
   creationDate: Date;
+  releaseDate: Date;
   coverName?: string;
   mediaType: MediaType;
   originalTitle: string;
   romajiTitle?: string;
   englishTitle?: string;
+  description?: string;
   characterCount: number;
   wordCount: number;
   uniqueWordCount: number;
@@ -124,6 +126,7 @@ export interface Metadata {
   englishTitle: string;
   image: string;
   releaseDate: string;
+  description: string;
   links: Link[];
 }
 
@@ -131,6 +134,8 @@ export interface Issues {
   missingRomajiTitles: number[];
   missingLinks: number[];
   zeroCharacters: number[];
+  missingReleaseDate: number[];
+  missingDescription: number[];
 }
 
 export interface LoginRequest {

@@ -51,11 +51,15 @@ public class ParseJob(JitenDbContext context)
         deck.OriginalTitle = metadata.OriginalTitle;
         deck.MediaType = deckType;
 
+        if (metadata.ReleaseDate != null)
+            deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
+
         if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
             deck.SentenceCount = 0;
 
         deck.RomajiTitle = metadata.RomajiTitle;
         deck.EnglishTitle = metadata.EnglishTitle;
+        deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
         deck.Links = metadata.Links;
         deck.CoverName = metadata.Image ?? "nocover.jpg";
         deck.CreationDate = DateTimeOffset.UtcNow;

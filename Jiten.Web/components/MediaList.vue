@@ -34,6 +34,7 @@
     { label: 'Unique Kanji', value: 'uKanji' },
     { label: 'Unique Word Count', value: 'uWordCount' },
     { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
+    { label: 'Release Date', value: 'releaseDate' },
   ]);
 
   const sortOrder = ref(route.query.sortOrder ? route.query.sortOrder : SortOrder.Ascending);

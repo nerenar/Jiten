@@ -35,6 +35,8 @@
   const originalTitle = ref('');
   const romajiTitle = ref('');
   const englishTitle = ref('');
+  const releaseDate = ref<Date>();
+  const description = ref('');
 
   const coverImage = ref<File | null>(null); // User uploaded file
   const coverImageUrl = ref<string | null>(null); // URL from API metadata
@@ -193,6 +195,8 @@
     originalTitle.value = metadata.originalTitle;
     romajiTitle.value = metadata.romajiTitle || '';
     englishTitle.value = metadata.englishTitle || '';
+    description.value = metadata.description || '';
+    releaseDate.value = new Date(metadata.releaseDate) || new Date();
 
     if (metadata.image) {
       coverImageUrl.value = metadata.image;
@@ -212,6 +216,8 @@
       originalTitle.value = '';
       romajiTitle.value = '';
       englishTitle.value = '';
+      releaseDate.value = new Date();
+      description.value = '';
       clearCoverImage();
       searchQuery.value = '';
       authorQuery.value = '';
@@ -239,6 +245,8 @@
       formData.append('originalTitle', originalTitle.value);
       formData.append('romajiTitle', romajiTitle.value);
       formData.append('englishTitle', englishTitle.value);
+      formData.append('releaseDate', formatDateAsYyyyMmDd(releaseDate.value));
+      formData.append('description', description.value);
 
       // Handle cover image
       if (coverImage.value) {
@@ -357,6 +365,14 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">English Title</label>
                   <InputText v-model="englishTitle" class="w-full" />
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Release Date</label>
+                  <DatePicker v-model="releaseDate" class="w-full" />
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Description</label>
+                  <Textarea v-model="description" class="w-full" />
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Selected File</label>

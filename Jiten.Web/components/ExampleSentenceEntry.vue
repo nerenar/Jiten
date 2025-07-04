@@ -8,7 +8,13 @@
 
   const store = useJitenStore();
   const isNsfw = isTextNsfw(props.exampleSentence.text);
-  const isRevealed = ref(store.displayAllNsfw);
+  const isRevealed = computed({
+    get: () => store.displayAllNsfw,
+    set: (value) => {
+      store.displayAllNsfw = value;
+    },
+  });
+
 
   const formattedText = computed(() => {
     const { text, wordPosition, wordLength } = props.exampleSentence;

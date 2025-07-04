@@ -278,7 +278,22 @@ public static class JmDictHelper
                                                                             },
                                                                             { "ik", "irregular kana usage" },
                                                                             { "ok", "out-dated or obsolete kana usage" },
-                                                                            { "sk", "search-only kana form" },
+                                                                            { "sk", "search-only kana form" }, { "boxing", "boxing" },
+                                                                            { "chmyth", "Chinese mythology" },
+                                                                            { "civeng", "civil engineering" },
+                                                                            { "figskt", "figure skating" }, { "internet", "Internet" },
+                                                                            { "jpmyth", "Japanese mythology" }, { "min", "mineralogy" },
+                                                                            { "motor", "motorsport" },
+                                                                            { "prowres", "professional wrestling" }, { "surg", "surgery" },
+                                                                            { "vet", "veterinary terms" },
+                                                                            { "ateji", "ateji (phonetic) reading" },
+                                                                            // { "ik", "word containing irregular kana usage" },
+                                                                            { "iK", "word containing irregular kanji usage" },
+                                                                            { "io", "irregular okurigana usage" },
+                                                                            { "oK", "word containing out-dated kanji or kanji usage" },
+                                                                            { "rK", "rarely used kanji form" },
+                                                                            { "sK", "search-only kanji form" },
+                                                                            { "rk", "rarely used kana form" },
                                                                         };
 
     public static async Task<List<JmDictWord>> LoadAllWords(JitenDbContext context)
@@ -325,75 +340,7 @@ public static class JmDictHelper
     public static async Task<bool> Import(DbContextOptions<JitenDbContext> options, string dtdPath, string dictionaryPath,
                                           string furiganaPath)
     {
-        Regex reg = new Regex(@"<!ENTITY (.*) ""(.*)"">");
-
-        var dtdLines = await File.ReadAllLinesAsync(dtdPath);
-        dtdLines = dtdLines.Concat(new[]
-                                   {
-                                       "<!ENTITY name-char \"character\">", "<!ENTITY name-company \"company name\">",
-                                       "<!ENTITY name-creat \"creature\">", "<!ENTITY name-dei \"deity\">",
-                                       "<!ENTITY name-doc \"document\">", "<!ENTITY name-ev \"event\">",
-                                       "<!ENTITY name-fem \"female given name or forename\">", "<!ENTITY name-fict \"fiction\">",
-                                       "<!ENTITY name-given \"given name or forename, gender not specified\">",
-                                       "<!ENTITY name-group \"group\">", "<!ENTITY name-leg \"legend\">",
-                                       "<!ENTITY name-masc \"male given name or forename\">", "<!ENTITY name-myth \"mythology\">",
-                                       "<!ENTITY name-obj \"object\">", "<!ENTITY name-organization \"organization name\">",
-                                       "<!ENTITY name-oth \"other\">", "<!ENTITY name-person \"full name of a particular person\">",
-                                       "<!ENTITY name-place \"place name\">", "<!ENTITY name-product \"product name\">",
-                                       "<!ENTITY name-relig \"religion\">", "<!ENTITY name-serv \"service\">",
-                                       "<!ENTITY name-ship \"ship name\">", "<!ENTITY name-station \"railway station\">",
-                                       "<!ENTITY name-surname \"family or surname\">", "<!ENTITY name-unclass \"unclassified name\">",
-                                       "<!ENTITY name-work \"work of art, literature, music, etc. name\">"
-                                   }).ToArray();
-
-        foreach (var line in dtdLines)
-        {
-            var matches = reg.Match(line);
-            if (matches.Length > 0)
-            {
-                _entities.Add(matches.Groups[1].Value, matches.Groups[2].Value);
-            }
-        }
-
-        var readerSettings = new XmlReaderSettings() { Async = true, DtdProcessing = DtdProcessing.Parse, MaxCharactersFromEntities = 0 };
-        XmlReader reader = XmlReader.Create(dictionaryPath, readerSettings);
-
-        await reader.MoveToContentAsync();
-
-        List<JmDictWord> wordInfos = new();
-
-        while (await reader.ReadAsync())
-        {
-            if (reader.NodeType != XmlNodeType.Element) continue;
-
-            if (reader.Name != "entry") continue;
-
-            var wordInfo = new JmDictWord();
-
-            while (await reader.ReadAsync())
-            {
-                if (reader.NodeType == XmlNodeType.Element)
-                {
-                    if (reader.Name == "ent_seq")
-                        wordInfo.WordId = reader.ReadElementContentAsInt();
-
-                    wordInfo = await ParseKEle(reader, wordInfo);
-                    wordInfo = await ParseREle(reader, wordInfo);
-                    wordInfo = await ParseSense(reader, wordInfo);
-                }
-
-                if (reader.NodeType != XmlNodeType.EndElement) continue;
-                if (reader.Name != "entry") continue;
-
-                wordInfo.Readings = wordInfo.Readings.Select(r => r.Replace("ゎ", "わ").Replace("ヮ", "わ")).ToList();
-
-                wordInfos.Add(wordInfo);
-
-                break;
-            }
-        }
-
-        reader.Close();
+        var wordInfos = await GetWordInfos(dtdPath, dictionaryPath);
 
         wordInfos.AddRange(GetCustomWords());
 
@@ -678,6 +625,121 @@ public static class JmDictHelper
         return true;
     }
 
+    public static async Task CompareJMDicts(string dtdPath, string dictionaryPathOld, string dictionaryPathNew)
+    {
+        var oldWordInfos = await GetWordInfos(dtdPath, dictionaryPathOld);
+        var newWordInfos = await GetWordInfos(dtdPath, dictionaryPathNew);
+
+        Console.WriteLine($"Words - Old dictionary: {oldWordInfos.Count}, New dictionary: {newWordInfos.Count}, difference (new - old): {newWordInfos.Count - oldWordInfos.Count}");
+        
+        // Check for duplicate WordIds in new dictionary and log them
+        var duplicateWordIds = newWordInfos.GroupBy(w => w.WordId)
+                                          .Where(g => g.Count() > 1)
+                                          .Select(g => g.Key)
+                                          .ToList();
+        
+        if (duplicateWordIds.Any())
+        {
+            Console.WriteLine($"Warning: Found {duplicateWordIds.Count} duplicate WordIds in the new dictionary.");
+            foreach (var dupId in duplicateWordIds.Take(5))
+            {
+                var entries = newWordInfos.Where(w => w.WordId == dupId).ToList();
+                Console.WriteLine($"  Duplicate ID: {dupId}, Readings: {string.Join(", ", entries.SelectMany(e => e.Readings))}");
+            }
+            if (duplicateWordIds.Count > 5)
+                Console.WriteLine($"  ... and {duplicateWordIds.Count - 5} more");
+        }
+        
+        // Create dictionaries with WordId as key for easier lookup, handling duplicates
+        var oldWordDict = oldWordInfos.GroupBy(w => w.WordId)
+                                      .ToDictionary(g => g.Key, g => g.First());
+                                      
+        var newWordDict = newWordInfos.GroupBy(w => w.WordId)
+                                      .ToDictionary(g => g.Key, g => g.First());
+        
+        // Find added, removed, and changed words
+        var addedWordIds = newWordDict.Keys.Except(oldWordDict.Keys).ToList();
+        var removedWordIds = oldWordDict.Keys.Except(newWordDict.Keys).ToList();
+        var commonWordIds = oldWordDict.Keys.Intersect(newWordDict.Keys).ToList();
+        
+        // Words with changes
+        var changedWordIds = new List<int>();
+        var readingChanges = new List<(int WordId, List<string> Added, List<string> Removed)>();
+        var posChanges = new List<(int WordId, List<string> Added, List<string> Removed)>();
+        var priorityChanges = new List<(int WordId, List<string> Added, List<string> Removed)>();
+        
+        // Check for changes in common words
+        foreach (var wordId in commonWordIds)
+        {
+            var oldWord = oldWordDict[wordId];
+            var newWord = newWordDict[wordId];
+            bool isChanged = false;
+            
+            // Check for reading changes
+            var oldReadings = oldWord.Readings;
+            var newReadings = newWord.Readings;
+            var addedReadings = newReadings.Except(oldReadings).ToList();
+            var removedReadings = oldReadings.Except(newReadings).ToList();
+            
+            if (addedReadings.Any() || removedReadings.Any())
+            {
+                isChanged = true;
+                readingChanges.Add((wordId, addedReadings, removedReadings));
+            }
+            
+            
+            // Check for parts of speech changes
+            var oldPos = oldWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();;
+            var newPos = newWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
+            var addedPos = newPos.Except(oldPos).ToList();
+            var removedPos = oldPos.Except(newPos).ToList();
+            
+            if (addedPos.Any() || removedPos.Any())
+            {
+                isChanged = true;
+                posChanges.Add((wordId, addedPos, removedPos));
+            }
+            
+          
+            // Check for priority changes
+            var oldPriorities = oldWord.Priorities ?? new List<string>();
+            var newPriorities = newWord.Priorities ?? new List<string>();
+            var addedPriorities = newPriorities.Except(oldPriorities).ToList();
+            var removedPriorities = oldPriorities.Except(newPriorities).ToList();
+            
+            if (addedPriorities.Any() || removedPriorities.Any())
+            {
+                isChanged = true;
+                priorityChanges.Add((wordId, addedPriorities, removedPriorities));
+            }
+            
+            if (isChanged)
+            {
+                changedWordIds.Add(wordId);
+            }
+        }
+        
+        // Output the summary
+        Console.WriteLine($"\nSummary of Changes:");
+        Console.WriteLine($"Added words: {addedWordIds.Count}");
+        Console.WriteLine($"Removed words: {removedWordIds.Count}");
+        Console.WriteLine($"Changed words: {changedWordIds.Count}");
+        
+        // Detailed breakdown of changes
+        Console.WriteLine($"\nDetailed Changes:");
+        Console.WriteLine($"Words with reading changes: {readingChanges.Count}");
+        Console.WriteLine($"Words with parts of speech changes: {posChanges.Count}");
+        Console.WriteLine($"Words with priority changes: {priorityChanges.Count}");
+        
+        // List removed words
+        Console.WriteLine($"\nRemoved Words:");
+        foreach (var wordId in removedWordIds)
+        {
+            var word = oldWordDict[wordId];
+            Console.WriteLine($"  WordId: {wordId}, Readings: {string.Join(", ", word.Readings)}");
+        }
+    }
+
     private static void MergeNameEntries(JmDictWord target, JmDictWord source)
     {
         // Merge readings (avoiding duplicates)
@@ -705,6 +767,80 @@ public static class JmDictHelper
                     target.Priorities.Add(priority);
             }
         }
+    }
+
+    private static async Task<List<JmDictWord>> GetWordInfos(string dtdPath, string dictionaryPath)
+    {
+        Regex reg = new Regex(@"<!ENTITY (.*) ""(.*)"">");
+
+        var dtdLines = await File.ReadAllLinesAsync(dtdPath);
+        dtdLines = dtdLines.Concat([
+            "<!ENTITY name-char \"character\">", "<!ENTITY name-company \"company name\">",
+            "<!ENTITY name-creat \"creature\">", "<!ENTITY name-dei \"deity\">",
+            "<!ENTITY name-doc \"document\">", "<!ENTITY name-ev \"event\">",
+            "<!ENTITY name-fem \"female given name or forename\">", "<!ENTITY name-fict \"fiction\">",
+            "<!ENTITY name-given \"given name or forename, gender not specified\">",
+            "<!ENTITY name-group \"group\">", "<!ENTITY name-leg \"legend\">",
+            "<!ENTITY name-masc \"male given name or forename\">", "<!ENTITY name-myth \"mythology\">",
+            "<!ENTITY name-obj \"object\">", "<!ENTITY name-organization \"organization name\">",
+            "<!ENTITY name-oth \"other\">", "<!ENTITY name-person \"full name of a particular person\">",
+            "<!ENTITY name-place \"place name\">", "<!ENTITY name-product \"product name\">",
+            "<!ENTITY name-relig \"religion\">", "<!ENTITY name-serv \"service\">",
+            "<!ENTITY name-ship \"ship name\">", "<!ENTITY name-station \"railway station\">",
+            "<!ENTITY name-surname \"family or surname\">", "<!ENTITY name-unclass \"unclassified name\">",
+            "<!ENTITY name-work \"work of art, literature, music, etc. name\">"
+        ]).ToArray();
+
+        foreach (var line in dtdLines)
+        {
+            var matches = reg.Match(line);
+            if (matches.Length > 0 && !_entities.ContainsKey(matches.Groups[1].Value))
+            {
+                _entities.Add(matches.Groups[1].Value, matches.Groups[2].Value);
+            }
+        }
+
+        var readerSettings = new XmlReaderSettings() { Async = true, DtdProcessing = DtdProcessing.Parse, MaxCharactersFromEntities = 0 };
+        XmlReader reader = XmlReader.Create(dictionaryPath, readerSettings);
+
+        await reader.MoveToContentAsync();
+
+        List<JmDictWord> wordInfos = new();
+
+        while (await reader.ReadAsync())
+        {
+            if (reader.NodeType != XmlNodeType.Element) continue;
+
+            if (reader.Name != "entry") continue;
+
+            var wordInfo = new JmDictWord();
+
+            while (await reader.ReadAsync())
+            {
+                if (reader.NodeType == XmlNodeType.Element)
+                {
+                    if (reader.Name == "ent_seq")
+                        wordInfo.WordId = reader.ReadElementContentAsInt();
+
+                    wordInfo = await ParseKEle(reader, wordInfo);
+                    wordInfo = await ParseREle(reader, wordInfo);
+                    wordInfo = await ParseSense(reader, wordInfo);
+                }
+
+                if (reader.NodeType != XmlNodeType.EndElement) continue;
+                if (reader.Name != "entry") continue;
+
+                wordInfo.Readings = wordInfo.Readings.Select(r => r.Replace("ゎ", "わ").Replace("ヮ", "わ")).ToList();
+
+                wordInfos.Add(wordInfo);
+
+                break;
+            }
+        }
+
+        reader.Close();
+
+        return wordInfos;
     }
 
     private static async Task<JmDictWord> ParseNameKEle(XmlReader reader, JmDictWord wordInfo)

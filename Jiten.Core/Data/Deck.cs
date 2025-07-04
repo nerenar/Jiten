@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,8 @@ public class Deck
     public DateTimeOffset CreationDate { get; set; } = DateTime.UtcNow;
 
     public DateTimeOffset LastUpdate { get; set; } = DateTime.UtcNow;
+
+    public DateOnly ReleaseDate { get; set; } = default;
 
     /// <summary>
     /// Name of the image cover file
@@ -40,6 +43,12 @@ public class Deck
     /// English translation of the title, if it exists
     /// </summary>
     public string? EnglishTitle { get; set; }
+    
+    /// <summary>
+    /// Description or summary for media decks
+    /// </summary>
+    [MaxLength(2000)]
+    public string? Description { get; set; }
 
     /// <summary>
     /// Total character count, without punctuation
@@ -84,7 +93,7 @@ public class Deck
     /// <summary>
     /// Average sentence length with decimal precision
     /// </summary>
-    public float AverageSentenceLength => SentenceCount == 0 ? 0 : (float)CharacterCount / SentenceCount;
+    public float AverageSentenceLength => SentenceCount is 0 or 1 ? 0 : (float)CharacterCount / SentenceCount;
 
     /// <summary>
     /// Percentage of dialogue in the whole text

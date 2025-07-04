@@ -25,10 +25,10 @@ public static class MetadataDownloader
 
         _currentApi = api.Trim() switch
         {
-            "vndb" => MetadataProviderHelper.VndbApi,
-            "books" => MetadataProviderHelper.GoogleBooksApi,
-            "anilist" => MetadataProviderHelper.AnilistNovelApi,
-            "anilist-manga" => MetadataProviderHelper.AnilistMangaApi,
+            "vndb" => MetadataProviderHelper.VndbSearchApi,
+            "books" => MetadataProviderHelper.GoogleBooksSearchApi,
+            "anilist" => MetadataProviderHelper.AnilistNovelSearchApi,
+            "anilist-manga" => MetadataProviderHelper.AnilistMangaSearchApi,
             _ => throw new ArgumentException("Invalid API")
         };
 
