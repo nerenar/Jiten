@@ -35,7 +35,7 @@ public static class MetadataProviderHelper
                                               {
                                                   OriginalTitle = i.VolumeInfo.Title, RomajiTitle = null, EnglishTitle = null,
                                                   ReleaseDate = i.VolumeInfo.PublishedDate,
-                                                  Description = i.VolumeInfo.Description.Replace("<wbr>", Environment.NewLine)
+                                                  Description = i.VolumeInfo.Description?.Replace("<wbr>", Environment.NewLine)
                                                                  .Replace("<br>", Environment.NewLine),
                                                   Links =
                                                   [

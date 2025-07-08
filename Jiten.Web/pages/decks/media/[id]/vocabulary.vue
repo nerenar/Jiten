@@ -98,11 +98,6 @@
       window.scrollTo({ top: 0, behavior: 'instant' });
     });
   };
-
-  const hideKnownWords = computed({
-    get: () => store.hideVocabularyDefinitions,
-    set: (value) => (store.hideVocabularyDefinitions = value),
-  })
 </script>
 
 <template>
@@ -130,10 +125,6 @@
         <Icon v-if="sortOrder == SortOrder.Descending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
         <Icon v-if="sortOrder == SortOrder.Ascending" name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
       </Button>
-      <div class="flex items-center gap-2">
-        <Checkbox v-model="hideKnownWords" input-id="hideKnownWords" name="hideKnownWords" :binary="true" />
-        <label for="hideKnownWords">Hide known words</label>
-      </div>
     </div>
     <div class="flex justify-between flex-col md:flex-row">
       <div class="flex gap-8 pl-2">
