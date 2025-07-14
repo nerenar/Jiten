@@ -121,31 +121,31 @@ builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("fixed", context =>
     {
-        return RateLimitPartition.GetFixedWindowLimiter(
-                                                        context.Connection.RemoteIpAddress?.ToString() ??
-                                                        context.Request.Headers["X-Forwarded-For"].FirstOrDefault() ??
-                                                        "unknown",
-                                                        _ => new FixedWindowRateLimiterOptions
-                                                             {
-                                                                 PermitLimit = 120, Window = TimeSpan.FromSeconds(60),
-                                                                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 3,
-                                                                 AutoReplenishment = true
-                                                             });
+        var clientIp = GetClientIp(context);
+        
+        return RateLimitPartition.GetFixedWindowLimiter(clientIp, _ => new FixedWindowRateLimiterOptions
+                                                                       {
+                                                                           PermitLimit = 300, 
+                                                                           Window = TimeSpan.FromSeconds(60),
+                                                                           QueueProcessingOrder = QueueProcessingOrder.OldestFirst, 
+                                                                           QueueLimit = 3,
+                                                                           AutoReplenishment = true
+                                                                       });
     });
 
     options.AddPolicy("download", context =>
     {
-        return RateLimitPartition.GetSlidingWindowLimiter(
-                                                          context.Connection.RemoteIpAddress?.ToString() ??
-                                                          context.Request.Headers["X-Forwarded-For"].FirstOrDefault() ??
-                                                          "unknown",
-                                                          _ => new SlidingWindowRateLimiterOptions
-                                                               {
-                                                                   PermitLimit = 5, Window = TimeSpan.FromSeconds(60),
-                                                                   SegmentsPerWindow = 10,
-                                                                   QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 2,
-                                                                   AutoReplenishment = true
-                                                               });
+        var clientIp = GetClientIp(context);
+        
+        return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
+                                                                         {
+                                                                             PermitLimit = 5, 
+                                                                             Window = TimeSpan.FromSeconds(60),
+                                                                             SegmentsPerWindow = 10,
+                                                                             QueueProcessingOrder = QueueProcessingOrder.OldestFirst, 
+                                                                             QueueLimit = 2,
+                                                                             AutoReplenishment = true
+                                                                         });
     });
 
     options.OnRejected = async (context, token) =>
@@ -290,3 +290,31 @@ app.MapControllers();
 app.MapHangfireDashboard();
 
 app.Run();
+
+static string GetClientIp(HttpContext context)
+{
+    // Traefik header precedence
+    var headers = new[] 
+                  { 
+                      "X-Forwarded-For",      // Standard header Traefik uses
+                      "X-Real-IP",            // Alternative header
+                      "CF-Connecting-IP"      // If you're using Cloudflare
+                  };
+    
+    foreach (var header in headers)
+    {
+        var value = context.Request.Headers[header].FirstOrDefault();
+        if (!string.IsNullOrEmpty(value))
+        {
+            // X-Forwarded-For can be comma-separated, take the first (original client)
+            var ip = value.Split(',')[0].Trim();
+            if (!string.IsNullOrEmpty(ip) && ip != "unknown")
+            {
+                return ip;
+            }
+        }
+    }
+    
+    // Fallback to connection IP (will be Traefik's IP)
+    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}
