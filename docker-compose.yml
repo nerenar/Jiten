@@ -53,11 +53,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=Host(`api.jiten.moe`)"
       - "traefik.http.services.api.loadbalancer.server.port=8080"
-      - traefik.http.middlewares.forwarded-headers.forwardedheaders.trustedIPs=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-      - traefik.http.middlewares.forwarded-headers.forwardedheaders.insecure=false
-      - traefik.http.routers.https-0-ecgo8040csk88wg04s0sckgk-api.middlewares=gzip,forwarded-headers
-
-
 
   web:
     build:
