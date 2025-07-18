@@ -27,6 +27,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
             "GoogleBooks" =>
                 await MetadataProviderHelper.GoogleBooksSearchApi(query + (!string.IsNullOrEmpty(author) ? $"+inauthor:{author}" : "")),
             "Vndb" => await MetadataProviderHelper.VndbSearchApi(query),
+            "Igdb" => await MetadataProviderHelper.IgdbSearchApi(config["IgdbClientId"], config["IgdbClientSecret"],query),
             _ => new List<Metadata>()
         });
     }

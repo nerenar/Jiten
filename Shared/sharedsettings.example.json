@@ -18,5 +18,7 @@
   "DictionaryPath": "path/to/system_full.dic",
   "JimakuApiKey" : "YourApiKey",
   "TmdbApiKey" : "YourApiKey",
+  "IgdbClientId": "YourClientId",
+  "IgdbClientSecret": "YourClientSecret",
   "StoreRawText": false
 }

@@ -11,7 +11,7 @@ using Jiten.Core.Data.Providers.Vndb;
 
 namespace Jiten.Core;
 
-public static class MetadataProviderHelper
+public static partial class MetadataProviderHelper
 {
     public static async Task<List<Metadata>> GoogleBooksSearchApi(string query)
     {
@@ -34,9 +34,9 @@ public static class MetadataProviderHelper
         metadatas = result!.Items.Select(i => new Metadata
                                               {
                                                   OriginalTitle = i.VolumeInfo.Title, RomajiTitle = null, EnglishTitle = null,
-                                                  ReleaseDate = i.VolumeInfo.PublishedDate,
-                                                  Description = i.VolumeInfo.Description?.Replace("<wbr>", Environment.NewLine)
-                                                                 .Replace("<br>", Environment.NewLine),
+                                                  ReleaseDate = i.VolumeInfo.PublishedDate, Description = i.VolumeInfo.Description
+                                                      ?.Replace("<wbr>", Environment.NewLine)
+                                                      .Replace("<br>", Environment.NewLine),
                                                   Links =
                                                   [
                                                       new Link
@@ -140,7 +140,8 @@ public static class MetadataProviderHelper
                                                          {
                                                              OriginalTitle = media.Title.Native, RomajiTitle = media.Title.Romaji,
                                                              EnglishTitle = media.Title.English, ReleaseDate = media.ReleaseDate,
-                                                             Description = Regex.Replace(media.Description ?? "", "<.*?>", "").Trim(), Links =
+                                                             Description = Regex.Replace(media.Description ?? "", "<.*?>", "").Trim(),
+                                                             Links =
                                                              [
                                                                  new Link
                                                                  {
@@ -246,7 +247,8 @@ public static class MetadataProviderHelper
                                OriginalTitle = requestResult.Titles.FirstOrDefault(t => t.Lang == "ja")?.Title ?? requestResult.Title,
                                RomajiTitle = requestResult.Titles.FirstOrDefault(t => t.Lang == "ja")?.Latin,
                                EnglishTitle = requestResult.Titles.FirstOrDefault(t => t.Lang == "en")?.Title,
-                               ReleaseDate = requestResult.Released, Description = Regex.Replace(requestResult.Description ?? "", @"\[.*\]", ""),
+                               ReleaseDate = requestResult.Released,
+                               Description = Regex.Replace(requestResult.Description ?? "", @"\[.*\]", ""),
                                Links = [new Link { LinkType = LinkType.Vndb, Url = $"https://vndb.org/{requestResult.Id}" }],
                                Image = requestResult.Image?.Url
                            };

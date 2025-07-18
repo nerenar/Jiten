@@ -45,6 +45,8 @@ services:
       - TmdbApiKey=${TMDB_API_KEY:-}
       - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-}
       - StoreRawText=${STORE_RAW_TEXT:-false}
+      - IgdbClientId=${IGDB_CLIENT_ID:-}
+      - IgdbClientSecret=${IGDB_CLIENT_SECRET:-}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
