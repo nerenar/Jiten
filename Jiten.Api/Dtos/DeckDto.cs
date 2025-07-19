@@ -96,19 +96,19 @@ public class DeckDto
     /// <returns></returns>
     private int MapDifficulty(float difficulty)
     {
-        if (difficulty < 1.20)
+        if (difficulty < 1.05)
             return 0;
         
         if (difficulty < 1.75)
             return 1;
 
-        if (difficulty < 2.6)
+        if (difficulty < 2.55)
             return 2;
 
-        if (difficulty < 3.6)
+        if (difficulty < 3.55)
             return 3;
 
-        if (difficulty < 4.2)
+        if (difficulty < 4)
             return 4;
 
         return 5;
