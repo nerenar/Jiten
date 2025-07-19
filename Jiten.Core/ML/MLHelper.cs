@@ -6,6 +6,78 @@ namespace Jiten.Cli.ML;
 
 public static class MLHelper
 {
+    private static int[] LOGICAL_CONNECTORS =
+    [
+        1254730, // 結局
+        1007040, // それに
+        1006730, // そして
+        1254690, // 結果
+        1406090, // そこで
+        1004200, // けど
+        2853889, // けれども
+        1612900, // にも関わらず
+        2454160, // それにもかかわらず
+        1009720, // に加えて
+        1505990, // しかし
+        2055530, // だが
+        1166510, // 一方
+        1007310, // だから
+        1009970, // ので 
+        1335210, // 従って
+        1009410, // なぜなら
+        1279310, // さらに
+        1506050, // しかも
+        1349300, // なお
+        1387240, // まず
+        2600340, // 次に
+        1610430, // つまり
+        1343110, // ところで
+    ];
+
+    private static int[] MODAL_MARKERS =
+    [
+        1928670, // だろう
+        1008420, // でしょう
+        1002970, // かもしれない
+        2143350, // かも
+        1476430, // はず
+        1610740, // 違いない
+        1013240, // らしい
+        2409190, // ようだ
+        2016410, // みたい
+        1006650, // そうだ
+        2083720, // っぽい
+        1221540, // 気がする
+        1589350, // 思う
+        1002940, // かな
+    ];
+
+    private static int[] RELATIVE_CLAUSE_MARKERS =
+    [
+        1922760, // という
+        2540200, // といった
+        1009660,// による
+        1009780, // について
+        1008590, // として
+        1215790,// 関する
+        1009810,// に対する
+        1342050,// めぐる
+        1432880,// 通じた
+        1404100,// すなわち
+    ];
+
+    private static int[] METAPHOR_MARKERS =
+    [
+        1010030, // のように
+        2016410, // みたい
+        1216280, // まるで
+        1208190, // あたかも
+        2409180, // ような
+        2826769, // かのように
+        2409190, // ようだ
+        
+    ];
+
     public static void ExtractCharacterCounts(string text, ExtractedFeatures features)
     {
         features.TotalCount = text.Length;
@@ -280,15 +352,16 @@ public static class MLHelper
         var gairaigoOccurrenceSum = deckWords.Where(dw => dw.Origin == WordOrigin.Gairaigo).Sum(dw => dw.Occurrences);
         var verbOccurrenceSum = deckWords.Where(dw => dw.PartsOfSpeech.Contains(PartOfSpeech.Verb)).Sum(dw => dw.Occurrences);
         var particleOccurrenceSum = deckWords.Where(dw => dw.PartsOfSpeech.Contains(PartOfSpeech.Particle)).Sum(dw => dw.Occurrences);
-        
+
         var kangoPercentage = 100d * kangoOccurrenceSum / wordCount;
         var wagoPercentage = 100d * wagoOccurrenceSum / wordCount;
         var gairaigoPercentage = 100d * gairaigoOccurrenceSum / wordCount;
         var verbPercentage = 100d * verbOccurrenceSum / wordCount;
         var particlePercentage = particleOccurrenceSum / wordCount;
         var avgWordPerSentence = features.SentenceCount > 0 ? wordCount / features.SentenceCount : 5;
-        var readabilityScore = avgWordPerSentence * -0.056 + kangoPercentage * -0.126 + wagoPercentage * -0.042 + verbPercentage * -0.145 + particlePercentage * -0.044 + 11.724;
-        
+        var readabilityScore = avgWordPerSentence * -0.056 + kangoPercentage * -0.126 + wagoPercentage * -0.042 + verbPercentage * -0.145 +
+                               particlePercentage * -0.044 + 11.724;
+
         features.KangoPercentage = kangoPercentage;
         features.WagoPercentage = wagoPercentage;
         features.GairaigoPercentage = gairaigoPercentage;
@@ -296,5 +369,18 @@ public static class MLHelper
         features.ParticlePercentage = particlePercentage;
         features.AvgWordPerSentence = avgWordPerSentence;
         features.ReadabilityScore = readabilityScore;
+    }
+
+    public static void ExtractSemanticComplexity(List<DeckWord> deckWords, ExtractedFeatures features)
+    {
+        var logicalConnectorsCount = deckWords.Where(dw => LOGICAL_CONNECTORS.Contains(dw.WordId)).Sum(x => x.Occurrences);
+        var modalMarkers = deckWords.Where(dw => MODAL_MARKERS.Contains(dw.WordId)).Sum(x => x.Occurrences);
+        var relativeClauseMarkers = deckWords.Where(dw => RELATIVE_CLAUSE_MARKERS.Contains(dw.WordId)).Sum(x => x.Occurrences);
+        var metaphorMarkers = deckWords.Where(dw => METAPHOR_MARKERS.Contains(dw.WordId)).Sum(x => x.Occurrences);
+        
+        features.LogicalConnectorRatio = logicalConnectorsCount / features.WordCount;
+        features.ModalMarkerRatio = modalMarkers / features.WordCount;
+        features.RelativeClauseMarkerRatio = relativeClauseMarkers / features.WordCount;
+        features.MetaphorMarkerRatio = metaphorMarkers / features.WordCount;
     }
 }

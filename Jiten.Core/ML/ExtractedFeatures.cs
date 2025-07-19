@@ -37,6 +37,12 @@ public class ExtractedFeatures
     public double ParticlePercentage { get; set; }
     public double AvgWordPerSentence { get; set; }
     public double ReadabilityScore { get; set; }
+    
+    // Semantic complexity
+    public double LogicalConnectorRatio { get; set; }
+    public double ModalMarkerRatio { get; set; }
+    public double RelativeClauseMarkerRatio { get; set; }
+    public double MetaphorMarkerRatio { get; set; }
 
     // Frequency Stats
     public double AvgLogFreqRank { get; set; }

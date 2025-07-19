@@ -118,12 +118,12 @@
                       Difficulty
                       <span class="text-purple-500 text-xs align-super"> beta </span>
                     </span>
-                    <span v-if="deck.difficulty == 0" v-tooltip="'1/6'" class="ml-8 tabular-nums text-green-700 dark:text-green-300"> Beginner </span>
-                    <span v-else-if="deck.difficulty == 1" v-tooltip="'2/6'" class="ml-8 tabular-nums text-green-500 dark:text-green-200"> Easy </span>
-                    <span v-else-if="deck.difficulty == 2" v-tooltip="'3/6'" class="ml-8 tabular-nums text-yellow-600 dark:text-yellow-300"> Moderate </span>
-                    <span v-else-if="deck.difficulty == 3" v-tooltip="'4/6'" class="ml-8 tabular-nums text-amber-600 dark:text-amber-300"> Hard </span>
-                    <span v-else-if="deck.difficulty == 4" v-tooltip="'5/6'" class="ml-8 tabular-nums text-orange-600 dark:text-orange-300"> Very hard </span>
-                    <span v-else-if="deck.difficulty == 5" v-tooltip="'6/6'" class="ml-8 tabular-nums text-red-600 dark:text-red-300"> Expert </span>
+                    <span v-if="deck.difficulty == 0" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-green-700 dark:text-green-300"> Beginner </span>
+                    <span v-else-if="deck.difficulty == 1" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-green-500 dark:text-green-200"> Easy </span>
+                    <span v-else-if="deck.difficulty == 2" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-yellow-600 dark:text-yellow-300"> Moderate </span>
+                    <span v-else-if="deck.difficulty == 3" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-amber-600 dark:text-amber-300"> Hard </span>
+                    <span v-else-if="deck.difficulty == 4" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-orange-600 dark:text-orange-300"> Very hard </span>
+                    <span v-else-if="deck.difficulty == 5" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-red-600 dark:text-red-300"> Expert </span>
                   </div>
                 </div>
 

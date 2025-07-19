@@ -121,13 +121,13 @@ public static class MLConfig
                                                                                           ]
                                                                                       },
                                                                                       { "adv", [PartOfSpeech.Adverb] },
-                                                                                      { "part", [PartOfSpeech.Particle] },
+                                                                                      // { "part", [PartOfSpeech.Particle] },
                                                                                       { "conjunc", [PartOfSpeech.Conjunction] },
                                                                                       { "aux", [PartOfSpeech.Auxiliary] },
                                                                                       { "inter", [PartOfSpeech.Interjection] },
                                                                                       { "fix", [PartOfSpeech.Prefix, PartOfSpeech.Suffix] },
-                                                                                      { "filler", [PartOfSpeech.Filler] },
-                                                                                      { "name", [PartOfSpeech.Name] },
+                                                                                      // { "filler", [PartOfSpeech.Filler] },
+                                                                                      // { "name", [PartOfSpeech.Name] },
                                                                                       { "pn", [PartOfSpeech.Pronoun] },
                                                                                       { "exp", [PartOfSpeech.Expression] },
                                                                                       { "other", [PartOfSpeech.Unknown] }

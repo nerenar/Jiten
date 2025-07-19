@@ -153,6 +153,7 @@ public class FeatureExtractor
         await MLHelper.ExtractFrequencyStats(_context, deckWords, features);
         MLHelper.ExtractConjugationStats(deckWords, features);
         MLHelper.ExtractReadabilityScore(deckWords, features);
+        MLHelper.ExtractSemanticComplexity(deckWords, features);
 
         return features;
     }
@@ -233,7 +234,7 @@ public class FeatureExtractor
                 record["SentenceCount"] = feature.SentenceCount;
                 record["Ttr"] = feature.Ttr;
                 record["AverageSentenceLength"] = feature.AverageSentenceLength;
-                record["LogSentenceLength"] = feature.LogSentenceLength;
+                // record["LogSentenceLength"] = feature.LogSentenceLength;
                 record["DialoguePercentage"] = feature.DialoguePercentage;
 
                 record["TotalCount"] = feature.TotalCount;
@@ -245,7 +246,7 @@ public class FeatureExtractor
                 record["HiraganaRatio"] = feature.HiraganaRatio;
                 record["KatakanaRatio"] = feature.KatakanaRatio;
                 record["OtherRatio"] = feature.OtherRatio;
-                record["KanjiToKanaRatio"] = feature.KanjiToKanaRatio;
+                // record["KanjiToKanaRatio"] = feature.KanjiToKanaRatio;
 
                 record["KangoPercentage"] = feature.KangoPercentage;
                 record["WagoPercentage"] = feature.WagoPercentage;
@@ -254,18 +255,23 @@ public class FeatureExtractor
                 record["ParticlePercentage"] = feature.ParticlePercentage;
                 record["AvgWordPerSentence"] = feature.AvgWordPerSentence;
                 record["ReadabilityScore"] = feature.ReadabilityScore;
+                
+                record["LogicalConnectorRatio"] = feature.LogicalConnectorRatio;
+                record["ModalMarkerRatio"] = feature.ModalMarkerRatio;
+                record["RelativeClauseMarkerRatio"] = feature.RelativeClauseMarkerRatio;
+                record["MetaphorMarkerRatio"] = feature.MetaphorMarkerRatio;
 
                 record["AvgLogFreqRank"] = feature.AvgLogFreqRank;
-                record["AvgFreqRank"] = feature.AvgFreqRank;
-                record["MedianLogFreqRank"] = feature.MedianLogFreqRank;
+                // record["AvgFreqRank"] = feature.AvgFreqRank;
+                // record["MedianLogFreqank"] = feature.MedianLogFreqRank;
                 record["StdLogFreqRank"] = feature.StdLogFreqRank;
                 record["MinFreqRank"] = feature.MinFreqRank;
-                record["MaxFreqRank"] = feature.MaxFreqRank;
+                // record["MaxFreqRank"] = feature.MaxFreqRank;
                 record["AvgLogObsFreq"] = feature.AvgLogObsFreq;
-                record["MedianLogObsFreq"] = feature.MedianLogObsFreq;
+                // record["MedianLogObsFreq"] = feature.MedianLogObsFreq;
                 record["StdLogObsFreq"] = feature.StdLogObsFreq;
-                record["MinObsFreq"] = feature.MinObsFreq;
-                record["MaxObsFreq"] = feature.MaxObsFreq;
+                // record["MinObsFreq"] = feature.MinObsFreq;
+                // record["MaxObsFreq"] = feature.MaxObsFreq;
                 record["LowFreqRankPerc"] = feature.LowFreqRankPerc;
                 record["LowFreqObsPerc"] = feature.LowFreqObsPerc;
                 record["AvgReadingFreqRank"] = feature.AvgReadingFreqRank;
@@ -273,11 +279,11 @@ public class FeatureExtractor
                 record["AvgReadingObsFreq"] = feature.AvgReadingObsFreq;
                 record["MedianReadingObsFreq"] = feature.MedianReadingObsFreq;
                 record["AvgReadingFreqPerc"] = feature.AvgReadingFreqPerc;
-                record["MedianReadingFreqPerc"] = feature.MedianReadingFreqPerc;
+                // record["MedianReadingFreqPerc"] = feature.MedianReadingFreqPerc;
                 record["AvgCustomScorePerWord"] = feature.AvgCustomScorePerWord;
-                record["MedianCustomWordScore"] = feature.MedianCustomWordScore;
+                // record["MedianCustomWordScore"] = feature.MedianCustomWordScore;
                 record["StdCustomWordScore"] = feature.StdCustomWordScore;
-                record["MaxCustomWordScore"] = feature.MaxCustomWordScore;
+                // record["MaxCustomWordScore"] = feature.MaxCustomWordScore;
                 record["PercCustomScoreAboveSoftcapStart"] = feature.PercCustomScoreAboveSoftcapStart;
 
                 record["TotalConjugations"] = feature.TotalConjugations;
