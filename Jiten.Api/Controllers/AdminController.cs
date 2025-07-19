@@ -605,6 +605,9 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
                 return BadRequest("No valid subtitle files found.");
             }
 
+            if (string.IsNullOrEmpty(metadata.OriginalTitle))
+                metadata.OriginalTitle = metadata.EnglishTitle ?? metadata.RomajiTitle ?? entry.Name;
+            
             var mediaType = entry.Flags.Anime ? MediaType.Anime : entry.Flags.Movie ? MediaType.Movie : MediaType.Drama;
             backgroundJobs.Enqueue<ParseJob>(job => job.Parse(metadata, mediaType, bool.Parse(config["StoreRawText"] ?? "false")));
 
