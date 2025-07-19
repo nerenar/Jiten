@@ -501,9 +501,8 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
             Metadata metadata;
             if (entry.Flags.Anime && entry.AnilistId.HasValue)
             {
-                metadata = await MetadataProviderHelper.AnilistApi(entry.AnilistId.Value) ??
+                metadata = await MetadataProviderHelper.AnilistAnimeApi(entry.AnilistId.Value) ??
                            throw new Exception("Anilist API returned null.");
-                ;
             }
             else if (entry.Flags.Movie && entry.TmdbId != null)
             {
@@ -546,7 +545,8 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
                 {
                     using var archive = ArchiveFactory.Open(filePath);
                     foreach (var e in archive.Entries.Where(currentEntry => !currentEntry.IsDirectory &&
-                                                                     _supportedExtensions.Contains(Path.GetExtension(currentEntry.Key))))
+                                                                            _supportedExtensions
+                                                                                .Contains(Path.GetExtension(currentEntry.Key))))
                     {
                         var entryPath = Path.Combine(path, Path.GetFileName(e.Key));
                         e.WriteToFile(entryPath, new ExtractionOptions { ExtractFullPath = false, Overwrite = true });
@@ -607,7 +607,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
 
             if (string.IsNullOrEmpty(metadata.OriginalTitle))
                 metadata.OriginalTitle = metadata.EnglishTitle ?? metadata.RomajiTitle ?? entry.Name;
-            
+
             var mediaType = entry.Flags.Anime ? MediaType.Anime : entry.Flags.Movie ? MediaType.Movie : MediaType.Drama;
             backgroundJobs.Enqueue<ParseJob>(job => job.Parse(metadata, mediaType, bool.Parse(config["StoreRawText"] ?? "false")));
 

@@ -210,6 +210,63 @@ public static partial class MetadataProviderHelper
                };
     }
 
+    public static async Task<Metadata> AnilistAnimeApi(int anilistId)
+    {
+        var requestBody = new
+                          {
+                              query = @"
+        query ($id: Int) {
+            Media (id: $id) {
+              id
+              idMal
+              title {
+                romaji
+                english
+                native
+              }
+              startDate {
+                day
+                month
+                year
+              }
+              bannerImage
+              coverImage {
+                extraLarge
+              }
+            }
+        }",
+                              variables = new { id = anilistId }
+                          };
+
+        var httpClient = new HttpClient();
+        var requestContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+        var response = await httpClient.PostAsync("https://graphql.anilist.co", requestContent);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return new Metadata();
+        }
+
+        var contentStream = await response.Content.ReadAsStringAsync();
+        var result = JsonSerializer.Deserialize<AnilistResult>(contentStream,
+                                                               new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        if (result?.Data?.Media == null)
+        {
+            return new Metadata();
+        }
+
+        return new Metadata
+               {
+                   OriginalTitle = result.Data.Media.Title.Native, RomajiTitle = result.Data.Media.Title.Romaji,
+                   EnglishTitle = result.Data.Media.Title.English, ReleaseDate = result.Data.Media.ReleaseDate, Links =
+                   [
+                       new Link { LinkType = LinkType.Anilist, Url = $"https://anilist.co/anime/{result.Data.Media.Id}" },
+                       new Link { LinkType = LinkType.Mal, Url = $"https://myanimelist.net/anime/{result.Data.Media.IdMal}" }
+                   ],
+                   Image = result.Data.Media.CoverImage.ExtraLarge
+               } ?? new Metadata();
+    }
 
     public static async Task<List<Metadata>> VndbSearchApi(string query)
     {
