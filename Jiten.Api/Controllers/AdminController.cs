@@ -1,3 +1,4 @@
+using System.Text;
 using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
@@ -8,6 +9,9 @@ using Jiten.Core.Data.Providers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SharpCompress.Archives;
+using SharpCompress.Common;
+using MetadataProviderHelper = Jiten.Core.MetadataProviderHelper;
 
 namespace Jiten.Api.Controllers;
 
@@ -17,6 +21,8 @@ namespace Jiten.Api.Controllers;
 public class AdminController(IConfiguration config, HttpClient httpClient, IBackgroundJobClient backgroundJobs, JitenDbContext dbContext)
     : ControllerBase
 {
+    private static readonly List<string> _supportedExtensions = [".ass", ".srt", ".ssa"];
+
     [HttpGet("search-media")]
     public async Task<IResult> SearchMedia(string provider, string query, string? author)
     {
@@ -27,7 +33,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
             "GoogleBooks" =>
                 await MetadataProviderHelper.GoogleBooksSearchApi(query + (!string.IsNullOrEmpty(author) ? $"+inauthor:{author}" : "")),
             "Vndb" => await MetadataProviderHelper.VndbSearchApi(query),
-            "Igdb" => await MetadataProviderHelper.IgdbSearchApi(config["IgdbClientId"], config["IgdbClientSecret"],query),
+            "Igdb" => await MetadataProviderHelper.IgdbSearchApi(config["IgdbClientId"], config["IgdbClientSecret"], query),
             _ => new List<Metadata>()
         });
     }
@@ -426,7 +432,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
         var decks = await dbContext
                           .Decks.Where(d => d.ParentDeck == null && (d.ReleaseDate == default || string.IsNullOrEmpty(d.Description)))
                           .Include(deck => deck.Links).ToListAsync();
-        
+
         foreach (var deck in decks)
         {
             switch (deck.MediaType)
@@ -449,6 +455,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
                     {
                         backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deck.DeckId));
                     }
+
                     break;
                 default:
                     break;
@@ -456,5 +463,161 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
         }
 
         return Ok(new { Message = $"Fetching missing metadata for {decks.Count} decks", Count = decks.Count });
+    }
+
+    [HttpGet("get-jimaku/{id}")]
+    public async Task<IActionResult> GetJimaku(int id)
+    {
+        var jimakuResult = new JimakuResultDto();
+
+        var entry = await MetadataProviderHelper.JimakuGetEntryAsync(httpClient, config["JimakuApiKey"], id);
+        if (entry == null)
+        {
+            return NotFound();
+        }
+
+        jimakuResult.Entry = entry;
+        jimakuResult.Files = await MetadataProviderHelper.JimakuGetFilesAsync(httpClient, config["JimakuApiKey"], id);
+
+        return Ok(jimakuResult);
+    }
+
+    [HttpPost("add-jimaku-deck")]
+    public async Task<IActionResult> AddJimakuDeck([FromBody] AddJimakuDeckRequest model)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            var entry = await MetadataProviderHelper.JimakuGetEntryAsync(httpClient, config["JimakuApiKey"], model.JimakuId);
+            if (entry == null) return NotFound("Jimaku entry not found.");
+
+            string path = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());
+            Directory.CreateDirectory(path);
+
+            Metadata metadata;
+            if (entry.Flags.Anime && entry.AnilistId.HasValue)
+            {
+                metadata = await MetadataProviderHelper.AnilistApi(entry.AnilistId.Value) ??
+                           throw new Exception("Anilist API returned null.");
+                ;
+            }
+            else if (entry.Flags.Movie && entry.TmdbId != null)
+            {
+                metadata = await MetadataProviderHelper.TmdbMovieApi(entry.TmdbId.Replace("movie:", ""), config["TmdbApiKey"]);
+                metadata.OriginalTitle = entry.JapaneseName;
+                metadata.EnglishTitle = entry.EnglishName;
+                metadata.RomajiTitle = entry.Name;
+            }
+            else if (entry.TmdbId != null)
+            {
+                metadata = await MetadataProviderHelper.TmdbTvApi(entry.TmdbId.Replace("tv:", ""), config["TmdbApiKey"]);
+                metadata.OriginalTitle = entry.JapaneseName;
+                metadata.EnglishTitle = entry.EnglishName;
+                metadata.RomajiTitle = entry.Name;
+            }
+            else
+            {
+                return BadRequest("No metadata provider found for this entry.");
+            }
+
+            if (!string.IsNullOrEmpty(metadata.Image))
+            {
+                var coverImagePath = Path.Join(path, "cover.jpg");
+                var response = await httpClient.GetAsync(metadata.Image);
+                response.EnsureSuccessStatusCode();
+
+                await using var imageStream = await response.Content.ReadAsStreamAsync();
+                await using var fileStream = new FileStream(coverImagePath, FileMode.Create);
+                await imageStream.CopyToAsync(fileStream);
+                metadata.Image = coverImagePath;
+            }
+
+            var downloadedFiles = new List<string>();
+            foreach (var file in model.Files)
+            {
+                var filePath = Path.Join(path, file.Name);
+                await MetadataProviderHelper.JimakuDownloadFileAsync(httpClient, file.Url, filePath);
+
+                if (Path.GetExtension(filePath) is ".zip" or ".rar" or ".7z")
+                {
+                    using var archive = ArchiveFactory.Open(filePath);
+                    foreach (var e in archive.Entries.Where(currentEntry => !currentEntry.IsDirectory &&
+                                                                     _supportedExtensions.Contains(Path.GetExtension(currentEntry.Key))))
+                    {
+                        var entryPath = Path.Combine(path, Path.GetFileName(e.Key));
+                        e.WriteToFile(entryPath, new ExtractionOptions { ExtractFullPath = false, Overwrite = true });
+                        downloadedFiles.Add(entryPath);
+                    }
+                }
+                else
+                {
+                    downloadedFiles.Add(filePath);
+                }
+            }
+
+            // Preprocess ass files for subtitle parser
+            var assFiles = downloadedFiles.Where(f => Path.GetExtension(f) == ".ass").ToList();
+            foreach (var assFile in assFiles)
+            {
+                var ssaFile = Path.ChangeExtension(assFile, ".ssa");
+                var lines = await System.IO.File.ReadAllLinesAsync(assFile);
+                var filteredLines = lines.Where(line => !line.TrimStart().StartsWith(";") && !line.Contains("cn")).ToList();
+                await System.IO.File.WriteAllLinesAsync(ssaFile, filteredLines);
+                downloadedFiles.Remove(assFile);
+                downloadedFiles.Add(ssaFile);
+            }
+
+            var subtitleFiles = downloadedFiles
+                                .Where(f => _supportedExtensions.Contains(Path.GetExtension(f)))
+                                .ToList();
+
+            List<string> extractedFiles = new();
+            foreach (var file in subtitleFiles)
+            {
+                var parser = new SubtitlesParser.Classes.Parsers.SubParser();
+                await using var fileStream = System.IO.File.OpenRead(file);
+                var items = parser.ParseStream(fileStream, Encoding.UTF8);
+                List<string> lines = items.SelectMany(it => it.PlaintextLines).ToList();
+                var txtPath = Path.ChangeExtension(file, ".txt");
+                await System.IO.File.WriteAllLinesAsync(txtPath, lines);
+                extractedFiles.Add(txtPath);
+            }
+
+            if (extractedFiles.Count > 1)
+            {
+                metadata.Children = new List<Metadata>();
+                for (var i = 0; i < extractedFiles.Count; i++)
+                {
+                    var file = extractedFiles[i];
+                    metadata.Children.Add(new Metadata { FilePath = file, OriginalTitle = $"Episode {i + 1}" });
+                }
+            }
+            else if (extractedFiles.Count == 1)
+            {
+                metadata.FilePath = extractedFiles.First();
+            }
+            else
+            {
+                return BadRequest("No valid subtitle files found.");
+            }
+
+            var mediaType = entry.Flags.Anime ? MediaType.Anime : entry.Flags.Movie ? MediaType.Movie : MediaType.Drama;
+            backgroundJobs.Enqueue<ParseJob>(job => job.Parse(metadata, mediaType, bool.Parse(config["StoreRawText"] ?? "false")));
+
+            return Ok(new
+                      {
+                          Message = "Media added successfully.", Title = metadata.OriginalTitle, Path = path,
+                          SubdeckCount = metadata.Children?.Count ?? 0
+                      });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                              new { Message = "An unexpected error occurred while processing your request.", Details = ex.ToString() });
+        }
     }
 }

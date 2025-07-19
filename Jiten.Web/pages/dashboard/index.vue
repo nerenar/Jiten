@@ -45,6 +45,16 @@
           </div>
         </template>
       </Card>
+
+      <Card class="shadow-md">
+        <template #title>Add from Jimaku</template>
+        <template #content>
+          <p class="mb-4">Add new media from Jimaku</p>
+          <div class="flex justify-center">
+            <Button label="Add Media" class="p-button-primary" @click="navigateTo('/dashboard/add-jimaku')" />
+          </div>
+        </template>
+      </Card>
     </div>
   </div>
 </template>
