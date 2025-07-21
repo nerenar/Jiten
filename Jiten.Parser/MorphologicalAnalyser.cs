@@ -247,84 +247,6 @@ public class MorphologicalAnalyser
                 continue;
             }
 
-            // I'm not sure why this happens, but sudachi thinks those words are proper nouns
-            if (w1.Text == "俺の")
-            {
-                var ore = new WordInfo
-                          {
-                              Text = "俺", DictionaryForm = "俺", PartOfSpeech = PartOfSpeech.Pronoun,
-                              PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "おれ"
-                          };
-                var no = new WordInfo
-                         {
-                             Text = "の", PartOfSpeech = PartOfSpeech.Particle,
-                             PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "の", DictionaryForm = "の"
-                         };
-
-                newList.Add(ore);
-                newList.Add(no);
-                i += 1;
-                continue;
-            }
-
-            if (w1.Text == "風使い")
-            {
-                var kaze = new WordInfo
-                           {
-                               Text = "風", DictionaryForm = "風", PartOfSpeech = PartOfSpeech.Noun,
-                               PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun, Reading = "かぜ"
-                           };
-                var tsukai = new WordInfo
-                             {
-                                 Text = "使い", PartOfSpeech = PartOfSpeech.Noun, PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun,
-                                 Reading = "つかい", DictionaryForm = "使い"
-                             };
-
-                newList.Add(kaze);
-                newList.Add(tsukai);
-                i += 1;
-                continue;
-            }
-
-            if (w1.Text == "能力者")
-            {
-                var nouryoku = new WordInfo
-                               {
-                                   Text = "能力", DictionaryForm = "能力", PartOfSpeech = PartOfSpeech.Noun,
-                                   PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun, Reading = "のうりょく"
-                               };
-                var sha = new WordInfo
-                          {
-                              Text = "者", PartOfSpeech = PartOfSpeech.Suffix, PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun,
-                              Reading = "しゃ", DictionaryForm = "者"
-                          };
-
-                newList.Add(nouryoku);
-                newList.Add(sha);
-                i += 1;
-                continue;
-            }
-
-
-            if (w1.Text == "泣きながら")
-            {
-                var naki = new WordInfo
-                           {
-                               Text = "泣き", DictionaryForm = "泣き", PartOfSpeech = PartOfSpeech.Noun,
-                               PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "なき"
-                           };
-                var nagara = new WordInfo
-                             {
-                                 Text = "ながら", PartOfSpeech = PartOfSpeech.Particle,
-                                 PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "ながら", DictionaryForm = "ながら"
-                             };
-
-                newList.Add(naki);
-                newList.Add(nagara);
-                i += 1;
-                continue;
-            }
-
             newList.Add(w1);
             i++;
         }
@@ -614,7 +536,7 @@ public class MorphologicalAnalyser
             bool combined = false;
 
             if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) &&
-                currentWord.Text is "て" or "で" or "ながら" or "ちゃ" or "ば" &&
+                currentWord.Text is "て" or "で" or "ちゃ" or "ば" &&
                 previousWord.PartOfSpeech == PartOfSpeech.Verb)
             {
                 previousWord.Text += currentWord.Text;
@@ -701,6 +623,7 @@ public class MorphologicalAnalyser
             if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) &&
                 wordInfos[i].Text != "ように" &&
                 wordInfos[i].Text != "よう" &&
+                wordInfos[i].Text != "みたい" &&
                 (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.IAdjective))
             {
                 currentWord.Text += nextWord.Text;
@@ -983,6 +906,5 @@ public class MorphologicalAnalyser
         }
 
         return sentences;
-
     }
 }

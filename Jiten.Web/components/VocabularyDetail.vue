@@ -36,7 +36,7 @@
   const currentReadingIndex = ref(props.readingIndex);
   const url = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}`);
 
-  const { data: response, status, error, refresh } = await useAsyncData(() => useApiFetch<Word>(url.value), { immediate: true, watch: false });
+  const { data: response } = await useAsyncData(() => useApiFetch<Word>(url.value), { immediate: true, watch: false });
 
   const getSortedReadings = () => {
     return response.value?.data?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
@@ -50,21 +50,22 @@
   const switchReadingOrWord = async () => {
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
-    getRandomExampleSentences();
-    await refresh();
+    await getRandomExampleSentences();
+    const result = await $api<Word>(url.value);
+    response.value = { data: result };
   };
 
   const selectReading = async (index: number) => {
     emit('readingSelected', index);
     currentReadingIndex.value = index;
-    switchReadingOrWord();
+    await switchReadingOrWord();
   };
 
   watch(
     [() => props.wordId, () => props.readingIndex],
     async ([newWordId, newReadingIndex]) => {
       currentReadingIndex.value = newReadingIndex;
-      switchReadingOrWord();
+      await switchReadingOrWord();
     },
     { immediate: false }
   );
@@ -132,14 +133,14 @@
               <div v-if="!showRedirect" class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)" />
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
-            <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}</div>
-            <div v-if="isWordKnown">
-              <span class="text-green-600 dark:text-green-300">Known</span>
-              <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
-            </div>
-            <div v-else>
-              <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
-            </div>
+              <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}</div>
+              <div v-if="isWordKnown">
+                <span class="text-green-600 dark:text-green-300">Known</span>
+                <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
+              </div>
+              <div v-else>
+                <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
+              </div>
             </div>
           </div>
 

@@ -54,7 +54,7 @@ public class Program
 
         [Option("furi", Required = false, HelpText = "Path to the JMDict Furigana dictionary file.")]
         public string FuriganaPath { get; set; }
-        
+
         [Option('e', "extract", Required = false, HelpText = "Extract text from a file or a folder and all its subfolders.")]
         public string ExtractFilePath { get; set; }
 
@@ -113,7 +113,7 @@ public class Program
 
         [Option("import-vocabulary-origin", Required = false, HelpText = "Path to the VocabularyOrigin CSV file.")]
         public string ImportVocabularyOrigin { get; set; }
-        
+
         [Option(longName: "extract-features", Required = false, HelpText = "Extract features from directory for ML.")]
         public string ExtractFeatures { get; set; }
 
@@ -132,9 +132,12 @@ public class Program
 
         [Option(longName: "password", Required = false, HelpText = "Password for the admin.")]
         public string Password { get; set; }
-        
-        [Option(longName:"compare-jmdict", Required=false, HelpText="Compare two JMDict XML.")]
+
+        [Option(longName: "compare-jmdict", Required = false, HelpText = "Compare two JMDict XML.")]
         public bool CompareJMDict { get; set; }
+
+        [Option(longName: "prune-sudachi", Required = false, HelpText = "Prune CSV files from sudachi directory")]
+        public string PruneSudachiCsvDirectory { get; set; }
     }
 
     static async Task Main(string[] args)
@@ -239,7 +242,7 @@ public class Program
                             await JitenHelper.DebugDeck(_dbOptions, o.DebugDeck.Value);
                         }
 
-                        if (o.UserDicMassAdd != null)
+                        if (!string.IsNullOrEmpty(o.UserDicMassAdd))
                         {
                             if (string.IsNullOrEmpty(o.XmlPath))
                             {
@@ -249,6 +252,12 @@ public class Program
 
                             Console.WriteLine("Importing words...");
                             await AddWordsToUserDictionary(o.UserDicMassAdd, o.XmlPath);
+                        }
+
+                        if (!string.IsNullOrEmpty(o.PruneSudachiCsvDirectory))
+                        {
+                            Console.WriteLine("Pruning files...");
+                            await PruneSudachiCsvFiles(o.PruneSudachiCsvDirectory);
                         }
 
                         if (o.ApplyMigrations)
@@ -311,7 +320,7 @@ public class Program
                                 Console.WriteLine("Usage : -xml dtdPath -dic oldDictionaryPath -x newDictionaryPath");
                                 return;
                             }
-                            
+
                             await JmDictHelper.CompareJMDicts(o.XmlPath, o.DictionaryPath, o.Extra);
                         }
 
@@ -1074,7 +1083,7 @@ public class Program
                     // No word found for this morpheme, we skip to avoid running out of bounds
                     if (lastWasNull)
                         continue;
-                    
+
                     lastWasNull = true;
                     currentMorphemeIndex++;
                 }
@@ -1107,5 +1116,19 @@ public class Program
         var totalMorphenes = parsedMorphemes.Select(p => p.morphemes.Count).Sum() + error + noMorphemes;
         Console.WriteLine($"Total: {totalMorphenes} for {parsedMorphemes.Count} words (Average: {totalMorphenes / parsedMorphemes.Count:0.00)}");
         return true;
+    }
+
+    private static async Task PruneSudachiCsvFiles(string folderPath)
+    {
+        await using var context = new JitenDbContext(_dbOptions);
+        var allReadings = context.JMDictWords
+                                 .SelectMany(w => w.Readings)
+                                 .ToHashSet();
+
+        Console.WriteLine($"Loaded {allReadings.Count} readings.");
+
+        await SudachiDictionaryProcessor.PruneAndFixSudachiCsvFiles(folderPath, allReadings);
+
+        Console.WriteLine($"--- Pruning and fixing complete. ---");
     }
 }
