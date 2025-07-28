@@ -74,7 +74,7 @@ public class Cs2Extractor
         }
         else
         {
-            files = new string[] { filePath };
+            files = [filePath];
         }
 
         if (verbose)

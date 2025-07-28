@@ -8,7 +8,7 @@ public class IgdbGame
     public int Id { get; set; }
 
     [JsonPropertyName("name")]
-    public string Name { get; set; }
+    public required string Name { get; set; }
 
     [JsonPropertyName("storyline")]
     public string? Storyline { get; set; }
@@ -26,5 +26,5 @@ public class IgdbGame
     public int[] GameLocalizations { get; set; } = [];
 
     [JsonPropertyName("url")]
-    public string Url { get; set; }
+    public required string Url { get; set; }
 }

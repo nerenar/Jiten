@@ -6,7 +6,7 @@ public class ExampleSentence
 {
     public int SentenceId { get; set; }
     public int DeckId { get; set; }
-    public string Text { get; set; }
+    public required string Text { get; set; }
     
     /// <summary>
     /// Position i.e. id of the sentence it appears in
@@ -14,7 +14,7 @@ public class ExampleSentence
     public int Position { get; set; }
     public List<ExampleSentenceWord> Words { get; set; } = new();
     
-    public Deck Deck { get; set; }
+    public Deck? Deck { get; set; }
 }
 
 public class ExampleSentenceWord
@@ -25,6 +25,6 @@ public class ExampleSentenceWord
     public byte Position { get; set; }
     public byte Length { get; set; }
     
-    public ExampleSentence ExampleSentence { get; set; }
-    public JmDictWord Word { get; set; }
+    public ExampleSentence? ExampleSentence { get; set; }
+    public JmDictWord? Word { get; set; }
 }

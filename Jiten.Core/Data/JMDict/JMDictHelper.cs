@@ -440,6 +440,10 @@ public static class JmDictHelper
         wordInfos.First(w => w.WordId == 1191730).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2844190).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2207630).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 2029110).Definitions.Add(new JmDictDefinition()
+                                                                  {
+                                                                      PartsOfSpeech = ["prt"], EnglishMeanings = ["indicates na-adjective"]
+                                                                  });
 
         context.JMDictWords.AddRange(wordInfos);
 
@@ -631,13 +635,13 @@ public static class JmDictHelper
         var newWordInfos = await GetWordInfos(dtdPath, dictionaryPathNew);
 
         Console.WriteLine($"Words - Old dictionary: {oldWordInfos.Count}, New dictionary: {newWordInfos.Count}, difference (new - old): {newWordInfos.Count - oldWordInfos.Count}");
-        
+
         // Check for duplicate WordIds in new dictionary and log them
         var duplicateWordIds = newWordInfos.GroupBy(w => w.WordId)
-                                          .Where(g => g.Count() > 1)
-                                          .Select(g => g.Key)
-                                          .ToList();
-        
+                                           .Where(g => g.Count() > 1)
+                                           .Select(g => g.Key)
+                                           .ToList();
+
         if (duplicateWordIds.Any())
         {
             Console.WriteLine($"Warning: Found {duplicateWordIds.Count} duplicate WordIds in the new dictionary.");
@@ -646,91 +650,93 @@ public static class JmDictHelper
                 var entries = newWordInfos.Where(w => w.WordId == dupId).ToList();
                 Console.WriteLine($"  Duplicate ID: {dupId}, Readings: {string.Join(", ", entries.SelectMany(e => e.Readings))}");
             }
+
             if (duplicateWordIds.Count > 5)
                 Console.WriteLine($"  ... and {duplicateWordIds.Count - 5} more");
         }
-        
+
         // Create dictionaries with WordId as key for easier lookup, handling duplicates
         var oldWordDict = oldWordInfos.GroupBy(w => w.WordId)
                                       .ToDictionary(g => g.Key, g => g.First());
-                                      
+
         var newWordDict = newWordInfos.GroupBy(w => w.WordId)
                                       .ToDictionary(g => g.Key, g => g.First());
-        
+
         // Find added, removed, and changed words
         var addedWordIds = newWordDict.Keys.Except(oldWordDict.Keys).ToList();
         var removedWordIds = oldWordDict.Keys.Except(newWordDict.Keys).ToList();
         var commonWordIds = oldWordDict.Keys.Intersect(newWordDict.Keys).ToList();
-        
+
         // Words with changes
         var changedWordIds = new List<int>();
         var readingChanges = new List<(int WordId, List<string> Added, List<string> Removed)>();
         var posChanges = new List<(int WordId, List<string> Added, List<string> Removed)>();
         var priorityChanges = new List<(int WordId, List<string> Added, List<string> Removed)>();
-        
+
         // Check for changes in common words
         foreach (var wordId in commonWordIds)
         {
             var oldWord = oldWordDict[wordId];
             var newWord = newWordDict[wordId];
             bool isChanged = false;
-            
+
             // Check for reading changes
             var oldReadings = oldWord.Readings;
             var newReadings = newWord.Readings;
             var addedReadings = newReadings.Except(oldReadings).ToList();
             var removedReadings = oldReadings.Except(newReadings).ToList();
-            
+
             if (addedReadings.Any() || removedReadings.Any())
             {
                 isChanged = true;
                 readingChanges.Add((wordId, addedReadings, removedReadings));
             }
-            
-            
+
+
             // Check for parts of speech changes
-            var oldPos = oldWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();;
+            var oldPos = oldWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
+            ;
             var newPos = newWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
             var addedPos = newPos.Except(oldPos).ToList();
             var removedPos = oldPos.Except(newPos).ToList();
-            
+
             if (addedPos.Any() || removedPos.Any())
             {
                 isChanged = true;
                 posChanges.Add((wordId, addedPos, removedPos));
             }
-            
-          
+
+
             // Check for priority changes
             var oldPriorities = oldWord.Priorities ?? new List<string>();
             var newPriorities = newWord.Priorities ?? new List<string>();
             var addedPriorities = newPriorities.Except(oldPriorities).ToList();
             var removedPriorities = oldPriorities.Except(newPriorities).ToList();
-            
+
             if (addedPriorities.Any() || removedPriorities.Any())
             {
                 isChanged = true;
                 priorityChanges.Add((wordId, addedPriorities, removedPriorities));
             }
-            
+
             if (isChanged)
             {
                 changedWordIds.Add(wordId);
             }
         }
-        
+
         // Output the summary
         Console.WriteLine($"\nSummary of Changes:");
         Console.WriteLine($"Added words: {addedWordIds.Count}");
         Console.WriteLine($"Removed words: {removedWordIds.Count}");
         Console.WriteLine($"Changed words: {changedWordIds.Count}");
-        
+
         // Detailed breakdown of changes
         Console.WriteLine($"\nDetailed Changes:");
         Console.WriteLine($"Words with reading changes: {readingChanges.Count}");
         Console.WriteLine($"Words with parts of speech changes: {posChanges.Count}");
         Console.WriteLine($"Words with priority changes: {priorityChanges.Count}");
-        
+
         // List removed words
         Console.WriteLine($"\nRemoved Words:");
         foreach (var wordId in removedWordIds)
@@ -1164,6 +1170,15 @@ public static class JmDictHelper
                                 Definitions =
                                 [
                                     new JmDictDefinition { EnglishMeanings = ["was, were"], PartsOfSpeech = ["exp"] }
+                                ]
+                            });
+        
+        customWordInfos.Add(new JmDictWord
+                            {
+                                WordId = 8000001, Readings = new List<string> { "イクシオトキシン" }, ReadingTypes = [JmDictReadingType.KanaReading],
+                                Definitions =
+                                [
+                                    new JmDictDefinition { EnglishMeanings = ["ichthyotoxin"], PartsOfSpeech = ["n"] }
                                 ]
                             });
 

@@ -44,9 +44,9 @@ public class DeckWord
         get => _conjugationIndices.Select(ConjugationCache.GetString).ToList();
         set => _conjugationIndices = value.Select(ConjugationCache.GetOrAddByte).ToList();
     }
-    
+
     [NotMapped]
-    public List<PartOfSpeech> PartsOfSpeech { get; set; }
+    public List<PartOfSpeech> PartsOfSpeech { get; set; } = [];
     
     [NotMapped]
     public WordOrigin Origin { get; set; }

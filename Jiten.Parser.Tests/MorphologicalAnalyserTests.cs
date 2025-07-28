@@ -102,7 +102,7 @@ public class MorphologicalAnalyserTests
     [InlineData("泣きそうなんだけど", new[] { "泣きそうな", "んだ", "けど" })]
     [InlineData("これですね", new[] { "これ", "です", "ね" })]
     [InlineData("忘れなく", new[] { "忘れなく" })]
-    [InlineData("じゃないですか", new[] { "じゃないです", "か" })]
+    [InlineData("じゃないですか", new[] { "じゃない","ですか" })]
     [InlineData("純粋さ健気さ", new[] { "純粋さ", "健気さ" })]
     [InlineData("着てたからね", new[] { "着てた", "から", "ね" })]
     [InlineData("仕出かすからだと思います", new[] { "仕出かす", "から", "だ", "と", "思います" })]
@@ -328,7 +328,7 @@ public class MorphologicalAnalyserTests
     [InlineData("してしまったのがいまだに忘れられないし", new[] { "してしまった", "の", "が", "いまだに", "忘れられない", "し" })]
     [InlineData("彼ははんぱじゃなく", new[] { "彼", "は", "はんぱじゃなく" })]
     [InlineData("許さないじゃなくてさ", new[] { "許さない", "じゃなくて", "さ" })]
-    [InlineData("じゃなかったです", new[] { "じゃなかったです" })]
+    [InlineData("じゃなかったです", new[] { "じゃなかった","です" })]
     [InlineData("彼女は苦しげにうめいて横たわった", new[] { "彼女", "は", "苦し", "げ", "に", "うめいて", "横たわった" })]
     [InlineData("わたしにはちょっとわかりかねますので", new[] { "わたし", "には", "ちょっと", "わかりかねます", "ので" })]
     [InlineData("腕をつかまれて路地", new[] { "腕", "を", "つかまれて", "路地" })]
@@ -502,6 +502,7 @@ public class MorphologicalAnalyserTests
     [InlineData("俺は奴の民主主義ぶった欺瞞を指弾する", new[] { "俺", "は", "奴", "の", "民主主義", "ぶった", "欺瞞", "を", "指弾", "する" })]
     [InlineData("俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳", "的な", "昂揚", "感" })]
     [InlineData("欠陥品め", new[] { "欠陥品", "め" })]
+    [InlineData("本人たちは面白いと思ったのかもしれない", new[] { "本人","たち","は","面白い","と","思った","の","かもしれない" })]
     public async Task SegmentationTest(string text, string[] expectedResult)
     {
         (await Parse(text)).Select(r => r.Text).Should().Equal(expectedResult);

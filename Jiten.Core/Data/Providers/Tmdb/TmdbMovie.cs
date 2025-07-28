@@ -10,13 +10,13 @@ public class TmdbMovie
     /// Japanese title
     /// </summary>
     [JsonPropertyName("original_title")]
-    public string OriginalTitle { get; set; }
+    public required string OriginalTitle { get; set; }
 
     /// <summary>
     /// English or romaji title
     /// </summary>
     [JsonPropertyName("title")]
-    public string Title { get; set; }
+    public required string Title { get; set; }
 
     [JsonPropertyName("imdb_id")] public string? ImdbId { get; set; }
 
@@ -24,5 +24,5 @@ public class TmdbMovie
 
     [JsonPropertyName("poster_path")] public string? PosterPath { get; set; }
     
-    [JsonPropertyName("overview")] public string Description { get; set; } 
+    [JsonPropertyName("overview")] public required string Description { get; set; } 
 }

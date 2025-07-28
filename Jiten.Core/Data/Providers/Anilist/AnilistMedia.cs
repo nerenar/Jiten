@@ -5,10 +5,10 @@ public class AnilistMedia
     public int Id { get; set; }
     public int? IdMal { get; set; }
     public string? Description { get; set; }
-    public AnilistTitle Title { get; set; }
-    public AnilistDate StartDate { get; set; }
-    public string BannerImage { get; set; }
-    public AnilistImage CoverImage { get; set; }
+    public required AnilistTitle Title { get; set; }
+    public required AnilistDate StartDate { get; set; }
+    public required string BannerImage { get; set; }
+    public required AnilistImage CoverImage { get; set; }
 
     public DateTime ReleaseDate => new(
                                        StartDate.Year.GetValueOrDefault(1),

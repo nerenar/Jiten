@@ -201,7 +201,7 @@ public class FeatureExtractor
                 }
             }
         }
-        catch (Exception ex)
+        catch
         {
             Console.WriteLine($"Error reading difficulty CSV: {difficultyCsvPath}");
         }

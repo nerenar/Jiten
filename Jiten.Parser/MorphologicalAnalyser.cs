@@ -88,16 +88,16 @@ public class MorphologicalAnalyser
             return [new SentenceInfo("") { Words = wordInfos.Select(w => (w, (byte)0, (byte)0)).ToList() }];
 
         wordInfos = ProcessSpecialCases(wordInfos);
-        wordInfos = CombineConjunctiveParticle(wordInfos);
         wordInfos = CombinePrefixes(wordInfos);
 
         wordInfos = CombineAmounts(wordInfos);
         wordInfos = CombineTte(wordInfos);
         wordInfos = CombineAuxiliaryVerbStem(wordInfos);
-        wordInfos = CombineVerbDependant(wordInfos);
         wordInfos = CombineAdverbialParticle(wordInfos);
         wordInfos = CombineSuffix(wordInfos);
         wordInfos = CombineAuxiliary(wordInfos);
+        wordInfos = CombineVerbDependant(wordInfos);
+        wordInfos = CombineConjunctiveParticle(wordInfos);
         wordInfos = CombineParticles(wordInfos);
 
         wordInfos = CombineFinal(wordInfos);
@@ -247,6 +247,13 @@ public class MorphologicalAnalyser
                 continue;
             }
 
+            // Always process な as the particle and not the vegetable
+            // Always process に as the particle and not the baggage
+            if (w1.Text is "な" or "に")
+            {
+                w1.PartOfSpeech = PartOfSpeech.Particle;
+            }
+
             newList.Add(w1);
             i++;
         }
@@ -265,7 +272,7 @@ public class MorphologicalAnalyser
         for (int i = 1; i < wordInfos.Count; i++)
         {
             var nextWord = wordInfos[i];
-            if (currentWord.PartOfSpeech == PartOfSpeech.Prefix)
+            if (currentWord.PartOfSpeech == PartOfSpeech.Prefix && currentWord.NormalizedForm != "御")
             {
                 var newText = currentWord.Text + nextWord.Text;
                 currentWord = new WordInfo(nextWord);
@@ -398,16 +405,7 @@ public class MorphologicalAnalyser
             // Condition uses accumulator (verb) and next word (possible dependant + specific forms)
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
                 currentWord.PartOfSpeech == PartOfSpeech.Verb &&
-                (nextWord.DictionaryForm == "得る" ||
-                 nextWord.DictionaryForm == "する" ||
-                 nextWord.DictionaryForm == "しまう" ||
-                 nextWord.DictionaryForm == "おる" ||
-                 nextWord.DictionaryForm == "きる" ||
-                 nextWord.DictionaryForm == "こなす" ||
-                 nextWord.DictionaryForm == "いく" ||
-                 nextWord.DictionaryForm == "貰う" ||
-                 nextWord.DictionaryForm == "いる"
-                ))
+                nextWord.DictionaryForm is "得る" or "する" or "しまう" or "おる" or "きる" or "こなす" or "いく" or "貰う" or "いる")
             {
                 currentWord.Text += nextWord.Text;
             }
@@ -577,25 +575,17 @@ public class MorphologicalAnalyser
             if (previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
                 && currentWord.Text != "な"
                 && currentWord.Text != "に"
-                && currentWord.DictionaryForm != "です"
+                && (currentWord.DictionaryForm != "です" ||
+                    previousWord.PartOfSpeech is PartOfSpeech.Verb && currentWord is { DictionaryForm: "です", Text: "でし" or "でした" })
                 && currentWord.DictionaryForm != "らしい"
                 && currentWord.Text != "なら"
                 && currentWord.DictionaryForm != "べし"
                 && currentWord.DictionaryForm != "ようだ"
+                && currentWord.DictionaryForm != "やがる"
                 && currentWord.Text != "だろう"
                )
             {
                 previousWord.Text += currentWord.Text;
-                combined = true;
-            }
-
-            if (currentWord.Text == "な" &&
-                (previousWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleNaAdjective) ||
-                 previousWord.HasPartOfSpeechSection(PartOfSpeechSection.NaAdjectiveLike) ||
-                 previousWord.PartOfSpeech == PartOfSpeech.NaAdjective))
-            {
-                previousWord.Text += currentWord.Text;
-                previousWord.PartOfSpeech = PartOfSpeech.NaAdjective;
                 combined = true;
             }
 
@@ -656,7 +646,7 @@ public class MorphologicalAnalyser
                 && (wordInfos[i].DictionaryForm == "っこ"
                     || wordInfos[i].DictionaryForm == "さ"
                     || wordInfos[i].DictionaryForm == "がる"
-                    || ((wordInfos[i].DictionaryForm == "たち" || wordInfos[i].DictionaryForm == "ら") &&
+                    || ((wordInfos[i].DictionaryForm == "ら") &&
                         wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun)))
             {
                 currentWord.Text += nextWord.Text;

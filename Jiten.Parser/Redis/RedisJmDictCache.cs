@@ -247,7 +247,7 @@ public class RedisJmDictCache : IJmDictCache
                             var backoffMs = (int)Math.Pow(2, retry) * 100 + Jitter.Next(50);
                             await Task.Delay(backoffMs);
                         }
-                        catch (Exception ex) when (retry < maxRetries - 1)
+                        catch when (retry < maxRetries - 1)
                         {
                             // For other transient errors, also retry with backoff
                             var backoffMs = (int)Math.Pow(2, retry) * 200 + Jitter.Next(100);

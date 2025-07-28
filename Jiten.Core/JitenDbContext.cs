@@ -8,8 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 public class JitenDbContext : DbContext
 {
-    public DbContextOptions<JitenDbContext> DbOptions { get; }
-
+    public DbContextOptions<JitenDbContext>? DbOptions { get; set; }
 
     public DbSet<Deck> Decks { get; set; }
     public DbSet<DeckWord> DeckWords { get; set; }

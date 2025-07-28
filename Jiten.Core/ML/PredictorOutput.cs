@@ -5,5 +5,5 @@ namespace Jiten.Cli.ML;
 public class PredictorOutput
 {
     [ColumnName("variable")]
-    public float[] PredictedDifficulty { get; set; }
+    public float[]? PredictedDifficulty { get; set; }
 }

@@ -235,7 +235,7 @@ namespace Jiten.Parser
                 exampleSentences = ExampleSentenceExtractor.ExtractSentences(sentences, processedWords);
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
-            
+
             timer.Stop();
 
             double deconjugationTime = timer.Elapsed.TotalMilliseconds;
@@ -270,7 +270,7 @@ namespace Jiten.Parser
             float dialoguePercentage = (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f;
 
             Console.WriteLine($"Dialogue percentage: {dialoguePercentage:0.0}%");
-            
+
             var deck = new Deck
                        {
                            CharacterCount = characterCount, WordCount = totalWordCount, UniqueWordCount = processedWords.Length,
@@ -341,7 +341,7 @@ namespace Jiten.Parser
 
         // Limit how many concurrent operations we perform to prevent overwhelming the system
         private static readonly SemaphoreSlim _processSemaphore = new SemaphoreSlim(50, 50);
-        
+
         private static async Task<DeckWord?> ProcessWord((WordInfo wordInfo, int occurrences) wordData, Deconjugator deconjugator)
         {
             // Try to acquire semaphore with timeout to prevent deadlock
@@ -351,7 +351,7 @@ namespace Jiten.Parser
                 // This is better than hanging indefinitely
                 return null;
             }
-            
+
             try
             {
                 var cacheKey = new DeckWordCacheKey(
@@ -359,20 +359,21 @@ namespace Jiten.Parser
                                                     wordData.wordInfo.PartOfSpeech,
                                                     wordData.wordInfo.DictionaryForm
                                                    );
-        
+
                 if (UseCache)
                 {
                     try
                     {
                         var cachedWord = await DeckWordCache.GetAsync(cacheKey);
-        
+
                         if (cachedWord != null)
                         {
                             return new DeckWord
                                    {
-                                       WordId = cachedWord.WordId, OriginalText = wordData.wordInfo.Text, ReadingIndex = cachedWord.ReadingIndex,
-                                       Occurrences = wordData.occurrences, Conjugations = cachedWord.Conjugations,
-                                       PartsOfSpeech = cachedWord.PartsOfSpeech, Origin = cachedWord.Origin
+                                       WordId = cachedWord.WordId, OriginalText = wordData.wordInfo.Text,
+                                       ReadingIndex = cachedWord.ReadingIndex, Occurrences = wordData.occurrences,
+                                       Conjugations = cachedWord.Conjugations, PartsOfSpeech = cachedWord.PartsOfSpeech,
+                                       Origin = cachedWord.Origin
                                    };
                         }
                     }
@@ -382,12 +383,12 @@ namespace Jiten.Parser
                         Console.WriteLine($"[Warning] Failed to read from DeckWordCache: {ex.Message}");
                     }
                 }
-        
+
                 DeckWord? processedWord = null;
                 bool isProcessed = false;
                 int attemptCount = 0;
                 const int maxAttempts = 3; // Limit how many attempts we make to prevent infinite loops
-        
+
                 do
                 {
                     attemptCount++;
@@ -411,12 +412,36 @@ namespace Jiten.Parser
                         }
                         else
                         {
-                            var result = await DeconjugateWord(wordData);
-                            processedWord = result.word;
+                            var nounResult = await DeconjugateWord(wordData);
+                            if (!nounResult.success || nounResult.word == null)
+                            {
+                                // The word might be a verb or an adjective misparsed as a noun like らしく
+                                var oldPos = wordData.wordInfo.PartOfSpeech;
+                                wordData.wordInfo.PartOfSpeech = PartOfSpeech.Verb;
+                                var verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
+                                if (!verbResult.success || verbResult.word == null)
+                                {
+                                    wordData.wordInfo.PartOfSpeech = PartOfSpeech.IAdjective;
+                                    verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
+                                }
+                                
+                                if (!verbResult.success || verbResult.word == null)
+                                {
+                                    wordData.wordInfo.PartOfSpeech = PartOfSpeech.NaAdjective;
+                                    verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
+                                }
+
+                                wordData.wordInfo.PartOfSpeech = oldPos;
+                                processedWord = verbResult.word;
+                            }
+                            else
+                            {
+                                processedWord = nounResult.word;
+                            }
                         }
-        
+
                         if (processedWord != null) break;
-        
+
                         // We haven't found a match, let's try to remove the last character if it's a っ, a ー or a duplicate
                         if (wordData.wordInfo.Text.Length > 2 &&
                             (wordData.wordInfo.Text[^1] == 'っ' || wordData.wordInfo.Text[^1] == 'ー' ||
@@ -438,7 +463,7 @@ namespace Jiten.Parser
                         {
                             isProcessed = true;
                         }
-                        
+
                         // Also stop if we've made too many attempts
                         if (attemptCount >= maxAttempts)
                         {
@@ -452,31 +477,28 @@ namespace Jiten.Parser
                         isProcessed = true;
                     }
                 } while (!isProcessed);
-        
-                if (processedWord != null)
+
+                if (processedWord == null) return processedWord;
+
+                processedWord.Occurrences = wordData.occurrences;
+
+                if (!UseCache) return processedWord;
+                try
                 {
-                    processedWord.Occurrences = wordData.occurrences;
-        
-                    if (UseCache)
-                    {
-                        try
-                        {
-                            await DeckWordCache.SetAsync(cacheKey,
-                                                         new DeckWord
-                                                         {
-                                                             WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
-                                                             ReadingIndex = processedWord.ReadingIndex,
-                                                             Conjugations = processedWord.Conjugations,
-                                                             PartsOfSpeech = processedWord.PartsOfSpeech, Origin = processedWord.Origin
-                                                         }, CommandFlags.FireAndForget);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[Warning] Failed to write to DeckWordCache: {ex.Message}");
-                        }
-                    }
+                    await DeckWordCache.SetAsync(cacheKey,
+                                                 new DeckWord
+                                                 {
+                                                     WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
+                                                     ReadingIndex = processedWord.ReadingIndex, Conjugations = processedWord.Conjugations,
+                                                     PartsOfSpeech = processedWord.PartsOfSpeech, Origin = processedWord.Origin
+                                                 }, CommandFlags.FireAndForget);
                 }
-        
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Warning] Failed to write to DeckWordCache: {ex.Message}");
+                }
+
+
                 return processedWord;
             }
             finally
@@ -524,26 +546,26 @@ namespace Jiten.Parser
                     Console.WriteLine($"Error retrieving word cache: {ex.Message}");
                     return (false, null);
                 }
-        
+
                 // Early return if we got no words from cache to avoid NullReferenceException
                 if (wordCache.Count == 0)
                 {
                     return (false, null);
                 }
-        
+
                 List<JmDictWord> matches = new();
                 JmDictWord? bestMatch = null;
-        
+
                 foreach (var id in candidates)
                 {
                     if (!wordCache.TryGetValue(id, out var word)) continue;
-        
+
                     List<PartOfSpeech> pos = word.PartsOfSpeech.ToPartOfSpeech();
                     if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
-        
+
                     matches.Add(word);
                 }
-        
+
                 if (matches.Count == 0)
                 {
                     if (candidates.Count > 0 && wordCache.TryGetValue(candidates[0], out var fallbackWord))
@@ -644,7 +666,7 @@ namespace Jiten.Parser
             try
             {
                 wordCache = await JmDictCache.GetWordsAsync(allCandidateIds);
-                
+
                 // Check if we got any results
                 if (wordCache.Count == 0)
                 {

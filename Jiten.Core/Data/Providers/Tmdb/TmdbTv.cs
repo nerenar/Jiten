@@ -10,17 +10,17 @@ public class TmdbTv
     /// Japanese title
     /// </summary>
     [JsonPropertyName("original_name")]
-    public string OriginalName { get; set; }
+    public required string OriginalName { get; set; }
 
     /// <summary>
     /// English or romaji title
     /// </summary>
     [JsonPropertyName("name")]
-    public string Name { get; set; }
+    public required string Name { get; set; }
 
     [JsonPropertyName("first_air_date")] public DateTime FirstAirDate { get; set; }
 
     [JsonPropertyName("poster_path")] public string? PosterPath { get; set; }
     
-    [JsonPropertyName("overview")] public string Description { get; set; } 
+    [JsonPropertyName("overview")] public required string Description { get; set; } 
 }

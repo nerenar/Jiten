@@ -2,7 +2,7 @@ namespace Jiten.Core.Data.Providers;
 
 public class Metadata
 {
-    public string FilePath { get; set; }
+    public string? FilePath { get; set; }
     public string OriginalTitle { get; set; } = "Unknown";
     public string? RomajiTitle { get; set; }
     public string? EnglishTitle { get; set; }

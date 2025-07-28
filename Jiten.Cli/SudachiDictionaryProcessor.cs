@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using CsvHelper;
 using CsvHelper.Configuration;
@@ -7,7 +6,6 @@ namespace Jiten.Cli;
 
 public class SudachiDictionaryProcessor
 {
-    // CsvHelper class mapping, now matching the official documentation.
     public class SudachiLexiconRecord
     {
         // Columns 0-3
@@ -68,48 +66,6 @@ public class SudachiDictionaryProcessor
         return info;
     }
 
-    private class WordIdMappingContext
-    {
-        public Dictionary<string, int> OriginalFileSizes { get; } = new Dictionary<string, int>();
-        public Dictionary<string, int> NewFileSizes { get; } = new Dictionary<string, int>();
-        public Dictionary<int, int> OldToNewGlobalIdMap { get; } = new Dictionary<int, int>();
-
-        public int GetOriginalGlobalId(string fileName, int localIndex)
-        {
-            int baseOffset = 0;
-            if (fileName.Contains("core_lex") && !fileName.Contains("notcore"))
-            {
-                baseOffset = OriginalFileSizes["small_lex.csv"];
-            }
-            else if (fileName.Contains("notcore_lex"))
-            {
-                baseOffset = OriginalFileSizes["small_lex.csv"] + OriginalFileSizes["core_lex.csv"];
-            }
-
-            return baseOffset + localIndex;
-        }
-
-        public int GetNewLocalId(int newGlobalId)
-        {
-            // Determine which file this ID belongs to in the new structure
-            int smallLexSize = NewFileSizes.GetValueOrDefault("small_lex.csv", 0);
-            int coreLexSize = NewFileSizes.GetValueOrDefault("core_lex.csv", 0);
-
-            if (newGlobalId < smallLexSize)
-            {
-                return newGlobalId;
-            }
-            else if (newGlobalId < smallLexSize + coreLexSize)
-            {
-                return newGlobalId - smallLexSize;
-            }
-            else
-            {
-                return newGlobalId - smallLexSize - coreLexSize;
-            }
-        }
-    }
-
     public class PruningContext
     {
         // Holds all records from all files, mapped by a unique global ID
@@ -148,123 +104,45 @@ public class SudachiDictionaryProcessor
         }
     }
 
-
-private static void EnsureConnectionIdCoverage(PruningContext context)
-{
-    // Pre-group all records by their connection IDs for efficient lookups.
-    // This is done once outside the loop.
-    var leftIdGroups = context.AllRecords.Values
-                              .GroupBy(r => r.LeftId)
-                              .ToDictionary(g => g.Key, g => g.ToList());
-    var rightIdGroups = context.AllRecords.Values
-                               .GroupBy(r => r.RightId)
-                               .ToDictionary(g => g.Key, g => g.ToList());
-
-    int iteration = 0;
-    bool newRecordsAdded;
-    do
+    private static void PreserveAllConnectionIdDefinitions(PruningContext context)
     {
-        iteration++;
-        newRecordsAdded = false;
-        int recordsAddedThisIteration = 0;
+        Console.WriteLine("Finding one representative for each unique Left/Right connection ID...");
+        // Use dictionaries to efficiently find the first record for each unique ID.
+        // Key: Connection ID, Value: Global ID of the representative record.
+        var leftIdRepresentatives = new Dictionary<int, int>();
+        var rightIdRepresentatives = new Dictionary<int, int>();
 
-        // 1. Find all connection IDs used by the records we are *currently* keeping.
-        // This set grows with each iteration if new records are added.
-        var targetLeftIds = new HashSet<int>();
-        var targetRightIds = new HashSet<int>();
-        foreach (var globalId in context.GlobalIdsToKeep)
+        // Iterate through all records once to find representatives.
+        foreach (var (globalId, record) in context.AllRecords)
         {
-            var record = context.AllRecords[globalId];
-            targetLeftIds.Add(record.LeftId);
-            targetRightIds.Add(record.RightId);
-        }
-
-        // Helper function to check for coverage and add a record if needed.
-        // Returns true if a record was added.
-        bool findAndAdd(HashSet<int> targetIds, Dictionary<int, List<SudachiLexiconRecord>> groups)
-        {
-            bool added = false;
-            foreach (var id in targetIds)
+            if (!leftIdRepresentatives.ContainsKey(record.LeftId))
             {
-                if (groups.TryGetValue(id, out var entries))
-                {
-                    // Check if any of the entries for this connection ID are already in our keep set.
-                    bool isCovered = entries.Any(e =>
-                        context.GlobalIdsToKeep.Contains(
-                            context.GetOriginalGlobalId(e.SourceFileName, e.OriginalIndex)
-                        )
-                    );
-
-                    if (!isCovered)
-                    {
-                        // Not covered. Add the first available entry to ensure the ID is present.
-                        // This new entry might have new connection IDs of its own, which is why we loop.
-                        var entryToAdd = entries[0];
-                        int globalIdToAdd = context.GetOriginalGlobalId(entryToAdd.SourceFileName, entryToAdd.OriginalIndex);
-                        if (context.GlobalIdsToKeep.Add(globalIdToAdd))
-                        {
-                            added = true;
-                            recordsAddedThisIteration++;
-                        }
-                    }
-                }
+                leftIdRepresentatives[record.LeftId] = globalId;
             }
-            return added;
+
+            if (!rightIdRepresentatives.ContainsKey(record.RightId))
+            {
+                rightIdRepresentatives[record.RightId] = globalId;
+            }
         }
 
-        // 2. Run the check for both Left and Right IDs.
-        bool addedFromLeft = findAndAdd(targetLeftIds, leftIdGroups);
-        bool addedFromRight = findAndAdd(targetRightIds, rightIdGroups);
+        // Add the global IDs of these representative records to the final set to keep.
+        // This forms the non-prunable "base" of the dictionary.
+        int initialKeepCount = context.GlobalIdsToKeep.Count;
 
-        newRecordsAdded = addedFromLeft || addedFromRight;
-
-        if (newRecordsAdded)
+        foreach (var globalId in leftIdRepresentatives.Values)
         {
-            Console.WriteLine($"  └─ Iteration {iteration}: Added {recordsAddedThisIteration} records for connection ID coverage.");
+            context.GlobalIdsToKeep.Add(globalId);
         }
 
-    } while (newRecordsAdded); // Loop until a pass completes with no new additions.
-
-    Console.WriteLine($"  └─ Connection ID coverage stable after {iteration} iterations.");
-}
-
-private static void PreserveAllConnectionIdDefinitions(PruningContext context)
-{
-    Console.WriteLine("Finding one representative for each unique Left/Right connection ID...");
-    // Use dictionaries to efficiently find the first record for each unique ID.
-    // Key: Connection ID, Value: Global ID of the representative record.
-    var leftIdRepresentatives = new Dictionary<int, int>();
-    var rightIdRepresentatives = new Dictionary<int, int>();
-
-    // Iterate through all records once to find representatives.
-    foreach (var (globalId, record) in context.AllRecords)
-    {
-        if (!leftIdRepresentatives.ContainsKey(record.LeftId))
+        foreach (var globalId in rightIdRepresentatives.Values)
         {
-            leftIdRepresentatives[record.LeftId] = globalId;
+            context.GlobalIdsToKeep.Add(globalId);
         }
-        if (!rightIdRepresentatives.ContainsKey(record.RightId))
-        {
-            rightIdRepresentatives[record.RightId] = globalId;
-        }
-    }
 
-    // Add the global IDs of these representative records to the final set to keep.
-    // This forms the non-prunable "base" of the dictionary.
-    int initialKeepCount = context.GlobalIdsToKeep.Count;
-
-    foreach (var globalId in leftIdRepresentatives.Values)
-    {
-        context.GlobalIdsToKeep.Add(globalId);
+        int addedCount = context.GlobalIdsToKeep.Count - initialKeepCount;
+        Console.WriteLine($"  └─ Preserved {addedCount} records to cover all {leftIdRepresentatives.Count} LeftIDs and {rightIdRepresentatives.Count} RightIDs.");
     }
-    foreach (var globalId in rightIdRepresentatives.Values)
-    {
-        context.GlobalIdsToKeep.Add(globalId);
-    }
-    
-    int addedCount = context.GlobalIdsToKeep.Count - initialKeepCount;
-    Console.WriteLine($"  └─ Preserved {addedCount} records to cover all {leftIdRepresentatives.Count} LeftIDs and {rightIdRepresentatives.Count} RightIDs.");
-}
 
     private static void BuildFinalGlobalWordIdMapping(PruningContext context)
     {
@@ -307,9 +185,6 @@ private static void PreserveAllConnectionIdDefinitions(PruningContext context)
             await using var csv = new CsvWriter(writer, GetCsvConfig());
 
             var recordsToWrite = group.OrderBy(r => r.OriginalIndex);
-
-
-
 
 
             foreach (var record in recordsToWrite)
@@ -409,51 +284,7 @@ private static void PreserveAllConnectionIdDefinitions(PruningContext context)
 
         return newGlobalId - smallLexSize - coreLexSize;
     }
-
-
-    private static Dictionary<int, int> CreateGlobalWordIdMapping(
-        List<SudachiLexiconRecord> allKeptRecords)
-    {
-        var globalMapping = new Dictionary<int, int>();
-
-        // Sort records by source file and original index to maintain order
-        var sortedRecords = allKeptRecords
-                            .OrderBy(r => GetFileOrder(r.SourceFileName))
-                            .ThenBy(r => r.OriginalIndex)
-                            .ToList();
-
-        // Assign new global IDs
-        for (int i = 0; i < sortedRecords.Count; i++)
-        {
-            var record = sortedRecords[i];
-            int oldGlobalId = CalculateGlobalWordId(record.SourceFileName, record.OriginalIndex);
-            globalMapping[oldGlobalId] = i;
-        }
-
-        return globalMapping;
-    }
-
-// Helper to calculate global word ID based on file and local index
-    private static int CalculateGlobalWordId(string fileName, int localIndex)
-    {
-        // This depends on how Sudachi calculates global word IDs
-        // Typically it's: small_lex entries first, then core_lex, then notcore_lex
-        int baseOffset = 0;
-        if (fileName.Contains("core_lex") && !fileName.Contains("notcore"))
-        {
-            // You need to know how many entries were in small_lex originally
-            // This is a simplified version - you'll need the actual count
-            baseOffset = GetOriginalSmallLexCount();
-        }
-        else if (fileName.Contains("notcore_lex"))
-        {
-            baseOffset = GetOriginalSmallLexCount() + GetOriginalCoreLexCount();
-        }
-
-        return baseOffset + localIndex;
-    }
-
-// Helper to determine file order
+    
     private static int GetFileOrder(string fileName)
     {
         if (fileName.Contains("small_lex")) return 0;
@@ -462,7 +293,6 @@ private static void PreserveAllConnectionIdDefinitions(PruningContext context)
         return 3;
     }
 
-// Store original file sizes
     private static Dictionary<string, int> _originalFileSizes = new Dictionary<string, int>();
 
     private static void RecordOriginalFileSize(string filePath)
@@ -482,52 +312,48 @@ private static void PreserveAllConnectionIdDefinitions(PruningContext context)
         return _originalFileSizes.GetValueOrDefault("core_lex.csv", 0);
     }
 
-public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<string> allReadings)
-{
-    try
+    public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<string> allReadings)
     {
-        var smallLexPath = Path.Combine(folderPath, "small_lex.csv");
-        var coreLexPath = Path.Combine(folderPath, "core_lex.csv");
-        var notCoreLexPath = Path.Combine(folderPath, "notcore_lex.csv");
-        var filePaths = new[] { smallLexPath, coreLexPath, notCoreLexPath };
+        try
+        {
+            var smallLexPath = Path.Combine(folderPath, "small_lex.csv");
+            var coreLexPath = Path.Combine(folderPath, "core_lex.csv");
+            var notCoreLexPath = Path.Combine(folderPath, "notcore_lex.csv");
+            var filePaths = new[] { smallLexPath, coreLexPath, notCoreLexPath };
 
-        var context = new PruningContext();
+            var context = new PruningContext();
 
-        // --- Pass 1: Load all records ---
-        Console.WriteLine("Pass 1: Loading all dictionary records...");
-        LoadAllRecords(filePaths, context);
+            // --- Pass 1: Load all records ---
+            Console.WriteLine("Pass 1: Loading all dictionary records...");
+            LoadAllRecords(filePaths, context);
 
-        // --- Pass 2: Preserve the entire connection matrix structure (THE FIX) ---
-        Console.WriteLine("Pass 2: Preserving connection matrix structure...");
-        PreserveAllConnectionIdDefinitions(context);
+            // --- Pass 2: Preserve the entire connection matrix structure (THE FIX) ---
+            Console.WriteLine("Pass 2: Preserving connection matrix structure...");
+            PreserveAllConnectionIdDefinitions(context);
 
-        // --- Pass 3: Identify user-defined entries to keep ---
-        Console.WriteLine("Pass 3: Identifying initial set of entries to keep based on readings...");
-        MarkInitialEntriesToKeep(context, allReadings);
+            // --- Pass 3: Identify user-defined entries to keep ---
+            Console.WriteLine("Pass 3: Identifying initial set of entries to keep based on readings...");
+            MarkInitialEntriesToKeep(context, allReadings);
 
-        // --- Pass 4: Recursively find all dependencies ---
-        Console.WriteLine("Pass 4: Finding all required component entries...");
-        ResolveComponentDependencies(context, allReadings);
-        
-        // --- REMOVE THE OLD STEP ---
-        // Console.WriteLine("Pass 3: Ensuring connection ID coverage...");
-        // EnsureConnectionIdCoverage(context); // This is no longer needed.
+            // --- Pass 4: Recursively find all dependencies ---
+            Console.WriteLine("Pass 4: Finding all required component entries...");
+            ResolveComponentDependencies(context, allReadings);
 
-        // --- Pass 5: Build the final Word ID map ---
-        Console.WriteLine("Pass 5: Building final global word ID mapping...");
-        BuildFinalGlobalWordIdMapping(context);
+            // --- Pass 5: Build the final Word ID map ---
+            Console.WriteLine("Pass 5: Building final global word ID mapping...");
+            BuildFinalGlobalWordIdMapping(context);
 
-        // --- Pass 6: Write the new pruned files ---
-        Console.WriteLine("Pass 6: Writing pruned dictionary files...");
-        await WriteAllPrunedFiles(filePaths, context);
+            // --- Pass 6: Write the new pruned files ---
+            Console.WriteLine("Pass 6: Writing pruned dictionary files...");
+            await WriteAllPrunedFiles(filePaths, context);
 
-        Console.WriteLine("Pruning complete.");
+            Console.WriteLine("Pruning complete.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error processing Sudachi dictionaries: {ex.Message}\n{ex.StackTrace}");
+        }
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error processing Sudachi dictionaries: {ex.Message}\n{ex.StackTrace}");
-    }
-}
 
     private static void LoadAllRecords(string[] filePaths, PruningContext context)
     {
@@ -566,7 +392,6 @@ public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<s
 
     private static void MarkInitialEntriesToKeep(PruningContext context, HashSet<string> allReadings)
     {
-        // This dictionary helps us find all conjugations of a word
         var normalizedFormToGlobalIds = context.AllRecords.Values
                                                .Where(r => !string.IsNullOrEmpty(r.NormalizedForm) && r.NormalizedForm != "*")
                                                .GroupBy(r => r.NormalizedForm)
@@ -576,25 +401,20 @@ public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<s
 
         foreach (var record in context.AllRecords.Values)
         {
-            // Your primary keep logic
             bool shouldKeep = (record.Pos1 == "動詞" || record.Pos1 == "空白") ||
                               (allReadings.Contains(record.Surface) &&
-                               !(record.Pos1 == "名詞" && record.Pos2 == "固有名詞" && record.Surface.Length > 4) &&
-                               !(record.Pos1 == "名詞" && record.Surface.Length > 8));
+                               !(record is { Pos1: "名詞", Pos2: "固有名詞", Surface.Length: > 4 }) &&
+                               !(record is { Pos1: "名詞", Surface.Length: > 8 }));
 
-            if (shouldKeep)
+            if (!shouldKeep) continue;
+            int globalId = context.GetOriginalGlobalId(record.SourceFileName, record.OriginalIndex);
+            context.GlobalIdsToKeep.Add(globalId);
+
+            // Also keep all related conjugations
+            if (!normalizedFormToGlobalIds.TryGetValue(record.NormalizedForm, out var conjugationIds)) continue;
+            foreach (var id in conjugationIds)
             {
-                int globalId = context.GetOriginalGlobalId(record.SourceFileName, record.OriginalIndex);
-                context.GlobalIdsToKeep.Add(globalId);
-
-                // Also keep all related conjugations
-                if (normalizedFormToGlobalIds.TryGetValue(record.NormalizedForm, out var conjugationIds))
-                {
-                    foreach (var id in conjugationIds)
-                    {
-                        context.GlobalIdsToKeep.Add(id);
-                    }
-                }
+                context.GlobalIdsToKeep.Add(id);
             }
         }
     }
@@ -610,9 +430,6 @@ public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<s
             if (!context.AllRecords.TryGetValue(globalId, out var record)) continue;
 
             var componentIds = new HashSet<int>();
-            // NOTE: Component IDs in SplitInfo are LOCAL to the dictionary they are defined in.
-            // For core_lex and notcore_lex, they almost always refer to small_lex.
-            // This logic assumes components for a word in `core_lex` or `notcore_lex` refer to `small_lex`.
             string componentSourceFile = "small_lex.csv";
             ExtractComponentIds(record.SplitInfoAUnit, componentIds);
             ExtractComponentIds(record.SplitInfoBUnit, componentIds);
@@ -622,18 +439,12 @@ public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<s
                 // Convert the local component ID to its global ID
                 int componentGlobalId = context.GetOriginalGlobalId(componentSourceFile, localComponentId);
 
-                if (visited.Add(componentGlobalId)) // If it's a newly discovered component
-                {
-                    if (context.AllRecords.TryGetValue(componentGlobalId, out var componentRecord))
-                    {
-                        // You might want a less strict filter for components
-                        if (ShouldKeepAsComponent(componentRecord.Surface, componentRecord.Pos1, componentRecord.Pos2, allReadings))
-                        {
-                            context.GlobalIdsToKeep.Add(componentGlobalId);
-                            queue.Enqueue(componentGlobalId); // Add its dependencies to the queue
-                        }
-                    }
-                }
+                if (!visited.Add(componentGlobalId)) continue; // If it's a newly discovered component
+                if (!context.AllRecords.TryGetValue(componentGlobalId, out var componentRecord)) continue;
+                if (!ShouldKeepAsComponent(componentRecord.Surface, componentRecord.Pos1, componentRecord.Pos2, allReadings))
+                    continue;
+                context.GlobalIdsToKeep.Add(componentGlobalId);
+                queue.Enqueue(componentGlobalId); // Add its dependencies to the queue
             }
         }
     }
@@ -650,12 +461,19 @@ public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<s
             return true;
         }
 
-        if (pos == "動詞" || pos == "空白" || pos == "助詞" || pos == "助動詞" || pos == "接続詞" || pos == "感動詞" || pos == "接頭詞" ||
-            pos == "接尾詞") return true;
-        if (pos == "名詞" && subPos1 == "固有名詞") return surfaceForm.Length <= 2;
-        if (pos == "名詞") return surfaceForm.Length <= 2;
-        if ((pos == "形容詞" || pos == "副詞") && surfaceForm.Length <= 3) return true;
-        return surfaceForm.Length <= 2;
+        switch (pos)
+        {
+            case "動詞" or "空白" or "助詞" or "助動詞" or "接続詞" or "感動詞" or "接頭詞" or "接尾詞":
+                return true;
+            case "名詞" when subPos1 == "固有名詞":
+                return surfaceForm.Length <= 2;
+            case "名詞":
+                return surfaceForm.Length <= 2;
+            case "形容詞" or "副詞" when surfaceForm.Length <= 3:
+                return true;
+            default:
+                return surfaceForm.Length <= 2;
+        }
     }
 
     private static void ExtractComponentIds(string splitInfo, HashSet<int> componentIds)
@@ -668,5 +486,4 @@ public static async Task PruneAndFixSudachiCsvFiles(string folderPath, HashSet<s
             if (int.TryParse(part, out var lineId)) componentIds.Add(lineId);
         }
     }
-
 }

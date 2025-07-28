@@ -5,5 +5,5 @@ namespace Jiten.Core.Data.Providers.Igdb;
 public class IgdbCover
 {
     [JsonPropertyName("url")]
-    public string Url { get; set; }
+    public required string Url { get; set; }
 }
