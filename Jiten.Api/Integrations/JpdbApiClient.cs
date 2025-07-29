@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace Jiten.Api.Integrations;
 
 using System;
@@ -20,6 +22,9 @@ public class JpdbApiClient : IDisposable
     {
         if (string.IsNullOrEmpty(apiKey))
             throw new ArgumentNullException(nameof(apiKey));
+
+        ServicePointManager.ServerCertificateValidationCallback = 
+            (sender, certificate, chain, sslPolicyErrors) => true;
 
         _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
