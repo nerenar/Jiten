@@ -114,14 +114,14 @@ public static class YomitanHelper
         {
             var indexEntry = archive.CreateEntry("index.json", CompressionLevel.Optimal);
             await using (var entryStream = indexEntry.Open())
-            await using (var streamWriter = new StreamWriter(entryStream, Encoding.UTF8))
+            await using (var streamWriter = new StreamWriter(entryStream, new UTF8Encoding(false)))
             {
                 await streamWriter.WriteAsync(indexJson);
             }
 
             var termBankEntry = archive.CreateEntry("term_meta_bank_1.json", CompressionLevel.Optimal);
             await using (var entryStream = termBankEntry.Open())
-            await using (var streamWriter = new StreamWriter(entryStream, Encoding.UTF8))
+            await using (var streamWriter = new StreamWriter(entryStream, new UTF8Encoding(false)))
             {
                 await streamWriter.WriteAsync(termBankJson);
             }
@@ -266,14 +266,14 @@ public static class YomitanHelper
         {
             var indexEntry = archive.CreateEntry("index.json", CompressionLevel.Optimal);
             await using (var entryStream = indexEntry.Open())
-            await using (var streamWriter = new StreamWriter(entryStream, Encoding.UTF8))
+            await using (var streamWriter = new StreamWriter(entryStream, new UTF8Encoding(false)))
             {
                 await streamWriter.WriteAsync(indexJson);
             }
 
             var termBankEntry = archive.CreateEntry("term_meta_bank_1.json", CompressionLevel.Optimal);
             await using (var entryStream = termBankEntry.Open())
-            await using (var streamWriter = new StreamWriter(entryStream, Encoding.UTF8))
+            await using (var streamWriter = new StreamWriter(entryStream, new UTF8Encoding(false)))
             {
                 await streamWriter.WriteAsync(termBankJson);
             }

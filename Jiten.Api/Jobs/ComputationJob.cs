@@ -64,7 +64,7 @@ public class ComputationJob(JitenDbContext context, IConfiguration configuration
 
         // Create CSV file
         using var stream = new MemoryStream();
-        await using var writer = new StreamWriter(stream, Encoding.UTF8);
+        await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
         await using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
 
         // Create anonymous object for CsvWriter
