@@ -110,7 +110,7 @@
       const knownWordIds = excludeKnownWords.value ? store.getKnownWordIds() || [] : [];
 
       const response = await $api<File>(url, {
-        method: "POST",
+        method: 'POST',
         body: {
           format: format.value,
           downloadType: downloadType.value,
@@ -120,12 +120,12 @@
           excludeKana: excludeKana.value,
           excludeKnownWords: excludeKnownWords.value,
           excludeExampleSentences: excludeExampleSentences.value,
-          knownWordIds: knownWordIds
+          knownWordIds: knownWordIds,
         },
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
-        responseType: "blob"
+        responseType: 'blob',
       });
 
       if (response) {
@@ -138,6 +138,8 @@
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.csv`);
         } else if (format.value === DeckFormat.Txt || format.value === DeckFormat.TxtRepeated) {
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.txt`);
+        } else if (format.value === DeckFormat.Yomitan) {
+          link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.zip`);
         }
 
         document.body.appendChild(link);
@@ -168,7 +170,7 @@
 </script>
 
 <template>
-  <Dialog v-model:visible="localVisible" modal :header="`Download deck ${localiseTitle(deck)}`" :style="{ width: '30rem' }">
+  <Dialog v-model:visible="localVisible" modal :header="`Download deck ${localiseTitle(deck)}`" :style="{ width: '35rem' }">
     <div class="flex flex-col gap-2">
       <div>
         <div class="text-gray-500 text-sm">Format</div>
@@ -185,6 +187,11 @@
         Plain text format, one word per line, vocabulary only. <br />
         The vocabulary is repeated for each occurrence to handle frequency on some websites.
       </span>
+      <span v-if="format == DeckFormat.Yomitan" class="text-sm">
+        A zip file that can be imported as a yomitan dictionary. <br />
+        It will show the number of occurrences of a word in the selected media.
+      </span>
+      <template v-if="format != DeckFormat.Yomitan">
       <div>
         <div class="text-gray-500 text-sm">Filter type</div>
         <Select v-model="downloadType" :options="downloadTypes" option-value="value" option-label="label" size="small" />
@@ -217,7 +224,7 @@
       </div>
       <Accordion>
         <AccordionPanel value="0">
-          <AccordionHeader> Advanced </AccordionHeader>
+          <AccordionHeader> Advanced</AccordionHeader>
           <AccordionContent>
             <div class="flex flex-col gap-2">
               <div class="text-sm text-gray-500">These options might not be reflected in the card count below.</div>
@@ -241,6 +248,7 @@
       <div>
         This will download <span class="font-bold">{{ currentCardAmount }} cards</span>.
       </div>
+      </template>
       <div class="flex justify-center">
         <Button type="button" label="Download" @click="downloadFile()" />
       </div>

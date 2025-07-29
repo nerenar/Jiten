@@ -4,6 +4,8 @@
   import ConfirmDialog from 'primevue/confirmdialog';
   import Badge from 'primevue/badge';
   import Card from 'primevue/card';
+  import InputText from 'primevue/inputtext';
+  import Checkbox from 'primevue/checkbox';
 
   import { useJitenStore } from '~/stores/jitenStore';
   import { useToast } from 'primevue/usetoast';
@@ -38,6 +40,49 @@
 
   const vidRegex = /"vid"\s*:\s*(\d+)/g;
   const isLoading = ref(false);
+  const jpdbApiKey = ref('');
+  const blacklistedAsKnown = ref(true);
+  const dueAsKnown = ref(true);
+  const suspendedAsKnown = ref(true);
+
+  async function importFromJpdbApi() {
+    if (!jpdbApiKey.value) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Please enter your JPDB API key.', life: 5000 });
+      return;
+    }
+
+    try {
+      isLoading.value = true;
+      toast.add({ severity: 'info', summary: 'Processing', detail: 'Importing from JPDB API...', life: 5000 });
+
+      const response = await $api<number[]>('vocabulary/import-from-jpdb', {
+        method: 'POST',
+        body: {
+          apiKey: jpdbApiKey.value,
+          blacklistedAsKnown: blacklistedAsKnown.value,
+          dueAsKnown: dueAsKnown.value,
+          suspendedAsKnown: suspendedAsKnown.value
+        }
+      });
+
+      if (response && response.length > 0) {
+        store.addKnownWordIds(response);
+        toast.add({ severity: 'success', summary: 'Success', detail: `Imported ${response.length} word IDs from JPDB.`, life: 5000 });
+        await nextTick();
+        knownWordIdsAmount.value = store.getKnownWordIds().length;
+        console.log(`Imported word IDs from JPDB: ${response.length}`, response);
+      } else {
+        toast.add({ severity: 'info', summary: 'No words added', detail: 'No words were found or imported from JPDB.', life: 5000 });
+      }
+    } catch (error) {
+      console.error('Error importing from JPDB API:', error);
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to import from JPDB API. Please check your API key and try again.', life: 5000 });
+    } finally {
+      isLoading.value = false;
+      // Clear the API key for security
+      jpdbApiKey.value = '';
+    }
+  }
 
   async function handleJpdbFileSelect(event) {
     const file = event.files?.[0];
@@ -287,9 +332,52 @@
 
     <Card class="mb-4">
       <template #title>
-        <h3 class="text-lg font-semibold">Upload JPDB Word List (JSON)</h3>
+        <h3 class="text-lg font-semibold">Import from JPDB API</h3>
       </template>
       <template #content>
+        <p class="mb-2">You can find your API key on the bottom of the settings page (<a href="https://jpdb.io/settings" target="_blank" class="text-primary-500 hover:underline">https://jpdb.io/settings</a>)</p>
+        <p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
+          Your API key will only be used for the import and won't be saved anywhere.
+        </p>
+
+        <div class="mb-3">
+          <span class="p-float-label">
+            <InputText id="jpdbApiKey" v-model="jpdbApiKey" class="w-full" />
+            <label for="jpdbApiKey">JPDB API Key</label>
+          </span>
+        </div>
+
+        <div class="mb-3 flex flex-col gap-2">
+          <div class="flex items-center">
+            <Checkbox id="blacklistedAsKnown" v-model="blacklistedAsKnown" :binary="true" />
+            <label for="blacklistedAsKnown" class="ml-2">Consider <strong>blacklisted</strong> as known (please check your blacklisted settings on JPDB)</label>
+          </div>
+          <div class="flex items-center">
+            <Checkbox id="dueAsKnown" v-model="dueAsKnown" :binary="true" />
+            <label for="dueAsKnown" class="ml-2">Consider <strong>due</strong> as known</label>
+          </div>
+          <div class="flex items-center">
+            <Checkbox id="suspendedAsKnown" v-model="suspendedAsKnown" :binary="true" />
+            <label for="suspendedAsKnown" class="ml-2">Consider <strong>suspended</strong> as known</label>
+          </div>
+        </div>
+
+        <Button 
+          label="Import from JPDB" 
+          icon="pi pi-download" 
+          :disabled="!jpdbApiKey" 
+          @click="importFromJpdbApi" 
+          class="w-full md:w-auto"
+        />
+      </template>
+    </Card>
+
+    <Card class="mb-4">
+      <template #title>
+        <h3 class="text-lg font-semibold">(Obsolete) Upload JPDB Word List (JSON)</h3>
+      </template>
+      <template #content>
+        <p class="mb-2">Obsolete, please use the API method instead for better results.</p>
         <p class="mb-2">You can find the file in the settings > Data Export > button Export reviews (.json)</p>
         <p class="mb-3 text-sm text-amber-600 dark:text-amber-400">
           Warning: This will not add blacklisted words. If you blacklisted common words, please use the "Add words between global frequency" option below.
@@ -365,7 +453,7 @@
     <!-- Loading overlay -->
     <div v-if="isLoading" class="loading-overlay">
       <i class="pi pi-spin pi-spinner" style="font-size: 2rem"/>
-      <p>Processing Anki file...</p>
+      <p>Processing you data...</p>
     </div>
   </div>
 </template>

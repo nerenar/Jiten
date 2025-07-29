@@ -68,74 +68,110 @@
     <template v-if="!isCompact" #subtitle>{{ getMediaTypeText(deck.mediaType) }}</template>
     <template #content>
       <div class="flex-gap-6">
-        <div class="flex-1">
-          <div class="flex flex-col md:flex-row gap-x-8 gap-y-2">
+        <div class="flex-1 max-w-full overflow-hidden">
+          <div class="flex flex-col md:flex-row gap-x-4 gap-y-2 w-full">
             <div v-if="!isCompact" class="text-left text-sm md:text-center">
               <img :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName" :alt="deck.originalTitle" class="h-48 w-34 min-w-34" />
-              {{formatDateAsYyyyMmDd(new Date(deck.releaseDate)).replace(/-/g,'/')}}
+              {{ formatDateAsYyyyMmDd(new Date(deck.releaseDate)).replace(/-/g, '/') }}
             </div>
             <div>
-              <div class="flex flex-col gap-x-8 gap-y-2" :class="isCompact ? '' : 'md:flex-row'">
+              <div class="flex flex-col gap-x-6 gap-y-2" :class="isCompact ? '' : 'md:flex-row md:flex-wrap'">
                 <div class="w-full md:w-64">
-                  <div class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Character count</span>
-                    <span class="ml-8 tabular-nums">{{ deck.characterCount.toLocaleString() }}</span>
+                  <div class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Character count</span>
+                    <span class="tabular-nums font-semibold">{{ deck.characterCount.toLocaleString() }}</span>
                   </div>
-                  <div class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Word count</span>
-                    <span class="ml-8 tabular-nums">{{ deck.wordCount.toLocaleString() }}</span>
+                  <div class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Word count</span>
+                    <span class="tabular-nums font-semibold">{{ deck.wordCount.toLocaleString() }}</span>
                   </div>
-                  <div class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Unique words</span>
-                    <span class="ml-8 tabular-nums">{{ deck.uniqueWordCount.toLocaleString() }}</span>
+                  <div class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Unique words</span>
+                    <span class="tabular-nums font-semibold">{{ deck.uniqueWordCount.toLocaleString() }}</span>
                   </div>
-                  <div class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Unique words used once</span>
-                    <span class="ml-8 tabular-nums">{{ deck.uniqueWordUsedOnceCount.toLocaleString() }}</span>
+                  <div class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Words (1-occurrence)</span>
+                    <span class="tabular-nums font-semibold">{{ deck.uniqueWordUsedOnceCount.toLocaleString() }}</span>
                   </div>
                 </div>
 
                 <div class="w-full md:w-64">
-                  <div class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Unique kanji</span>
-                    <span class="ml-8 tabular-nums">{{ deck.uniqueKanjiCount.toLocaleString() }}</span>
+                  <div class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Unique kanji</span>
+                    <span class="tabular-nums font-semibold">{{ deck.uniqueKanjiCount.toLocaleString() }}</span>
                   </div>
-                  <div class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Unique kanji used once</span>
-                    <span class="ml-8 tabular-nums">{{ deck.uniqueKanjiUsedOnceCount.toLocaleString() }}</span>
+                  <div class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Kanji (1-occurrence)</span>
+                    <span class="tabular-nums font-semibold">{{ deck.uniqueKanjiUsedOnceCount.toLocaleString() }}</span>
                   </div>
-                  <div v-if="deck.averageSentenceLength !== 0" class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Average sentence length</span>
-                    <span class="ml-8 tabular-nums">{{ deck.averageSentenceLength.toFixed(1) }}</span>
+                  <div v-if="deck.averageSentenceLength !== 0" class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Average sentence length</span>
+                    <span class="tabular-nums font-semibold">{{ deck.averageSentenceLength.toFixed(1) }}</span>
                   </div>
-                  <div v-if="deck.difficulty != -1" class="flex justify-between mb-2">
+                  <div v-if="deck.difficulty != -1" class="flex justify-between flex-wrap stat-row">
                     <span
                       v-tooltip="
                         'This is a work in progress.\nIf you find scores that are way higher or lower than they should be, please report them so the algorithm can be refined further.'
                       "
-                      class="text-gray-600 dark:text-gray-300"
+                      class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium"
                     >
                       Difficulty
                       <span class="text-purple-500 text-xs align-super"> beta </span>
                     </span>
-                    <span v-if="deck.difficulty == 0" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-green-700 dark:text-green-300"> Beginner </span>
-                    <span v-else-if="deck.difficulty == 1" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-green-500 dark:text-green-200"> Easy </span>
-                    <span v-else-if="deck.difficulty == 2" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-yellow-600 dark:text-yellow-300"> Moderate </span>
-                    <span v-else-if="deck.difficulty == 3" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-amber-600 dark:text-amber-300"> Hard </span>
-                    <span v-else-if="deck.difficulty == 4" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-orange-600 dark:text-orange-300"> Very hard </span>
-                    <span v-else-if="deck.difficulty == 5" v-tooltip="`${(deck.difficultyRaw+1).toFixed(1)}/6`" class="ml-8 tabular-nums text-red-600 dark:text-red-300"> Expert </span>
+                    <span
+                      v-if="deck.difficulty == 0"
+                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
+                      class="tabular-nums text-green-700 dark:text-green-300 font-bold"
+                    >
+                      Beginner
+                    </span>
+                    <span
+                      v-else-if="deck.difficulty == 1"
+                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
+                      class="tabular-nums text-green-500 dark:text-green-200 font-bold"
+                    >
+                      Easy
+                    </span>
+                    <span
+                      v-else-if="deck.difficulty == 2"
+                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
+                      class="tabular-nums text-yellow-600 dark:text-yellow-300 font-bold"
+                    >
+                      Moderate
+                    </span>
+                    <span
+                      v-else-if="deck.difficulty == 3"
+                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
+                      class="tabular-nums text-amber-600 dark:text-amber-300 font-bold"
+                    >
+                      Hard
+                    </span>
+                    <span
+                      v-else-if="deck.difficulty == 4"
+                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
+                      class="tabular-nums text-orange-600 dark:text-orange-300 font-bold"
+                    >
+                      Very hard
+                    </span>
+                    <span
+                      v-else-if="deck.difficulty == 5"
+                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
+                      class="tabular-nums text-red-600 dark:text-red-300 font-bold"
+                    >
+                      Expert
+                    </span>
                   </div>
                 </div>
 
                 <div class="w-full md:w-64">
-                  <div v-if="deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100" class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Dialogue</span>
-                    <span class="ml-8 tabular-nums">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
+                  <div v-if="deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100" class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Dialogue</span>
+                    <span class="tabular-nums font-semibold">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
                   </div>
 
-                  <div v-if="deck.childrenDeckCount != 0" class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">{{ getChildrenCountText(deck.mediaType) }}</span>
-                    <span class="ml-8 tabular-nums">{{ deck.childrenDeckCount.toLocaleString() }}</span>
+                  <div v-if="deck.childrenDeckCount != 0" class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">{{ getChildrenCountText(deck.mediaType) }}</span>
+                    <span class="tabular-nums font-semibold">{{ deck.childrenDeckCount.toLocaleString() }}</span>
                   </div>
 
                   <div
@@ -146,15 +182,17 @@
                       deck.mediaType == MediaType.WebNovel
                     "
                     v-tooltip="'Based on your reading speed in the settings:\n ' + readingSpeed + ' characters per hour.'"
-                    class="flex justify-between mb-2"
+                    class="flex justify-between flex-wrap stat-row"
                   >
-                    <span class="text-gray-600 dark:text-gray-300">Duration <i class="pi pi-info-circle cursor-pointer text-primary-500" /></span>
-                    <span class="ml-8 tabular-nums">{{ readingDuration > 0 ? readingDuration : '<1' }} h</span>
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium"
+                      >Duration <i class="pi pi-info-circle cursor-pointer text-primary-500"
+                    /></span>
+                    <span class="tabular-nums font-semibold">{{ readingDuration > 0 ? readingDuration : '<1' }} h</span>
                   </div>
 
-                  <div v-if="deck.selectedWordOccurrences != 0" class="flex justify-between mb-2">
-                    <span class="text-gray-600 dark:text-gray-300">Appears (times)</span>
-                    <span class="ml-8 tabular-nums font-bold">{{ deck.selectedWordOccurrences.toLocaleString() }}</span>
+                  <div v-if="deck.selectedWordOccurrences != 0" class="flex justify-between flex-wrap stat-row">
+                    <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Appears (times)</span>
+                    <span class="tabular-nums font-bold">{{ deck.selectedWordOccurrences.toLocaleString() }}</span>
                   </div>
                 </div>
               </div>
@@ -209,6 +247,11 @@
     text-overflow: ellipsis;
   }
 
+  /* Ensure text wraps properly on small screens */
+  .flex-1 {
+    min-width: 0;
+  }
+
   @media (max-width: 768px) {
     .description-container:not(.expanded) p {
       line-clamp: 4;
@@ -218,5 +261,27 @@
 
   .description-container.expanded p {
     white-space: pre-line;
+  }
+
+  /* Add additional responsive behavior for small screens */
+  @media (max-width: 640px) {
+    .flex-1 > div > div {
+      width: 100%;
+    }
+  }
+
+  /* Style for stat rows */
+  .stat-row {
+    padding: 0.2rem;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+  }
+
+  .stat-row:hover {
+    background-color: rgba(183, 135, 243, 0.21);
+  }
+
+  :deep(.dark) .stat-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
   }
 </style>

@@ -10,6 +10,8 @@ export function getDeckFormatText(deckFormat: DeckFormat): string {
       return 'TXT (vocab only)';
     case DeckFormat.TxtRepeated:
       return 'TXT (repeated vocab)';
+    case DeckFormat.Yomitan:
+      return 'Yomitan (occurrences)';
     default:
       return 'Unknown';
   }

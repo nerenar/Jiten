@@ -38,8 +38,24 @@
   ]);
 
   const sortOrder = ref(route.query.sortOrder ? route.query.sortOrder : SortOrder.Ascending);
-
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
+  const wordIdRef = ref(props.word?.wordId);
+  const readingIndexRef = ref(props.word?.mainReading?.readingIndex);
+
+  watch(() => props.word, (newWord) => {
+    if (newWord) {
+      wordIdRef.value = newWord.wordId;
+      readingIndexRef.value = newWord.mainReading?.readingIndex;
+
+      // Reset sorting when word changes
+      if (!sortByOptions.value.some(opt => opt.value === 'occurrences')) {
+        sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
+      }
+      sortBy.value = 'occurrences';
+      sortOrder.value = SortOrder.Descending;
+    }
+  }, { immediate: true, deep: true });
+
 
   if (props.word != null) {
     sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
@@ -92,8 +108,8 @@
     query: {
       offset: offset,
       mediaType: mediaType,
-      wordId: props?.word?.wordId,
-      readingIndex: props?.word?.mainReading?.readingIndex,
+      wordId: wordIdRef,
+      readingIndex: readingIndexRef,
       titleFilter: debouncedTitleFilter,
       sortBy: sortBy,
       sortOrder: sortOrder,

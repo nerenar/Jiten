@@ -326,7 +326,13 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
         IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == id);
 
-        if (request.ExcludeKnownWords && request.KnownWordIds != null)
+        if (request.Format == DeckFormat.Yomitan)
+        {
+            var yomitanBytes = await YomitanHelper.GenerateYomitanFrequencyDeckFromDeck(context.DbOptions, deck);
+            return Results.File(yomitanBytes, "application/zip", $"freq_{deck.OriginalTitle}.zip");
+        }
+
+        if (request is { ExcludeKnownWords: true, KnownWordIds: not null })
             deckWordsQuery = deckWordsQuery.Where(dw => !request.KnownWordIds.Contains(dw.WordId));
 
         switch (request.DownloadType)
@@ -637,7 +643,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     }
 
     [HttpPost("{id}/coverage")]
-    public async Task<ActionResult<DeckCoverageResponse>> GetCoverage(int id, [FromBody] List<int>? wordIds)
+    public async Task<ActionResult<DeckCoverageResponse>> GetCoverage(int id, [FromBody] List<long>? wordIds)
     {
         if (wordIds == null || !wordIds.Any())
         {

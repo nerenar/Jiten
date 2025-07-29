@@ -7,7 +7,7 @@ export enum MediaType {
   VideoGame = 6,
   VisualNovel = 7,
   WebNovel = 8,
-  Manga = 9
+  Manga = 9,
 }
 
 export enum LinkType {
@@ -38,7 +38,8 @@ export enum DeckFormat {
   Anki = 1,
   Csv = 2,
   Txt = 3,
-  TxtRepeated
+  TxtRepeated = 4,
+  Yomitan = 5,
 }
 
 export enum DeckOrder {

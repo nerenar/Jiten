@@ -241,7 +241,7 @@
             </div>
           </AccordionHeader>
           <AccordionContent>
-            <MediaList :word="response.data" />
+            <MediaList :word="response.data"/>
           </AccordionContent>
         </AccordionPanel>
       </Accordion>

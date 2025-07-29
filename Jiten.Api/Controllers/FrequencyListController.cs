@@ -1,13 +1,7 @@
-using System.Diagnostics;
-using System.Globalization;
-using System.Text;
-using CsvHelper;
 using Jiten.Core;
-using Jiten.Core.Data.JMDict;
-using Microsoft.AspNetCore.Http.HttpResults;
+using Jiten.Core.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Controllers;
 
@@ -15,39 +9,42 @@ namespace Jiten.Api.Controllers;
 [Route("api/frequency-list")]
 public class FrequencyListController(JitenDbContext context) : ControllerBase
 {
-    [HttpGet("get-global-frequency-list")]
+    [HttpGet("download")]
     [ResponseCache(Duration = 60 * 60 * 24)]
     [EnableRateLimiting("download")]
-    public async Task<IResult> GetGlobalFrequencyList()
+    public async Task<IResult> GetFrequencyList([FromQuery] MediaType? mediaType = null, string downloadType = "yomitan")
     {
-        var frequencies = await context.JmDictWordFrequencies.AsNoTracking().OrderBy(w => w.FrequencyRank).ToListAsync();
-        Dictionary<int, JmDictWord> allWords = await context.JMDictWords.AsNoTracking()
-                                                            .Where(w => frequencies.Select(f => f.WordId).Contains(w.WordId))
-                                                            .ToDictionaryAsync(w => w.WordId);
-        List<(string word, int rank)> frequencyList = new();
+        var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        string path = Path.Join(configuration["StaticFilesPath"], "yomitan");
 
-        foreach (var frequency in frequencies)
+        string fileName, filePath;
+        byte[] bytes;
+        switch (downloadType)
         {
-            var highestPercentage = frequency.ReadingsFrequencyPercentage.Max();
+            case "yomitan":
+                fileName = mediaType == null ? "jiten_freq_global.zip" : $"jiten_freq_{mediaType.ToString()}.zip";
+                filePath = Path.Join(path, fileName);
 
-            string word = "";
-            var index = frequency.ReadingsFrequencyPercentage.IndexOf(highestPercentage);
-            word = allWords[frequency.WordId].Readings[index];
+                if (!System.IO.File.Exists(filePath))
+                {
+                    return Results.NotFound($"Frequency list not found: {fileName}");
+                }
 
+                bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                return Results.File(bytes, "application/zip", fileName);
 
-            frequencyList.Add((word, frequency.FrequencyRank));
+            case "csv":
+            default:
+                fileName = mediaType == null ? "jiten_freq_global.csv" : $"jiten_freq_{mediaType.ToString()}.csv";
+                filePath = Path.Join(path, fileName);
+
+                if (!System.IO.File.Exists(filePath))
+                {
+                    return Results.NotFound($"Frequency list not found: {fileName}");
+                }
+
+                bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                return Results.File(bytes, "text/csv", fileName);
         }
-
-        var stream = new MemoryStream();
-        await using var writer = new StreamWriter(stream, Encoding.UTF8);
-        await using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
-
-        // Create anonymous object since CsvWriter doesn't support writing tuples
-        object[] frequencyListCsv = frequencyList.Select(f => new { Word = f.word, Rank = f.rank }).ToArray<object>();
-
-        await csv.WriteRecordsAsync(frequencyListCsv);
-        var bytes = stream.ToArray();
-
-        return Results.File(bytes, "text/csv", "frequency_list.csv");
     }
 }

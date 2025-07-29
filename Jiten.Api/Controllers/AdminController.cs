@@ -366,13 +366,13 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
         return Ok(new { Message = "Recomputing frequencies job has been queued" });
     }
 
-    [HttpPost("recompute-difficulties")]
-    public IActionResult RecomputeDifficulties()
-    {
-        backgroundJobs.Enqueue<ComputationJob>(job => job.RecomputeDifficulties());
-
-        return Ok(new { Message = "Recomputing difficulties job has been queued" });
-    }
+    // [HttpPost("recompute-difficulties")]
+    // public IActionResult RecomputeDifficulties()
+    // {
+    //     backgroundJobs.Enqueue<ComputationJob>(job => job.RecomputeDifficulties());
+    //
+    //     return Ok(new { Message = "Recomputing difficulties job has been queued" });
+    // }
 
     [HttpGet("issues")]
     public async Task<IActionResult> GetIssues()
