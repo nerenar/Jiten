@@ -1,5 +1,3 @@
-using System.Net;
-
 namespace Jiten.Api.Integrations;
 
 using System;
@@ -14,21 +12,14 @@ using System.Threading.Tasks;
 public class JpdbApiClient : IDisposable
 {
     private readonly HttpClient _httpClient;
-    private readonly SemaphoreSlim _rateLimitSemaphore;
-    private DateTime _lastRequestTime = DateTime.MinValue;
-    private readonly TimeSpan _rateLimitDelay = TimeSpan.FromSeconds(0.5);
 
     public JpdbApiClient(string apiKey)
     {
         if (string.IsNullOrEmpty(apiKey))
             throw new ArgumentNullException(nameof(apiKey));
 
-        ServicePointManager.ServerCertificateValidationCallback = 
-            (sender, certificate, chain, sslPolicyErrors) => true;
-
         _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-        _rateLimitSemaphore = new SemaphoreSlim(1, 1);
     }
 
     /// <summary>
@@ -167,23 +158,12 @@ public class JpdbApiClient : IDisposable
 
     private async Task<string> MakeApiRequestAsync(string url, object requestBody)
     {
-        await _rateLimitSemaphore.WaitAsync();
-
-        try
+        return await JpdbRateLimiter.ExecuteWithRateLimitAsync(async () => 
         {
-            // Enforce rate limit
-            var timeSinceLastRequest = DateTime.UtcNow - _lastRequestTime;
-            if (timeSinceLastRequest < _rateLimitDelay)
-            {
-                var delayTime = _rateLimitDelay - timeSinceLastRequest;
-                await Task.Delay(delayTime);
-            }
-
             var json = JsonSerializer.Serialize(requestBody);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var response = await _httpClient.PostAsync(url, content);
-            _lastRequestTime = DateTime.UtcNow;
 
             if (!response.IsSuccessStatusCode)
             {
@@ -192,17 +172,12 @@ public class JpdbApiClient : IDisposable
             }
 
             return await response.Content.ReadAsStringAsync();
-        }
-        finally
-        {
-            _rateLimitSemaphore.Release();
-        }
+        });
     }
 
     public void Dispose()
     {
         _httpClient?.Dispose();
-        _rateLimitSemaphore?.Dispose();
     }
 }
 
