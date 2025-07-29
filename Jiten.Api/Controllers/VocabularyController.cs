@@ -1,7 +1,5 @@
 using Jiten.Api.Dtos;
-using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
-using Jiten.Api.Integrations;
 using Jiten.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -205,27 +203,5 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
                                                            }
                                       )
                             .ToListAsync();
-    }
-
-    [HttpPost("import-from-jpdb")]
-    public async Task<IResult> ImportFromJpdb([FromBody] JpdbImportRequest request)
-    {
-        if (string.IsNullOrEmpty(request.ApiKey))
-            return Results.BadRequest("API key is required");
-
-        try
-        {
-            using var client = new JpdbApiClient(request.ApiKey);
-            var vocabularyIds = await client.GetFilteredVocabularyIds(
-                                                                      request.BlacklistedAsKnown,
-                                                                      request.DueAsKnown,
-                                                                      request.SuspendedAsKnown);
-
-            return Results.Ok(vocabularyIds);
-        }
-        catch (Exception ex)
-        {
-            return Results.BadRequest($"Error importing from JPDB: {ex.Message}");
-        }
     }
 }

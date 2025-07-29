@@ -18,6 +18,7 @@
   const store = useJitenStore();
   const { $api } = useNuxtApp();
   const confirm = useConfirm();
+  const { JpdbApiClient } = useJpdbApi();
 
   const knownWordIdsAmount = ref(0);
   knownWordIdsAmount.value = store.getKnownWordIds().length;
@@ -44,6 +45,7 @@
   const blacklistedAsKnown = ref(true);
   const dueAsKnown = ref(true);
   const suspendedAsKnown = ref(true);
+  const jpdbProgress = ref('');
 
   async function importFromJpdbApi() {
     if (!jpdbApiKey.value) {
@@ -53,19 +55,20 @@
 
     try {
       isLoading.value = true;
+      jpdbProgress.value = 'Initializing JPDB API client...';
       toast.add({ severity: 'info', summary: 'Processing', detail: 'Importing from JPDB API...', life: 5000 });
 
-      const response = await $api<number[]>('vocabulary/import-from-jpdb', {
-        method: 'POST',
-        body: {
-          apiKey: jpdbApiKey.value,
-          blacklistedAsKnown: blacklistedAsKnown.value,
-          dueAsKnown: dueAsKnown.value,
-          suspendedAsKnown: suspendedAsKnown.value
-        }
-      });
+      const client = new JpdbApiClient(jpdbApiKey.value);
+
+      jpdbProgress.value = 'Fetching user decks...';
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Allow UI to update
+
+      const response = await client.getFilteredVocabularyIds(blacklistedAsKnown.value, dueAsKnown.value, suspendedAsKnown.value);
 
       if (response && response.length > 0) {
+        jpdbProgress.value = 'Adding vocabulary to store...';
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Allow UI to update
+
         store.addKnownWordIds(response);
         toast.add({ severity: 'success', summary: 'Success', detail: `Imported ${response.length} word IDs from JPDB.`, life: 5000 });
         await nextTick();
@@ -76,9 +79,11 @@
       }
     } catch (error) {
       console.error('Error importing from JPDB API:', error);
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to import from JPDB API. Please check your API key and try again.', life: 5000 });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import from JPDB API. Please check your API key and try again.';
+      toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 5000 });
     } finally {
       isLoading.value = false;
+      jpdbProgress.value = '';
       // Clear the API key for security
       jpdbApiKey.value = '';
     }
@@ -158,16 +163,16 @@
       // Add the word IDs to the store
       if (wordIds && wordIds.length > 0) {
         store.addKnownWordIds(wordIds);
-        toast.add({ severity: 'success', detail: `Found ${wordIds.length} word IDs from Anki file.`,  life: 5000 });
+        toast.add({ severity: 'success', detail: `Found ${wordIds.length} word IDs from Anki file.`, life: 5000 });
         await nextTick();
         knownWordIdsAmount.value = store.getKnownWordIds().length;
         console.log(`Extracted word IDs from Anki: ${wordIds.length}`, wordIds);
       } else {
-        toast.add({ severity: 'info', detail: 'No word IDs found in the Anki file.',  life: 5000 });
+        toast.add({ severity: 'info', detail: 'No word IDs found in the Anki file.', life: 5000 });
       }
     } catch (error) {
       console.error('Error processing Anki file:', error);
-      toast.add({ severity: 'error', detail: 'Failed to process Anki file.',  life: 5000 });
+      toast.add({ severity: 'error', detail: 'Failed to process Anki file.', life: 5000 });
     } finally {
       isLoading.value = false;
     }
@@ -219,8 +224,7 @@
     // Release the URL object
     URL.revokeObjectURL(url);
 
-    toast.add({ severity: 'success',  detail: `Exported ${wordIds.length} word IDs to text file.`, life: 5000 });
-
+    toast.add({ severity: 'success', detail: `Exported ${wordIds.length} word IDs to text file.`, life: 5000 });
   }
 
   function handleWordIdsFileSelect(event) {
@@ -291,8 +295,8 @@
       </template>
       <template #content>
         <p class="mb-3">
-          You can upload a list of known words to calculate coverage and exclude them from downloads. Your data is processed temporarily on the server and
-          remains stored only in your local storage.
+          You can upload a list of known words to calculate coverage and exclude them from downloads. Your data is processed client-side and remains stored only
+          in your local storage.
         </p>
         <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Note: If you change browser or delete its data, your known words might be lost. You can export them to keep them safe.
@@ -335,14 +339,21 @@
         <h3 class="text-lg font-semibold">Import from JPDB API</h3>
       </template>
       <template #content>
-        <p class="mb-2">You can find your API key on the bottom of the settings page (<a href="https://jpdb.io/settings" target="_blank" class="text-primary-500 hover:underline">https://jpdb.io/settings</a>)</p>
+        <p class="mb-2">
+          You can find your API key on the bottom of the settings page (<a
+            href="https://jpdb.io/settings"
+            target="_blank"
+            class="text-primary-500 hover:underline"
+            >https://jpdb.io/settings</a
+          >)
+        </p>
         <p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
-          Your API key will only be used for the import and won't be saved anywhere.
+          Your API key will only be used for the import and won't be saved anywhere. All processing happens in your browser locally.
         </p>
 
         <div class="mb-3">
           <span class="p-float-label">
-            <InputText id="jpdbApiKey" v-model="jpdbApiKey" class="w-full" />
+            <InputText id="jpdbApiKey" v-model="jpdbApiKey" class="w-full" type="password" />
             <label for="jpdbApiKey">JPDB API Key</label>
           </span>
         </div>
@@ -362,13 +373,7 @@
           </div>
         </div>
 
-        <Button 
-          label="Import from JPDB" 
-          icon="pi pi-download" 
-          :disabled="!jpdbApiKey" 
-          @click="importFromJpdbApi" 
-          class="w-full md:w-auto"
-        />
+        <Button label="Import from JPDB" icon="pi pi-download" :disabled="!jpdbApiKey || isLoading" @click="importFromJpdbApi" class="w-full md:w-auto" />
       </template>
     </Card>
 
@@ -452,8 +457,9 @@
 
     <!-- Loading overlay -->
     <div v-if="isLoading" class="loading-overlay">
-      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"/>
-      <p>Processing you data...</p>
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem" />
+      <p v-if="jpdbProgress">{{ jpdbProgress }}</p>
+      <p v-else>Processing your data...</p>
     </div>
   </div>
 </template>
