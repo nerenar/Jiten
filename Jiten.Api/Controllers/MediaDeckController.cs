@@ -388,7 +388,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 return Results.BadRequest();
         }
 
-        var wordIds = await deckWordsQuery.Select(dw => dw.WordId).ToListAsync();
+        var wordIds = await deckWordsQuery.Select(dw => (long)dw.WordId).ToListAsync();
         List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords = await deckWordsQuery
                                                                                  .Select(dw => new ValueTuple<int, byte, int>(dw.WordId,
                                                                                              dw.ReadingIndex, dw.Occurrences))
@@ -421,7 +421,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         deck.OriginalTitle = "Custom deck";
         var deckDownloadRequest = new DeckDownloadRequest() { DownloadType = DeckDownloadType.Full, Format = DeckFormat.Anki };
         var deckWords = deck.DeckWords.Select(dw => new ValueTuple<int, byte, int>(dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
-        var wordIds = deck.DeckWords.Select(dw => dw.WordId).ToList();
+        var wordIds = deck.DeckWords.Select(dw => (long)dw.WordId).ToList();
 
         var fileResult = await GenerateDeckDownload(0, deckDownloadRequest, wordIds, deck, deckWords);
         var deckDto = new DeckDto(deck);
@@ -438,7 +438,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         return Results.Json(result);
     }
 
-    private async Task<byte[]?> GenerateDeckDownload(int id, DeckDownloadRequest request, List<int> wordIds, Deck deck,
+    private async Task<byte[]?> GenerateDeckDownload(int id, DeckDownloadRequest request, List<long> wordIds, Deck deck,
                                                      List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords)
     {
         var jmdictWords = await context.JMDictWords.AsNoTracking()
