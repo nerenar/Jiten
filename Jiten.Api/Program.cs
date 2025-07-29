@@ -139,7 +139,7 @@ builder.Services.AddRateLimiter(options =>
         
         return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
                                                                          {
-                                                                             PermitLimit = 5, 
+                                                                             PermitLimit = 10, 
                                                                              Window = TimeSpan.FromSeconds(60),
                                                                              SegmentsPerWindow = 10,
                                                                              QueueProcessingOrder = QueueProcessingOrder.OldestFirst, 

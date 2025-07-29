@@ -10,7 +10,6 @@ namespace Jiten.Api.Controllers;
 public class FrequencyListController(JitenDbContext context) : ControllerBase
 {
     [HttpGet("download")]
-    [ResponseCache(Duration = 60 * 60 * 24)]
     [EnableRateLimiting("download")]
     public async Task<IResult> GetFrequencyList([FromQuery] MediaType? mediaType = null, string downloadType = "yomitan")
     {
