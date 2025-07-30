@@ -95,9 +95,6 @@ public class Program
         [Option(longName: "compute-frequencies", Required = false, HelpText = "Compute global word frequencies")]
         public bool ComputeFrequencies { get; set; }
 
-        [Option(longName: "compute-difficulty", Required = false, HelpText = "Compute difficulty for decks")]
-        public bool ComputeDifficulty { get; set; }
-
         [Option(longName: "debug-deck", Required = false, HelpText = "Debug a deck by id")]
         public int? DebugDeck { get; set; }
 
@@ -227,14 +224,6 @@ public class Program
                         if (o.ComputeFrequencies)
                         {
                             await JitenHelper.ComputeFrequencies(_dbOptions);
-                        }
-
-                        if (o.ComputeDifficulty)
-                        {
-                            foreach (var mediaType in Enum.GetValues(typeof(MediaType)))
-                            {
-                                await JitenHelper.ComputeDifficulty(_dbOptions, o.Verbose, (MediaType)mediaType);
-                            }
                         }
 
                         if (o.DebugDeck != null)

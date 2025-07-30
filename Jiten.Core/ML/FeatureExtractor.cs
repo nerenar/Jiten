@@ -87,7 +87,7 @@ public class FeatureExtractor
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Unhandled exception in main processing loop.");
+            Console.WriteLine("Unhandled exception in main processing loop: " + ex);
         }
         finally
         {

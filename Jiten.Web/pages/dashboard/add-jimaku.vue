@@ -17,8 +17,8 @@ definePageMeta({
 });
 
 const toast = useToast();
-const startId = ref(5000);
-const endId = ref(6000);
+const startId = ref(9000);
+const endId = ref(9999);
 const currentId = ref<number | null>(null);
 const jimakuData = ref<any>(null);
 const allFiles = ref<any[]>([]);

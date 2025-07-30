@@ -33,7 +33,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
             "GoogleBooks" =>
                 await MetadataProviderHelper.GoogleBooksSearchApi(query + (!string.IsNullOrEmpty(author) ? $"+inauthor:{author}" : "")),
             "Vndb" => await MetadataProviderHelper.VndbSearchApi(query),
-            "Igdb" => await MetadataProviderHelper.IgdbSearchApi(config["IgdbClientId"], config["IgdbClientSecret"], query),
+            "Igdb" => await MetadataProviderHelper.IgdbSearchApi(config["IgdbClientId"]!, config["IgdbClientSecret"]!, query),
             _ => new List<Metadata>()
         });
     }
@@ -470,14 +470,14 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
     {
         var jimakuResult = new JimakuResultDto();
 
-        var entry = await MetadataProviderHelper.JimakuGetEntryAsync(httpClient, config["JimakuApiKey"], id);
+        var entry = await MetadataProviderHelper.JimakuGetEntryAsync(httpClient, config["JimakuApiKey"]!, id);
         if (entry == null)
         {
             return NotFound();
         }
 
         jimakuResult.Entry = entry;
-        jimakuResult.Files = await MetadataProviderHelper.JimakuGetFilesAsync(httpClient, config["JimakuApiKey"], id);
+        jimakuResult.Files = await MetadataProviderHelper.JimakuGetFilesAsync(httpClient, config["JimakuApiKey"]!, id);
 
         return Ok(jimakuResult);
     }
@@ -492,7 +492,7 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
 
         try
         {
-            var entry = await MetadataProviderHelper.JimakuGetEntryAsync(httpClient, config["JimakuApiKey"], model.JimakuId);
+            var entry = await MetadataProviderHelper.JimakuGetEntryAsync(httpClient, config["JimakuApiKey"]!, model.JimakuId);
             if (entry == null) return NotFound("Jimaku entry not found.");
 
             string path = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());
@@ -506,14 +506,14 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
             }
             else if (entry.Flags.Movie && entry.TmdbId != null)
             {
-                metadata = await MetadataProviderHelper.TmdbMovieApi(entry.TmdbId.Replace("movie:", ""), config["TmdbApiKey"]);
+                metadata = await MetadataProviderHelper.TmdbMovieApi(entry.TmdbId.Replace("movie:", ""), config["TmdbApiKey"]!);
                 metadata.OriginalTitle = entry.JapaneseName;
                 metadata.EnglishTitle = entry.EnglishName;
                 metadata.RomajiTitle = entry.Name;
             }
             else if (entry.TmdbId != null)
             {
-                metadata = await MetadataProviderHelper.TmdbTvApi(entry.TmdbId.Replace("tv:", ""), config["TmdbApiKey"]);
+                metadata = await MetadataProviderHelper.TmdbTvApi(entry.TmdbId.Replace("tv:", ""), config["TmdbApiKey"]!);
                 metadata.OriginalTitle = entry.JapaneseName;
                 metadata.EnglishTitle = entry.EnglishName;
                 metadata.RomajiTitle = entry.Name;

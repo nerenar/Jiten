@@ -14,7 +14,7 @@ public class JimakuEntry
 
     [JsonPropertyName("anilist_id")] public int? AnilistId { get; set; }
 
-    [JsonPropertyName("english_name")] public required string EnglishName { get; set; }
+    [JsonPropertyName("english_name")] public string? EnglishName { get; set; }
 
     [JsonPropertyName("japanese_name")] public required string JapaneseName { get; set; }
 
@@ -22,5 +22,5 @@ public class JimakuEntry
 
     [JsonPropertyName("tmdb_id")] public string? TmdbId { get; set; }
 
-    public required List<JimakuFile> Files { get; set; }
+    public List<JimakuFile>? Files { get; set; }
 }

@@ -430,7 +430,7 @@
                   <Button label="AniList" @click="searchAPI('AnilistAnime')" />
                 </template>
                 <template v-else-if="selectedMediaType === MediaType.Manga">
-                  <Button label="AniList" @click="searchAPI('AniListManga')" />
+                  <Button label="AniList" @click="searchAPI('AnilistManga')" />
                 </template>
                 <template v-else-if="selectedMediaType === MediaType.Movie || selectedMediaType === MediaType.Drama">
                   <Button label="TMDB" @click="searchAPI('Tmdb')" />

@@ -67,6 +67,9 @@ public static partial class MetadataProviderHelper
                                                                      PropertyNameCaseInsensitive = true
                                                                  });
 
+        if (result == null)
+            return null;
+
         return new Metadata
                {
                    OriginalTitle = result.VolumeInfo.Title, RomajiTitle = null, EnglishTitle = null,
