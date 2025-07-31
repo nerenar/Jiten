@@ -64,9 +64,15 @@ export default defineNuxtConfig({
   },
   googleFonts: {
     families: {
-      'Noto+Sans+JP': [400, 700],
+      'Noto+Sans+JP': {
+        wght: [400, 700],
+        ital: [400, 700] // if you need italic
+      }
     },
     display: 'swap',
+    preload: true,
+    useStylesheet: true,
+    download: false,
   },
   vite: {
     plugins: [tailwindcss()],
