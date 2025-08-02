@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /decks/media/*/vocabulary
+Disallow: /decks/media
+Disallow: /decks/media/
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /dashboard/*
+Disallow: /vocabulary/*
+Allow: /decks/media/*/detail
+
+Sitemap: https://jiten.moe/sitemap.xml
