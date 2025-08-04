@@ -228,20 +228,28 @@ public static class JitenHelper
     {
         if (!children.Any()) return;
 
+        // Store DeckWords separately for each child to prevent EF from inserting them
+        var childDeckWordsToInsert = new Dictionary<Deck, List<DeckWord>>();
+
         foreach (var child in children)
         {
             child.ParentDeckId = parentDeckId;
             child.CreationDate = DateTime.UtcNow;
             child.LastUpdate = DateTimeOffset.UtcNow;
 
+            // Prevent EF Core from inserting the DeckWords - we'll do it with bulk insert
+            childDeckWordsToInsert[child] = child.DeckWords.ToList();
+            child.DeckWords = new List<DeckWord>();
+
             context.Entry(child).State = child.DeckId == 0 ? EntityState.Added : EntityState.Modified;
+
         }
 
         await context.SaveChangesAsync();
 
         foreach (var child in children)
         {
-            await BulkInsertDeckWords(context, child.DeckWords, child.DeckId);
+            await BulkInsertDeckWords(context, childDeckWordsToInsert[child], child.DeckId);
         }
     }
 
