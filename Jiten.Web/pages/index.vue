@@ -17,7 +17,7 @@
         <div class="flex flex-col gap-4">
           <div>
             <h2><b>Update July 29, 2025</b></h2>
-            Yomitan frequendy dictionaries, better import from JPDB, download occurrences Yomitan dictionaries, bug fixes and improved parser.
+            Yomitan frequency dictionaries, better import from JPDB, download occurrences Yomitan dictionaries, bug fixes and improved parser.
           </div>
 
           <div>
