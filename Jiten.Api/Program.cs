@@ -239,8 +239,12 @@ var app = builder.Build();
 app.UseForwardedHeaders(new ForwardedHeadersOptions
                         {
                             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-                            KnownNetworks = { }, // clears default for reverse proxy
-                            KnownProxies = { }
+                            KnownNetworks = { 
+                                                new IPNetwork(System.Net.IPAddress.Parse("172.16.0.0"), 12),
+                                                new IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8)
+                                            },
+                            KnownProxies = { },
+                            RequireHeaderSymmetry = false
                         });
 
 // Configure the HTTP request pipeline.
