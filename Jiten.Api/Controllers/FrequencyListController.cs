@@ -46,4 +46,22 @@ public class FrequencyListController(JitenDbContext context) : ControllerBase
                 return Results.File(bytes, "text/csv", fileName);
         }
     }
+
+    [HttpGet("index")]
+    public async Task<IResult> GetFrequencyListIndex([FromQuery] MediaType? mediaType = null)
+    {
+        var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        string path = Path.Join(configuration["StaticFilesPath"], "yomitan");
+
+        string fileName = mediaType == null ? "jiten_freq_global.json" : $"jiten_freq_{mediaType.ToString()}.json";
+        string filePath = Path.Join(path, fileName);
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            return Results.NotFound($"Frequency list not found: {fileName}");
+        }
+
+        byte[] bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+        return Results.File(bytes, "text/json", fileName);
+    }
 }

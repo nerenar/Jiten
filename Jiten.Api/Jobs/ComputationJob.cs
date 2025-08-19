@@ -23,9 +23,12 @@ public class ComputationJob(JitenDbContext context, IConfiguration configuration
         await SaveFrequenciesToCsv(frequencies, Path.Join(path, "jiten_freq_global.csv"));
 
         // Generate Yomitan deck
-        var bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(context.DbOptions, frequencies, null);
+        string index = YomitanHelper.GetIndexJson(null);
+        var bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(context.DbOptions, frequencies, null, index);
         var filePath = Path.Join(path, "jiten_freq_global.zip");
+        string indexFilePath = Path.Join(path, "jiten_freq_global.json");
         await File.WriteAllBytesAsync(filePath, bytes);
+        await File.WriteAllTextAsync(indexFilePath, index);
 
         foreach (var mediaType in Enum.GetValues<MediaType>())
         {
@@ -36,9 +39,12 @@ public class ComputationJob(JitenDbContext context, IConfiguration configuration
             await SaveFrequenciesToCsv(frequencies, Path.Join(path, $"jiten_freq_{mediaType.ToString()}.csv"));
 
             // Generate Yomitan deck
-            bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(context.DbOptions, frequencies, mediaType);
+            index = YomitanHelper.GetIndexJson(mediaType);
+            bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(context.DbOptions, frequencies, mediaType, index);
             filePath = Path.Join(path, $"jiten_freq_{mediaType.ToString()}.zip");
+            indexFilePath = Path.Join(path, $"jiten_freq_{mediaType.ToString()}.json");
             await File.WriteAllBytesAsync(filePath, bytes);
+            await File.WriteAllTextAsync(indexFilePath, index);
         }
     }
 

@@ -14,16 +14,18 @@ public static class YomitanHelper
     /// <summary>
     /// Generates the content for the index.json file in a Yomitan dictionary.
     /// </summary>
-    private static string GetIndexJson(MediaType? mediaType)
+    public static string GetIndexJson(MediaType? mediaType)
     {
         string title = mediaType != null ? $"Jiten ({mediaType})" : "Jiten";
         string revision = mediaType != null ? $"Jiten ({mediaType}) {DateTime.UtcNow:yy-MM-dd}" : $"Jiten {DateTime.UtcNow:yy-MM-dd}";
         string description = mediaType != null
             ? $"Dictionary based on frequency data of {mediaType} from jiten.moe"
             : "Dictionary based on frequency data of all media from jiten.moe";
+        string indexUrl = mediaType != null ? "https://api.jiten.moe/api/frequency-list/index" : $"https://api.jiten.moe/api/frequency-list/index?mediaType={mediaType}";
+        string downloadUrl = mediaType != null ? "https://api.jiten.moe/api/frequency-list/download" : $"https://api.jiten.moe/api/frequency-list/download?mediaType={mediaType}";
 
         return
-            $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","sequenced":false,"frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
+            $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","isUpdatable":true,"indexUrl":"{{indexUrl}}","downloadUrl":"{{downloadUrl}}","sequenced":false,"frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
     }
 
     /// <summary>
@@ -33,11 +35,9 @@ public static class YomitanHelper
     /// <param name="mediaType">The media type to generate the frequency deck for. null for global</param>
     /// <returns>A byte array representing the zipped dictionary file.</returns>
     public static async Task<byte[]> GenerateYomitanFrequencyDeck(DbContextOptions<JitenDbContext> options,
-                                                                  List<JmDictWordFrequency> frequencies, MediaType? mediaType)
+                                                                  List<JmDictWordFrequency> frequencies, MediaType? mediaType, string indexJson)
     {
         await using var context = new JitenDbContext(options);
-
-        var indexJson = GetIndexJson(mediaType);
 
         var wordIds = frequencies.Select(f => f.WordId).ToList();
         var allWords = await context.JMDictWords.AsNoTracking()
