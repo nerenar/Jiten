@@ -21,8 +21,8 @@ public static class YomitanHelper
         string description = mediaType != null
             ? $"Dictionary based on frequency data of {mediaType} from jiten.moe"
             : "Dictionary based on frequency data of all media from jiten.moe";
-        string indexUrl = mediaType != null ? "https://api.jiten.moe/api/frequency-list/index" : $"https://api.jiten.moe/api/frequency-list/index?mediaType={mediaType}";
-        string downloadUrl = mediaType != null ? "https://api.jiten.moe/api/frequency-list/download" : $"https://api.jiten.moe/api/frequency-list/download?mediaType={mediaType}";
+        string indexUrl = mediaType != null ? $"https://api.jiten.moe/api/frequency-list/index?mediaType={mediaType}" : "https://api.jiten.moe/api/frequency-list/index" ;
+        string downloadUrl = mediaType != null ? $"https://api.jiten.moe/api/frequency-list/download?mediaType={mediaType}" : "https://api.jiten.moe/api/frequency-list/download" ;
 
         return
             $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","isUpdatable":true,"indexUrl":"{{indexUrl}}","downloadUrl":"{{downloadUrl}}","sequenced":false,"frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
