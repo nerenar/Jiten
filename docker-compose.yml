@@ -74,6 +74,8 @@ services:
         - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
         - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL=${UMAMI_ANALYTICS_HOST_URL:-https://umami.jiten.moe}
         - NUXT_PUBLIC_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
+        - NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+        - NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY=${GOOGLE_RECAPTCHA_V2_SITE_KEY:-}
     restart: unless-stopped
     depends_on:
       - api
