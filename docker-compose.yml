@@ -32,11 +32,11 @@ services:
     environment:
       - ConnectionStrings__JitenDatabase=Host=${DB_HOST:-postgres};Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password};Timeout=300;CommandTimeout=300
       - ConnectionStrings__Redis=redis:${REDIS_PORT:-6379}
-      - JwtSettings_Secret=${JWT_SECRET:-VERY_STRONG_KEY_AT_LEAST_32_CHARS}
-      - JwtSettings_Issuer=${JWT_ISSUER:-https://api.jiten.moe}
-      - JwtSettings_Audience=${JWT_AUDIENCE:-https://jiten.moe}
-      - JwtSettings_AccessTokenExpirationMinutes=${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:-15}
-      - JwtSettings_RefreshTokenExpirationDays=${JWT_REFRESH_TOKEN_EXPIRATION_DAYS:-30}
+      - JwtSettings__Secret=${JWT_SECRET:-VERY_STRONG_KEY_AT_LEAST_32_CHARS}
+      - JwtSettings__Issuer=${JWT_ISSUER:-https://api.jiten.moe}
+      - JwtSettings__Audience=${JWT_AUDIENCE:-https://jiten.moe}
+      - JwtSettings__AccessTokenExpirationMinutes=${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:-15}
+      - JwtSettings__RefreshTokenExpirationDays=${JWT_REFRESH_TOKEN_EXPIRATION_DAYS:-30}
       - StaticFilesPath=${STATIC_FILES_PATH:-/app/uploads}
       - UseBunnyCdn=${USE_BUNNYCDN:-false}
       - BunnyCdnSecret=${BUNNYCDN_SECRET:-}
@@ -49,14 +49,14 @@ services:
       - StoreRawText=${STORE_RAW_TEXT:-false}
       - IgdbClientId=${IGDB_CLIENT_ID:-}
       - IgdbClientSecret=${IGDB_CLIENT_SECRET:-}
-      - Google_ClientId=${GOOGLE_CLIENT_ID:-}
-      - Google_ClientSecret=${GOOGLE_CLIENT_SECRET:-}
-      - Google_RecapatchaSecret=${GOOGLE_RECAPTCHA_SECRET:-}
-      - Email_SmtpHost=${SES_SMTP_HOST:-smtp.eu.mailgun.org}
-      - Email_SmtpPort=${SES_SMTP_PORT:-587}
-      - Email_Username=${SES_SMTP_USER:-}
-      - Email_Password=${SES_SMTP_PASSWORD:-}
-      - Email_From=${SES_FROM:-noreply@example.com}
+      - Google__ClientId=${GOOGLE_CLIENT_ID:-}
+      - Google__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - Google__RecapatchaSecret=${GOOGLE_RECAPTCHA_SECRET:-}
+      - Email__SmtpHost=${SES_SMTP_HOST:-smtp.eu.mailgun.org}
+      - Email__SmtpPort=${SES_SMTP_PORT:-587}
+      - Email__Username=${SES_SMTP_USER:-}
+      - Email__Password=${SES_SMTP_PASSWORD:-}
+      - Email__From=${SES_FROM:-noreply@example.com}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
