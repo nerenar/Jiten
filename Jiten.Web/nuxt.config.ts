@@ -81,6 +81,11 @@ export default defineNuxtConfig({
   },
   vite: {
     plugins: [tailwindcss()],
+    build: {
+      rollupOptions: {
+        external: ['open'],
+      },
+    },
   },
   css: ['~/assets/css/main.css'],
   sitemap: {
