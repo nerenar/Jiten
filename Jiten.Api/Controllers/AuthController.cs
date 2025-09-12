@@ -358,6 +358,7 @@ public class AuthController : ControllerBase
         {
             // User already exists, proceed with normal login
             var tokens = await _tokenService.GenerateTokens(user);
+            await _context.SaveChangesAsync(); // Save refresh token
             return Ok(tokens);
         }
 
@@ -442,6 +443,7 @@ public class AuthController : ControllerBase
         _memoryCache.Remove($"google_registration_{request.TempToken}");
 
         var tokens = await _tokenService.GenerateTokens(user);
+        await _context.SaveChangesAsync(); // Save refresh token
         return Ok(tokens);
     }
 
