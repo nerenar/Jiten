@@ -93,6 +93,19 @@ export const useJitenStore = defineStore('jiten', () => {
     hideVocabularyDefinitionsCookie.value = newValue;
   });
 
+  const hideCoverageBordersCookie = useCookie<boolean>('jiten-hide-coverage-borders', {
+    default: () => false,
+    watch: true,
+    maxAge: 60 * 60 * 24 * 365, // 1 year
+    path: '/',
+  });
+
+  const hideCoverageBorders = ref<boolean>(hideCoverageBordersCookie.value);
+
+  watch(hideCoverageBorders, (newValue) => {
+    hideCoverageBordersCookie.value = newValue;
+  });
+
   const getKnownWordIds = (): number[] => {
     if (import.meta.client) {
       try {
@@ -104,16 +117,6 @@ export const useJitenStore = defineStore('jiten', () => {
       }
     }
     return [];
-  };
-
-  const setKnownWordIds = (wordIds: number[]) => {
-    if (import.meta.client) {
-      try {
-        localStorage.setItem('jiten-known-word-ids', JSON.stringify(wordIds));
-      } catch (error) {
-        console.error('Error saving known word IDs to localStorage:', error);
-      }
-    }
   };
 
   const knownWordIds = ref<number[]>([]);
@@ -130,38 +133,8 @@ export const useJitenStore = defineStore('jiten', () => {
     ensureInitialized();
   });
 
-  watch(
-    knownWordIds,
-    (newValue) => {
-      if (isInitialized) {
-        setKnownWordIds(newValue);
-      }
-    },
-    { deep: true }
-  );
-
-  function addKnownWordIds(wordIds: number[]) {
-    const uniqueWordIds = [...new Set([...knownWordIds.value, ...wordIds])];
-    knownWordIds.value = uniqueWordIds;
-    console.log(`Added ${wordIds.length} word IDs. Total: ${uniqueWordIds.length}`);
-  }
-  
-  function removeKnownWordId(wordId: number) {
-    knownWordIds.value = knownWordIds.value.filter((id) => id !== wordId);
-  }
-
-  function isWordKnown(wordId: number): boolean {
-    ensureInitialized();
-    return knownWordIds.value.includes(wordId);
-  }
-
   return {
-    // actions
     getKnownWordIds,
-    addKnownWordIds,
-    removeKnownWordId,
-    setKnownWordIds,
-    isWordKnown,
 
     // state
     titleLanguage,
@@ -171,6 +144,7 @@ export const useJitenStore = defineStore('jiten', () => {
     readingSpeed,
     knownWordIds,
     displayAllNsfw,
-    hideVocabularyDefinitions
+    hideVocabularyDefinitions,
+    hideCoverageBorders
   };
 });

@@ -440,6 +440,8 @@ public static class JmDictHelper
         wordInfos.First(w => w.WordId == 1191730).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2844190).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2207630).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1442490).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1423310).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2029110).Definitions.Add(new JmDictDefinition()
                                                                   {
                                                                       PartsOfSpeech = ["prt"], EnglishMeanings = ["indicates na-adjective"]
@@ -1166,19 +1168,38 @@ public static class JmDictHelper
 
         customWordInfos.Add(new JmDictWord
                             {
-                                WordId = 8000000, Readings = new List<string> { "でした" }, ReadingTypes = [JmDictReadingType.KanaReading],
-                                Definitions =
+                                WordId = 8000000, Readings = ["でした"], ReadingsFurigana = ["でした"],
+                                ReadingTypes = [JmDictReadingType.KanaReading], Definitions =
                                 [
                                     new JmDictDefinition { EnglishMeanings = ["was, were"], PartsOfSpeech = ["exp"] }
                                 ]
                             });
-        
+
         customWordInfos.Add(new JmDictWord
                             {
-                                WordId = 8000001, Readings = new List<string> { "イクシオトキシン" }, ReadingTypes = [JmDictReadingType.KanaReading],
-                                Definitions =
+                                WordId = 8000001, Readings = ["イクシオトキシン"], ReadingsFurigana = ["イクシオトキシン"],
+                                ReadingTypes = [JmDictReadingType.KanaReading], Definitions =
                                 [
                                     new JmDictDefinition { EnglishMeanings = ["ichthyotoxin"], PartsOfSpeech = ["n"] }
+                                ]
+                            });
+
+        customWordInfos.Add(new JmDictWord
+                            {
+                                WordId = 8000002, Readings = ["逢魔", "おうま"], ReadingsFurigana = ["逢[おう]魔[ま]", "おうま"],
+                                ReadingTypes = [JmDictReadingType.Reading, JmDictReadingType.KanaReading], 
+                                PitchAccents = [0],
+                                Definitions =
+                                [
+                                    new JmDictDefinition
+                                    {
+                                        EnglishMeanings =
+                                        [
+                                            "meeting with evil spirits; encounter with demons or monsters",
+                                            "(esp. in compounds) reference to the supernatural or ominous happenings at twilight (逢魔が時 \"the time to meet demons\")"
+                                        ],
+                                        PartsOfSpeech = ["exp"]
+                                    }
                                 ]
                             });
 

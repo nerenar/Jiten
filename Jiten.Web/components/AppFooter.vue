@@ -5,7 +5,8 @@
     <div class="flex justify-evenly items-center max-w-6xl mx-auto">
       <div class="flex items-center gap-4">
         <p class="text-sm">© {{ new Date().getFullYear() }} Jiten</p>
-        <NuxtLink :to="`/terms`" target="_blank" class="!text-white"> Terms of Service</NuxtLink>
+        <NuxtLink :to="`/terms`" target="_blank" class="!text-white text-sm">Terms of Service</NuxtLink>
+        <NuxtLink :to="`/privacy`" target="_blank" class="!text-white text-sm">Privacy Policy</NuxtLink>
       </div>
       <div class="flex items-center space-x-4">
         <a href="https://github.com/Sirush/Jiten" target="_blank">

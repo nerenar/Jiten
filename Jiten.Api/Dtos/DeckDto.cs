@@ -28,6 +28,8 @@ public class DeckDto
     public int ChildrenDeckCount { get; set; }
     public int SelectedWordOccurrences { get; set; }
     public float DialoguePercentage { get; set; }
+    public float Coverage { get; set; }
+    public float UniqueCoverage { get; set; }
 
     public DeckDto()
     {

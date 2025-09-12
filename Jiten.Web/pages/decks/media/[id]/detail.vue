@@ -1,15 +1,12 @@
 <script setup lang="ts">
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
-  import type { Deck, DeckDetail } from '~/types';
+  import type { DeckDetail } from '~/types';
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
-  import Button from 'primevue/button';
-  import { useJitenStore } from '~/stores/jitenStore';
 
   const route = useRoute();
   const deckId = computed(() => route.params.id as string);
 
-  const store = useJitenStore();
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
@@ -18,11 +15,11 @@
     data: response,
     status,
     error,
-  } = await useApiFetchPaginated<DeckDetail>(url, {
+  } = await useApiFetchPaginated<DeckDetail>(url.value, {
     query: {
       offset: offset,
     },
-    watch: [offset],
+    watch: [offset, deckId],
   });
 
   const currentPage = computed(() => response.value?.currentPage);
@@ -79,7 +76,7 @@
         </template>
       </Card>
     </div>
-    <div v-else>
+    <div v-else-if="response">
       <MediaDeckCard :deck="response.data.mainDeck" />
 
       <div v-if="response.data.parentDeck != null" class="pt-4">

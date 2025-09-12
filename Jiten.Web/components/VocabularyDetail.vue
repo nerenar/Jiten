@@ -31,7 +31,6 @@
   const { $api } = useNuxtApp();
 
   const store = useJitenStore();
-  const isWordKnown = ref(store.isWordKnown(props.wordId));
 
   const currentReadingIndex = ref(props.readingIndex);
   const url = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}`);
@@ -108,15 +107,6 @@
 
     exampleSentences.value.push(...results);
   }
-
-  const toggleWordKnown = () => {
-    if (isWordKnown.value) {
-      store.removeKnownWordId(props.wordId);
-    } else {
-      store.addKnownWordIds([props.wordId]);
-    }
-    isWordKnown.value = !isWordKnown.value;
-  };
 </script>
 
 <template>
@@ -134,13 +124,7 @@
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
               <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}</div>
-              <div v-if="isWordKnown">
-                <span class="text-green-600 dark:text-green-300">Known</span>
-                <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
-              </div>
-              <div v-else>
-                <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
-              </div>
+              <VocabularyStatus :word="response.data" />
             </div>
           </div>
 
@@ -180,15 +164,7 @@
         </div>
         <div class="min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
-            <template v-if="isWordKnown">
-              <span class="text-green-600 dark:text-green-300">Known</span>
-              <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
-              |
-            </template>
-            <template v-else>
-              <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
-              |
-            </template>
+            <VocabularyStatus :word="response.data" />
             Rank #{{ response.data.mainReading.frequencyRank }}
           </div>
           <div class="md:text-right pt-4">
@@ -241,7 +217,7 @@
             </div>
           </AccordionHeader>
           <AccordionContent>
-            <MediaList :word="response.data"/>
+            <MediaList :word="response.data" />
           </AccordionContent>
         </AccordionPanel>
       </Accordion>

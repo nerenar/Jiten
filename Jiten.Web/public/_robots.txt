@@ -6,6 +6,9 @@ Disallow: /dashboard
 Disallow: /dashboard/
 Disallow: /dashboard/*
 Disallow: /vocabulary/*
+Disallow: /confirm-email
+Disallow: /login-success
+Disallow: /reset-password
 Allow: /decks/media/*/detail
 
 Sitemap: https://jiten.moe/sitemap.xml

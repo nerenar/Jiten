@@ -1,16 +1,18 @@
 <script setup lang="ts">
   import { ref, reactive, onMounted } from 'vue';
   import { useAuthStore } from '~/stores/authStore';
-  import type { LoginRequest } from '~/types';
+  import type { LoginRequest } from '~/types/types';
+  import { type CredentialResponse } from 'vue3-google-signin';
+
 
   const authStore = useAuthStore();
   const router = useRouter();
+  const route = useRoute();
 
   const credentials = reactive<LoginRequest>({
     usernameOrEmail: '',
     password: '',
   });
-  const twoFactorCode = ref('');
 
   onMounted(() => {
     if (authStore.isAuthenticated) {
@@ -20,19 +22,41 @@
 
   async function handleLoginSubmit() {
     const success = await authStore.login(credentials);
-    if (success && !authStore.requiresTwoFactor && authStore.isAuthenticated) {
-      router.push('/');
-    } else if (success && authStore.requiresTwoFactor) {
-      console.log('2FA is required. Please enter the code.');
+    if (success && authStore.isAuthenticated) {
+      if (route.query.redirect) {
+        await router.push(route.query.redirect);
+      } else {
+        await router.push('/');
+      }
     }
   }
 
-  async function handle2faSubmit() {
-    const success = await authStore.loginWith2fa(twoFactorCode.value);
-    if (success && authStore.isAuthenticated) {
-      router.push('/');
+  const handleGoogleOnSuccess = async (response: CredentialResponse) => {
+    const { credential } = response;
+
+    try {
+      const result = await authStore.loginWithGoogle(credential);
+
+      if (result === 'requiresRegistration') {
+        await router.push({ path: '/google-registration' });
+      } else if (result === true) {
+        // Existing user login successful
+        if (route.query.redirect) {
+          await router.push(route.query.redirect);
+        } else {
+          await router.push('/');
+        }
+      } else {
+        console.error('Login failed:', authStore.error);
+      }
+    } catch (error) {
+      console.error('Unexpected error during Google login:', error);
     }
-  }
+  };
+
+  const handleGoogleOnError = () => {
+    console.error('Google login failed. Please try again.');
+  };
 </script>
 
 <template>
@@ -40,29 +64,28 @@
     <template #title>Login</template>
     <template #content>
       <form @submit.prevent="handleLoginSubmit">
-        <div v-if="!authStore.requiresTwoFactor">
-          <div>
-            <FloatLabel for="usernameOrEmail">Username or Email:</FloatLabel>
-            <InputText id="usernameOrEmail" v-model="credentials.usernameOrEmail" type="text" required />
-          </div>
-          <div>
-            <FloatLabel for="password">Password:</FloatLabel>
-            <InputText id="password" v-model="credentials.password" type="password" required />
-          </div>
-          <Button type="submit" :disabled="authStore.isLoading">
-            {{ authStore.isLoading ? 'Logging in...' : 'Login' }}
-          </Button>
+        <div>
+          <FloatLabel for="usernameOrEmail">Username or Email:</FloatLabel>
+          <InputText id="usernameOrEmail" v-model="credentials.usernameOrEmail" type="text" required />
         </div>
-
-        <div v-if="authStore.requiresTwoFactor">
-          <h3>Enter 2FA Code</h3>
+        <div>
+          <FloatLabel for="password">Password:</FloatLabel>
+          <InputText id="password" v-model="credentials.password" type="password" required />
+        </div>
+        <div class="flex flex-col items-center">
           <div>
-            <label for="twoFactorCode">Authenticator Code:</label>
-            <input id="twoFactorCode" v-model="twoFactorCode" type="text" required />
+            <Button type="submit" :disabled="authStore.isLoading">
+              {{ authStore.isLoading ? 'Logging in...' : 'Login' }}
+            </Button>
           </div>
-          <Button :disabled="authStore.isLoading" @click="handle2faSubmit">
-            {{ authStore.isLoading ? 'Verifying...' : 'Verify Code' }}
-          </Button>
+          <div>
+            <GoogleSignInButton @success="handleGoogleOnSuccess" @error="handleGoogleOnError"></GoogleSignInButton>
+          </div>
+        </div>
+        <div>
+          <NuxtLink to="/register">Create an account</NuxtLink>
+          <span> · </span>
+          <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
         </div>
       </form>
 

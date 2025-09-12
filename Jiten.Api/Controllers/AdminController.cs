@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
@@ -18,7 +19,12 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [Route("api/admin")]
 [Authorize("RequiresAdmin")]
-public class AdminController(IConfiguration config, HttpClient httpClient, IBackgroundJobClient backgroundJobs, JitenDbContext dbContext)
+public class AdminController(
+    IConfiguration config,
+    HttpClient httpClient,
+    IBackgroundJobClient backgroundJobs,
+    JitenDbContext dbContext,
+    UserDbContext userContext)
     : ControllerBase
 {
     private static readonly List<string> _supportedExtensions = [".ass", ".srt", ".ssa"];
@@ -366,13 +372,24 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
         return Ok(new { Message = "Recomputing frequencies job has been queued" });
     }
 
-    // [HttpPost("recompute-difficulties")]
-    // public IActionResult RecomputeDifficulties()
-    // {
-    //     backgroundJobs.Enqueue<ComputationJob>(job => job.RecomputeDifficulties());
-    //
-    //     return Ok(new { Message = "Recomputing difficulties job has been queued" });
-    // }
+    [HttpPost("recompute-coverages")]
+    public async Task<IActionResult> RecomputeUserCoverages()
+    {
+        var userIds = await userContext.Users.AsNoTracking().Select(u => u.Id).ToListAsync();
+
+        foreach (var userId in userIds)
+            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+
+        return Ok(new { Message = "Recomputing user coverages for all users has been queued" });
+    }
+
+    [HttpPost("recompute-coverage/{userId}")]
+    public IActionResult RecomputeUserCoverage(string userId)
+    {
+        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+        return Ok(new { Message = $"Recomputing user coverage for user {userId} has been queued" });
+    }
+
 
     [HttpGet("issues")]
     public async Task<IActionResult> GetIssues()
@@ -582,6 +599,17 @@ public class AdminController(IConfiguration config, HttpClient httpClient, IBack
                 await using var fileStream = System.IO.File.OpenRead(file);
                 var items = parser.ParseStream(fileStream, Encoding.UTF8);
                 List<string> lines = items.SelectMany(it => it.PlaintextLines).ToList();
+                for (int i = lines.Count - 1; i >= 0; i--)
+                {
+                    lines[i] = Regex.Replace(lines[i], @"\((.*?)\)", "");
+                    lines[i] = Regex.Replace(lines[i], @"（(.*?)）", "");
+
+                    if (string.IsNullOrWhiteSpace(lines[i]))
+                    {
+                        lines.RemoveAt(i);
+                    }
+                }
+
                 var txtPath = Path.ChangeExtension(file, ".txt");
                 await System.IO.File.WriteAllLinesAsync(txtPath, lines);
                 extractedFiles.Add(txtPath);

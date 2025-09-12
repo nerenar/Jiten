@@ -100,8 +100,14 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("ReceivesNewsletter")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
+
+                    b.Property<DateTime>("TosAcceptedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
@@ -123,6 +129,66 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserCoverage", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Coverage")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("UniqueCoverage")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("UserId", "DeckId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserCoverage_UserId");
+
+                    b.ToTable("UserCoverages", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserKnownWord", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<int>("KnownState")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LearnedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "WordId", "ReadingIndex");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserKnownWord_UserId");
+
+                    b.ToTable("UserKnownWords", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserMetadata", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CoverageRefreshedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserMetadatas", "user");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -266,6 +332,15 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserMetadata", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.User.UserMetadata", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

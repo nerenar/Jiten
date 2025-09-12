@@ -9,6 +9,14 @@ namespace Jiten.Api.Controllers;
 [Route("api/frequency-list")]
 public class FrequencyListController(JitenDbContext context) : ControllerBase
 {
+    
+    /// <summary>
+    /// DON'T TOUCH THIS
+    /// IT'S BEING USED BY THE YOMITAN EXTENSION
+    /// </summary>
+    /// <param name="mediaType"></param>
+    /// <param name="downloadType"></param>
+    /// <returns></returns>
     [HttpGet("download")]
     [EnableRateLimiting("download")]
     public async Task<IResult> GetFrequencyList([FromQuery] MediaType? mediaType = null, string downloadType = "yomitan")
@@ -47,6 +55,13 @@ public class FrequencyListController(JitenDbContext context) : ControllerBase
         }
     }
 
+    /// <summary>
+    /// DON'T TOUCH THIS
+    /// IT'S BEING USED BY THE YOMITAN EXTENSION
+    /// </summary>
+    /// <param name="mediaType"></param>
+    /// <param name="downloadType"></param>
+    /// <returns></returns>
     [HttpGet("index")]
     public async Task<IResult> GetFrequencyListIndex([FromQuery] MediaType? mediaType = null)
     {

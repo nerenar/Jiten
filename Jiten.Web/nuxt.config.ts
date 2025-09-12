@@ -39,6 +39,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       baseURL: 'https://localhost:7299/api/',
+      recaptcha:{
+        v2SiteKey: process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY || '',
+      }
     },
   },
   modules: [
@@ -51,6 +54,8 @@ export default defineNuxtConfig({
     'nuxt-link-checker',
     '@nuxt/scripts',
     'nuxt-umami',
+    'nuxt-vue3-google-signin',
+    'vue-recaptcha/nuxt'
   ],
   primevue: {
     options: {
@@ -110,4 +115,7 @@ export default defineNuxtConfig({
     proxy: 'cloak',
     ignoreLocalhost: true,
   },
+  googleSignIn:{
+    clientId: process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID || '',
+  }
 });

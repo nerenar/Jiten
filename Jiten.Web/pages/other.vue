@@ -136,6 +136,13 @@
             Create Custom Deck
           </Button>
         </div>
+        <div>
+          <ul>
+            <li>
+              <a href="https://greasyfork.org/en/scripts/549246-vndb-character-count" target="_blank">Userscript to display character count on VNDB</a>
+            </li>
+          </ul>
+        </div>
       </template>
     </Card>
 

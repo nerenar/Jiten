@@ -64,3 +64,10 @@ export enum DisplayStyle {
   Compact = 1,
   Table = 2,
 }
+
+export enum KnownState {
+  Unknown = 0,
+  Learning = 1,
+  Known = 2,
+  Suspended = 3,
+}

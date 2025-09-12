@@ -1,4 +1,4 @@
-import type { MediaType, ReadingType } from '~/types';
+import { type KnownState, type MediaType, type ReadingType } from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -25,6 +25,8 @@ export interface Deck {
   childrenDeckCount: number;
   selectedWordOccurrences: number;
   dialoguePercentage: number;
+  coverage: number;
+  uniqueCoverage: number;
 }
 
 export interface DeckDetail {
@@ -63,6 +65,7 @@ export interface Word {
   definitions: Definition[];
   occurrences: number;
   pitchAccents: number[];
+  knownState: KnownState;
 }
 
 export interface Reading {
@@ -149,20 +152,39 @@ export interface TokenResponse {
   refreshToken: string;
 }
 
-export interface DeckCoverage {
-  deckId: number;
-  totalWordCount: number;
-  knownWordsOccurrences: number;
-  knownUniqueWordCount: number;
-  uniqueWordCount: number;
-  knownWordPercentage: number;
-  knownUniqueWordPercentage: number;
-}
-
 export interface ExampleSentence {
   text: string;
   wordPosition: number;
   wordLength: number;
   sourceDeck: Deck;
   sourceDeckParent: Deck;
+}
+
+export interface GoogleSignInResponse {
+  requiresRegistration?: boolean;
+  tempToken?: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+  accessToken?: string;
+  refreshToken?: string;
+}
+
+export interface GoogleRegistrationData {
+  tempToken: string;
+  email: string;
+  name: string;
+  picture?: string;
+  username: string;
+}
+
+export interface CompleteGoogleRegistrationRequest {
+  tempToken: string;
+  username: string;
+  tosAccepted: boolean;
+  receiveNewsletter: boolean;
+}
+
+export interface UserMetadata {
+  coverageRefreshedAt?: Date;
 }

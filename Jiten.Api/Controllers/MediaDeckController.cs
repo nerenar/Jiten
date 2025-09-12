@@ -5,13 +5,13 @@ using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Enums;
 using Jiten.Api.Helpers;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using WanaKanaShaapu;
 
 namespace Jiten.Api.Controllers;
@@ -19,8 +19,14 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [Route("api/media-deck")]
 [EnableRateLimiting("fixed")]
-public class MediaDeckController(JitenDbContext context) : ControllerBase
+public class MediaDeckController(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService) : ControllerBase
 {
+    private class DeckWithOccurrences
+    {
+        public Deck Deck { get; set; } = null!;
+        public int Occurrences { get; set; }
+    }
+
     [HttpGet("get-media-decks-id")]
     [ResponseCache(Duration = 60 * 60 * 24)]
     public async Task<List<int>> GetMediaDecksId()
@@ -28,18 +34,18 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         return await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToListAsync();
     }
 
+
     [HttpGet("get-media-decks")]
-    [ResponseCache(Duration = 300,
-                   VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
+    // [ResponseCache(Duration = 300, VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
     public async Task<PaginatedResponse<List<DeckDto>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
                                                                       int wordId = 0, int readingIndex = 0, string? titleFilter = "",
                                                                       string? sortBy = "",
                                                                       SortOrder sortOrder = SortOrder.Ascending)
     {
         int pageSize = 50;
-
         var query = context.Decks.AsNoTracking();
 
+        // Apply title filter
         if (!string.IsNullOrEmpty(titleFilter))
         {
             FormattableString sql = $"""
@@ -52,7 +58,6 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                      ORDER BY pgroonga_score(tableoid, ctid) DESC
                                      """;
 
-
             query = context.Set<Deck>().FromSqlInterpolated(sql);
         }
         else
@@ -60,28 +65,159 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             query = query.Where(d => d.ParentDeckId == null);
         }
 
-        query = query.Include(d => d.Children);
-
         if (mediaType != null)
             query = query.Where(d => d.MediaType == mediaType);
 
         if (wordId != 0)
         {
-            // Execute this query first and materialize the results
-            var deckIds = await context.DeckWords
-                                       .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
-                                       .Select(dw => dw.DeckId)
-                                       .Distinct()
-                                       .ToListAsync(); // Get the IDs in memory first
+            var wordFilteredDeckIds = await context.DeckWords
+                                                   .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
+                                                   .Select(dw => dw.DeckId)
+                                                   .Distinct()
+                                                   .ToListAsync();
 
-            // Then use the in-memory collection for filtering
-            query = query.Where(d => deckIds.Contains(d.DeckId));
+            query = query.Where(d => wordFilteredDeckIds.Contains(d.DeckId));
+        }
+
+        query = query.Include(d => d.Children)
+                     .Include(d => d.Links);
+
+        // Create projected query for word-based searches
+        IQueryable<DeckWithOccurrences>? projectedQuery = null;
+        if (wordId != 0)
+        {
+            projectedQuery = query.Select(d => new DeckWithOccurrences
+                                               {
+                                                   Deck = d, Occurrences = d.DeckWords
+                                                                            .Where(dw => dw.WordId == wordId &&
+                                                                                         dw.ReadingIndex == readingIndex)
+                                                                            .Select(dw => (int?)dw.Occurrences)
+                                                                            .FirstOrDefault() ?? 0
+                                               });
         }
 
         if (string.IsNullOrEmpty(sortBy))
             sortBy = "title";
 
-        query = sortBy switch
+        Dictionary<int, float> coverageDict = new();
+        Dictionary<int, float> uniqueCoverageDict = new();
+
+        if (currentUserService.IsAuthenticated)
+        {
+            var allDeckIds = await query.Select(d => d.DeckId).ToListAsync();
+            var userId = currentUserService.UserId!;
+            var coverageList = await userContext.UserCoverages
+                                                .AsNoTracking()
+                                                .Where(uc => uc.UserId == userId && allDeckIds.Contains(uc.DeckId))
+                                                .Select(uc => new { uc.DeckId, uc.Coverage, uc.UniqueCoverage })
+                                                .ToListAsync();
+            coverageDict = coverageList.ToDictionary(x => x.DeckId, x => (float)x.Coverage);
+            uniqueCoverageDict = coverageList.ToDictionary(x => x.DeckId, x => (float)x.UniqueCoverage);
+
+            if ((sortBy is "coverage" or "uCoverage"))
+            {
+                bool sortByUnique = sortBy == "uCoverage";
+                return await HandleCoverageSorting(query, projectedQuery, sortOrder, offset ?? 0, pageSize, coverageDict,
+                                                   uniqueCoverageDict, sortByUnique);
+            }
+        }
+
+        if (wordId != 0)
+        {
+            return await HandleWordBasedQuery(projectedQuery!, sortBy, sortOrder, offset ?? 0, pageSize);
+        }
+
+        // Handle regular queries
+        query = ApplySorting(query, sortBy, sortOrder);
+        var totalCount = await query.CountAsync();
+        var paginatedDecks = await query
+                                   .Skip(offset ?? 0)
+                                   .Take(pageSize)
+                                   .AsSplitQuery()
+                                   .ToListAsync();
+
+        var dtos = paginatedDecks.Select(deck => new DeckDto(deck)).ToList();
+
+        if (currentUserService.IsAuthenticated)
+        {
+            foreach (var dto in dtos)
+            {
+                if (coverageDict.TryGetValue(dto.DeckId, out var c)) dto.Coverage = c;
+                if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uc)) dto.UniqueCoverage = uc;
+            }
+        }
+
+        return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
+    }
+
+    private async Task<PaginatedResponse<List<DeckDto>>> HandleCoverageSorting(
+        IQueryable<Deck> query,
+        IQueryable<DeckWithOccurrences>? projectedQuery,
+        SortOrder sortOrder,
+        int offset,
+        int pageSize,
+        Dictionary<int, float> coverageDict,
+        Dictionary<int, float> uniqueCoverageDict,
+        bool sortByUnique)
+    {
+        var totalCount = await query.CountAsync();
+        var allDeckIds = await query.Select(d => d.DeckId).ToListAsync();
+
+        var selectedDict = sortByUnique ? uniqueCoverageDict : coverageDict;
+        var idsWithCoverage = allDeckIds.Where(id => selectedDict.ContainsKey(id)).ToList();
+        var idsWithoutCoverage = allDeckIds.Where(id => !selectedDict.ContainsKey(id)).ToList();
+
+        IEnumerable<int> orderedWithCoverage = sortOrder == SortOrder.Ascending
+            ? idsWithCoverage.OrderBy(id => selectedDict[id])
+            : idsWithCoverage.OrderByDescending(id => selectedDict[id]);
+
+        var orderedIds = orderedWithCoverage.Concat(idsWithoutCoverage).ToList();
+        var pagedIds = orderedIds.Skip(offset).Take(pageSize).ToList();
+
+        // Use projectedQuery if it's word based
+        if (projectedQuery != null)
+        {
+            var pagedResults = await projectedQuery
+                                     .Where(p => pagedIds.Contains(p.Deck.DeckId))
+                                     .ToListAsync();
+
+            var orderIndex = pagedIds.Select((id, idx) => new { id, idx }).ToDictionary(k => k.id, v => v.idx);
+            pagedResults = pagedResults.OrderBy(r => orderIndex[r.Deck.DeckId]).ToList();
+
+            var dtos = pagedResults.Select(r => new DeckDto(r.Deck, r.Occurrences)).ToList();
+
+            foreach (var dto in dtos)
+            {
+                if (coverageDict.TryGetValue(dto.DeckId, out var cov)) dto.Coverage = cov;
+                if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uCov)) dto.UniqueCoverage = uCov;
+            }
+
+            return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
+        }
+        else
+        {
+            var pagedDecks = await query
+                                   .Where(d => pagedIds.Contains(d.DeckId))
+                                   .ToListAsync();
+
+            var orderIndex = pagedIds.Select((id, idx) => new { id, idx }).ToDictionary(k => k.id, v => v.idx);
+            pagedDecks = pagedDecks.OrderBy(d => orderIndex[d.DeckId]).ToList();
+
+            var dtos = pagedDecks.Select(deck => new DeckDto(deck)).ToList();
+
+            foreach (var dto in dtos)
+            {
+                if (coverageDict.TryGetValue(dto.DeckId, out var cov)) dto.Coverage = cov;
+                if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uCov)) dto.UniqueCoverage = uCov;
+            }
+
+            return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
+        }
+    }
+
+    private IQueryable<Deck> ApplySorting(IQueryable<Deck> query, string sortBy, SortOrder sortOrder)
+    {
+        return sortBy switch
         {
             "difficulty" => sortOrder == SortOrder.Ascending
                 ? query.Where(d => d.Difficulty != -1).OrderBy(d => d.Difficulty)
@@ -107,7 +243,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             "uKanjiOnce" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.UniqueKanjiUsedOnceCount)
                 : query.OrderByDescending(d => d.UniqueKanjiUsedOnceCount),
-            "filter" => query.OrderBy(_ => 1), // Dummy ordering to avoid efcore warning, pgroonga_score handles the actual sort
+            "filter" => query.OrderBy(_ => 1), // Dummy ordering for pgroonga_score
             "releaseDate" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.ReleaseDate)
                 : query.OrderByDescending(d => d.ReleaseDate),
@@ -115,64 +251,92 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 ? query.OrderBy(d => d.RomajiTitle)
                 : query.OrderByDescending(d => d.RomajiTitle),
         };
-
-        query = query.Include(d => d.Links);
-
-        var totalCount = query.Count();
-
-        List<DeckDto> dtos;
-
-        if (wordId != 0)
-        {
-            var projectedQuery = query.Select(d => new
-                                                   {
-                                                       Deck = d, Occurrences = d.DeckWords
-                                                                                .Where(dw => dw.WordId == wordId &&
-                                                                                           dw.ReadingIndex == readingIndex)
-                                                                                .Select(dw => (int?)dw.Occurrences)
-                                                                                .FirstOrDefault() ?? 0
-                                                   });
-
-            if (sortBy == "occurrences")
-            {
-                projectedQuery = sortOrder == SortOrder.Ascending
-                    ? projectedQuery.OrderBy(p => p.Occurrences)
-                    : projectedQuery.OrderByDescending(p => p.Occurrences);
-            }
-
-            var paginatedResults = await projectedQuery
-                                         .Skip(offset ?? 0)
-                                         .Take(pageSize)
-                                         .AsSplitQuery()
-                                         .ToListAsync();
-
-            dtos = paginatedResults
-                   .Select(r => new DeckDto(r.Deck, r.Occurrences))
-                   .ToList();
-        }
-        else
-        {
-            var paginatedDecks = await query
-                                       .Skip(offset ?? 0)
-                                       .Take(pageSize)
-                                       .AsSplitQuery()
-                                       .ToListAsync(); // Execute the query against the database
-
-            dtos = new List<DeckDto>();
-            foreach (var deck in paginatedDecks)
-            {
-                dtos.Add(new DeckDto(deck));
-            }
-        }
-
-        return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
     }
 
+    private IQueryable<DeckWithOccurrences> ApplySorting(IQueryable<DeckWithOccurrences> query, string sortBy, SortOrder sortOrder)
+    {
+        return sortBy switch
+        {
+            "occurrences" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Occurrences)
+                : query.OrderByDescending(p => p.Occurrences),
+            "difficulty" => sortOrder == SortOrder.Ascending
+                ? query.Where(p => p.Deck.Difficulty != -1).OrderBy(p => p.Deck.Difficulty)
+                : query.Where(p => p.Deck.Difficulty != -1).OrderByDescending(p => p.Deck.Difficulty),
+            "charCount" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.CharacterCount)
+                : query.OrderByDescending(p => p.Deck.CharacterCount),
+            "sentenceLength" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).Where(p => p.Deck.SentenceCount != 0)
+                : query.OrderByDescending(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).Where(p => p.Deck.SentenceCount != 0),
+            "dialoguePercentage" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.DialoguePercentage)
+                       .Where(p => p.Deck.DialoguePercentage != 0 && p.Deck.DialoguePercentage != 100)
+                : query.OrderByDescending(p => p.Deck.DialoguePercentage)
+                       .Where(p => p.Deck.DialoguePercentage != 0 && p.Deck.DialoguePercentage != 100),
+            "wordCount" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.WordCount)
+                : query.OrderByDescending(p => p.Deck.WordCount),
+            "uKanji" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.UniqueKanjiCount)
+                : query.OrderByDescending(p => p.Deck.UniqueKanjiCount),
+            "uWordCount" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.UniqueWordCount)
+                : query.OrderByDescending(p => p.Deck.UniqueWordCount),
+            "uKanjiOnce" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.UniqueKanjiUsedOnceCount)
+                : query.OrderByDescending(p => p.Deck.UniqueKanjiUsedOnceCount),
+            "filter" => query.OrderBy(_ => 1), // Dummy ordering for pgroonga_score
+            "releaseDate" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.ReleaseDate)
+                : query.OrderByDescending(p => p.Deck.ReleaseDate),
+            _ => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.RomajiTitle)
+                : query.OrderByDescending(p => p.Deck.RomajiTitle),
+        };
+    }
+
+    private async Task<PaginatedResponse<List<DeckDto>>> HandleWordBasedQuery(
+        IQueryable<DeckWithOccurrences> projectedQuery, string sortBy, SortOrder sortOrder, int offset, int pageSize)
+    {
+        // Apply sorting to the projected query
+        projectedQuery = ApplySorting(projectedQuery, sortBy, sortOrder);
+
+        var totalCount = await projectedQuery.CountAsync();
+        var paginatedResults = await projectedQuery
+                                     .Skip(offset)
+                                     .Take(pageSize)
+                                     .AsSplitQuery()
+                                     .ToListAsync();
+
+        var dtos = paginatedResults.Select(r => new DeckDto(r.Deck, r.Occurrences)).ToList();
+
+        // Populate user coverage if authenticated
+        if (currentUserService.IsAuthenticated)
+        {
+            var userId = currentUserService.UserId!;
+            var ids = dtos.Select(d => d.DeckId).ToList();
+            var covs = await userContext.UserCoverages.AsNoTracking()
+                                        .Where(uc => uc.UserId == userId && ids.Contains(uc.DeckId))
+                                        .Select(uc => new { uc.DeckId, uc.Coverage, uc.UniqueCoverage })
+                                        .ToListAsync();
+            var covDict = covs.ToDictionary(x => x.DeckId, x => (float)x.Coverage);
+            var uCovDict = covs.ToDictionary(x => x.DeckId, x => (float)x.UniqueCoverage);
+            foreach (var dto in dtos)
+            {
+                if (covDict.TryGetValue(dto.DeckId, out var c)) dto.Coverage = c;
+                if (uCovDict.TryGetValue(dto.DeckId, out var uc)) dto.UniqueCoverage = uc;
+            }
+        }
+
+        return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
+    }
 
     [HttpGet("{id}/vocabulary")]
-    [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
-    public PaginatedResponse<DeckVocabularyListDto?> GetVocabulary(int id, string? sortBy = "", SortOrder sortOrder = SortOrder.Ascending,
-                                                                   int? offset = 0)
+    // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
+    public async Task<PaginatedResponse<DeckVocabularyListDto?>> GetVocabulary(int id, string? sortBy = "",
+                                                                               SortOrder sortOrder = SortOrder.Ascending,
+                                                                               int? offset = 0, string displayFilter = "all")
     {
         int pageSize = 100;
 
@@ -185,6 +349,27 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         var parentDeckDto = parentDeck != null ? new DeckDto(parentDeck) : null;
 
         var query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == id);
+
+        if (currentUserService.IsAuthenticated && !string.IsNullOrEmpty(displayFilter) && displayFilter != "all")
+        {
+            var userId = currentUserService.UserId!;
+
+            // Materialize known keys in memory
+            var knownKeys = await userContext.UserKnownWords
+                                             .AsNoTracking()
+                                             .Where(uk => uk.UserId == userId)
+                                             .Select(uk => ((long)uk.WordId << 8) | uk.ReadingIndex)
+                                             .ToListAsync();
+
+            // Switch to in-memory filtering
+            query = query.AsEnumerable().Where(dw =>
+            {
+                var key = ((long)dw.WordId << 8) | dw.ReadingIndex;
+                return displayFilter == "known"
+                    ? knownKeys.Contains(key)
+                    : !knownKeys.Contains(key);
+            }).AsQueryable();
+        }
 
         query = sortBy switch
         {
@@ -226,6 +411,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
         DeckVocabularyListDto dto = new() { ParentDeck = parentDeckDto, Deck = deck, Words = new() };
 
+        var knownWords = await currentUserService.GetKnownWordsState(words.Select(dw => (dw.dw.WordId, dw.dw.ReadingIndex)).ToList());
+
         foreach (var word in words)
         {
             if (word.jmDictWord == null)
@@ -238,7 +425,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             List<ReadingDto> alternativeReadings = word.jmDictWord.ReadingsFurigana
                                                        .Select((r, i) => new ReadingDto
                                                                          {
-                                                                             Text = r, ReadingIndex = i,
+                                                                             Text = r, ReadingIndex = (byte)i,
                                                                              ReadingType = word.jmDictWord.ReadingTypes[i], FrequencyRank =
                                                                                  frequencies.First(f => f.WordId == word.dw.WordId)
                                                                                             .ReadingsFrequencyRank[i],
@@ -272,11 +459,14 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             dto.Words.Add(wordDto);
         }
 
+        dto.Words.ApplyKnownWordsState(knownWords);
+
+
         return new PaginatedResponse<DeckVocabularyListDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
     [HttpGet("{id}/detail")]
-    [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "offset"])]
+    // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "offset"])]
     public PaginatedResponse<DeckDetailDto?> GetMediaDeckDetail(int id, int? offset = 0)
     {
         int pageSize = 25;
@@ -287,9 +477,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             return new PaginatedResponse<DeckDetailDto?>(null, 0, pageSize, offset ?? 0);
 
         var parentDeck = context.Decks.AsNoTracking().FirstOrDefault(d => d.DeckId == deck.ParentDeckId);
-
-        var subDecks = context.Decks.AsNoTracking()
-                              .Where(d => d.ParentDeckId == id);
+        var subDecks = context.Decks.AsNoTracking().Where(d => d.ParentDeckId == id);
         int totalCount = subDecks.Count();
 
         subDecks = subDecks
@@ -298,14 +486,34 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                    .Take(pageSize);
 
         var mainDeckDto = new DeckDto(deck);
-        List<DeckDto> subDeckDtos = new();
+        List<DeckDto> subdeckDtos = [];
 
-        foreach (var subDeck in subDecks)
-            subDeckDtos.Add(new DeckDto(subDeck));
+        var subDeckList = subDecks.ToList();
+        foreach (var subDeck in subDeckList)
+            subdeckDtos.Add(new DeckDto(subDeck));
+
+        if (currentUserService.IsAuthenticated)
+        {
+            var userId = currentUserService.UserId!;
+            var ids = new List<int> { mainDeckDto.DeckId };
+            ids.AddRange(subdeckDtos.Select(d => d.DeckId));
+            var coverages = userContext.UserCoverages.AsNoTracking()
+                                       .Where(uc => uc.UserId == userId && ids.Contains(uc.DeckId))
+                                       .Select(uc => new { uc.DeckId, uc.Coverage, uc.UniqueCoverage })
+                                       .ToList();
+            var coverageDict = coverages.ToDictionary(x => x.DeckId, x => (float)x.Coverage);
+            var uCoverageDict = coverages.ToDictionary(x => x.DeckId, x => (float)x.UniqueCoverage);
+            if (coverageDict.TryGetValue(mainDeckDto.DeckId, out var mc)) mainDeckDto.Coverage = mc;
+            if (uCoverageDict.TryGetValue(mainDeckDto.DeckId, out var muc)) mainDeckDto.UniqueCoverage = muc;
+            foreach (var subdeckDto in subdeckDtos)
+            {
+                if (coverageDict.TryGetValue(subdeckDto.DeckId, out var c)) subdeckDto.Coverage = c;
+                if (uCoverageDict.TryGetValue(subdeckDto.DeckId, out var uc)) subdeckDto.UniqueCoverage = uc;
+            }
+        }
 
         var parentDeckDto = parentDeck != null ? new DeckDto(parentDeck) : null;
-
-        var dto = new DeckDetailDto { ParentDeck = parentDeckDto, MainDeck = mainDeckDto, SubDecks = subDeckDtos };
+        var dto = new DeckDetailDto { ParentDeck = parentDeckDto, MainDeck = mainDeckDto, SubDecks = subdeckDtos };
 
         return new PaginatedResponse<DeckDetailDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
@@ -331,9 +539,6 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             var yomitanBytes = await YomitanHelper.GenerateYomitanFrequencyDeckFromDeck(context.DbOptions, deck);
             return Results.File(yomitanBytes, "application/zip", $"freq_{deck.OriginalTitle}.zip");
         }
-
-        if (request is { ExcludeKnownWords: true, KnownWordIds: not null })
-            deckWordsQuery = deckWordsQuery.Where(dw => !request.KnownWordIds.Contains(dw.WordId));
 
         switch (request.DownloadType)
         {
@@ -388,11 +593,34 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 return Results.BadRequest();
         }
 
+        var deckWordsRaw = await deckWordsQuery.ToListAsync();
+
+        if (request.ExcludeKnownWords && currentUserService.IsAuthenticated)
+        {
+            var knownWordIds = await userContext.UserKnownWords
+                                                .Where(kw => kw.UserId == currentUserService.UserId!)
+                                                .Select(kw => new { kw.WordId, kw.ReadingIndex })
+                                                .ToListAsync();
+
+            var knownKeys = knownWordIds
+                            .Select(kw => ((long)kw.WordId << 32) | (uint)kw.ReadingIndex)
+                            .ToHashSet();
+
+            deckWordsRaw = deckWordsRaw
+                           .Where(dw =>
+                           {
+                               var key = ((long)dw.WordId << 32) | (uint)dw.ReadingIndex;
+                               return !knownKeys.Contains(key);
+                           })
+                           .ToList();
+        }
+
         var wordIds = await deckWordsQuery.Select(dw => (long)dw.WordId).ToListAsync();
-        List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords = await deckWordsQuery
-                                                                                 .Select(dw => new ValueTuple<int, byte, int>(dw.WordId,
-                                                                                             dw.ReadingIndex, dw.Occurrences))
-                                                                                 .ToListAsync();
+
+        List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords = deckWordsRaw
+                                                                           .Select(dw => new ValueTuple<int, byte, int>(dw.WordId,
+                                                                                       dw.ReadingIndex, dw.Occurrences))
+                                                                           .ToList();
 
         var bytes = await GenerateDeckDownload(id, request, wordIds, deck, deckWords);
 
@@ -512,11 +740,65 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                                                                        .Select(c => c.ToString()));
                     string expressionAudio = "";
                     string selectionText = "";
-                    string mainDefinition = "<ul>" +
-                                            string.Join("", jmdictWords[word.WordId].Definitions
-                                                                                    .SelectMany(d => d.EnglishMeanings)
-                                                                                    .Select(meaning => $"<li>{meaning}</li>")) +
-                                            "</ul>";
+
+
+                    var definitions = jmdictWords[word.WordId].Definitions;
+                    var definitionBuilder = new StringBuilder();
+                    List<string>? previousPos = null;
+
+                    for (var i = 0; i < definitions.Count; i++)
+                    {
+                        JmDictDefinition? definition = definitions[i];
+                        bool isDifferentPartOfSpeech = previousPos == null || !previousPos.SequenceEqual(definition.PartsOfSpeech);
+                        if (isDifferentPartOfSpeech)
+                        {
+                            if (i != 0)
+                                definitionBuilder.Append("</ul>");
+                            definitionBuilder.Append("<ul>");
+
+                            previousPos = definition.PartsOfSpeech?.ToList() ?? [];
+
+                            if (previousPos.Count > 0)
+                            {
+                                definitionBuilder.Append("<div class=\"definition-pos\">");
+                                definitionBuilder.Append(string.Join(" ",
+                                                                     previousPos.Select(p =>
+                                                                                            $"<span class=\"pos\" title=\"{JmDictHelper.ToHumanReadablePartsOfSpeech([p])[0]}\">{System.Net.WebUtility.HtmlEncode(p)}</span>")));
+                                definitionBuilder.Append("</div>");
+                            }
+                        }
+
+                        // Meanings for this definition
+                        for (var j = 0; j < definition.EnglishMeanings.Count; j++)
+                        {
+                            string? meaning = definition.EnglishMeanings[j];
+                            if (j == 0)
+                                definitionBuilder.Append("<li>");
+                            if (j != 0)
+                                definitionBuilder.Append(" ; ");
+                            definitionBuilder.Append(System.Net.WebUtility.HtmlEncode(meaning));
+                            if (j == definitions.Count - 1)
+                                definitionBuilder.Append("</li>");
+                        }
+                    }
+
+                    definitionBuilder.Append("</ul>");
+
+                    string css = """
+                                 <style>
+                                    .pos {
+                                         background-color: rgb(168, 85, 247);
+                                         border-radius: 0.35em;
+                                         padding: 0.2em 0.4em;
+                                         color: white;
+                                         word-break: keep-all;
+                                    }
+                                 </style>
+                                 """;
+                    definitionBuilder.Append(css);
+                    string mainDefinition = definitionBuilder.ToString();
+
+
                     string definitionPicture = "";
                     string sentence = "";
 
@@ -640,48 +922,6 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             default:
                 return null;
         }
-    }
-
-    [HttpPost("{id}/coverage")]
-    public async Task<ActionResult<DeckCoverageResponse>> GetCoverage(int id, [FromBody] List<long>? wordIds)
-    {
-        if (wordIds == null || !wordIds.Any())
-        {
-            return BadRequest("Please provide a valid list of words");
-        }
-
-        var deck = await context.Decks.AsNoTracking()
-                                .FirstOrDefaultAsync(d => d.DeckId == id);
-
-        if (deck == null)
-        {
-            return NotFound($"Deck with ID {id} not found");
-        }
-
-        var deckWords = await context.DeckWords.AsNoTracking()
-                                     .Where(dw => dw.DeckId == id)
-                                     .ToListAsync();
-
-        var knownUniqueWords = deckWords
-                               .Where(dw => wordIds.Contains(dw.WordId)).ToList();
-
-        int knownWordsOccurrences = knownUniqueWords
-            .Sum(dw => dw.Occurrences);
-
-        knownUniqueWords = knownUniqueWords.DistinctBy(w => w.WordId).ToList();
-
-        double knownWordPercentage = Math.Round((double)knownWordsOccurrences / deck.WordCount * 100, 2);
-
-        double knownUniqueWordPercentage = Math.Round((double)knownUniqueWords.Count() / deck.UniqueWordCount * 100, 2);
-
-        var response = new DeckCoverageResponse
-                       {
-                           DeckId = id, TotalWordCount = deck.WordCount, KnownUniqueWordCount = knownUniqueWords.Count(),
-                           UniqueWordCount = deck.UniqueWordCount, KnownWordsOccurrences = knownWordsOccurrences,
-                           KnownWordPercentage = knownWordPercentage, KnownUniqueWordPercentage = knownUniqueWordPercentage
-                       };
-
-        return Ok(response);
     }
 
     [HttpGet("decks-count")]

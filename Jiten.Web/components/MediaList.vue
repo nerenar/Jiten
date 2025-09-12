@@ -8,6 +8,7 @@
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
   import MediaDeckCompactView from '~/components/MediaDeckCompactView.vue';
   import MediaDeckTableView from '~/components/MediaDeckTableView.vue';
+  import { useAuthStore } from '~/stores/authStore';
 
   const props = defineProps<{
     word?: Word;
@@ -36,6 +37,18 @@
     { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
     { label: 'Release Date', value: 'releaseDate' },
   ]);
+
+  const authStore = useAuthStore();
+  const isConnected = computed(() => (authStore.isAuthenticated));
+
+  if (isConnected.value) {
+    if (!sortByOptions.value.some(o => o.value === 'coverage')) {
+      sortByOptions.value.push({ label: 'Coverage', value: 'coverage' });
+    }
+    if (!sortByOptions.value.some(o => o.value === 'uCoverage')) {
+      sortByOptions.value.push({ label: 'Unique Coverage', value: 'uCoverage' });
+    }
+  }
 
   const sortOrder = ref(route.query.sortOrder ? route.query.sortOrder : SortOrder.Ascending);
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);

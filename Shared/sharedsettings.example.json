@@ -3,6 +3,18 @@
       "JitenDatabase": "Host=localhost;Database=jiten;Username=postgres;Password=password",
       "Redis" : "localhost:6379"
   },
+  "Google": {
+    "ClientId": "",
+    "ClientSecret": "",
+    "RecapatchaSecret": ""
+  },
+  "Email": {
+    "SmtpHost": "smtp.eu.mailgun.org",
+    "SmtpPort": 587,
+    "Username": "",
+    "Password": "",
+    "From": "noreply@example.com"
+  },
   "JwtSettings": {
     "Secret": "YOUR_VERY_STRONG_AND_SECRET_KEY_THAT_IS_AT_LEAST_32_CHARS_LONG_AND_NOT_THIS_ONE",
     "Issuer": "https://api.jiten.moe",

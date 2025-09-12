@@ -103,8 +103,33 @@ public class MorphologicalAnalyser
         wordInfos = CombineFinal(wordInfos);
 
         wordInfos = SeparateSuffixHonorifics(wordInfos);
+        wordInfos = FilterMisparse(wordInfos);
 
         return SplitIntoSentences(text, wordInfos);
+    }
+
+    /// <summary>
+    /// Remove common misparses
+    /// </summary>
+    /// <param name="wordInfos"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    private List<WordInfo> FilterMisparse(List<WordInfo> wordInfos)
+    {
+        for (int i = wordInfos.Count - 1; i >= 0; i--)
+        {
+            var word = wordInfos[i];
+            if (word.Text.Length == 1)
+            {
+                if (word.Text is "ぐ" or "い" or "ー" or "ひ" or "そ" or "つ" or "た" or "く" or "ェ" or "ぇ" or "う")
+                {
+                    wordInfos.RemoveAt(i);
+                    continue;
+                }
+            }
+        }
+
+        return wordInfos;
     }
 
     private void PreprocessText(ref string text)
@@ -146,6 +171,14 @@ public class MorphologicalAnalyser
         for (int i = 0; i < wordInfos.Count;)
         {
             WordInfo w1 = wordInfos[i];
+
+            if (w1 is { PartOfSpeech: PartOfSpeech.Conjunction, Text: "で" })
+            {
+                w1.PartOfSpeech = PartOfSpeech.Particle;
+                newList.Add(w1);
+                i++;
+                continue;
+            }
 
             if (i < wordInfos.Count - 2)
             {
@@ -572,7 +605,9 @@ public class MorphologicalAnalyser
                 continue;
             }
 
-            if (previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+            if ((previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.NaAdjective
+                     or PartOfSpeech.Auxiliary
+                 || previousWord.HasPartOfSpeechSection(PartOfSpeechSection.Adjectival))
                 && currentWord.Text != "な"
                 && currentWord.Text != "に"
                 && (currentWord.DictionaryForm != "です" ||

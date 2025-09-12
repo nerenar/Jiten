@@ -1,4 +1,5 @@
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Data.User;
 
 namespace Jiten.Api.Dtos;
 
@@ -11,13 +12,14 @@ public class WordDto
     public List<DefinitionDto> Definitions { get; set; } = new();
     public int Occurrences { get; set; }
     public List<int>? PitchAccents { get; set; }
+    public KnownState KnownState { get; set; }
 }
 
 public class ReadingDto
 {
     public string Text { get; set; } = "";
     public JmDictReadingType ReadingType { get; set; }
-    public int ReadingIndex { get; set; }
+    public byte ReadingIndex { get; set; }
     public int FrequencyRank { get; set; }
     public double FrequencyPercentage { get; set; }
     public int UsedInMediaAmount { get; set; }

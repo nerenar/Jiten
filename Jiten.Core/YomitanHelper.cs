@@ -156,7 +156,7 @@ public static class YomitanHelper
         string description = $"Dictionary based on frequency data of {title} from jiten.moe";
 
         var indexJson =
-            $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","sequenced":false,"frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
+            $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","sequenced":false,"frequencyMode":"occurrence-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
 
         var deckWords = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deck.DeckId).ToList();
 

@@ -10,5 +10,4 @@ public class DeckDownloadRequest
     public bool ExcludeKana { get; set; }
     public bool ExcludeKnownWords { get; set; }
     public bool ExcludeExampleSentences { get; set; }
-    public List<long>? KnownWordIds { get; set; }
 }

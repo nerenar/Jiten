@@ -214,19 +214,15 @@ namespace Jiten.Parser
                              .Select(result => result)
                              .ToArray();
 
-            // Assign the occurences for each word
-            foreach (var deckWord in processedWords)
-            {
-                // Remove one since we already counted it at the start
-                deckWord.Occurrences--;
-                deckWord.Occurrences +=
-                    processedWords.Count(x => x.WordId == deckWord.WordId && x.ReadingIndex == deckWord.ReadingIndex);
-            }
-
-            // deduplicate deconjugated words
+            // Sum occurrences while deduplicating by WordId and ReadingIndex for deconjugated words
             processedWords = processedWords
                              .GroupBy(x => new { x.WordId, x.ReadingIndex })
-                             .Select(x => x.First())
+                             .Select(g =>
+                             {
+                                 var first = g.First();
+                                 first.Occurrences = g.Sum(w => w.Occurrences);
+                                 return first;
+                             })
                              .ToArray();
 
             List<ExampleSentence>? exampleSentences = null;
@@ -638,7 +634,8 @@ namespace Jiten.Parser
             }
 
             // if there's a candidate that's the same as the base word, put it first in the list
-            var baseDictionaryWord = WanaKana.ToHiragana(wordData.wordInfo.DictionaryForm);
+            var baseDictionaryWord = WanaKana.ToHiragana(wordData.wordInfo.DictionaryForm.Replace("ゎ", "わ").Replace("ヮ", "わ"),
+                                                         new DefaultOptions() { ConvertLongVowelMark = false });
             var baseDictionaryWordIndex = candidates.FindIndex(c => c.form.Text == baseDictionaryWord);
             if (baseDictionaryWordIndex != -1)
             {
@@ -704,7 +701,8 @@ namespace Jiten.Parser
 
             if (matches.Count > 1)
             {
-                bestMatch = matches.OrderByDescending(m => m.Item1.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text))).First();
+                matches = matches.OrderByDescending(m => m.Item1.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text))).ToList();
+                bestMatch = matches.First();
 
                 if (!WanaKana.IsKana(wordData.wordInfo.NormalizedForm))
                 {

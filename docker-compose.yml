@@ -14,6 +14,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d
+      - ./postgres-config/postgresql.conf:/etc/postgresql/postgresql.conf
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USER}" ]
       interval: 5s
@@ -47,6 +49,14 @@ services:
       - StoreRawText=${STORE_RAW_TEXT:-false}
       - IgdbClientId=${IGDB_CLIENT_ID:-}
       - IgdbClientSecret=${IGDB_CLIENT_SECRET:-}
+      - Google_ClientId=${GOOGLE_CLIENT_ID:-}
+      - Google_ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - Google_RecapatchaSecret=${GOOGLE_RECAPTCHA_SECRET:-}
+      - Email_SmtpHost=${SES_SMTP_HOST:-smtp.eu.mailgun.org}
+      - Email_SmtpPort=${SES_SMTP_PORT:-587}
+      - Email_Username=${SES_SMTP_USER:-}
+      - Email_Password=${SES_SMTP_PASSWORD:-}
+      - Email_From=${SES_FROM:-noreply@example.com}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
@@ -71,6 +81,8 @@ services:
       - NUXT_PUBLIC_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
       - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
       - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL=${UMAMI_ANALYTICS_HOST_URL:-https://umami.jiten.moe}
+      - NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY=${GOOGLE_RECAPTCHA_V2_SITE_KEY:-}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=Host(`jiten.moe`)"

@@ -99,7 +99,7 @@ public class Program
         public int? DebugDeck { get; set; }
 
         [Option(longName: "user-dic-mass-add", Required = false,
-                HelpText = "Add a list of words to the user dictionary from a file if they're not parsed correctly")]
+                HelpText = "Add all JMDict words that are not in the list of word of this file")]
         public string UserDicMassAdd { get; set; }
 
         [Option(longName: "apply-migrations", Required = false, HelpText = "Apply migrations to the database")]
@@ -790,39 +790,64 @@ public class Program
         return "";
     }
 
-    private static async Task AddWordsToUserDictionary(string filePath, string userDicPath)
+    private static async Task AddWordsToUserDictionary(string existingWords, string userDicPath)
     {
-        var file = filePath;
-        var lines = await File.ReadAllLinesAsync(file);
-        var parser = new Jiten.Parser.MorphologicalAnalyser();
-        var startLine = 0;
-        var batchSize = 1000;
-        var xmlLines = new System.Collections.Concurrent.ConcurrentBag<string>();
-        var processedCount = 0;
-        var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount };
+        // Load exclude list (one word per line)
+        var excludeList = await File.ReadAllLinesAsync(existingWords);
+        var excludeSet = new HashSet<string>(excludeList, StringComparer.Ordinal);
 
-        var linesToProcess = lines.Skip(startLine).ToArray();
+        // Load existing XML first tokens (surface before first comma)
+        var existingXmlFirstTokens = new HashSet<string>(StringComparer.Ordinal);
+        if (File.Exists(userDicPath))
+        {
+            var xmlExistingLines = await File.ReadAllLinesAsync(userDicPath);
+            foreach (var l in xmlExistingLines)
+            {
+                if (string.IsNullOrWhiteSpace(l)) continue;
+                var surface = l.Split(',', 2)[0].Trim();
+                if (!string.IsNullOrEmpty(surface))
+                    existingXmlFirstTokens.Add(surface);
+            }
+        }
+
+        excludeSet.UnionWith(existingXmlFirstTokens);
+
         await using var context = new JitenDbContext(_dbOptions);
 
-        var lookups = context.Lookups.ToList();
-        var words = context.JMDictWords.ToList();
-        await Parallel.ForEachAsync(linesToProcess, parallelOptions, async (line, ct) =>
+        // Pre-load lookups and words
+        var lookups = context.Lookups.AsNoTracking().ToList();
+        var words = context.JMDictWords.AsNoTracking().ToList();
+
+        // Candidate readings = all readings not in exclude list
+        var allReadings = words.SelectMany(w => w.Readings).Distinct().ToList();
+        var wordsToAdd = allReadings.Where(r => !excludeSet.Contains(r));
+
+        var lookupDict = lookups
+                         .GroupBy(l => l.LookupKey)
+                         .ToDictionary(g => g.Key, g => g.First());
+
+        var wordDict = words
+                       .GroupBy(w => w.WordId)
+                       .ToDictionary(g => g.Key, g => g.First());
+
+        const int batchSize = 10000;
+        var buffer = new List<string>(batchSize);
+        int addedCount = 0;
+
+        foreach (var reading in wordsToAdd)
         {
-            var parsed = await parser.Parse(line);
+            // Ensure there is a lookup for this reading
+            var readingInHiragana = WanaKana.ToHiragana(reading);
+            if (!lookupDict.TryGetValue(readingInHiragana, out var lookup))
+                continue;
 
-            if (parsed.Count <= 1) return;
+            if (!wordDict.TryGetValue(lookup.WordId, out var word))
+                continue;
 
-            Console.WriteLine("Fail parsing " + line);
-            // Create a new context for each task
-            var lookup = lookups.FirstOrDefault(x => x.LookupKey == line);
-            if (lookup == null)
-            {
-                Console.WriteLine("No lookup found for " + line);
-                return;
-            }
+            // Determine kana reading to convert to katakana
+            var indexKana = word.ReadingTypes.IndexOf(JmDictReadingType.KanaReading);
+            var kanas = indexKana >= 0 && indexKana < word.Readings.Count ? word.Readings[indexKana] : reading;
 
-            var word = words.First(x => x.WordId == lookup.WordId);
-            var kanas = word.Readings[word.ReadingTypes.IndexOf(JmDictReadingType.KanaReading)];
             var pos = word.PartsOfSpeech.Select(p => p.ToPartOfSpeech()).ToList();
 
             string posKanji = "NULL";
@@ -852,35 +877,45 @@ public class Program
                 posKanji = "感動詞";
             else if (pos.Contains(PartOfSpeech.Numeral))
                 posKanji = "数詞";
+            else if (pos.Contains(PartOfSpeech.Suffix))
+                posKanji = "接尾辞";
+            else if (pos.Contains(PartOfSpeech.Counter))
+                posKanji = "助数詞";
+            else if (pos.Contains(PartOfSpeech.AdverbTo))
+                posKanji = "副詞的と";
+            else if (pos.Contains(PartOfSpeech.NounSuffix))
+                posKanji = "名詞接尾辞";
+            else if (pos.Contains(PartOfSpeech.PrenounAdjectival))
+                posKanji = "連体詞";
+            else if (pos.Contains(PartOfSpeech.Name))
+                posKanji = "名";
+            else if (pos.Contains(PartOfSpeech.Prefix))
+                posKanji = "接頭詞";
 
-            var xmlLine = $"{line},5146,5146,5000,{line},{posKanji},普通名詞,一般,*,*,*,{WanaKana.ToKatakana(kanas)},{line},*,*,*,*,*";
-            xmlLines.Add(xmlLine);
 
-            var currentCount = Interlocked.Increment(ref processedCount);
-            if (currentCount % batchSize == 0)
+            var xmlLine = $"{reading},5146,5146,5000,{reading},{posKanji},普通名詞,一般,*,*,*,{WanaKana.ToKatakana(kanas)},{reading},*,*,*,*,*";
+            buffer.Add(xmlLine);
+            // Update in-memory set to avoid duplicates within this run
+            existingXmlFirstTokens.Add(reading);
+            addedCount++;
+
+            if (buffer.Count >= batchSize)
             {
-                await WriteBatchToFile();
-            }
-
-            Console.WriteLine("fixed");
-        });
-
-        await WriteBatchToFile();
-
-        async Task WriteBatchToFile()
-        {
-            var linesToWrite = new List<string>();
-            while (xmlLines.TryTake(out var line))
-            {
-                linesToWrite.Add(line);
-            }
-
-            if (linesToWrite.Count > 0)
-            {
-                await File.AppendAllLinesAsync(userDicPath, linesToWrite);
-                Console.WriteLine($"Wrote {linesToWrite.Count} lines to file");
+                await File.AppendAllLinesAsync(userDicPath, buffer);
+                Console.WriteLine($"Wrote {buffer.Count} lines to file");
+                buffer.Clear();
             }
         }
+
+        // Flush remaining lines
+        if (buffer.Count > 0)
+        {
+            await File.AppendAllLinesAsync(userDicPath, buffer);
+            Console.WriteLine($"Wrote {buffer.Count} lines to file");
+            buffer.Clear();
+        }
+
+        Console.WriteLine($"Added {addedCount} entries.");
     }
 
     private static async Task RegisterAdmin(IConfigurationRoot config, string email, string username, string password)

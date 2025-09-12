@@ -3,17 +3,39 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { localiseTitle } from '~/utils/localiseTitle';
   import MediaDeckDownloadDialog from '~/components/MediaDeckDownloadDialog.vue';
+  import Card from 'primevue/card';
+  import { useAuthStore } from '~/stores/authStore';
+  import { useJitenStore } from '~/stores/jitenStore';
+
+  const authStore = useAuthStore();
+  const store = useJitenStore();
 
   const props = defineProps<{
     deck: Deck;
   }>();
 
   const showDownloadDialog = ref(false);
+
+  const borderColor = computed(() => {
+    if (!authStore.isAuthenticated|| store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0))
+      return 'none';
+
+    // red
+    if (props.deck.coverage < 50) return "4px solid red";
+    // orange
+    if (props.deck.coverage < 70) return "4px solid #FFA500";
+    // yellow
+    if (props.deck.coverage < 80) return "4px solid #FEDE00";
+    // greenish yellow
+    if (props.deck.coverage < 90) return "4px solid #D4E157";
+    // green
+    return "4px solid #4CAF50";
+  });
 </script>
 
 <template>
   <div class="relative group h-48 w-34">
-    <div class="h-48 w-34 overflow-hidden rounded-md border hover:shadow-md transition-shadow duration-200">
+    <div class="h-48 w-34 overflow-hidden rounded-md border hover:shadow-md transition-shadow duration-200"   :style="{ 'border': borderColor }">
       <div class="relative h-full">
         <!-- Cover image -->
         <img
@@ -23,9 +45,12 @@
         />
 
         <!-- Title overlay at bottom -->
-        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 p-1 text-white">
-          <div class="font-bold text-sm truncate">{{ localiseTitle(deck) }}</div>
+        <div class="absolute flex justify-between items-center bottom-0 left-0 right-0 bg-black/75 0 p-1 text-white">
+<!--          <div class="font-bold text-sm truncate">{{ localiseTitle(deck) }}</div>-->
           <div class="text-xs text-gray-300">{{ getMediaTypeText(deck.mediaType) }}</div>
+          <div v-if="deck.selectedWordOccurrences != 0" class="bg-purple-500 dark:bg-purple-300 border-1 border-purple-200 dark:border-purple-800 text-white dark:text-black px-2 py-1 rounded-full text-xs font-bold">
+            x{{ deck.selectedWordOccurrences.toLocaleString() }}
+          </div>
         </div>
 
         <!-- Hover overlay with additional info -->
@@ -44,7 +69,7 @@
               <span>Uniq words:</span>
               <span class="tabular-nums">{{ deck.uniqueWordCount.toLocaleString() }}</span>
             </div>
-            <div v-if="deck.difficulty != 0" class="flex justify-between">
+            <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>
               <span v-if="deck.difficulty == 0" class="tabular-nums text-green-700 dark:text-green-300"> ★☆☆☆☆☆ </span>
               <span v-else-if="deck.difficulty == 1" class="tabular-nums text-green-500"> ★★☆☆☆☆ </span>

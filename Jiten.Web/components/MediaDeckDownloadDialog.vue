@@ -107,7 +107,6 @@
     try {
       downloading.value = true;
       localVisible.value = false;
-      const knownWordIds = excludeKnownWords.value ? store.getKnownWordIds() || [] : [];
 
       const response = await $api<File>(url, {
         method: 'POST',
@@ -120,7 +119,6 @@
           excludeKana: excludeKana.value,
           excludeKnownWords: excludeKnownWords.value,
           excludeExampleSentences: excludeExampleSentences.value,
-          knownWordIds: knownWordIds,
         },
         headers: {
           'Content-Type': 'application/json',

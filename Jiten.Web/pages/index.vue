@@ -16,6 +16,13 @@
 
         <div class="flex flex-col gap-4">
           <div>
+            <h2><b>Update September 12, 2025</b></h2>
+            Accounts are now available! Sign up to get access to coverage, filtering vocabulary lists by words that you know or don't know and downloading decks with only unknown words!
+            <br />
+            A lot more related features are coming soon :)
+          </div>
+
+          <div>
             <h2><b>Update July 29, 2025</b></h2>
             Yomitan frequency dictionaries, better import from JPDB, download occurrences Yomitan dictionaries, bug fixes and improved parser.
           </div>

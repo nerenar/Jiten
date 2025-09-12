@@ -1,5 +1,6 @@
 using System.Diagnostics;
-using BunnyCDN.Net.Storage;
+using System.Threading;
+using ImageMagick;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
@@ -9,9 +10,34 @@ namespace Jiten.Core;
 
 public static class JitenHelper
 {
+    // Cap concurrent PostgreSQL COPY operations to reduce server pressure/timeouts
+    private static readonly SemaphoreSlim CopySemaphore = new SemaphoreSlim(6);
     public static async Task InsertDeck(DbContextOptions<JitenDbContext> options, Deck deck, byte[] cover, bool update = false)
     {
+        var totalTimer = Stopwatch.StartNew();
+        Console.WriteLine($"[{DateTime.UtcNow:O}] Inserting deck {deck.OriginalTitle}...");
+
+        byte[] optimizedCoverBytes = null;
+        try
+        {
+            if (cover.Length > 0)
+            {
+                using var coverOptimized = new MagickImage(cover);
+                coverOptimized.Resize(400, 400);
+                coverOptimized.Strip();
+                coverOptimized.Quality = 85;
+                coverOptimized.Format = MagickFormat.Jpeg;
+                optimizedCoverBytes = coverOptimized.ToByteArray();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[{DateTime.UtcNow:O}] Warning: cover processing failed: {ex.Message}. Continuing without optimized cover.");
+        }
+
+        // Create a context for the transactional metadata update and to get DeckId
         await using var context = new JitenDbContext(options);
+        // start a transaction only around the initial deck insert/update metadata
         await using var transaction = await context.Database.BeginTransactionAsync();
 
         try
@@ -19,174 +45,295 @@ public static class JitenHelper
             var existingDeck =
                 await context.Decks
                              .Include(d => d.DeckWords)
-                             .Include(d => d.Children).ThenInclude(d => d.DeckWords).OrderBy(d => d.DeckOrder)
+                             .Include(d => d.Children).ThenInclude(d => d.DeckWords)
                              .Include(d => d.RawText)
                              .Include(d => d.ExampleSentences)
+                             .OrderBy(d => d.DeckOrder)
                              .FirstOrDefaultAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType);
 
             if (existingDeck != null)
             {
-                if (!update || update && existingDeck.LastUpdate >= deck.LastUpdate)
+                if (!update || (update && existingDeck.LastUpdate >= deck.LastUpdate))
                 {
-                    Console.WriteLine($"Deck {deck.OriginalTitle} already exists, no update flag or deck not changed, skipping.");
+                    Console.WriteLine($"[{DateTime.UtcNow:O}] Deck {deck.OriginalTitle} already exists, no update flag or deck not changed, skipping.");
                     await transaction.RollbackAsync();
                     return;
                 }
-                else
-                {
-                    Console.WriteLine($"Deck {deck.OriginalTitle} already exists, updating.");
-                    await UpdateDeck(context, existingDeck, deck);
-                }
+
+                Console.WriteLine($"[{DateTime.UtcNow:O}] Deck {deck.OriginalTitle} exists, updating metadata...");
+                await UpdateDeck(context, existingDeck, deck);
+                await context.SaveChangesAsync();
+                Console.WriteLine($"[{DateTime.UtcNow:O}] Update completed.");
             }
             else
             {
-                // Fix potential null references to decks
+                // New deck: detach deckwords and example sentences so EF doesn't attempt to cascade insert them
                 deck.SetParentsAndDeckWordDeck(deck);
                 deck.ParentDeckId = null;
 
-                // Prevent efcore from inserting the deckwords as we will do it with an optimized method later
-                var deckWordsToInsert = deck.DeckWords.ToList();
+                var deckWordsToInsert = deck.DeckWords?.ToList() ?? new List<DeckWord>();
                 deck.DeckWords = new List<DeckWord>();
 
-                // Do the same for example sentences to prevent EF Core from inserting them prematurely
                 var exampleSentencesToInsert = deck.ExampleSentences?.ToList() ?? new List<ExampleSentence>();
-                if (deck.ExampleSentences != null)
-                    deck.ExampleSentences = new List<ExampleSentence>();
+                if (deck.ExampleSentences != null) deck.ExampleSentences = new List<ExampleSentence>();
 
+                var childrenToInsert = deck.Children?.ToList() ?? new List<Deck>();
+                deck.Children = new List<Deck>();
+
+                // Add minimal deck entity
                 context.Decks.Add(deck);
+                context.Entry(deck).State = EntityState.Added;
+                context.Entry(deck).Collection(d => d.Children).IsModified = false;
+                context.Entry(deck).Collection(d => d.DeckWords).IsModified = false;
+                context.Entry(deck).Collection(d => d.ExampleSentences).IsModified = false;
 
-                await context.SaveChangesAsync();
+                // Hint PostgreSQL to skip fsync for this small transaction; reduces latency for large row inserts
+                await context.Database.ExecuteSqlRawAsync(@"SET LOCAL synchronous_commit = OFF");
 
-                using var coverOptimized = new ImageMagick.MagickImage(cover);
-
-                coverOptimized.Resize(400, 400);
-                coverOptimized.Strip();
-                coverOptimized.Quality = 85;
-                coverOptimized.Format = ImageMagick.MagickFormat.Jpeg;
-
-                var coverUrl = await BunnyCdnHelper.UploadFile(coverOptimized.ToByteArray(), $"{deck.DeckId}/cover.jpg");
-                deck.CoverName = coverUrl;
-
-                await BulkInsertDeckWords(context, deckWordsToInsert, deck.DeckId);
-
-                if (deck.ExampleSentences != null && exampleSentencesToInsert.Any())
+                // Persist the deck so we have deck.DeckId for foreign keys/paths
+                var saveTimer = Stopwatch.StartNew();
+                var prevDetect = context.ChangeTracker.AutoDetectChangesEnabled;
+                try
                 {
-                    await BulkInsertExampleSentences(context, exampleSentencesToInsert, deck.DeckId);
+                    context.ChangeTracker.AutoDetectChangesEnabled = false;
+                    await context.SaveChangesAsync();
+                }
+                finally
+                {
+                    context.ChangeTracker.AutoDetectChangesEnabled = prevDetect;
                 }
 
-                await InsertChildDecks(context, deck.Children, deck.DeckId);
+                Console.WriteLine($"[{DateTime.UtcNow:O}] SaveChanges (new deck) took {saveTimer.ElapsedMilliseconds} ms. DeckId={deck.DeckId}");
 
-                context.Entry(deck).State = EntityState.Modified;
+                // Commit the transactional metadata now so we don't hold it while doing large COPYs
+                await transaction.CommitAsync();
+
+                // Upload the cover (network) after committing -- use optimizedCoverBytes
+                if (optimizedCoverBytes != null)
+                {
+                    try
+                    {
+                        var coverUrl = await BunnyCdnHelper.UploadFile(optimizedCoverBytes, $"{deck.DeckId}/cover.jpg");
+                        deck.CoverName = coverUrl;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[{DateTime.UtcNow:O}] Warning: cover upload failed: {ex.Message}");
+                    }
+                }
+
+                // Bulk insert the deck words for this deck (using a separate connection)
+                var deckWordTask = BulkInsertDeckWords(context, deckWordsToInsert, deck.DeckId);
+
+                // Bulk insert example sentences
+                Task exampleSentencesTask = Task.CompletedTask;
+                if (exampleSentencesToInsert.Any())
+                    exampleSentencesTask = BulkInsertExampleSentences(context, exampleSentencesToInsert, deck.DeckId);
+
+                // Insert child decks: we will add rows to the DB (get their IDs) then perform their heavy COPYs in parallel.
+                var childBulkTasks = InsertChildDecks(context, childrenToInsert, deck.DeckId);
+
+                // Wait for all bulk operations (deck words, sentences, children) to finish
+                await Task.WhenAll(deckWordTask, exampleSentencesTask, childBulkTasks);
+
+                // Update deck entity to reflect cover url if any
+                await using var updateCtx = new JitenDbContext(options);
+                updateCtx.Attach(deck);
+                updateCtx.Entry(deck).State = EntityState.Modified;
+
+                // Small retry to survive transient socket drops during final update
+                var attempts = 0;
+                Exception lastEx = null;
+                while (attempts < 3)
+                {
+                    try
+                    {
+                        attempts++;
+                        await updateCtx.SaveChangesAsync();
+                        lastEx = null;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastEx = ex;
+                        var delayMs = (int)Math.Pow(2, attempts) * 200;
+                        Console.WriteLine($"[{DateTime.UtcNow:O}] Warning: final SaveChanges failed (attempt {attempts}): {ex.Message}. Retrying in {delayMs} ms...");
+                        await Task.Delay(delayMs);
+                    }
+                }
+                if (lastEx != null) throw lastEx;
+
+                Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk inserts for deck and children completed.");
+                Console.WriteLine($"Insert took {totalTimer.ElapsedMilliseconds} ms.");
+                return;
             }
 
-            await context.SaveChangesAsync();
+            // If existing deck update path: we committed or will do bulk ops below.
             await transaction.CommitAsync();
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync();
-            Console.WriteLine($"Error inserting deck: {ex.Message}");
+            // If we are still in transaction, rollback
+            try
+            {
+                await transaction.RollbackAsync();
+            }
+            catch
+            {
+                /* ignore */
+            }
+
+            Console.WriteLine($"[{DateTime.UtcNow:O}] Error inserting deck: {ex.Message}");
+            return;
         }
     }
 
     private static async Task BulkInsertDeckWords(JitenDbContext context, ICollection<DeckWord> deckWords, int deckId)
     {
+        var timer = Stopwatch.StartNew();
+        Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk inserting {deckWords.Count} deck words for DeckId {deckId}...");
         if (!deckWords.Any()) return;
 
-        const int batchSize = 5000;
-        var batches = deckWords.Chunk(batchSize);
-
-        foreach (var batch in batches)
+        await CopySemaphore.WaitAsync();
+        try
         {
-            var sql = $@"
-                        INSERT INTO jiten.""DeckWords"" (""WordId"", ""ReadingIndex"", ""Occurrences"", ""DeckId"") VALUES " +
-                      "";
-            var parameters = new List<object>();
-            var values = new List<string>();
-
-            for (int i = 0; i < batch.Length; i++)
+            await using (var ctx = new JitenDbContext(context.DbOptions))
             {
-                var dw = batch[i];
-                values.Add($"({{{parameters.Count}}}, {{{parameters.Count + 1}}}, {{{parameters.Count + 2}}}, {{{parameters.Count + 3}}})");
-                parameters.AddRange([dw.WordId, dw.ReadingIndex, dw.Occurrences, deckId]);
-            }
+                var conn = (NpgsqlConnection)ctx.Database.GetDbConnection();
+                await conn.OpenAsync();
 
-            sql += string.Join(", ", values);
-            await context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
+                // Disable statement timeout for this COPY scope
+                await using (var timeoutCmd = new NpgsqlCommand(@"SET LOCAL statement_timeout = 0", conn))
+                {
+                    timeoutCmd.CommandTimeout = 0;
+                    await timeoutCmd.ExecuteNonQueryAsync();
+                }
+
+                // Use binary COPY
+                await using (var writer = await conn.BeginBinaryImportAsync(
+                    @"COPY jiten.""DeckWords"" (""WordId"", ""ReadingIndex"", ""Occurrences"", ""DeckId"") FROM STDIN (FORMAT BINARY)"))
+                {
+                    foreach (var dw in deckWords)
+                    {
+                        await writer.StartRowAsync();
+                        await writer.WriteAsync(dw.WordId);
+                        await writer.WriteAsync(dw.ReadingIndex);
+                        await writer.WriteAsync(dw.Occurrences);
+                        await writer.WriteAsync(deckId);
+                    }
+
+                    await writer.CompleteAsync();
+                }
+            }
         }
+        finally
+        {
+            CopySemaphore.Release();
+        }
+
+        Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk insert (deck words) took {timer.ElapsedMilliseconds} ms for DeckId {deckId}.");
     }
 
     private static async Task BulkInsertExampleSentences(JitenDbContext context, ICollection<ExampleSentence> exampleSentences, int deckId)
     {
+        var timer = Stopwatch.StartNew();
+        Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk inserting {exampleSentences.Count} example sentences for DeckId {deckId}...");
         if (!exampleSentences.Any()) return;
 
-        const int batchSize = 1000;
-        var batches = exampleSentences.Chunk(batchSize);
-        var sentenceIdMapping = new Dictionary<ExampleSentence, int>();
-
-        // First, insert all example sentences and keep track of their generated IDs
-        foreach (var batch in batches)
+        await CopySemaphore.WaitAsync();
+        try
         {
-            var sql = $@"
-                        INSERT INTO jiten.""ExampleSentences"" (""Text"", ""Position"", ""DeckId"") 
-                        VALUES {string.Join(", ", Enumerable.Range(0, batch.Length).Select(i => $"({{{i * 3}}}, {{{i * 3 + 1}}}, {{{i * 3 + 2}}})"))}
-                        RETURNING ""SentenceId""";
-
-            var parameters = new List<object>();
-
-            foreach (var sentence in batch)
+            await using (var ctx = new JitenDbContext(context.DbOptions))
             {
-                parameters.Add(sentence.Text);
-                parameters.Add(sentence.Position);
-                parameters.Add(deckId);
-            }
+                var conn = (NpgsqlConnection)ctx.Database.GetDbConnection();
+                await conn.OpenAsync();
 
-            var sentenceIds = await context.Database.SqlQueryRaw<int>(sql, parameters.ToArray()).ToListAsync();
+                // Disable statement timeout for this session scope
+                await using (var timeoutCmd = new NpgsqlCommand(@"SET LOCAL statement_timeout = 0", conn))
+                {
+                    timeoutCmd.CommandTimeout = 0;
+                    await timeoutCmd.ExecuteNonQueryAsync();
+                }
 
-            // Store the mapping between sentences and their IDs
-            for (int i = 0; i < batch.Length; i++)
-            {
-                sentenceIdMapping[batch[i]] = sentenceIds[i];
-                // Update the entity with the generated ID
-                batch[i].SentenceId = sentenceIds[i];
-                batch[i].DeckId = deckId;
+                // Step 1: preallocate unique IDs from the backing sequence (safe under concurrency)
+                var ids = new List<int>(exampleSentences.Count);
+                await using (var idCmd = new NpgsqlCommand(
+                    @"SELECT nextval(pg_get_serial_sequence('jiten.""ExampleSentences""', 'SentenceId')::regclass)
+                         FROM generate_series(1, @cnt)", conn))
+                {
+                    idCmd.CommandTimeout = 0;
+                    idCmd.Parameters.AddWithValue("cnt", exampleSentences.Count);
+                    await using var reader = await idCmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        // nextval returns bigint
+                        var id64 = reader.GetInt64(0);
+                        ids.Add(Convert.ToInt32(id64));
+                    }
+                }
+
+                if (ids.Count != exampleSentences.Count)
+                    throw new InvalidOperationException("Failed to allocate IDs for example sentences.");
+
+                // Step 2: COPY sentences
+                await using (var writer = await conn.BeginBinaryImportAsync(
+                    @"COPY jiten.""ExampleSentences"" (""SentenceId"", ""Text"", ""Position"", ""DeckId"") FROM STDIN (FORMAT BINARY)"))
+                {
+                    var idx = 0;
+                    foreach (var sentence in exampleSentences)
+                    {
+                        var id = ids[idx++];
+                        await writer.StartRowAsync();
+                        await writer.WriteAsync(id);
+                        await writer.WriteAsync(sentence.Text);
+                        await writer.WriteAsync(sentence.Position);
+                        await writer.WriteAsync(deckId);
+
+                        sentence.SentenceId = id;
+                        sentence.DeckId = deckId;
+                    }
+
+                    await writer.CompleteAsync();
+                }
+
+                // Collect example sentence words and assign ExampleSentenceId
+                var allWords = new List<ExampleSentenceWord>();
+                foreach (var sentence in exampleSentences)
+                {
+                    foreach (var word in sentence.Words)
+                    {
+                        word.ExampleSentenceId = sentence.SentenceId;
+                        allWords.Add(word);
+                    }
+                }
+
+                // Step 3: COPY words if any
+                if (allWords.Any())
+                {
+                    await using (var wordWriter = await conn.BeginBinaryImportAsync(
+                        @"COPY jiten.""ExampleSentenceWords"" (""ExampleSentenceId"", ""WordId"", ""ReadingIndex"", ""Position"", ""Length"") FROM STDIN (FORMAT BINARY)"))
+                    {
+                        foreach (var w in allWords)
+                        {
+                            await wordWriter.StartRowAsync();
+                            await wordWriter.WriteAsync(w.ExampleSentenceId);
+                            await wordWriter.WriteAsync(w.WordId);
+                            await wordWriter.WriteAsync(w.ReadingIndex);
+                            await wordWriter.WriteAsync(w.Position);
+                            await wordWriter.WriteAsync(w.Length);
+                        }
+
+                        await wordWriter.CompleteAsync();
+                    }
+                }
             }
         }
-
-        // Then, insert all example sentence words using the generated sentence IDs
-        var allWords = new List<ExampleSentenceWord>();
-
-        foreach (var sentence in exampleSentences)
+        finally
         {
-            foreach (var word in sentence.Words)
-            {
-                word.ExampleSentenceId = sentence.SentenceId;
-                allWords.Add(word);
-            }
+            CopySemaphore.Release();
         }
 
-        if (!allWords.Any()) return;
-
-        var wordBatches = allWords.Chunk(batchSize);
-
-        foreach (var batch in wordBatches)
-        {
-            var sql = $@"
-                        INSERT INTO jiten.""ExampleSentenceWords"" (""ExampleSentenceId"", ""WordId"", ""ReadingIndex"", ""Position"", ""Length"") VALUES " +
-                      "";
-            var parameters = new List<object>();
-            var values = new List<string>();
-
-            for (int i = 0; i < batch.Length; i++)
-            {
-                var word = batch[i];
-                values.Add($"({{{parameters.Count}}}, {{{parameters.Count + 1}}}, {{{parameters.Count + 2}}}, {{{parameters.Count + 3}}}, {{{parameters.Count + 4}}})");
-                parameters.AddRange([word.ExampleSentenceId, word.WordId, word.ReadingIndex, word.Position, word.Length]);
-            }
-
-            sql += string.Join(", ", values);
-            await context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
-        }
+        Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk insert (example sentences+words) took {timer.ElapsedMilliseconds} ms for DeckId {deckId}.");
     }
 
     private static async Task UpdateDeck(JitenDbContext context, Deck existingDeck, Deck deck)
@@ -210,8 +357,6 @@ public static class JitenHelper
         existingDeck.RawText = deck.RawText;
 
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {{0}}", deckId);
-
-        // Delete existing example sentences (cascade will delete their words too)
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""ExampleSentences"" WHERE ""DeckId"" = {{0}}", deckId);
 
         await BulkInsertDeckWords(context, deck.DeckWords, deckId);
@@ -226,31 +371,93 @@ public static class JitenHelper
 
     private static async Task InsertChildDecks(JitenDbContext context, ICollection<Deck> children, int parentDeckId)
     {
-        if (!children.Any()) return;
+        if (children == null || !children.Any()) return;
 
-        // Store DeckWords separately for each child to prevent EF from inserting them
-        var childDeckWordsToInsert = new Dictionary<Deck, List<DeckWord>>();
+        // Capture child data by object reference (not by DeckId which may be 0 before SaveChanges)
+        var childPayloads = new List<(Deck child, List<DeckWord> words, List<ExampleSentence> sentences, DeckRawText? rawText)>();
 
-        foreach (var child in children)
+        await using (var ctx = new JitenDbContext(context.DbOptions))
         {
-            child.ParentDeckId = parentDeckId;
-            child.CreationDate = DateTime.UtcNow;
-            child.LastUpdate = DateTimeOffset.UtcNow;
+            foreach (var child in children)
+            {
+                child.ParentDeckId = parentDeckId;
+                child.CreationDate = DateTime.UtcNow;
+                child.LastUpdate = DateTimeOffset.UtcNow;
 
-            // Prevent EF Core from inserting the DeckWords - we'll do it with bulk insert
-            childDeckWordsToInsert[child] = child.DeckWords.ToList();
-            child.DeckWords = new List<DeckWord>();
+                // Detach heavy collections for EF insert and keep them in our payload list
+                var dwList = child.DeckWords?.ToList() ?? new List<DeckWord>();
+                child.DeckWords = new List<DeckWord>();
 
-            context.Entry(child).State = child.DeckId == 0 ? EntityState.Added : EntityState.Modified;
+                var exList = child.ExampleSentences?.ToList() ?? new List<ExampleSentence>();
+                if (child.ExampleSentences != null) child.ExampleSentences = new List<ExampleSentence>();
 
+                childPayloads.Add((child, dwList, exList, child.RawText));
+                ;
+
+                // Add or update minimal metadata row
+                ctx.Entry(child).State = child.DeckId == 0 ? EntityState.Added : EntityState.Modified;
+            }
+
+            var saveTimer = Stopwatch.StartNew();
+            await ctx.SaveChangesAsync();
+            Console.WriteLine($"[{DateTime.UtcNow:O}] Saved {children.Count} child deck metadata in {saveTimer.ElapsedMilliseconds} ms.");
         }
 
-        await context.SaveChangesAsync();
-
-        foreach (var child in children)
+        // Prepare RawText entities with assigned DeckIds
+        var rawTextsToUpsert = new List<DeckRawText>();
+        foreach (var (child, _, _, rawText) in childPayloads)
         {
-            await BulkInsertDeckWords(context, childDeckWordsToInsert[child], child.DeckId);
+            if (rawText == null) continue;
+            // Ensure the FK is the newly assigned child.DeckId
+            rawText.DeckId = child.DeckId;
+            rawTextsToUpsert.Add(rawText);
         }
+
+        // Upsert RawText in one go (performs insert or update based on PK DeckId)
+        if (rawTextsToUpsert.Count > 0)
+        {
+            await using var rawCtx = new JitenDbContext(context.DbOptions);
+            // Reduce fsync cost for this one batch insert/update
+            await rawCtx.Database.ExecuteSqlRawAsync(@"SET LOCAL synchronous_commit = OFF");
+
+            // Attach as Added when not present, Modified when present
+            // If you always want to overwrite, use Upsert-like behavior:
+            foreach (var rt in rawTextsToUpsert)
+            {
+                // Try to attach as Modified; if not exists, mark as Added
+                rawCtx.Entry(rt).State = EntityState.Modified;
+            }
+
+            try
+            {
+                await rawCtx.SaveChangesAsync();
+            }
+            catch
+            {
+                // Fallback: if Modified failed because rows don't exist, add them
+                rawCtx.ChangeTracker.Clear();
+                await rawCtx.DeckRawTexts.AddRangeAsync(rawTextsToUpsert);
+                await rawCtx.SaveChangesAsync();
+            }
+        }
+
+        // Schedule bulk COPYs using the now-assigned DeckIds
+        var bulkTasks = new List<Task>();
+        foreach (var (child, words, sentences, rawText) in childPayloads)
+        {
+            var deckId = child.DeckId;
+            // Safety: skip if EF failed to assign an ID for some reason
+            if (deckId <= 0) continue;
+
+            if (words is { Count: > 0 })
+                bulkTasks.Add(BulkInsertDeckWords(context, words, deckId));
+
+            if (sentences is { Count: > 0 })
+                bulkTasks.Add(BulkInsertExampleSentences(context, sentences, deckId));
+        }
+
+        await Task.WhenAll(bulkTasks);
+        Console.WriteLine($"[{DateTime.UtcNow:O}] All child bulk inserts completed.");
     }
 
     private static async Task UpdateChildDecks(JitenDbContext context, Deck existingDeck, ICollection<Deck> children)
@@ -259,7 +466,6 @@ public static class JitenHelper
                                             .Where(d => d.ParentDeckId == existingDeck.DeckId)
                                             .ToListAsync();
 
-        var newChildren = children.ToDictionary(c => c.OriginalTitle);
         var existingChildrenDict = existingChildren.ToDictionary(c => c.OriginalTitle);
 
         foreach (var child in children)
@@ -335,10 +541,11 @@ public static class JitenHelper
     /// <param name="context">The database context.</param>
     /// <param name="mediaType">The media type to compute frequencies for. If null, calculates global frequencies.</param>
     /// <returns>A list of JmDictWordFrequency objects, sorted by rank.</returns>
-    public static async Task<List<JmDictWordFrequency>> ComputeFrequencies(DbContextOptions<JitenDbContext> options, MediaType? mediaType = null)
+    public static async Task<List<JmDictWordFrequency>> ComputeFrequencies(DbContextOptions<JitenDbContext> options,
+                                                                           MediaType? mediaType = null)
     {
         await using var context = new JitenDbContext(options);
-        
+
         Dictionary<int, JmDictWordFrequency> wordFrequencies = new();
         var wordReadingCounts = await context.JMDictWords
                                              .AsNoTracking()

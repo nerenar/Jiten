@@ -26,6 +26,7 @@
   const isLoading = ref({
     reparse: false,
     frequencies: false,
+    coverages: false,
     difficulties: false,
   });
 
@@ -120,6 +121,44 @@
     }
   };
 
+  const confirmRecomputeCoverages = () => {
+    confirm.require({
+      message: 'Are you sure you want to recompute coverages for all users? This operation may take a long time.',
+      header: 'Confirmation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => recomputeCoverages(),
+      reject: () => {},
+    });
+  };
+
+  const recomputeCoverages = async () => {
+    try {
+      isLoading.value.coverages = true;
+      const data = await $api('/admin/recompute-coverages', {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Recomputing coverages job has been queued',
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to recompute coverages',
+        life: 5000,
+      });
+      console.error('Error recomputing coverages:', error);
+    } finally {
+      isLoading.value.coverages = false;
+    }
+  };
+  
   const fetchMissingMetadata = async () => {
     try {
       const data = await $api(`/admin/fetch-all-missing-metadata`, {
@@ -199,6 +238,24 @@
               :disabled="isLoading.frequencies"
               :loading="isLoading.frequencies"
               @click="confirmRecomputeFrequencies"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Recompute Coverages</template>
+        <template #content>
+          <p class="mb-4">Recompute coverage for all users.</p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Recompute Coverages"
+              icon="pi pi-users"
+              class="p-button-warning"
+              :disabled="isLoading.coverages"
+              :loading="isLoading.coverages"
+              @click="confirmRecomputeCoverages"
             />
           </div>
         </template>

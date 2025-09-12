@@ -1,5 +1,6 @@
 using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,11 +11,11 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [Route("api/vocabulary")]
 [EnableRateLimiting("fixed")]
-public class VocabularyController(JitenDbContext context) : ControllerBase
+public class VocabularyController(JitenDbContext context, ICurrentUserService currentUserService) : ControllerBase
 {
     [HttpGet("{wordId}/{readingIndex}")]
-    [ResponseCache(Duration = 3600)]
-    public async Task<IResult> GetWord(int wordId, int readingIndex)
+    // [ResponseCache(Duration = 3600)]
+    public async Task<IResult> GetWord(int wordId, byte readingIndex)
     {
         var word = await context.JMDictWords.AsNoTracking()
                                 .Include(w => w.Definitions)
@@ -51,7 +52,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
         List<ReadingDto> alternativeReadings = word.Readings
                                                    .Select((r, i) => new ReadingDto
                                                                      {
-                                                                         Text = r, ReadingIndex = i, ReadingType = word.ReadingTypes[i],
+                                                                         Text = r, ReadingIndex = (byte)i, ReadingType = word.ReadingTypes[i],
                                                                          FrequencyRank =
                                                                              frequency.ReadingsFrequencyRank[i],
                                                                          FrequencyPercentage =
@@ -59,12 +60,13 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
                                                                          UsedInMediaAmount = frequency.ReadingsUsedInMediaAmount[i]
                                                                      })
                                                    .ToList();
+        
 
         return Results.Ok(new WordDto
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents
+                              PitchAccents = word.PitchAccents, KnownState = await currentUserService.GetKnownWordState(wordId, readingIndex)
                           });
     }
 

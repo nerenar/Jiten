@@ -9,6 +9,7 @@ using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -58,6 +59,7 @@ builder.Services.AddIdentity<User, IdentityRole>(options =>
            options.Password.RequireDigit = true;
            options.Password.RequireLowercase = true;
            options.Password.RequireUppercase = true;
+           options.Password.RequireNonAlphanumeric = false;
            options.Password.RequiredLength = 10;
 
            // Lockout settings
@@ -68,9 +70,6 @@ builder.Services.AddIdentity<User, IdentityRole>(options =>
            // User settings
            options.User.RequireUniqueEmail = true;
            options.SignIn.RequireConfirmedEmail = true;
-
-           // Token Provider for 2FA
-           // options.Tokens.AuthenticatorTokenProvider = TokenOptions.DefaultAuthenticatorProvider;
        })
        .AddEntityFrameworkStores<UserDbContext>()
        .AddDefaultTokenProviders();
@@ -103,12 +102,6 @@ builder.Services.AddAuthentication(options =>
                                                    IssuerSigningKey = new SymmetricSecurityKey(key), ClockSkew = TimeSpan.Zero
                                                };
        });
-// TODO: Later, for Google Login:
-// .AddGoogle(options =>
-// {
-//     options.ClientId = configuration["Authentication:Google:ClientId"];
-//     options.ClientSecret = configuration["Authentication:Google:ClientSecret"];
-// });
 
 builder.Services.AddAuthorization(options =>
 {
@@ -116,36 +109,37 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSender, Jiten.Api.Services.EmailService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("fixed", context =>
     {
         var clientIp = GetClientIp(context);
-        
-        return RateLimitPartition.GetFixedWindowLimiter(clientIp, _ => new FixedWindowRateLimiterOptions
-                                                                       {
-                                                                           PermitLimit = 300, 
-                                                                           Window = TimeSpan.FromSeconds(60),
-                                                                           QueueProcessingOrder = QueueProcessingOrder.OldestFirst, 
-                                                                           QueueLimit = 3,
-                                                                           AutoReplenishment = true
-                                                                       });
+
+        return RateLimitPartition.GetFixedWindowLimiter(clientIp,
+                                                        _ => new FixedWindowRateLimiterOptions
+                                                             {
+                                                                 PermitLimit = 300, Window = TimeSpan.FromSeconds(60),
+                                                                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 3,
+                                                                 AutoReplenishment = true
+                                                             });
     });
 
     options.AddPolicy("download", context =>
     {
         var clientIp = GetClientIp(context);
-        
-        return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
-                                                                         {
-                                                                             PermitLimit = 10, 
-                                                                             Window = TimeSpan.FromSeconds(60),
-                                                                             SegmentsPerWindow = 10,
-                                                                             QueueProcessingOrder = QueueProcessingOrder.OldestFirst, 
-                                                                             QueueLimit = 2,
-                                                                             AutoReplenishment = true
-                                                                         });
+
+        return RateLimitPartition.GetSlidingWindowLimiter(clientIp,
+                                                          _ => new SlidingWindowRateLimiterOptions
+                                                               {
+                                                                   PermitLimit = 10, Window = TimeSpan.FromSeconds(60),
+                                                                   SegmentsPerWindow = 10,
+                                                                   QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 2,
+                                                                   AutoReplenishment = true
+                                                               });
     });
 
     options.OnRejected = async (context, token) =>
@@ -171,6 +165,7 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddResponseCaching();
+builder.Services.AddMemoryCache();
 
 builder.Services.AddCors(options =>
 {
@@ -229,12 +224,41 @@ builder.Services.AddHangfireServer((options) =>
 
 builder.Services.AddHangfireServer((options) =>
 {
+    options.ServerName = "CoverageServer";
+    options.Queues = ["coverage"];
+    options.WorkerCount = 4;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
     options.ServerName = "DefaultServer";
     options.Queues = ["default"];
     options.WorkerCount = Environment.ProcessorCount / 4;
 });
 
+
+builder.Services.Configure<FormOptions>(options => { options.ValueCountLimit = 8192; });
+
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    foreach (var roleName in Enum.GetNames(typeof(UserRole)))
+    {
+        if (!await roleManager.RoleExistsAsync(roleName))
+        {
+            await roleManager.CreateAsync(new IdentityRole(roleName));
+        }
+    }
+
+    var recurringJobs = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+    recurringJobs.AddOrUpdate<ComputationJob>(
+                                              "updateCoverage",
+                                              job => job.DailyUserCoverage(),
+                                              Cron.Daily());
+}
+
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions
                         {
@@ -298,13 +322,13 @@ app.Run();
 static string GetClientIp(HttpContext context)
 {
     // Traefik header precedence
-    var headers = new[] 
-                  { 
-                      "X-Forwarded-For",      // Standard header Traefik uses
-                      "X-Real-IP",            // Alternative header
-                      "CF-Connecting-IP"      // If you're using Cloudflare
+    var headers = new[]
+                  {
+                      "X-Forwarded-For", // Standard header Traefik uses
+                      "X-Real-IP", // Alternative header
+                      "CF-Connecting-IP" // If you're using Cloudflare
                   };
-    
+
     foreach (var header in headers)
     {
         var value = context.Request.Headers[header].FirstOrDefault();
@@ -318,7 +342,7 @@ static string GetClientIp(HttpContext context)
             }
         }
     }
-    
+
     // Fallback to connection IP (will be Traefik's IP)
     return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }

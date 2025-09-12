@@ -5,34 +5,22 @@
   import VocabularyDefinitions from '~/components/VocabularyDefinitions.vue';
   import { convertToRuby } from '~/utils/convertToRuby';
   import { useJitenStore } from '~/stores/jitenStore';
+  import VocabularyStatus from '~/components/VocabularyStatus.vue';
 
   const props = defineProps<{
     word: Word;
     isCompact: boolean;
   }>();
 
-  const store = useJitenStore();
-
-  const isWordKnown = ref(store.isWordKnown(props.word.wordId));
-
   const isCompact = ref(props.isCompact);
 
   const toggleCompact = () => {
     isCompact.value = !isCompact.value;
   };
-
-  const toggleWordKnown = () => {
-    if (isWordKnown.value) {
-      store.removeKnownWordId(props.word.wordId);
-    } else {
-      store.addKnownWordIds([props.word.wordId]);
-    }
-    isWordKnown.value = !isWordKnown.value;
-  };
 </script>
 
 <template>
-  <Card class="">
+  <Card>
     <template #title>
       <div class="flex justify-between">
         <div class="flex flex-row gap-4">
@@ -40,15 +28,7 @@
           <Button text @click="toggleCompact">{{ isCompact ? 'Expand' : 'Compact' }}</Button>
         </div>
         <div class="text-gray-500 dark:text-gray-300 text-sm text-right">
-          <template v-if="isWordKnown">
-            <span class="text-green-600 dark:text-green-300">Known</span>
-            <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
-            |
-          </template>
-          <template v-else>
-            <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
-            |
-          </template>
+          <VocabularyStatus :word="word" />
           x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
         </div>
       </div>

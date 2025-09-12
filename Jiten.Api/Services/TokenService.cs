@@ -23,19 +23,20 @@ public class TokenService
         _context = context;
     }
 
-    public async Task<TokenResponse> GenerateTokensAsync(User user, bool isTwoFactorLogin = false)
+    public async Task<TokenResponse> GenerateTokens(User user)
     {
         var userRoles = await _userManager.GetRolesAsync(user);
         var jwtSettings = _configuration.GetSection("JwtSettings");
 
         var claims = new List<Claim>
                      {
-                         new Claim(JwtRegisteredClaimNames.Sub, user.Id), new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                         new Claim(JwtRegisteredClaimNames.Email, user.Email), new Claim(ClaimTypes.Name, user.UserName),
+                         new(ClaimTypes.NameIdentifier, user.Id), new(JwtRegisteredClaimNames.Sub, user.Id),
+                         new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                         new(JwtRegisteredClaimNames.Email, user.Email), new(ClaimTypes.Name, user.UserName),
                          // Add amr (Authentication Method Reference) claim for 2FA
                          // "mfa" indicates multi-factor authentication was performed
                          // This is useful for clients or other services to know the strength of the authentication
-                         new Claim("amr", isTwoFactorLogin ? "mfa" : "pwd") // "pwd" for password
+                         new("amr", "pwd")
                      };
 
         foreach (var role in userRoles)

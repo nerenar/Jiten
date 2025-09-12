@@ -15,8 +15,15 @@
     { label: 'Global Frequency', value: 'globalFreq' },
   ]);
 
+  const displayOptions = ref([
+    { label: 'All', value: 'all' },
+    { label: 'Only known', value: 'known' },
+    { label: 'Only unknown', value: 'unknown' },
+  ]);
+
   const sortOrder = ref(route.query.sortOrder ? route.query.sortOrder : SortOrder.Ascending);
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
+  const display = ref(route.query.display ? route.query.display : displayOptions.value[0].value);
 
   watch(sortOrder, (newValue) => {
     router.replace({
@@ -36,6 +43,15 @@
     });
   });
 
+  watch(display, (newValue) => {
+    router.replace({
+      query: {
+        ...route.query,
+        display: newValue,
+      },
+    });
+  })
+
   const {
     data: response,
     status,
@@ -45,6 +61,7 @@
       offset: offset,
       sortBy: sortBy,
       sortOrder: sortOrder,
+      displayFilter: display
     },
     watch: [offset],
   });
@@ -125,6 +142,18 @@
         <Icon v-if="sortOrder == SortOrder.Descending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
         <Icon v-if="sortOrder == SortOrder.Ascending" name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
       </Button>
+      <FloatLabel variant="on">
+        <Select
+          v-model="display"
+          :options="displayOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="display"
+          input-id="display"
+          class="w-full md:w-56"
+        />
+        <label for="display">Display</label>
+      </FloatLabel>
     </div>
     <div class="flex justify-between flex-col md:flex-row">
       <div class="flex gap-8 pl-2">

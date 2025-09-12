@@ -25,7 +25,10 @@ public enum PartOfSpeech
     Expression = 20,
     NominalAdjective = 21,
     Numeral = 22,
-    PrenounAdjectival = 23
+    PrenounAdjectival = 23,
+    Counter = 24,
+    AdverbTo = 25,
+    NounSuffix = 26
 }
 
 public enum PartOfSpeechSection
@@ -86,7 +89,8 @@ public enum PartOfSpeechSection
     Name = 53,
     Letter = 54,
     PlaceName = 55,
-    TaruAdjective = 56, }
+    TaruAdjective = 56,
+}
 
 public static class PartOfSpeechExtension
 {
@@ -107,7 +111,9 @@ public static class PartOfSpeechExtension
             "記号" => PartOfSpeech.Symbol,
             "接頭詞" or "接頭辞" or "pref" => PartOfSpeech.Prefix,
             "フィラー" => PartOfSpeech.Filler,
-            "名" or "company" or "given" or "place" or "person" or "product" or "ship" or "surname" => PartOfSpeech.Name,
+            "名" or "company" or "given" or "place" or "person" or "product" or "ship" or "surname" or "unclass" or "name-fem" or "name-masc" or "station"
+                or "group" or "char" or "creat" or "dei" or "doc" or "ev" or "fem" or "fict" or "leg" or "masc" or "myth" or "obj"
+                or "organization" or "oth" or "relig" or "serv" or "ship" or "surname" or "work" or "unc" => PartOfSpeech.Name,
             "代名詞" or "pn" => PartOfSpeech.Pronoun,
             "接尾辞" or "suf" => PartOfSpeech.Suffix,
             "普通名詞" => PartOfSpeech.CommonNoun,
@@ -117,11 +123,14 @@ public static class PartOfSpeechExtension
             "形動" or "adj-no" or "adj-t" or "adj-f" => PartOfSpeech.NominalAdjective,
             "連体詞" or "adj-pn" => PartOfSpeech.PrenounAdjectival,
             "数詞" or "num" => PartOfSpeech.Numeral,
+            "助数詞" or "ctr" => PartOfSpeech.Counter,
+            "副詞的と" or "adv-to" => PartOfSpeech.AdverbTo,
+            "名詞接尾辞" or "n-suf" => PartOfSpeech.NounSuffix,
             // _ => throw new ArgumentException($"Invalid part of speech : {pos}")
             _ => PartOfSpeech.Unknown
         };
     }
-    
+
     public static List<PartOfSpeech> ToPartOfSpeech(this List<string> pos)
     {
         return pos.Select(p => p.ToPartOfSpeech()).ToList();
