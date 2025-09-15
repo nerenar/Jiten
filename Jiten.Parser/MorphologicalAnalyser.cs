@@ -119,13 +119,15 @@ public class MorphologicalAnalyser
         for (int i = wordInfos.Count - 1; i >= 0; i--)
         {
             var word = wordInfos[i];
-            if (word.Text.Length == 1)
+            if (word.Text == "なん")
+                word.PartOfSpeech = PartOfSpeech.Prefix;
+
+            if (word.Text.Length != 1) continue;
+            if (word.Text is "ぐ" or "い" or "ー" or "ひ" or "そ" or "つ" or "た" or "く" or "ェ" or "ぇ" or "う" or "せ" or "レ" or "ま" or "す" or "き"
+                or "り" or "る")
             {
-                if (word.Text is "ぐ" or "い" or "ー" or "ひ" or "そ" or "つ" or "た" or "く" or "ェ" or "ぇ" or "う")
-                {
-                    wordInfos.RemoveAt(i);
-                    continue;
-                }
+                wordInfos.RemoveAt(i);
+                continue;
             }
         }
 
@@ -283,9 +285,13 @@ public class MorphologicalAnalyser
             // Always process な as the particle and not the vegetable
             // Always process に as the particle and not the baggage
             if (w1.Text is "な" or "に")
-            {
                 w1.PartOfSpeech = PartOfSpeech.Particle;
-            }
+
+            if (w1.HasPartOfSpeechSection(PartOfSpeechSection.SentenceEndingParticle) && w1.Text is "かあ" or "かー")
+                w1.Text = "か";
+
+            if (w1.HasPartOfSpeechSection(PartOfSpeechSection.CaseMarkingParticle) && w1.Text is "にー" or "にい")
+                w1.Text = "に";
 
             newList.Add(w1);
             i++;
@@ -568,7 +574,7 @@ public class MorphologicalAnalyser
 
             if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) &&
                 currentWord.Text is "て" or "で" or "ちゃ" or "ば" &&
-                previousWord.PartOfSpeech == PartOfSpeech.Verb)
+                previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective)
             {
                 previousWord.Text += currentWord.Text;
                 combined = true;

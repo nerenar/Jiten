@@ -113,6 +113,9 @@ public class Program
 
         [Option(longName: "extract-features", Required = false, HelpText = "Extract features from directory for ML.")]
         public string ExtractFeatures { get; set; }
+        
+        [Option(longName: "extract-features-db", Required = false, HelpText = "Extract features from DB for ML.")]
+        public string ExtractFeaturesDb { get; set; }
 
         [Option(longName: "extract-morphemes", Required = false,
                 HelpText = "Extract morphemes from words in the directionary and add them to the database.")]
@@ -283,8 +286,16 @@ public class Program
                         if (!string.IsNullOrEmpty(o.ExtractFeatures))
                         {
                             Console.WriteLine("Extracting features...");
-                            var featureExtractor = new FeatureExtractor(_dbOptions);
+                            var featureExtractor = new FileFeatureExtractor(_dbOptions);
                             await featureExtractor.ExtractFeatures(Jiten.Parser.Parser.ParseTextToDeck, o.ExtractFeatures);
+                            Console.WriteLine("All features extracted.");
+                        }
+                        
+                        if (!string.IsNullOrEmpty(o.ExtractFeaturesDb))
+                        {
+                            Console.WriteLine("Extracting features...");
+                            var featureExtractor = new DbFeatureExtractor(_dbOptions);
+                            await featureExtractor.ExtractFeatures(Jiten.Parser.Parser.ParseTextToDeck, o.ExtractFeaturesDb);
                             Console.WriteLine("All features extracted.");
                         }
 
@@ -862,7 +873,12 @@ public class Program
             else if (pos.Contains(PartOfSpeech.Pronoun))
                 posKanji = "代名詞";
             else if (pos.Contains(PartOfSpeech.Noun))
+            {
+                if (reading == "ていい" || reading == "からな")
+                    continue;
+                
                 posKanji = "名詞";
+            }
             else if (pos.Contains(PartOfSpeech.Particle))
                 posKanji = "助詞";
             else if (pos.Contains(PartOfSpeech.NaAdjective))
@@ -888,7 +904,12 @@ public class Program
             else if (pos.Contains(PartOfSpeech.PrenounAdjectival))
                 posKanji = "連体詞";
             else if (pos.Contains(PartOfSpeech.Name))
+            {
+                // Remove problematic readings
+                if (WanaKana.IsHiragana(reading) ||reading == "イーノ" ||reading == "ドーダ" || reading == "コトカ")
+                    continue;
                 posKanji = "名";
+            }
             else if (pos.Contains(PartOfSpeech.Prefix))
                 posKanji = "接頭詞";
 

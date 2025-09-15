@@ -280,10 +280,20 @@ namespace Jiten.Parser
 
             if (predictDifficulty)
             {
+                string model;
+                if (mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.Manga
+                    or MediaType.WebNovel)
+                    model = "difficulty_prediction_model_novels.onnx";
+                else
+                    model = "difficulty_prediction_model_shows.onnx";
+
                 DifficultyPredictor difficultyPredictor =
-                    new(_dbContext.DbOptions,
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "difficulty_prediction_model.onnx"));
+                    new(_dbContext.DbOptions, Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", model));
                 deck.Difficulty = await difficultyPredictor.PredictDifficulty(deck, mediatype);
+                // DifficultyPredictorVae difficultyPredictor =
+                //     new(_dbContext.DbOptions,
+                //         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "vae_prediction.py"));
+                // deck.Difficulty = await difficultyPredictor.PredictDifficulty(deck, mediatype);
                 Console.WriteLine($"Predicted difficulty: {deck.Difficulty}");
             }
 
@@ -420,7 +430,7 @@ namespace Jiten.Parser
                                     wordData.wordInfo.PartOfSpeech = PartOfSpeech.IAdjective;
                                     verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
                                 }
-                                
+
                                 if (!verbResult.success || verbResult.word == null)
                                 {
                                     wordData.wordInfo.PartOfSpeech = PartOfSpeech.NaAdjective;

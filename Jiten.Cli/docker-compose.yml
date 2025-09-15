@@ -7,6 +7,7 @@ services:
     # Environment Variables
     environment:
       - ConnectionStrings__JitenDatabase=Host=${HOST_NAME:-postgres};Port=5432;Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password}
+      - ConnectionStrings__Redis=redis:${REDIS_PORT:-6379}
       - UseBunnyCdn=${USE_BUNNYCDN:-false}
       - BunnyCdnSecret=${BUNNYCDN_SECRET:-}
       - BunnyCdnStorageZone=${BUNNYCDN_STORAGE_ZONE:-}

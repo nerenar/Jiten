@@ -442,6 +442,11 @@ public static class JmDictHelper
         wordInfos.First(w => w.WordId == 2207630).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 1442490).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 1423310).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1502390).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1343100).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1610040).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 2059630).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1495580).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2029110).Definitions.Add(new JmDictDefinition()
                                                                   {
                                                                       PartsOfSpeech = ["prt"], EnglishMeanings = ["indicates na-adjective"]
