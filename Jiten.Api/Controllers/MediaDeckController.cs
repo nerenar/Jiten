@@ -1106,7 +1106,7 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
     }
 
     /// <summary>
-    /// Report an issue with adeck
+    /// Report an issue with a deck
     /// </summary>
     /// <param name="request">Issue type and comment.</param>
     /// <returns>Did the report get sent successfully.</returns>

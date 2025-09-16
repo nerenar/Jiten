@@ -122,9 +122,8 @@ public class MorphologicalAnalyser
             if (word.Text == "なん")
                 word.PartOfSpeech = PartOfSpeech.Prefix;
 
-            if (word.Text.Length != 1) continue;
             if (word.Text is "ぐ" or "い" or "ー" or "ひ" or "そ" or "つ" or "た" or "く" or "ェ" or "ぇ" or "う" or "せ" or "レ" or "ま" or "す" or "き"
-                or "り" or "る")
+                or "り" or "る" or "かあ" or "かー" or "にー" or "にい")
             {
                 wordInfos.RemoveAt(i);
                 continue;
@@ -286,13 +285,7 @@ public class MorphologicalAnalyser
             // Always process に as the particle and not the baggage
             if (w1.Text is "な" or "に")
                 w1.PartOfSpeech = PartOfSpeech.Particle;
-
-            if (w1.HasPartOfSpeechSection(PartOfSpeechSection.SentenceEndingParticle) && w1.Text is "かあ" or "かー")
-                w1.Text = "か";
-
-            if (w1.HasPartOfSpeechSection(PartOfSpeechSection.CaseMarkingParticle) && w1.Text is "にー" or "にい")
-                w1.Text = "に";
-
+            
             newList.Add(w1);
             i++;
         }

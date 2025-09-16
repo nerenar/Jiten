@@ -410,7 +410,7 @@
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Difficulty Override</label>
-                  <InputNumber v-model="difficultyOverride" class="w-full" />
+                  <InputNumber v-model="difficultyOverride" class="w-full" :min-fraction-digits="1" />
                 </div>
               </div>
               <div>
@@ -580,7 +580,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium mb-1">Difficulty Override</label>
-                    <InputNumber v-model="subdeck.difficultyOverride" class="w-12" />
+                    <InputNumber v-model="subdeck.difficultyOverride" class="w-12" :min-fraction-digits="1" />
                   </div>
                 </div>
                 <Button class="p-button-danger p-button-text" icon-class="text-2xl" @click="removeSubdeck(subdeck.id)">
