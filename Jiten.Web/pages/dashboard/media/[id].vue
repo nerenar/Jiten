@@ -39,6 +39,7 @@
   const englishTitle = ref('');
   const releaseDate = ref<Date>();
   const description = ref('');
+  const difficultyOverride = ref(0);
 
   const coverImage = ref<File | null>(null);
   const coverImageUrl = ref<string | null>(null);
@@ -70,6 +71,7 @@
       originalTitle: string;
       file: File | null;
       mediaSubdeckId?: number; // Added to track existing subdeck IDs
+      difficultyOverride: number;
     }>
   >([]);
   let nextSubdeckId = 1;
@@ -115,6 +117,7 @@
       englishTitle.value = mainDeck.englishTitle || '';
       description.value = mainDeck.description || '';
       releaseDate.value = new Date(mainDeck.releaseDate) || new Date();
+      difficultyOverride.value = mainDeck.difficultyOverride || 0;
 
       if (mainDeck.coverName) {
         coverImageUrl.value = `${mainDeck.coverName}`;
@@ -128,6 +131,7 @@
           originalTitle: subdeck.originalTitle || `${subdeckDefaultName.value} ${index + 1}`,
           file: null,
           mediaSubdeckId: subdeck.deckId,
+          difficultyOverride: subdeck.difficultyOverride || -1,
         }));
       }
 
@@ -162,6 +166,7 @@
           id: nextSubdeckId++,
           originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
           file: file,
+          difficultyOverride: -1,
         });
       }
       // Explicitly clear the FileUpload component's selection
@@ -177,6 +182,7 @@
       id: nextSubdeckId++,
       originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
       file: null,
+      difficultyOverride: -1,
     });
   }
 
@@ -294,6 +300,7 @@
       formData.append('englishTitle', englishTitle.value);
       formData.append('releaseDate', formatDateAsYyyyMmDd(releaseDate.value));
       formData.append('description', description.value);
+      formData.append('difficultyOverride', difficultyOverride.value);
 
       if (coverImage.value) {
         formData.append('coverImage', coverImage.value);
@@ -323,6 +330,7 @@
           }
 
           formData.append(`subdecks[${i}].deckOrder`, (i + 1).toString());
+          formData.append(`subdecks[${i}].difficultyOverride`, subdeck.difficultyOverride.toString());
 
           // Include the file if available
           if (subdeck.file) {
@@ -400,6 +408,10 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Description</label>
                   <Textarea v-model="description" class="w-full" />
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Difficulty Override</label>
+                  <InputNumber v-model="difficultyOverride" class="w-full" />
                 </div>
               </div>
               <div>
@@ -562,7 +574,16 @@
           <Card v-for="subdeck in subdecks" :key="subdeck.id" class="mb-4">
             <template #title>
               <div class="flex justify-between items-center">
-                <InputText v-model="subdeck.originalTitle" class="w-64" />
+                <div class="flex flex-row gap-2">
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Title</label>
+                    <InputText v-model="subdeck.originalTitle" class="w-64" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Difficulty Override</label>
+                    <InputNumber v-model="subdeck.difficultyOverride" class="w-12" />
+                  </div>
+                </div>
                 <Button class="p-button-danger p-button-text" icon-class="text-2xl" @click="removeSubdeck(subdeck.id)">
                   <Icon name="material-symbols-light:delete" size="1.5em" />
                 </Button>

@@ -18,6 +18,7 @@ export interface Deck {
   uniqueKanjiUsedOnceCount: number;
   difficulty: number;
   difficultyRaw: number;
+  difficultyOverride: number;
   averageSentenceLength: number;
   parentDeckId: number;
   deckWords: DeckWord[];

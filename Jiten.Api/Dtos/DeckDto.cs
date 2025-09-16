@@ -21,6 +21,7 @@ public class DeckDto
     public int UniqueKanjiUsedOnceCount { get; set; }
     public int Difficulty { get; set; }
     public float DifficultyRaw { get; set; }
+    public float DifficultyOverride { get; set; }
     public int SentenceCount { get; set; }
     public float AverageSentenceLength { get; set; }
     public int? ParentDeckId { get; set; }
@@ -37,6 +38,9 @@ public class DeckDto
 
     public DeckDto(Deck deck, int occurrences)
     {
+        if (deck.DifficultyOverride > -1)
+            deck.Difficulty = deck.DifficultyOverride;
+
         DeckId = deck.DeckId;
         CreationDate = deck.CreationDate;
         ReleaseDate = deck.ReleaseDate.ToDateTime(new TimeOnly());
@@ -54,6 +58,7 @@ public class DeckDto
         UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
         Difficulty = MapDifficulty(deck.Difficulty);
         DifficultyRaw = deck.Difficulty;
+        DifficultyOverride = deck.DifficultyOverride;
         SentenceCount = deck.SentenceCount;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
@@ -65,6 +70,9 @@ public class DeckDto
 
     public DeckDto(Deck deck)
     {
+        if (deck.DifficultyOverride > -1)
+            deck.Difficulty = deck.DifficultyOverride;
+
         DeckId = deck.DeckId;
         CreationDate = deck.CreationDate;
         ReleaseDate = deck.ReleaseDate.ToDateTime(new TimeOnly());
@@ -82,6 +90,7 @@ public class DeckDto
         UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
         Difficulty = MapDifficulty(deck.Difficulty);
         DifficultyRaw = deck.Difficulty;
+        DifficultyOverride = deck.DifficultyOverride;
         SentenceCount = deck.SentenceCount;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
@@ -100,7 +109,7 @@ public class DeckDto
     {
         if (difficulty < 1.05)
             return 0;
-        
+
         if (difficulty < 1.75)
             return 1;
 

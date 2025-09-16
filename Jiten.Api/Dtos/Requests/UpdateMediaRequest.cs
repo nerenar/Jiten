@@ -12,6 +12,7 @@ public class UpdateMediaRequest
     public string? RomajiTitle { get; set; }
     public string? EnglishTitle { get; set; }
     public string? Description { get; set; }
+    public float DifficultyOverride { get; set; }
     public IFormFile? CoverImage { get; set; }
     public IFormFile? File { get; set; }
     public List<Link> Links { get; set; } = new List<Link>();
@@ -23,5 +24,6 @@ public class UpdateMediaRequestSubdeck
     public required string OriginalTitle { get; set; }
     public int DeckId { get; set; }
     public int DeckOrder { get; set; }
+    public float DifficultyOverride { get; set; }
     public IFormFile? File { get; set; }
 }

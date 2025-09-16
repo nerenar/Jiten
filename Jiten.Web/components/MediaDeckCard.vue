@@ -14,6 +14,7 @@
   }>();
 
   const showDownloadDialog = ref(false);
+  const showIssueDialog = ref(false);
   const isDescriptionExpanded = ref(false);
 
   const store = useJitenStore();
@@ -36,8 +37,7 @@
   };
 
   const borderColor = computed(() => {
-    if (!authStore.isAuthenticated || store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0))
-      return 'none';
+    if (!authStore.isAuthenticated || store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0)) return 'none';
 
     // red
     if (props.deck.coverage < 50) return '2px solid red';
@@ -230,6 +230,7 @@
                   <Button as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" label="View vocabulary" class="" />
                   <Button label="Download deck" class="" @click="showDownloadDialog = true" />
                   <Button v-if="!isCompact && displayAdminFunctions" as="router-link" :to="`/dashboard/media/${deck.deckId}`" label="Edit" class="" />
+                  <Button v-if="!isCompact && authStore.isAuthenticated" @click="showIssueDialog = true" label="Report an issue" class="" />
                 </div>
               </div>
             </div>
@@ -240,6 +241,7 @@
   </Card>
 
   <MediaDeckDownloadDialog :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+  <ReportIssueDialog :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
 </template>
 
 <style scoped>

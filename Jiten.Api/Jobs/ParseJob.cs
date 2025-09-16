@@ -64,6 +64,7 @@ public class ParseJob(JitenDbContext context)
         deck.CoverName = metadata.Image ?? "nocover.jpg";
         deck.CreationDate = DateTimeOffset.UtcNow;
         deck.LastUpdate = DateTime.UtcNow;
+        deck.DifficultyOverride = -1;
 
         foreach (var link in deck.Links)
         {
@@ -110,6 +111,7 @@ public class ParseJob(JitenDbContext context)
             deck.DeckOrder = deckOrder;
             deck.OriginalTitle = metadata.OriginalTitle;
             deck.MediaType = deckType;
+            deck.DifficultyOverride = -1;
 
             if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
                 deck.SentenceCount = 0;

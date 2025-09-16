@@ -32,5 +32,6 @@
   "TmdbApiKey" : "YourApiKey",
   "IgdbClientId": "YourClientId",
   "IgdbClientSecret": "YourClientSecret",
+  "DiscordWebhook": "https://ptb.discord.com/api/webhooks/your/webhookurl",
   "StoreRawText": false
 }

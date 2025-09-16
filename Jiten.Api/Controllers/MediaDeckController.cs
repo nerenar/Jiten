@@ -25,7 +25,7 @@ namespace Jiten.Api.Controllers;
 [EnableRateLimiting("fixed")]
 [Produces("application/json")]
 [SwaggerTag("Media decks and vocabulary")]
-public class MediaDeckController(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService) : ControllerBase
+public class MediaDeckController(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService, IConfiguration configuration) : ControllerBase
 {
     private class DeckWithOccurrences
     {
@@ -40,7 +40,6 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
     [HttpGet("get-media-decks-id")]
     [ResponseCache(Duration = 60 * 60 * 24)]
     [SwaggerOperation(Summary = "Get IDs of top-level media decks")]
-    
     [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
     public async Task<List<int>> GetMediaDecksId()
     {
@@ -61,7 +60,9 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
     /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
     // [ResponseCache(Duration = 300, VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
-    [SwaggerOperation(Summary = "List media decks", Description = "Returns a paginated list of decks with optional filters, sorting and user coverage when authenticated.")]
+    [SwaggerOperation(Summary = "List media decks",
+                      Description =
+                          "Returns a paginated list of decks with optional filters, sorting and user coverage when authenticated.")]
     [ProducesResponseType(typeof(PaginatedResponse<List<DeckDto>>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<List<DeckDto>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
                                                                       int wordId = 0, int readingIndex = 0, string? titleFilter = "",
@@ -571,7 +572,8 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
     /// <returns>File content result with the generated deck.</returns>
     [HttpPost("{id}/download")]
     [EnableRateLimiting("download")]
-    [SwaggerOperation(Summary = "Download a deck", Description = "Generate a deck file (Anki, CSV, TXT, Yomitan) with optional filters and ordering.")]
+    [SwaggerOperation(Summary = "Download a deck",
+                      Description = "Generate a deck file (Anki, CSV, TXT, Yomitan) with optional filters and ordering.")]
     [Produces("application/x-binary", "text/csv", "text/plain", "application/zip")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -707,7 +709,6 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
     {
         if (request.Text.Length > 200000)
             return Results.BadRequest();
-        ;
 
         var deck = await Parser.Parser.ParseTextToDeck(context, storeRawText: true, text: request.Text);
         deck.OriginalTitle = "Custom deck";
@@ -1102,5 +1103,61 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Report an issue with adeck
+    /// </summary>
+    /// <param name="request">Issue type and comment.</param>
+    /// <returns>Did the report get sent successfully.</returns>
+    [HttpPost("report")]
+    [EnableRateLimiting("download")]
+    [SwaggerOperation(Summary = "Report an issue with a deck")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReportIssue([FromBody] ReportIssueRequest request)
+    {
+        if (!currentUserService.IsAuthenticated)
+            return BadRequest("You are not logged in");
+
+        if (string.IsNullOrEmpty(request.IssueType) || string.IsNullOrEmpty(request.Comment) || request.IssueType.Length > 30 ||
+            request.Comment.Length > 1000)
+            return BadRequest();
+
+        var deck = await context.Decks.FirstOrDefaultAsync(d => d.DeckId == request.DeckId);
+
+        if (deck == null)
+            return BadRequest("Deck not found");
+
+        var rawEmbed = """
+                       {{
+                         "content": "A new report from user ID `{0}` came in.\n",
+                         "tts": false,
+                         "embeds": [
+                           {{
+                             "id": 652627557,
+                             "title": "{4}",
+                             "description": "[{1}](https://jiten.moe/decks/media/{2}/detail)\n\nComment:\n{3}",
+                             "color": 8266731,
+                             "fields": []
+                           }}
+                         ],
+                         "components": [],
+                         "actions": {{}},
+                         "flags": 0,
+                         "username": "IssueReporter"
+                       }}
+                       """;
+
+        var embed = String.Format(rawEmbed, currentUserService.UserId, deck.OriginalTitle, deck.DeckId, request.Comment, request.IssueType);
+        var webhook = configuration["DiscordWebhook"];
+        using var httpClient = new HttpClient();
+        var content = new StringContent(embed, Encoding.UTF8, "application/json");
+        var result = await httpClient.PostAsync(webhook, content);
+
+        if (result.IsSuccessStatusCode)
+            return Ok();
+
+        return BadRequest("Failed to send report");
     }
 }

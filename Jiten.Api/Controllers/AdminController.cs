@@ -77,9 +77,9 @@ public class AdminController(
                     Request.Form.TryGetValue(linkTypeKey, out var linkTypeValue) &&
                     !string.IsNullOrEmpty(urlValue) &&
                     !string.IsNullOrEmpty(linkTypeValue) &&
-                    Enum.TryParse<Core.Data.LinkType>(linkTypeValue, out var linkType))
+                    Enum.TryParse<LinkType>(linkTypeValue, out var linkType))
                 {
-                    metadata.Links.Add(new Core.Data.Link { Url = urlValue.ToString(), LinkType = linkType });
+                    metadata.Links.Add(new Link { Url = urlValue.ToString(), LinkType = linkType });
                 }
             }
 
@@ -128,17 +128,15 @@ public class AdminController(
 
                 foreach (var subdeck in model.Subdecks)
                 {
-                    if (subdeck.File is { Length: > 0 })
-                    {
-                        var subdeckFilePath = Path.Join(path, $"{Guid.NewGuid()}{Path.GetExtension(subdeck.File.FileName)}");
+                    if (subdeck.File is not { Length: > 0 }) continue;
+                    var subdeckFilePath = Path.Join(path, $"{Guid.NewGuid()}{Path.GetExtension(subdeck.File.FileName)}");
 
-                        await using var stream = new FileStream(subdeckFilePath, FileMode.Create);
-                        await subdeck.File.CopyToAsync(stream);
+                    await using var stream = new FileStream(subdeckFilePath, FileMode.Create);
+                    await subdeck.File.CopyToAsync(stream);
 
-                        var subdeckMetadata = new Metadata { OriginalTitle = subdeck.OriginalTitle, FilePath = subdeckFilePath };
+                    var subdeckMetadata = new Metadata { OriginalTitle = subdeck.OriginalTitle, FilePath = subdeckFilePath };
 
-                        metadata.Children.Add(subdeckMetadata);
-                    }
+                    metadata.Children.Add(subdeckMetadata);
                 }
             }
             else
@@ -224,6 +222,7 @@ public class AdminController(
         deck.EnglishTitle = model.EnglishTitle?.Trim();
         deck.ReleaseDate = model.ReleaseDate;
         deck.Description = model.Description?.Trim();
+        deck.DifficultyOverride = model.DifficultyOverride;
 
         // Update cover image if provided
         if (model.CoverImage is { Length: > 0 })
@@ -288,6 +287,7 @@ public class AdminController(
                     var existingSubdeck = deck.Children.First(d => d.DeckId == subdeck.DeckId);
                     existingSubdeck.OriginalTitle = subdeck.OriginalTitle.Trim();
                     existingSubdeck.DeckOrder = subdeck.DeckOrder;
+                    existingSubdeck.DifficultyOverride = subdeck.DifficultyOverride;
 
                     if (subdeck.File is { Length: > 0 })
                         existingSubdeck.RawText!.RawText = await GetTextFromFile(subdeck.File);
@@ -297,7 +297,7 @@ public class AdminController(
                     var newDeck = new Deck
                                   {
                                       MediaType = deck.MediaType, OriginalTitle = subdeck.OriginalTitle.Trim(),
-                                      DeckOrder = subdeck.DeckOrder,
+                                      DeckOrder = subdeck.DeckOrder, DifficultyOverride = subdeck.DifficultyOverride
                                   };
 
                     if (subdeck.File is { Length: > 0 })

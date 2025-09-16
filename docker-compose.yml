@@ -57,6 +57,7 @@ services:
       - Email__Username=${SES_SMTP_USER:-}
       - Email__Password=${SES_SMTP_PASSWORD:-}
       - Email__From=${SES_FROM:-noreply@example.com}
+      - DiscordWebhook=${DISCORD_WEBHOOK:-}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
