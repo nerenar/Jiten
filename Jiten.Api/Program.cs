@@ -28,9 +28,7 @@ builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    options.JsonSerializerOptions.NumberHandling = System.Text.Json.Serialization
-                                                         .JsonNumberHandling.AllowNamedFloatingPointLiterals;
-    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()); 
+    options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals;
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -50,6 +48,8 @@ builder.Services.AddSwaggerGen(c =>
 
     c.UseInlineDefinitionsForEnums();
     c.EnableAnnotations();
+    c.SchemaFilter<EnumSchemaFilter>();
+    c.DocumentFilter<EnumDocumentFilter>();
 
     // Include XML comments if the XML file exists (improves schemas and descriptions)
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
