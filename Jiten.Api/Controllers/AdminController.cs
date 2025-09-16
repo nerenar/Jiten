@@ -18,6 +18,7 @@ namespace Jiten.Api.Controllers;
 
 [ApiController]
 [Route("api/admin")]
+[ApiExplorerSettings(IgnoreApi = true)]
 [Authorize("RequiresAdmin")]
 public class AdminController(
     IConfiguration config,

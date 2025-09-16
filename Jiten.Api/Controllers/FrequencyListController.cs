@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Jiten.Api.Controllers;
 
 [ApiController]
+[ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/frequency-list")]
 public class FrequencyListController(JitenDbContext context) : ControllerBase
 {

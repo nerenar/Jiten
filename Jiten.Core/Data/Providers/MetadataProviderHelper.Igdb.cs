@@ -110,7 +110,7 @@ public static partial class MetadataProviderHelper
                 await MakeIgdbRequest<List<IgdbGameLocalization>>("game_localizations", localizationQuery, clientId, accessToken);
 
             var japaneseLocalization = localizations.FirstOrDefault(l => l.Region == 3);
-            metadata.OriginalTitle = japaneseLocalization != null ? japaneseLocalization.Name : game.Name;
+            metadata.OriginalTitle = japaneseLocalization != null ? japaneseLocalization.Name ?? "Unknown" : game.Name;
         }
         else
         {

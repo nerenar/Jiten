@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -12,7 +13,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
@@ -30,10 +30,50 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.NumberHandling = System.Text.Json.Serialization
                                                          .JsonNumberHandling.AllowNamedFloatingPointLiterals;
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()); 
 });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1",
+                       new Microsoft.OpenApi.Models.OpenApiInfo
+                       {
+                           Title = "Jiten API", Version = "v1",
+                           Description = "OpenAPI documentation for Jiten. Use the Authorize button to provide a Bearer token.",
+                           Contact = new Microsoft.OpenApi.Models.OpenApiContact { Name = "Jiten", Url = new Uri("https://jiten.moe") },
+                           License = new Microsoft.OpenApi.Models.OpenApiLicense
+                                     {
+                                         Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
+                                     }
+                       });
+
+    c.UseInlineDefinitionsForEnums();
+    c.EnableAnnotations();
+
+    // Include XML comments if the XML file exists (improves schemas and descriptions)
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
+
+    // JWT Bearer auth definition so Swagger UI shows the lock icon and sends the token
+    var securityScheme = new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                         {
+                             Name = "Authorization", Description = "Enter 'Bearer' [space] and then your JWT token.",
+                             In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                             Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT",
+                             Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                                         {
+                                             Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer"
+                                         }
+                         };
+
+    c.AddSecurityDefinition("Bearer", securityScheme);
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement { { securityScheme, new List<string>() } });
+});
 
 builder.Services.AddHttpClient();
 
@@ -263,25 +303,26 @@ using (var scope = app.Services.CreateScope())
 app.UseForwardedHeaders(new ForwardedHeadersOptions
                         {
                             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-                            KnownNetworks = { 
-                                                new IPNetwork(System.Net.IPAddress.Parse("172.16.0.0"), 12),
-                                                new IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8)
-                                            },
-                            KnownProxies = { },
-                            RequireHeaderSymmetry = false
+                            KnownNetworks =
+                            {
+                                new IPNetwork(System.Net.IPAddress.Parse("172.16.0.0"), 12),
+                                new IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8)
+                            },
+                            KnownProxies = { }, RequireHeaderSymmetry = false
                         });
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
-        c.RoutePrefix = "";
-    });
     app.UseHttpsRedirection();
 }
+
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
+    c.RoutePrefix = "";
+});
 
 app.UseRouting();
 

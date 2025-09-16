@@ -8,7 +8,7 @@ public class IgdbGameLocalization
     public int Id { get; set; }
 
     [JsonPropertyName("name")]
-    public required string Name { get; set; }
+    public string? Name { get; set; }
 
     [JsonPropertyName("region")]
     public int Region { get; set; }

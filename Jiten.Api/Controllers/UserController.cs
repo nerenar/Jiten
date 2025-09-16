@@ -11,6 +11,7 @@ namespace Jiten.Api.Controllers;
 
 [ApiController]
 [Route("api/user")]
+[ApiExplorerSettings(IgnoreApi = true)]
 [Authorize]
 public class UserController(
     ICurrentUserService userService,

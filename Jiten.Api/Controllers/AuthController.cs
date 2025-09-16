@@ -19,6 +19,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace Jiten.Api.Controllers;
 
 [ApiController]
+[ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {

@@ -5,17 +5,31 @@ using Jiten.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace Jiten.Api.Controllers;
 
+/// <summary>
+/// Endpoints for working with vocabulary: words, parsing text, and example sentences.
+/// </summary>
 [ApiController]
 [Route("api/vocabulary")]
 [EnableRateLimiting("fixed")]
+[Produces("application/json")]
 public class VocabularyController(JitenDbContext context, ICurrentUserService currentUserService) : ControllerBase
 {
+    /// <summary>
+    /// Gets a word by its ID and reading index, including definitions, readings, frequency and user known state.
+    /// </summary>
+    /// <param name="wordId">The unique identifier of the word.</param>
+    /// <param name="readingIndex">Index of the reading to treat as main (zero-based).</param>
+    /// <returns>The full word data.</returns>
     [HttpGet("{wordId}/{readingIndex}")]
+    [SwaggerOperation(Summary = "Get word by ID and reading index", Description = "Returns a word with main and alternative readings, definitions, parts of speech, pitch accents, frequency and known state.")]
+    [ProducesResponseType(typeof(WordDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     // [ResponseCache(Duration = 3600)]
-    public async Task<IResult> GetWord(int wordId, byte readingIndex)
+    public async Task<IResult> GetWord([FromRoute] int wordId, [FromRoute] byte readingIndex)
     {
         var word = await context.JMDictWords.AsNoTracking()
                                 .Include(w => w.Definitions)
@@ -70,8 +84,16 @@ public class VocabularyController(JitenDbContext context, ICurrentUserService cu
                           });
     }
 
+    /// <summary>
+    /// Parses the provided text and returns a sequence of parsed and unparsed segments as deck words.
+    /// </summary>
+    /// <param name="text">Text to parse. Max length 500 characters.</param>
+    /// <returns>List of parsed and unparsed segments preserving original order.</returns>
     [HttpGet("parse")]
-    public async Task<IResult> Parse(string text)
+    [SwaggerOperation(Summary = "Parse text into words", Description = "Parses the provided text and returns parsed words and any gaps as separate items, preserving order.")]
+    [ProducesResponseType(typeof(List<DeckWordDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Parse([FromQuery] string text)
     {
         if (text.Length > 500)
             return Results.BadRequest("Text is too long");
@@ -119,61 +141,33 @@ public class VocabularyController(JitenDbContext context, ICurrentUserService cu
     }
 
 
+    /// <summary>
+    /// Gets IDs of words whose media frequency rank falls within the specified inclusive range.
+    /// </summary>
+    /// <param name="minFrequency">Minimum frequency rank (inclusive).</param>
+    /// <param name="maxFrequency">Maximum frequency rank (inclusive).</param>
+    /// <returns>List of word IDs.</returns>
     [HttpGet("vocabulary-list-frequency/{minFrequency}/{maxFrequency}")]
-    public IResult GetVocabularyByMediaFrequencyRange(int minFrequency, int maxFrequency)
+    [SwaggerOperation(Summary = "Get vocabulary IDs by media frequency range")]
+    [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
+    public IResult GetVocabularyByMediaFrequencyRange([FromRoute] int minFrequency, [FromRoute] int maxFrequency)
     {
         var query = context.JmDictWordFrequencies.Where(f => f.FrequencyRank >= minFrequency && f.FrequencyRank <= maxFrequency);
 
         return Results.Ok(query.Select(f => f.WordId).ToList());
     }
 
-    [HttpPost("vocabulary-from-anki-txt")]
-    public async Task<IResult> ParseAnkiTxt(IFormFile? file)
-    {
-        if (file == null || file.Length == 0)
-            return Results.BadRequest("File is empty or not provided");
-
-        using var reader = new StreamReader(file.OpenReadStream());
-        var lineCount = 0;
-        var validWords = new List<string>();
-
-        while (await reader.ReadLineAsync() is { } line)
-        {
-            lineCount++;
-
-            if (lineCount > 50000)
-                return Results.BadRequest("File has more than 50,000 lines");
-
-            // Skip comments
-            if (line.StartsWith("#"))
-                continue;
-
-            // Find the first word that ends with a tab
-            var tabIndex = line.IndexOf('\t');
-
-            if (tabIndex <= 0)
-                tabIndex = line.IndexOf(',');
-
-            if (tabIndex <= 0) continue;
-
-            var word = line.Substring(0, tabIndex);
-
-            // Skip words longer than 25 characters
-            if (word.Length <= 25)
-            {
-                validWords.Add(word);
-            }
-        }
-
-        var combinedText = string.Join(Environment.NewLine, validWords);
-        var parsedWords = await Parser.Parser.ParseText(context, combinedText);
-        var wordIds = parsedWords.Select(w => w.WordId).ToList();
-
-        return Results.Ok(wordIds);
-    }
-
+    /// <summary>
+    /// Returns up to three random example sentences for the given word and reading index, excluding already loaded ones.
+    /// </summary>
+    /// <param name="wordId">The word ID.</param>
+    /// <param name="readingIndex">The reading index for the word.</param>
+    /// <param name="alreadyLoaded">A list of deck IDs already loaded on the client to avoid duplicates.</param>
+    /// <returns>A list of example sentences with metadata.</returns>
     [HttpPost("{wordId}/{readingIndex}/random-example-sentences")]
-    public async Task<List<ExampleSentenceDto>> GetRandomExampleSentences(int wordId, int readingIndex, [FromBody] List<int> alreadyLoaded)
+    [SwaggerOperation(Summary = "Get random example sentences", Description = "Returns up to three random example sentences for the given word and reading index, excluding already loaded ones.")]
+    [ProducesResponseType(typeof(List<ExampleSentenceDto>), StatusCodes.Status200OK)]
+    public async Task<List<ExampleSentenceDto>> GetRandomExampleSentences([FromRoute] int wordId, [FromRoute] int readingIndex, [FromBody] List<int> alreadyLoaded)
     {
         return await context.ExampleSentenceWords
                             .AsNoTracking()

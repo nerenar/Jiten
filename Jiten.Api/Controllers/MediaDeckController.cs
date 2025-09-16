@@ -13,12 +13,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace Jiten.Api.Controllers;
 
+/// <summary>
+/// Endpoints for browsing media decks, vocabulary, downloads and related statistics.
+/// </summary>
 [ApiController]
 [Route("api/media-deck")]
 [EnableRateLimiting("fixed")]
+[Produces("application/json")]
+[SwaggerTag("Media decks and vocabulary")]
 public class MediaDeckController(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService) : ControllerBase
 {
     private class DeckWithOccurrences
@@ -27,16 +33,36 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         public int Occurrences { get; set; }
     }
 
+    /// <summary>
+    /// Returns the IDs of all parent media decks.
+    /// </summary>
+    /// <returns>List of deck IDs.</returns>
     [HttpGet("get-media-decks-id")]
     [ResponseCache(Duration = 60 * 60 * 24)]
+    [SwaggerOperation(Summary = "Get IDs of top-level media decks")]
+    
+    [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
     public async Task<List<int>> GetMediaDecksId()
     {
         return await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToListAsync();
     }
 
 
+    /// <summary>
+    /// Returns media decks with optional filtering, sorting and pagination.
+    /// </summary>
+    /// <param name="offset">Page offset (multiple of 50).</param>
+    /// <param name="mediaType">Restrict to a specific media type.</param>
+    /// <param name="wordId">If set, only decks containing this word are returned.</param>
+    /// <param name="readingIndex">Reading index associated with wordId.</param>
+    /// <param name="titleFilter">Full‑text filter on title (supports romaji/english/japanese).</param>
+    /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, etc.).</param>
+    /// <param name="sortOrder">Ascending or Descending.</param>
+    /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
     // [ResponseCache(Duration = 300, VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
+    [SwaggerOperation(Summary = "List media decks", Description = "Returns a paginated list of decks with optional filters, sorting and user coverage when authenticated.")]
+    [ProducesResponseType(typeof(PaginatedResponse<List<DeckDto>>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<List<DeckDto>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
                                                                       int wordId = 0, int readingIndex = 0, string? titleFilter = "",
                                                                       string? sortBy = "",
@@ -332,8 +358,19 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
     }
 
+    /// <summary>
+    /// Returns vocabulary entries for a given deck with sorting and pagination.
+    /// </summary>
+    /// <param name="id">Deck identifier.</param>
+    /// <param name="sortBy">Sort by globalFreq | deckFreq | chrono.</param>
+    /// <param name="sortOrder">Ascending or Descending.</param>
+    /// <param name="offset">Pagination offset.</param>
+    /// <param name="displayFilter">When authenticated: all | known | unknown.</param>
+    /// <returns>Paginated deck vocabulary list.</returns>
     [HttpGet("{id}/vocabulary")]
     // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
+    [SwaggerOperation(Summary = "Get deck vocabulary")]
+    [ProducesResponseType(typeof(PaginatedResponse<DeckVocabularyListDto?>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<DeckVocabularyListDto?>> GetVocabulary(int id, string? sortBy = "",
                                                                                SortOrder sortOrder = SortOrder.Ascending,
                                                                                int? offset = 0, string displayFilter = "all")
@@ -465,8 +502,16 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         return new PaginatedResponse<DeckVocabularyListDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
+    /// <summary>
+    /// Returns details for a media deck including parent and subdecks.
+    /// </summary>
+    /// <param name="id">Deck identifier.</param>
+    /// <param name="offset">Pagination offset for subdecks.</param>
+    /// <returns>Deck detail with subdecks.</returns>
     [HttpGet("{id}/detail")]
     // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "offset"])]
+    [SwaggerOperation(Summary = "Get deck details")]
+    [ProducesResponseType(typeof(PaginatedResponse<DeckDetailDto?>), StatusCodes.Status200OK)]
     public PaginatedResponse<DeckDetailDto?> GetMediaDeckDetail(int id, int? offset = 0)
     {
         int pageSize = 25;
@@ -518,8 +563,19 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         return new PaginatedResponse<DeckDetailDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
+    /// <summary>
+    /// Downloads a deck in the requested format and order. Supports filtering and excluding known words.
+    /// </summary>
+    /// <param name="id">Deck identifier.</param>
+    /// <param name="request">Download options.</param>
+    /// <returns>File content result with the generated deck.</returns>
     [HttpPost("{id}/download")]
     [EnableRateLimiting("download")]
+    [SwaggerOperation(Summary = "Download a deck", Description = "Generate a deck file (Anki, CSV, TXT, Yomitan) with optional filters and ordering.")]
+    [Produces("application/x-binary", "text/csv", "text/plain", "application/zip")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IResult> DownloadDeck(int id, [FromBody] DeckDownloadRequest request)
     {
         var deck = await context.Decks
@@ -636,9 +692,17 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         };
     }
 
+    /// <summary>
+    /// Parses a custom text into a temporary deck and returns the generated Anki package as base64.
+    /// </summary>
+    /// <param name="request">Text to parse.</param>
+    /// <returns>JSON containing deck metadata and a base64-encoded file.</returns>
     [HttpPost("parse-custom-deck")]
     [EnableRateLimiting("download")]
     [RequestSizeLimit(5_000_000)]
+    [SwaggerOperation(Summary = "Parse custom deck text")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IResult> ParseCustomDeck([FromBody] ParseCustomDeckRequest request)
     {
         if (request.Text.Length > 200000)
@@ -924,8 +988,13 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         }
     }
 
+    /// <summary>
+    /// Returns the count of top-level decks per media type.
+    /// </summary>
     [HttpGet("decks-count")]
     [ResponseCache(Duration = 600)]
+    [SwaggerOperation(Summary = "Get deck counts by media type")]
+    [ProducesResponseType(typeof(Dictionary<int, int>), StatusCodes.Status200OK)]
     public IResult GetDecksCountByMediaType()
     {
         Dictionary<int, int> decksCount = context.Decks.AsNoTracking()
@@ -936,7 +1005,15 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         return Results.Ok(decksCount);
     }
 
+    /// <summary>
+    /// Returns the number of vocabulary items in a deck between global frequency ranks.
+    /// </summary>
+    /// <param name="id">Deck identifier.</param>
+    /// <param name="minFrequency">Minimum global frequency rank (inclusive).</param>
+    /// <param name="maxFrequency">Maximum global frequency rank (inclusive).</param>
     [HttpGet("{id}/vocabulary-count-frequency")]
+    [SwaggerOperation(Summary = "Count vocabulary in frequency range")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
     public IResult GetVocabularyCountByMediaFrequencyRange(int id, int minFrequency, int maxFrequency)
     {
         var query = context.DeckWords.AsNoTracking()
@@ -958,6 +1035,8 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
     /// <returns>Deck information for the specified 30-day window</returns>
     [HttpGet("media-update-log")]
     [ResponseCache(Duration = 60 * 10, VaryByQueryKeys = ["offset"])]
+    [SwaggerOperation(Summary = "Get decks for update log")]
+    [ProducesResponseType(typeof(PaginatedResponse<List<DeckDto>>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<List<DeckDto>>> GetDecksForUpdateLog(int? offset = 0)
     {
         int offsetValue = offset ?? 0;
@@ -983,8 +1062,15 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, decks.Count, offsetValue);
     }
 
+    /// <summary>
+    /// Returns deck IDs that have a link of the specified type whose trailing URL segment matches the provided id.
+    /// </summary>
+    /// <param name="linkType">External link type.</param>
+    /// <param name="id">Trailing identifier from the link URL.</param>
     [HttpGet("by-link-id/{linkType}/{id}")]
     [ResponseCache(Duration = 600, VaryByQueryKeys = ["id"])]
+    [SwaggerOperation(Summary = "Find decks by external link id")]
+    [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
     public async Task<List<int>> GetMediaDeckIdsByLinkId(LinkType linkType, string id)
     {
         var links = await context.Decks
