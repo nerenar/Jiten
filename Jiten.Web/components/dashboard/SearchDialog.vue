@@ -73,7 +73,6 @@ function closeDialog() {
 </script>
 
 <template>
-  <Toast />
   <Dialog
     :visible="visible"
     header="Search Results"

@@ -354,7 +354,6 @@
 
 <template>
   <div>
-    <Toast />
     <div class="container mx-auto p-4">
       <div class="flex items-center mb-6">
         <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard')" />

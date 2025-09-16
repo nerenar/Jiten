@@ -29,5 +29,6 @@
       <NuxtPage />
     </div>
     <AppFooter />
+    <Toast />
   </div>
 </template>

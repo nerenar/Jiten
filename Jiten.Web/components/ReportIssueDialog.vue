@@ -65,25 +65,16 @@
         deckId: props.deck.deckId,
         issueType: selectedType.value,
         comment: comment.value.trim(),
-      }
+      },
     });
 
-    if (response) {
-      toast.add({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Issue reported successfully',
-        life: 3000,
-      });
-      localVisible.value = false;
-    } else {
-      toast.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to report issue',
-        life: 3000,
-      });
-    }
+    toast.add({
+      severity: 'success',
+      summary: 'Success',
+      detail: 'Issue reported successfully',
+      life: 3000,
+    });
+    localVisible.value = false;
   };
 </script>
 

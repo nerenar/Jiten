@@ -305,7 +305,6 @@
 <template>
   <div class="">
     <ConfirmDialog />
-    <Toast />
 
     <Card class="mb-4">
       <template #title>

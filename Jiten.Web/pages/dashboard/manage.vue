@@ -186,7 +186,6 @@
 
 <template>
   <div class="container mx-auto p-4">
-    <Toast />
     <ConfirmDialog />
 
     <div class="flex items-center mb-6">
