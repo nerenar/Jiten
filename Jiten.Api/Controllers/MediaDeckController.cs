@@ -25,7 +25,11 @@ namespace Jiten.Api.Controllers;
 [EnableRateLimiting("fixed")]
 [Produces("application/json")]
 [SwaggerTag("Media decks and vocabulary")]
-public class MediaDeckController(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService, IConfiguration configuration) : ControllerBase
+public class MediaDeckController(
+    JitenDbContext context,
+    UserDbContext userContext,
+    ICurrentUserService currentUserService,
+    IConfiguration configuration) : ControllerBase
 {
     private class DeckWithOccurrences
     {
@@ -247,8 +251,10 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
         return sortBy switch
         {
             "difficulty" => sortOrder == SortOrder.Ascending
-                ? query.Where(d => d.Difficulty != -1).OrderBy(d => d.Difficulty)
-                : query.Where(d => d.Difficulty != -1).OrderByDescending(d => d.Difficulty),
+                ? query.Where(d => d.Difficulty > -1)
+                       .OrderBy(d => d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                : query.Where(d => d.Difficulty > -1)
+                       .OrderByDescending(d => d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty),
             "charCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.CharacterCount)
                 : query.OrderByDescending(d => d.CharacterCount),
@@ -288,8 +294,10 @@ public class MediaDeckController(JitenDbContext context, UserDbContext userConte
                 ? query.OrderBy(p => p.Occurrences)
                 : query.OrderByDescending(p => p.Occurrences),
             "difficulty" => sortOrder == SortOrder.Ascending
-                ? query.Where(p => p.Deck.Difficulty != -1).OrderBy(p => p.Deck.Difficulty)
-                : query.Where(p => p.Deck.Difficulty != -1).OrderByDescending(p => p.Deck.Difficulty),
+                ? query.Where(p => p.Deck.Difficulty > -1)
+                       .OrderBy(p => p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty)
+                : query.Where(p => p.Deck.Difficulty > -1)
+                       .OrderByDescending(p => p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty),
             "charCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(p => p.Deck.CharacterCount)
                 : query.OrderByDescending(p => p.Deck.CharacterCount),

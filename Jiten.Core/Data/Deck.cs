@@ -43,7 +43,7 @@ public class Deck
     /// English translation of the title, if it exists
     /// </summary>
     public string? EnglishTitle { get; set; }
-    
+
     /// <summary>
     /// Description or summary for media decks
     /// </summary>
@@ -81,10 +81,10 @@ public class Deck
     public int UniqueKanjiUsedOnceCount { get; set; }
 
     /// <summary>
-    ///  Difficulty rating from 0 to 100
+    ///  Difficulty rating from 0 to 5
     /// </summary>
     public float Difficulty { get; set; }
-    
+
     /// <summary>
     /// Manual override of difficulty that will replace Difficulty if it's not equal to -1
     /// </summary>
@@ -116,9 +116,9 @@ public class Deck
     }
 
     /// <summary>
-        /// Parent deck, null if no parent
-        /// </summary>
-        public int? ParentDeckId { get; set; }
+    /// Parent deck, null if no parent
+    /// </summary>
+    public int? ParentDeckId { get; set; }
 
     /// <summary>
     /// Parent deck, null if no parent
@@ -149,13 +149,15 @@ public class Deck
     /// Raw text from which the deck was parsed with
     /// </summary>
     public DeckRawText? RawText { get; set; }
-    
+
     /// <summary>
     /// Example sentences in this deck
     /// </summary>
     public ICollection<ExampleSentence>? ExampleSentences { get; set; } = new List<ExampleSentence>();
 
     private float _dialoguePercentage;
+
+    public float GetDifficulty() => DifficultyOverride > -1 ? DifficultyOverride : Difficulty;
 
     public async Task AddChildDeckWords(JitenDbContext context)
     {
