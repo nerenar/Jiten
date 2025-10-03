@@ -42,7 +42,7 @@ public class MediaDeckController(
     /// </summary>
     /// <returns>List of deck IDs.</returns>
     [HttpGet("get-media-decks-id")]
-    [ResponseCache(Duration = 60 * 60 * 24)]
+    [ResponseCache(Duration = 60 * 60)]
     [SwaggerOperation(Summary = "Get IDs of top-level media decks")]
     [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
     public async Task<List<int>> GetMediaDecksId()

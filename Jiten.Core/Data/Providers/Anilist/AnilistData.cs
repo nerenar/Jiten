@@ -2,6 +2,6 @@ namespace Jiten.Core.Data.Providers.Anilist;
 
 public class AnilistData
 {
-    public required AnilistPage Page { get; set; }
+    public AnilistPage Page { get; set; }
     public AnilistMedia? Media { get; set; }
 }
