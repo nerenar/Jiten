@@ -113,7 +113,7 @@
           <nuxt-link to="/" class="!text-white">Home</nuxt-link>
           <nuxt-link to="/decks/media" class="!text-white">Media</nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="!text-white">Settings</nuxt-link>
-          <nuxt-link to="/other" class="!text-white">Other</nuxt-link>
+          <nuxt-link to="/other" class="!text-white">Tools</nuxt-link>
           <nuxt-link to="/faq" class="!text-white">FAQ</nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions" to="/Dashboard" class="!text-white">Dashboard</nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated" to="/" class="!text-white" @click="auth.logout()"> Logout </nuxt-link>

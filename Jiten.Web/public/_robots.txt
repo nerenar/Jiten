@@ -9,6 +9,9 @@ Disallow: /vocabulary/*
 Disallow: /confirm-email
 Disallow: /login-success
 Disallow: /reset-password
+Disallow: /settings/*
+Disallow: /google-registration
 Allow: /decks/media/*/detail
+Allow: /decks/media/list/*
 
 Sitemap: https://jiten.moe/sitemap.xml

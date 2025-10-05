@@ -81,6 +81,13 @@
 
   const globalStatsUrl = 'stats/get-global-stats';
   const { data: response, status, error } = await useApiFetch<GlobalStats>(globalStatsUrl);
+
+  const mediaTypesForDisplay = Object.values(MediaType)
+    .filter((value) => typeof value === 'number')
+    .map((value) => ({
+      name: getMediaTypeText(value as MediaType),
+      id: value as MediaType,
+    }));
 </script>
 
 <template>
@@ -146,8 +153,6 @@
       </template>
     </Card>
 
-    <VocabularyImport />
-
     <Card v-if="status === 'success'" class="mt-4">
       <template #title>
         <div class="flex items-center">
@@ -168,6 +173,22 @@
             <div class="text-lg font-bold text-primary-600">
               {{ amount?.toLocaleString() }}
             </div>
+          </div>
+        </div>
+      </template>
+    </Card>
+
+    <Card class="mt-4">
+      <template #title>
+        <div class="flex items-center">
+          <Icon name="material-symbols-light:manage-search" class="mr-2 text-primary" size="1.5em" />
+          Media indexes by type
+        </div>
+      </template>
+      <template #content>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="item in mediaTypesForDisplay" :key="item.id" class="p-2 border rounded-md">
+          <NuxtLink :to="`/decks/media/list/${item.id}`" target="_blank">{{ item.name }} index</NuxtLink>
           </div>
         </div>
       </template>

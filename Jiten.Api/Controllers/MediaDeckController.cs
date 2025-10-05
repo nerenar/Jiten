@@ -45,9 +45,29 @@ public class MediaDeckController(
     [ResponseCache(Duration = 60 * 60)]
     [SwaggerOperation(Summary = "Get IDs of top-level media decks")]
     [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
-    public async Task<List<int>> GetMediaDecksId()
+    public async Task<List<int>> GetMediaDecksId(MediaType? mediaType)
     {
         return await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToListAsync();
+    }
+
+    /// <summary>
+    /// Returns the deck dto of all parent media decks.
+    /// </summary>
+    /// <returns>List of decks with titles and ids.</returns>
+    [HttpGet("get-media-decks-by-type/{mediaType}")]
+    [ResponseCache(Duration = 60 * 60)]
+    [SwaggerOperation(Summary = "Get list of top-level media decks by type")]
+    [ProducesResponseType(typeof(List<DeckDto>), StatusCodes.Status200OK)]
+    public async Task<List<DeckDto>> GetMediaDecksByType(MediaType mediaType)
+    {
+        var decks = await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null && d.MediaType == mediaType).OrderBy(d => d.RomajiTitle).ToListAsync();
+        var dtos = new List<DeckDto>();
+        foreach (var deck in decks)
+        {
+            dtos.Add(new DeckDto(deck));
+        }
+
+        return dtos;
     }
 
 
