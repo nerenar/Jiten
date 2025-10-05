@@ -39,8 +39,6 @@
       client = new YankiConnect();
       decks = await client.deck.deckNamesAndIds();
       deckEntries = Object.entries(decks);
-      // remove default deck, id = 1
-      deckEntries = deckEntries.filter(([name, id]) => id !== 1);
       cantConnect.value = false;
       await NextStep();
     } catch (e) {
