@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Jiten.Core.Data;
 using Microsoft.Extensions.Configuration;
+using WanaKanaShaapu;
 
 namespace Jiten.Parser;
 
@@ -12,7 +13,7 @@ public class MorphologicalAnalyser
         ("な", "の", "で", PartOfSpeech.Expression),
         ("で", "は", "ない", PartOfSpeech.Expression),
         ("それ", "で", "も", PartOfSpeech.Conjunction),
-        ("なく", "なっ", "た", PartOfSpeech.Verb)
+        ("なく", "なっ", "た", PartOfSpeech.Verb),
     ];
 
     private static HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
@@ -119,11 +120,24 @@ public class MorphologicalAnalyser
         for (int i = wordInfos.Count - 1; i >= 0; i--)
         {
             var word = wordInfos[i];
-            if (word.Text == "なん")
+            if (word.Text is "なん" or "フン" or "ふん")
                 word.PartOfSpeech = PartOfSpeech.Prefix;
+            
+            if (word.Text == "そう")
+                word.PartOfSpeech = PartOfSpeech.Adverb;        
+            
+            if (word.Text == "おい")
+                word.PartOfSpeech = PartOfSpeech.Interjection;  
+            
+            if (word is { Text: "つ", PartOfSpeech: PartOfSpeech.Suffix })
+                word.PartOfSpeech = PartOfSpeech.Counter;
 
-            if (word.Text is "ぐ" or "い" or "ー" or "ひ" or "そ" or "つ" or "た" or "く" or "ェ" or "ぇ" or "う" or "せ" or "レ" or "ま" or "す" or "き"
-                or "り" or "る" or "かあ" or "かー" or "にー" or "にい")
+            if (word.Text is "そ" or "ー" or "る" or "ま" or "ふ" or "ち" or "ほ" or "す" or "じ" or "なさ" ||
+                word.PartOfSpeech == PartOfSpeech.Noun && (
+                    (word.Text.Length == 1 && WanaKana.IsKana(word.Text)) ||
+                    word.Text.Length == 2 && WanaKana.IsKana(word.Text[0].ToString()) && word.Text[1] == 'ー'
+                    || word.Text is "エナ" or "えな"
+                ))
             {
                 wordInfos.RemoveAt(i);
                 continue;
@@ -262,21 +276,22 @@ public class MorphologicalAnalyser
                 continue;
             }
 
-            if (w1.Text == "絶対無理")
-            {
-                var zettai = new WordInfo
-                             {
-                                 Text = "絶対", DictionaryForm = "絶対", PartOfSpeech = PartOfSpeech.Adverb,
-                                 PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "ぜったい"
-                             };
-                var muri = new WordInfo
-                           {
-                               Text = "無理", DictionaryForm = "無理", PartOfSpeech = PartOfSpeech.NaAdjective,
-                               PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "むり"
-                           };
 
-                newList.Add(zettai);
-                newList.Add(muri);
+            if (w1.Text == "だし")
+            {
+                var da = new WordInfo
+                         {
+                             Text = "だ", DictionaryForm = "だ", PartOfSpeech = PartOfSpeech.Auxiliary,
+                             PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "だ"
+                         };
+                var shi = new WordInfo
+                          {
+                              Text = "し", DictionaryForm = "し", PartOfSpeech = PartOfSpeech.Conjunction,
+                              PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "し"
+                          };
+
+                newList.Add(da);
+                newList.Add(shi);
                 i++;
                 continue;
             }
@@ -285,7 +300,11 @@ public class MorphologicalAnalyser
             // Always process に as the particle and not the baggage
             if (w1.Text is "な" or "に")
                 w1.PartOfSpeech = PartOfSpeech.Particle;
-            
+
+            // Always process よう as the noun
+            if (w1.Text is "よう")
+                w1.PartOfSpeech = PartOfSpeech.Noun;
+
             newList.Add(w1);
             i++;
         }
@@ -501,7 +520,7 @@ public class MorphologicalAnalyser
                 WordInfo nextWord1 = wordInfos[i + 1];
                 WordInfo nextWord2 = wordInfos[i + 2];
 
-                if (currentWord.PartOfSpeech == PartOfSpeech.Verb &&
+                if (currentWord.PartOfSpeech is PartOfSpeech.Verb &&
                     nextWord1.DictionaryForm == "て" &&
                     nextWord2.DictionaryForm == "いる")
                 {
@@ -567,7 +586,7 @@ public class MorphologicalAnalyser
 
             if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) &&
                 currentWord.Text is "て" or "で" or "ちゃ" or "ば" &&
-                previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective)
+                previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary)
             {
                 previousWord.Text += currentWord.Text;
                 combined = true;
@@ -757,11 +776,11 @@ public class MorphologicalAnalyser
                     (!currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PersonName) &&
                      !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ProperNoun))) continue;
 
-                currentWord.Text = currentWord.Text.Substring(0, currentWord.Text.Length - honorific.Length);
+                currentWord.Text = currentWord.Text[..^honorific.Length];
                 if (currentWord.DictionaryForm.EndsWith(honorific))
                 {
                     currentWord.DictionaryForm =
-                        currentWord.DictionaryForm.Substring(0, currentWord.DictionaryForm.Length - honorific.Length);
+                        currentWord.DictionaryForm[..^honorific.Length];
                 }
 
                 var suffix = new WordInfo()

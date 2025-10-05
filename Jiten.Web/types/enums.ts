@@ -67,7 +67,7 @@ export enum DisplayStyle {
 
 export enum KnownState {
   Unknown = 0,
-  Learning = 1,
-  Known = 2,
+  Young = 1,
+  Mature = 2,
   Suspended = 3,
 }

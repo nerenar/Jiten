@@ -32,6 +32,7 @@ public class AuthController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly UrlEncoder _urlEncoder;
     private readonly IMemoryCache _memoryCache;
+    private readonly ApiKeyService _apiKeyService;
 
     public AuthController(
         UserManager<User> userManager,
@@ -42,7 +43,8 @@ public class AuthController : ControllerBase
         UserDbContext context,
         IConfiguration configuration,
         UrlEncoder urlEncoder,
-        IMemoryCache memoryCache)
+        IMemoryCache memoryCache,
+        ApiKeyService apiKeyService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -53,6 +55,7 @@ public class AuthController : ControllerBase
         _configuration = configuration;
         _urlEncoder = urlEncoder;
         _memoryCache = memoryCache;
+        _apiKeyService = apiKeyService;
     }
 
     [HttpPost("register")]
@@ -447,7 +450,7 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync(); // Save refresh token
         return Ok(tokens);
     }
-
+    
     private async Task<bool> ValidateRecaptcha(string recaptchaToken)
     {
         var recaptchaSecret = _configuration["Google:RecapatchaSecret"];

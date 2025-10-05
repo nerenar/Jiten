@@ -182,6 +182,30 @@
     } finally {
     }
   };
+
+  const migrateFsrs = async () => {
+    try {
+      const data = await $api(`/admin/migrate-known-words-to-fsrs`, {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Migrated known words`,
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to migrate known words',
+        life: 5000,
+      });
+      console.error('Error migrating known words:', error);
+    } finally {
+    }
+  };
 </script>
 
 <template>
@@ -276,7 +300,21 @@
         </template>
       </Card>
 
+      <Card class="shadow-md">
+        <template #title>Migrate known words to FSRS</template>
+        <template #content>
+          <p class="mb-4">Only do once</p>
 
+          <div class="flex justify-center">
+            <Button
+              label="Migrate FSRS"
+              icon="pi pi-table"
+              class="p-button-warning"
+              @click="migrateFsrs"
+            />
+          </div>
+        </template>
+      </Card>
     </div>
   </div>
 </template>

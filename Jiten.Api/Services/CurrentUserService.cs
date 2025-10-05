@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
 using Microsoft.EntityFrameworkCore;
@@ -43,13 +44,13 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
 
         var wordIds = keysList.Select(k => k.WordId).Distinct().ToList();
 
-        var candidates = await userContext.UserKnownWords
+        var candidates = await userContext.FsrsCards
                                           .Where(u => u.UserId == UserId && wordIds.Contains(u.WordId))
                                           .ToListAsync();
 
         return candidates
                .Where(w => keysList.Contains((w.WordId, w.ReadingIndex)))
-               .ToDictionary(w => (w.WordId, w.ReadingIndex), w => w.KnownState);
+               .ToDictionary(w => (w.WordId, w.ReadingIndex), w => (w.Due - w.LastReview!.Value).TotalDays < 21 ? KnownState.Young : KnownState.Mature);
     }
 
     public async Task<KnownState> GetKnownWordState(int wordId, byte readingIndex)
@@ -57,16 +58,21 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
         if (!IsAuthenticated)
             return KnownState.Unknown;
 
-        var word = await userContext.UserKnownWords.FirstOrDefaultAsync(u => u.UserId == UserId && u.WordId == wordId &&
-                                                                             u.ReadingIndex == readingIndex);
-        return word?.KnownState ?? KnownState.Unknown;
+        var word = await userContext.FsrsCards.FirstOrDefaultAsync(u => u.UserId == UserId && u.WordId == wordId &&
+                                                                        u.ReadingIndex == readingIndex);
+
+        if (word == null)
+            return KnownState.Unknown;
+
+        var dueIn = (word.Due - word.LastReview!.Value).TotalDays;
+        return dueIn < 21 ? KnownState.Young : KnownState.Mature;
     }
 
     public async Task<int> AddKnownWords(IEnumerable<DeckWord> deckWords)
     {
         if (!IsAuthenticated) return 0;
         var words = deckWords?.ToList() ?? [];
-        if (words.Count == 0) return 0;;
+        if (words.Count == 0) return 0;
 
         var byWordId = words.GroupBy(w => w.WordId).ToDictionary(g => g.Key, g => g.Select(x => x.ReadingIndex).Distinct().ToList());
         var wordIds = byWordId.Keys.ToList();
@@ -99,39 +105,37 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
 
         DateTime now = DateTime.UtcNow;
         List<int> pairWordIds = pairs.Select(p => p.WordId).Distinct().ToList();
-        List<UserKnownWord> existing = await userContext.UserKnownWords
-                                                        .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
-                                                        .ToListAsync();
+        List<FsrsCard> existing = await userContext.FsrsCards
+                                                   .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
+                                                   .ToListAsync();
         var existingSet = existing.ToDictionary(e => (e.WordId, e.ReadingIndex));
 
-        List<UserKnownWord> toInsert = new();
+        List<FsrsCard> toInsert = new();
         foreach (var p in pairs)
         {
             if (!existingSet.TryGetValue(p, out var existingUk))
             {
-                toInsert.Add(new UserKnownWord
-                             {
-                                 UserId = UserId!, WordId = p.WordId, ReadingIndex = p.ReadingIndex, LearnedDate = now,
-                                 KnownState = KnownState.Known
-                             });
+                toInsert.Add(new FsrsCard(UserId!, p.WordId, p.ReadingIndex, due: now.AddYears(100), lastReview: now,
+                                          state: FsrsState.Review));
             }
-            else if (existingUk.KnownState != KnownState.Known)
+            else
             {
-                existingUk.KnownState = KnownState.Known;
-                existingUk.LearnedDate = now;
+                existingUk.State = FsrsState.Review;
+                existingUk.Due = now.AddYears(100);
+                existingUk.LastReview = now;
             }
         }
 
         if (toInsert.Count > 0)
-            await userContext.UserKnownWords.AddRangeAsync(toInsert);
+            await userContext.FsrsCards.AddRangeAsync(toInsert);
 
-        var updated = existing.Any(e => e.KnownState == KnownState.Known && e.LearnedDate == now) ||
-                      existing.Any(e => e.KnownState != KnownState.Known && e.LearnedDate == now);
+        var updated = existing.Any(e => e.State == FsrsState.Review && e.Due == now) ||
+                      existing.Any(e => e.State != FsrsState.Review && e.Due == now);
         if (toInsert.Count > 0 || updated)
         {
             await userContext.SaveChangesAsync();
         }
-        
+
         return (toInsert.Count);
     }
 
@@ -158,12 +162,12 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
         }
 
         List<int> pairWordIds = pairs.Select(p => p.WordId).Distinct().ToList();
-        List<UserKnownWord> toRemove = await userContext.UserKnownWords
-                                                        .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
-                                                        .ToListAsync();
-        List<UserKnownWord> removals = toRemove.Where(uk => pairs.Contains((uk.WordId, uk.ReadingIndex))).ToList();
+        List<FsrsCard> toRemove = await userContext.FsrsCards
+                                                   .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
+                                                   .ToListAsync();
+        List<FsrsCard> removals = toRemove.Where(uk => pairs.Contains((uk.WordId, uk.ReadingIndex))).ToList();
         if (removals.Count == 0) return;
-        userContext.UserKnownWords.RemoveRange(removals);
+        userContext.FsrsCards.RemoveRange(removals);
         await userContext.SaveChangesAsync();
     }
 

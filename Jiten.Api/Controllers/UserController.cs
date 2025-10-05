@@ -2,6 +2,7 @@ using Hangfire;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
+using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,14 +29,14 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var uniqueWordCount = await userContext.UserKnownWords
+        var uniqueWordCount = await userContext.FsrsCards
                                                .AsNoTracking()
                                                .Where(uk => uk.UserId == userId)
                                                .Select(uk => uk.WordId)
                                                .Distinct()
                                                .CountAsync();
 
-        var totalFormsCount = await userContext.UserKnownWords
+        var totalFormsCount = await userContext.FsrsCards
                                                .AsNoTracking()
                                                .Where(uk => uk.UserId == userId)
                                                .Select(uk => new { uk.WordId, uk.ReadingIndex })
@@ -54,12 +55,13 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var ids = await userContext.UserKnownWords
+        var ids = await userContext.FsrsCards
                                    .AsNoTracking()
                                    .Where(uk => uk.UserId == userId)
                                    .Select(uk => uk.WordId)
                                    .Distinct()
                                    .ToListAsync();
+
         return Results.Ok(ids);
     }
 
@@ -72,16 +74,16 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var entries = await userContext.UserKnownWords
+        var entries = await userContext.FsrsCards
                                        .Where(uk => uk.UserId == userId)
                                        .ToListAsync();
         if (entries.Count == 0) return Results.Ok(new { removed = 0 });
 
-        userContext.UserKnownWords.RemoveRange(entries);
+        userContext.FsrsCards.RemoveRange(entries);
         await userContext.SaveChangesAsync();
-        
+
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
-        
+
         return Results.Ok(new { removed = entries.Count });
     }
 
@@ -108,12 +110,12 @@ public class UserController(
 
         var jmdictWordIds = jmdictWords.Select(w => w.WordId).ToList();
 
-        var alreadyKnown = await userContext.UserKnownWords
+        var alreadyKnown = await userContext.FsrsCards
                                             .AsNoTracking()
                                             .Where(uk => uk.UserId == userId && jmdictWordIds.Contains(uk.WordId))
                                             .ToListAsync();
 
-        List<UserKnownWord> toInsert = new();
+        List<FsrsCard> toInsert = new();
 
         foreach (var word in jmdictWords)
         {
@@ -122,20 +124,17 @@ public class UserController(
                 if (alreadyKnown.Any(uk => uk.WordId == word.WordId && uk.ReadingIndex == i))
                     continue;
 
-                toInsert.Add(new UserKnownWord
-                             {
-                                 UserId = userId, WordId = word.WordId, ReadingIndex = (byte)i, LearnedDate = DateTime.UtcNow,
-                                 KnownState = KnownState.Known,
-                             });
+                toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow.AddYears(100), lastReview: DateTime.UtcNow,
+                                          state: FsrsState.Review));
             }
         }
 
         if (toInsert.Count > 0)
         {
-            await userContext.UserKnownWords.AddRangeAsync(toInsert);
+            await userContext.FsrsCards.AddRangeAsync(toInsert);
             await userContext.SaveChangesAsync();
         }
-        
+
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
         return Results.Ok(new { added = toInsert.Count, skipped = alreadyKnown.Count });
@@ -183,7 +182,7 @@ public class UserController(
         var combinedText = string.Join(Environment.NewLine, validWords);
         var parsedWords = await Parser.Parser.ParseText(jitenContext, combinedText);
         var added = await userService.AddKnownWords(parsedWords);
-        
+
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
         return Results.Ok(new { parsed = parsedWords.Count, added });
@@ -254,12 +253,12 @@ public class UserController(
         var jmdictWordIds = jmdictWords.Select(w => w.WordId).ToList();
 
         // Determine which entries are already known (by word + reading index)
-        var alreadyKnown = await userContext.UserKnownWords
+        var alreadyKnown = await userContext.FsrsCards
                                             .AsNoTracking()
                                             .Where(uk => uk.UserId == userId && jmdictWordIds.Contains(uk.WordId))
                                             .ToListAsync();
 
-        List<UserKnownWord> toInsert = new();
+        List<FsrsCard> toInsert = new();
 
         foreach (var word in jmdictWords)
         {
@@ -268,22 +267,19 @@ public class UserController(
                 if (alreadyKnown.Any(uk => uk.WordId == word.WordId && uk.ReadingIndex == i))
                     continue;
 
-                toInsert.Add(new UserKnownWord
-                             {
-                                 UserId = userId, WordId = word.WordId, ReadingIndex = (byte)i, LearnedDate = DateTime.UtcNow,
-                                 KnownState = KnownState.Known,
-                             });
+                toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow.AddYears(100), lastReview: DateTime.UtcNow,
+                                          state: FsrsState.Review));
             }
         }
 
         if (toInsert.Count > 0)
         {
-            await userContext.UserKnownWords.AddRangeAsync(toInsert);
+            await userContext.FsrsCards.AddRangeAsync(toInsert);
             await userContext.SaveChangesAsync();
         }
 
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
-        
+
         return Results.Ok(new { words = jmdictWords.Count, forms = toInsert.Count });
     }
 

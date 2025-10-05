@@ -35,18 +35,16 @@ public class ComputationJob(JitenDbContext context, UserDbContext userContext, I
         // Prevent duplicate concurrent computations for the same user
         lock (CoverageComputeLock)
         {
-            if (CoverageComputingUserIds.Contains(userId))
+            if (!CoverageComputingUserIds.Add(userId))
             {
                 return;
             }
-
-            CoverageComputingUserIds.Add(userId);
         }
 
         try
         {
             // Only compute coverage for users with at least 10 known words
-            if (await userContext.UserKnownWords.CountAsync(ukw => ukw.UserId == userId) < 10)
+            if (await userContext.FsrsCards.CountAsync(ukw => ukw.UserId == userId) < 10)
             {
                 // Remove existing coverages if they exist, if the user cleared his words for example
                 await userContext.UserCoverages.Where(uc => uc.UserId == userId).ExecuteDeleteAsync();
@@ -60,7 +58,7 @@ public class ComputationJob(JitenDbContext context, UserDbContext userContext, I
         WITH KnownWords AS (
             SELECT ""WordId"", ""ReadingIndex""
             FROM ""user"".""UserKnownWords"" 
-            WHERE ""UserId"" = {0}
+            WHERE ""UserId"" = {0}::uuid
         ),
         DeckCoverage AS (
             SELECT 

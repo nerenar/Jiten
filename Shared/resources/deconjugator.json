@@ -857,6 +857,14 @@
   {
     "type": "onlyfinalrule",
     "dec_end": [""],
+    "con_end": ["ましゅ"],
+    "dec_tag": ["stem-ren"],
+    "con_tag": ["uninflectable"],
+    "detail": "polite (childish)"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
     "con_end": ["たら"],
     "dec_tag": ["stem-ren-less"],
     "con_tag": ["uninflectable"],
@@ -1314,5 +1322,37 @@
     "dec_tag": ["v1", "v1-s", "v5r", "v5aru", "vk"],
     "con_tag": ["uninflectable"],
     "detail": "slurred"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["らない"],
+    "con_end": ["んない"],
+    "dec_tag": ["adj-i"],
+    "con_tag": ["adj-i"],
+    "detail": "slang negative"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["らなければ"],
+    "con_end": ["んなければ"],
+    "dec_tag": ["uninflectable"],
+    "con_tag": ["uninflectable"],
+    "detail": "slurred negative conditional"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["られない"],
+    "con_end": ["らんない"],
+    "dec_tag": ["adj-i"],
+    "con_tag": ["adj-i"],
+    "detail": "slang negative"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["らなきゃ"],
+    "con_end": ["んなきゃ"],
+    "dec_tag": ["uninflectable"],
+    "con_tag": ["uninflectable"],
+    "detail": "slang negative conditional"
   }
 ]

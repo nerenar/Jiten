@@ -23,6 +23,55 @@ namespace Jiten.Core.Migrations.UserDb
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ApiKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasMaxLength(88)
+                        .HasColumnType("character varying(88)");
+
+                    b.Property<bool>("IsRevoked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Hash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ApiKey_Hash");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ApiKey_UserId");
+
+                    b.HasIndex("UserId", "IsRevoked")
+                        .HasDatabaseName("IX_ApiKey_UserId_IsRevoked");
+
+                    b.ToTable("ApiKeys", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Authentication.RefreshToken", b =>
                 {
                     b.Property<string>("Token")
@@ -44,9 +93,8 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Token");
 
@@ -57,8 +105,8 @@ namespace Jiten.Core.Migrations.UserDb
 
             modelBuilder.Entity("Jiten.Core.Data.Authentication.User", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("text");
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
@@ -131,10 +179,77 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("AspNetUsers", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCard", b =>
+                {
+                    b.Property<long>("CardId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("CardId"));
+
+                    b.Property<double?>("Difficulty")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("Due")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastReview")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<double?>("Stability")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Step")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CardId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "WordId", "ReadingIndex")
+                        .IsUnique();
+
+                    b.ToTable("FsrsCards", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsReviewLog", b =>
+                {
+                    b.Property<long>("ReviewLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ReviewLogId"));
+
+                    b.Property<long>("CardId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("ReviewDateTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ReviewLogId");
+
+                    b.HasIndex("CardId", "ReviewDateTime")
+                        .IsUnique();
+
+                    b.ToTable("FsrsReviewLogs", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.User.UserCoverage", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("DeckId")
                         .HasColumnType("integer");
@@ -155,8 +270,8 @@ namespace Jiten.Core.Migrations.UserDb
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserKnownWord", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("WordId")
                         .HasColumnType("integer");
@@ -180,8 +295,8 @@ namespace Jiten.Core.Migrations.UserDb
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserMetadata", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CoverageRefreshedAt")
                         .HasColumnType("timestamp with time zone");
@@ -256,9 +371,8 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<string>("ClaimValue")
                         .HasColumnType("text");
 
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -278,9 +392,8 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<string>("ProviderDisplayName")
                         .HasColumnType("text");
 
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("LoginProvider", "ProviderKey");
 
@@ -291,8 +404,8 @@ namespace Jiten.Core.Migrations.UserDb
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<string>", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("RoleId")
                         .HasColumnType("text");
@@ -306,8 +419,8 @@ namespace Jiten.Core.Migrations.UserDb
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("LoginProvider")
                         .HasColumnType("text");
@@ -323,6 +436,17 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("AspNetUserTokens", "user");
                 });
 
+            modelBuilder.Entity("ApiKey", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", "User")
+                        .WithOne()
+                        .HasForeignKey("ApiKey", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Authentication.RefreshToken", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Authentication.User", "User")
@@ -332,6 +456,15 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsReviewLog", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.FSRS.FsrsCard", null)
+                        .WithMany()
+                        .HasForeignKey("CardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserMetadata", b =>

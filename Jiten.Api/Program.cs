@@ -7,6 +7,7 @@ using Hangfire.PostgreSql;
 using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
+using Jiten.Api.Authentication;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -73,6 +74,27 @@ builder.Services.AddSwaggerGen(c =>
 
     c.AddSecurityDefinition("Bearer", securityScheme);
     c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement { { securityScheme, new List<string>() } });
+
+    // API Key auth definition (X-Api-Key header)
+    var apiKeyScheme = new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Description = "API Key needed to access the endpoints. Use the 'X-Api-Key' header or 'Authorization: ApiKey <key>'.",
+        Name = "X-Api-Key",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Reference = new Microsoft.OpenApi.Models.OpenApiReference
+        {
+            Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+            Id = "ApiKey"
+        }
+    };
+    c.AddSecurityDefinition("ApiKey", apiKeyScheme);
+
+    // Allow either Bearer OR ApiKey for endpoints
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        { apiKeyScheme, new List<string>() }
+    });
 });
 
 builder.Services.AddHttpClient();
@@ -126,9 +148,21 @@ var key = Encoding.ASCII.GetBytes(secretKey);
 
 builder.Services.AddAuthentication(options =>
        {
-           options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-           options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-           options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+           options.DefaultAuthenticateScheme = "Smart";
+           options.DefaultChallengeScheme = "Smart";
+           options.DefaultScheme = "Smart";
+       })
+       .AddPolicyScheme("Smart", "JWT or API Key", options =>
+       {
+           options.ForwardDefaultSelector = context =>
+           {
+               if (context.Request.Headers.ContainsKey("X-Api-Key"))
+                   return "ApiKey";
+               var auth = context.Request.Headers["Authorization"].FirstOrDefault();
+               if (!string.IsNullOrEmpty(auth) && auth.StartsWith("ApiKey ", StringComparison.OrdinalIgnoreCase))
+                   return "ApiKey";
+               return JwtBearerDefaults.AuthenticationScheme;
+           };
        })
        .AddJwtBearer(options =>
        {
@@ -141,6 +175,10 @@ builder.Services.AddAuthentication(options =>
                                                    ValidAudience = jwtSettings["Audience"],
                                                    IssuerSigningKey = new SymmetricSecurityKey(key), ClockSkew = TimeSpan.Zero
                                                };
+       })
+       .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>("ApiKey", options =>
+       {
+           options.HeaderName = "X-Api-Key";
        });
 
 builder.Services.AddAuthorization(options =>
@@ -149,6 +187,7 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddSingleton<ApiKeyService>();
 builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSender, Jiten.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();

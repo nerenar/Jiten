@@ -7,6 +7,7 @@
 - [JmdictFurigana](https://github.com/Doublevil/JmdictFurigana) - Furigana dictionary for JMDict
 - [Lapis](https://github.com/donkuri/lapis) - Anki notetype
 - [Hatsuon](https://github.com/DJTB/hatsuon) - Pitch accent display
+- [FSRS.Core](https://github.com/TranPhucTien/FSRS.Core) - .NET FSRS Implementation
 
 # Installation
 

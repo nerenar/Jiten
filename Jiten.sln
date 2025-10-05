@@ -4,7 +4,7 @@ VisualStudioVersion = 16.0.0.0
 MinimumVisualStudioVersion = 16.0.0.0
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jiten.Parser", "Jiten.Parser\Jiten.Parser.csproj", "{3DE44763-9B8A-43D4-8936-406E772E1EBA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jiten.Parser.Tests", "Jiten.Parser.Tests\Jiten.Parser.Tests.csproj", "{1FFF1475-8CA6-4906-861A-A096E92EA296}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jiten.Tests", "Jiten.Tests\Jiten.Tests.csproj", "{1FFF1475-8CA6-4906-861A-A096E92EA296}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jiten.Core", "Jiten.Core\Jiten.Core.csproj", "{8CD3F08B-DFBD-49FB-B874-A63CE8F38693}"
 EndProject
