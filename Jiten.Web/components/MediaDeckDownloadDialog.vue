@@ -232,7 +232,7 @@
               </div>
               <div class="flex items-center gap-2">
                 <Checkbox v-model="excludeExampleSentences" input-id="excludeExampleSentences" name="noExampleSentences" :binary="true" />
-                <label for="excludeKana">Don't include example sentences</label>
+                <label for="excludeExampleSentences">Don't include example sentences</label>
               </div>
               <div class="flex items-center gap-2">
                 <Checkbox v-model="excludeKnownWords" input-id="excludeKnownWords" name="excludeKnownWords" :binary="true" />

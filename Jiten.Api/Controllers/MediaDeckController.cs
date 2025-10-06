@@ -45,7 +45,7 @@ public class MediaDeckController(
     [ResponseCache(Duration = 60 * 60)]
     [SwaggerOperation(Summary = "Get IDs of top-level media decks")]
     [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
-    public async Task<List<int>> GetMediaDecksId(MediaType? mediaType)
+    public async Task<List<int>> GetMediaDecksId()
     {
         return await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToListAsync();
     }

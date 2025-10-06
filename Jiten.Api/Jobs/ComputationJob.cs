@@ -10,7 +10,11 @@ using Jiten.Core.Data.User;
 
 namespace Jiten.Api.Jobs;
 
-public class ComputationJob(JitenDbContext context, UserDbContext userContext, IConfiguration configuration, IBackgroundJobClient backgroundJobs)
+public class ComputationJob(
+    JitenDbContext context,
+    UserDbContext userContext,
+    IConfiguration configuration,
+    IBackgroundJobClient backgroundJobs)
 {
     private static readonly object CoverageComputeLock = new();
     private static readonly HashSet<string> CoverageComputingUserIds = new();
@@ -19,16 +23,16 @@ public class ComputationJob(JitenDbContext context, UserDbContext userContext, I
     public async Task DailyUserCoverage()
     {
         var userIds = await userContext.Users
-                                        .AsNoTracking()
-                                        .Select(u => u.Id)
-                                        .ToListAsync();
+                                       .AsNoTracking()
+                                       .Select(u => u.Id)
+                                       .ToListAsync();
 
         foreach (var userId in userIds)
         {
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
         }
     }
-    
+
     [Queue("coverage")]
     public async Task ComputeUserCoverage(string userId)
     {
@@ -55,35 +59,29 @@ public class ComputationJob(JitenDbContext context, UserDbContext userContext, I
             }
 
             var sql = @"
-        WITH KnownWords AS (
-            SELECT ""WordId"", ""ReadingIndex""
-            FROM ""user"".""UserKnownWords"" 
-            WHERE ""UserId"" = {0}::uuid
-        ),
-        DeckCoverage AS (
+             WITH KnownWords AS NOT MATERIALIZED (
+                SELECT ""WordId"", ""ReadingIndex""
+                FROM ""user"".""FsrsCards""
+                WHERE ""UserId"" = {0}::uuid
+            )
             SELECT 
                 d.""DeckId"",
-                d.""WordCount"",
-                d.""UniqueWordCount"",
-                COALESCE(SUM(CASE WHEN kw.""WordId"" IS NOT NULL THEN dw.""Occurrences"" ELSE 0 END), 0) as KnownOccurrences,
-                COUNT(CASE WHEN kw.""WordId"" IS NOT NULL THEN 1 END) as KnownUniqueCount
+                CASE 
+                    WHEN d.""WordCount"" = 0 THEN 0.0 
+                    ELSE ROUND((SUM(CASE WHEN kw.""WordId"" IS NOT NULL THEN dw.""Occurrences"" ELSE 0 END)::NUMERIC / d.""WordCount""::NUMERIC * 100), 2)
+                END AS ""Coverage"",
+                CASE 
+                    WHEN d.""UniqueWordCount"" = 0 THEN 0.0 
+                    ELSE ROUND((COUNT(CASE WHEN kw.""WordId"" IS NOT NULL THEN 1 END)::NUMERIC / d.""UniqueWordCount""::NUMERIC * 100), 2)
+                END AS ""UniqueCoverage""
             FROM ""jiten"".""Decks"" d
             LEFT JOIN ""jiten"".""DeckWords"" dw ON d.""DeckId"" = dw.""DeckId""
-            LEFT JOIN KnownWords kw ON dw.""WordId"" = kw.""WordId"" AND dw.""ReadingIndex"" = kw.""ReadingIndex""
+            LEFT JOIN ""user"".""FsrsCards"" kw 
+                ON kw.""WordId"" = dw.""WordId""
+                AND kw.""ReadingIndex"" = dw.""ReadingIndex""
+                AND kw.""UserId"" = {0}::uuid
             WHERE d.""ParentDeckId"" IS NULL
-            GROUP BY d.""DeckId"", d.""WordCount"", d.""UniqueWordCount""
-        )
-        SELECT 
-            ""DeckId"",
-            CASE 
-                WHEN ""WordCount"" = 0 THEN 0.0 
-                ELSE ROUND((KnownOccurrences::NUMERIC / ""WordCount""::NUMERIC * 100), 2) 
-            END as ""Coverage"",
-            CASE 
-                WHEN ""UniqueWordCount"" = 0 THEN 0.0 
-                ELSE ROUND((KnownUniqueCount::NUMERIC / ""UniqueWordCount""::NUMERIC * 100), 2) 
-            END as ""UniqueCoverage""
-        FROM DeckCoverage";
+            GROUP BY d.""DeckId"", d.""WordCount"", d.""UniqueWordCount"";";
 
             var coverageResults = await context.Database
                                                .SqlQueryRaw<DeckCoverageResult>(sql, userId)
@@ -96,7 +94,7 @@ public class ComputationJob(JitenDbContext context, UserDbContext userContext, I
                                                      .ToListAsync();
             var existingDict = existingCoverages.ToDictionary(uc => uc.DeckId);
 
-            var newCoverages = new List<Core.Data.User.UserCoverage>();
+            var newCoverages = new List<UserCoverage>();
 
             foreach (var result in coverageResults)
             {
@@ -107,7 +105,7 @@ public class ComputationJob(JitenDbContext context, UserDbContext userContext, I
                 }
                 else
                 {
-                    newCoverages.Add(new Core.Data.User.UserCoverage
+                    newCoverages.Add(new UserCoverage
                                      {
                                          UserId = userId, DeckId = result.DeckId, Coverage = result.Coverage,
                                          UniqueCoverage = result.UniqueCoverage
@@ -142,7 +140,7 @@ public class ComputationJob(JitenDbContext context, UserDbContext userContext, I
             {
                 metadata.CoverageRefreshedAt = DateTime.UtcNow;
             }
-            
+
             await userContext.SaveChangesAsync();
         }
     }
