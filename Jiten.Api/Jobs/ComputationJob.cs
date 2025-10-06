@@ -59,29 +59,28 @@ public class ComputationJob(
             }
 
             var sql = @"
-             WITH KnownWords AS NOT MATERIALIZED (
-                SELECT ""WordId"", ""ReadingIndex""
-                FROM ""user"".""FsrsCards""
-                WHERE ""UserId"" = {0}::uuid
-            )
-            SELECT 
-                d.""DeckId"",
-                CASE 
-                    WHEN d.""WordCount"" = 0 THEN 0.0 
-                    ELSE ROUND((SUM(CASE WHEN kw.""WordId"" IS NOT NULL THEN dw.""Occurrences"" ELSE 0 END)::NUMERIC / d.""WordCount""::NUMERIC * 100), 2)
-                END AS ""Coverage"",
-                CASE 
-                    WHEN d.""UniqueWordCount"" = 0 THEN 0.0 
-                    ELSE ROUND((COUNT(CASE WHEN kw.""WordId"" IS NOT NULL THEN 1 END)::NUMERIC / d.""UniqueWordCount""::NUMERIC * 100), 2)
-                END AS ""UniqueCoverage""
-            FROM ""jiten"".""Decks"" d
-            LEFT JOIN ""jiten"".""DeckWords"" dw ON d.""DeckId"" = dw.""DeckId""
-            LEFT JOIN ""user"".""FsrsCards"" kw 
-                ON kw.""WordId"" = dw.""WordId""
-                AND kw.""ReadingIndex"" = dw.""ReadingIndex""
-                AND kw.""UserId"" = {0}::uuid
-            WHERE d.""ParentDeckId"" IS NULL
-            GROUP BY d.""DeckId"", d.""WordCount"", d.""UniqueWordCount"";";
+                SET LOCAL join_collapse_limit = 1;
+                SET LOCAL from_collapse_limit = 1;
+
+                SELECT 
+                    d.""DeckId"",
+                    CASE 
+                        WHEN d.""WordCount"" = 0 THEN 0.0 
+                        ELSE ROUND((SUM(CASE WHEN kw.""WordId"" IS NOT NULL THEN dw.""Occurrences"" ELSE 0 END)::NUMERIC / d.""WordCount""::NUMERIC * 100), 2)
+                    END AS ""Coverage"",
+                    CASE 
+                        WHEN d.""UniqueWordCount"" = 0 THEN 0.0 
+                        ELSE ROUND((COUNT(CASE WHEN kw.""WordId"" IS NOT NULL THEN 1 END)::NUMERIC / d.""UniqueWordCount""::NUMERIC * 100), 2)
+                    END AS ""UniqueCoverage""
+                FROM ""jiten"".""Decks"" d
+                LEFT JOIN ""jiten"".""DeckWords"" dw ON d.""DeckId"" = dw.""DeckId""
+                LEFT JOIN ""user"".""FsrsCards"" kw 
+                    ON kw.""UserId"" = {0}::uuid
+                    AND kw.""WordId"" = dw.""WordId""
+                    AND kw.""ReadingIndex"" = dw.""ReadingIndex""
+                WHERE d.""ParentDeckId"" IS NULL
+                GROUP BY d.""DeckId"", d.""WordCount"", d.""UniqueWordCount"";
+                ";
 
             var coverageResults = await context.Database
                                                .SqlQueryRaw<DeckCoverageResult>(sql, userId)
