@@ -99,15 +99,25 @@ public class MediaDeckController(
         // Apply title filter
         if (!string.IsNullOrEmpty(titleFilter))
         {
-            FormattableString sql = $"""
-                                     SELECT *
-                                     FROM jiten."Decks"
-                                     WHERE "ParentDeckId" IS NULL AND
-                                     ("OriginalTitle" &@~ {titleFilter} OR 
-                                      "RomajiTitle" &@~ {titleFilter} OR REPLACE("RomajiTitle", ' ', '') &@~ {titleFilter} OR 
-                                      "EnglishTitle" &@~ {titleFilter})
-                                     ORDER BY pgroonga_score(tableoid, ctid) DESC
-                                     """;
+            FormattableString sql = $$"""
+                                      SELECT d.*
+                                      FROM jiten."Decks" d
+                                      JOIN (
+                                        SELECT dt."DeckId",
+                                               MIN(CASE dt."TitleType"
+                                                 WHEN 0 THEN 1
+                                                 WHEN 1   THEN 2
+                                                 WHEN 2  THEN 3
+                                                 ELSE 4 END) AS best_type_rank,
+                                               MAX(pgroonga_score(dt.tableoid, dt.ctid)) AS best_score
+                                        FROM jiten."DeckTitles" dt
+                                        WHERE dt."Title" &@~ {{titleFilter}}
+                                        OR ((dt."TitleType" = 1 OR dt."TitleType" = 3) AND REPLACE(dt."Title", ' ', '') &@~ {{titleFilter}})
+                                        GROUP BY dt."DeckId"
+                                      ) s ON s."DeckId" = d."DeckId"
+                                      WHERE d."ParentDeckId" IS NULL
+                                      ORDER BY s.best_type_rank ASC, s.best_score DESC
+                                      """;
 
             query = context.Set<Deck>().FromSqlInterpolated(sql);
         }
@@ -131,7 +141,8 @@ public class MediaDeckController(
         }
 
         query = query.Include(d => d.Children)
-                     .Include(d => d.Links);
+                     .Include(d => d.Links)
+                     .Include(d => d.Titles);
 
         // Create projected query for word-based searches
         IQueryable<DeckWithOccurrences>? projectedQuery = null;
@@ -282,8 +293,8 @@ public class MediaDeckController(
                 ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0)
                 : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.DialoguePercentage).Where(d => d.DialoguePercentage != 0 && d.DialoguePercentage != 100)
-                : query.OrderByDescending(d => d.DialoguePercentage).Where(d => d.DialoguePercentage != 0 && d.DialoguePercentage != 100),
+                ? query.OrderBy(d => d.DialoguePercentage).Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100)
+                : query.OrderByDescending(d => d.DialoguePercentage).Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100),
             "wordCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.WordCount)
                 : query.OrderByDescending(d => d.WordCount),
@@ -701,7 +712,7 @@ public class MediaDeckController(
                            .ToList();
         }
 
-        var wordIds = await deckWordsQuery.Select(dw => (long)dw.WordId).ToListAsync();
+        var wordIds = deckWordsRaw.Select(dw => (long)dw.WordId).ToList();
 
         List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords = deckWordsRaw
                                                                            .Select(dw => new ValueTuple<int, byte, int>(dw.WordId,
@@ -955,7 +966,7 @@ public class MediaDeckController(
             case DeckFormat.Csv:
                 StringBuilder sb = new StringBuilder();
 
-                sb.AppendLine($"\"Reading\",\"ReadingFurigana\",\"ReadingKana\",\"Occurences\",\"ReadingFrequency\",\"PitchPositions\",\"Definitions\"");
+                sb.AppendLine($"\"Reading\",\"ReadingFurigana\",\"ReadingKana\",\"Occurences\",\"ReadingFrequency\",\"PitchPositions\",\"Definitions\",\"ExampleSentence\"");
 
                 foreach (var word in deckWords)
                 {
@@ -963,7 +974,6 @@ public class MediaDeckController(
 
                     if (request.ExcludeKana && WanaKana.IsKana(reading))
                         continue;
-
 
                     string readingFurigana = jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex];
                     string pitchPositions = "";
@@ -981,7 +991,25 @@ public class MediaDeckController(
                     var occurrences = word.Occurrences;
                     var readingFrequency = frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex];
 
-                    sb.AppendLine($"\"{reading}\",\"{readingFurigana}\",\"{readingKana}\",\"{occurrences}\",\"{readingFrequency}\",\"{pitchPositions}\",\"{definitions}\"");
+                    string exampleSentence = "";
+                    if (!request.ExcludeExampleSentences &&
+                        wordToSentencesMap.TryGetValue((word.WordId, word.ReadingIndex), out var sentences) && sentences.Count > 0)
+                    {
+                        var sentence = sentences.First();
+                        int position = sentence.Position;
+                        int length = sentence.Length;
+
+                        string originalText = sentence.Text;
+                        if (position >= 0 && position + length <= originalText.Length)
+                        {
+                            exampleSentence = originalText.Substring(0, position) +
+                                              "**" +
+                                              originalText.Substring(position, length) + "**" +
+                                              originalText.Substring(position + length);
+                        }
+                    }
+
+                    sb.AppendLine($"\"{reading}\",\"{readingFurigana}\",\"{readingKana}\",\"{occurrences}\",\"{readingFrequency}\",\"{pitchPositions}\",\"{definitions}\",\"{exampleSentence}\"");
                 }
 
                 return Encoding.UTF8.GetBytes(sb.ToString());
@@ -1177,7 +1205,25 @@ public class MediaDeckController(
                        }}
                        """;
 
-        var embed = String.Format(rawEmbed, currentUserService.UserId, deck.OriginalTitle, deck.DeckId, request.Comment, request.IssueType);
+        string SafeMarkdown(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return "";
+            // Escape common Discord markup characters: *, _, ~, `, >, |, [, ], (, ), @, #, :, \, etc.
+            var sb = new StringBuilder(input.Length);
+            foreach (var c in input)
+            {
+                if (c is '*' or '_' or '~' or '`' or '>' or '|' or '[' or ']' or '(' or ')' or '@' or '#' or ':' or '\\')
+                {
+                    sb.Append('\\'); // prepend backslash to escape
+                }
+                sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        var safeComment = SafeMarkdown(request.Comment);
+        var safeIssueType = SafeMarkdown(request.IssueType);
+        var embed = String.Format(rawEmbed, currentUserService.UserId, deck.OriginalTitle, deck.DeckId, safeComment, safeIssueType);
         var webhook = configuration["DiscordWebhook"];
         using var httpClient = new HttpClient();
         var content = new StringContent(embed, Encoding.UTF8, "application/json");

@@ -65,6 +65,7 @@ public class ParseJob(JitenDbContext context)
         deck.CreationDate = DateTimeOffset.UtcNow;
         deck.LastUpdate = DateTime.UtcNow;
         deck.DifficultyOverride = -1;
+        deck.Titles = metadata.Aliases.Select(a => new DeckTitle { DeckId = deck.DeckId, Title = a, TitleType = DeckTitleType.Alias }).ToList();
 
         foreach (var link in deck.Links)
         {
@@ -72,8 +73,7 @@ public class ParseJob(JitenDbContext context)
         }
 
         var coverImage = await File.ReadAllBytesAsync(metadata.Image ?? throw new Exception("No cover image found."));
-        ;
-
+        
         // Insert the deck into the database
         await JitenHelper.InsertDeck(context.DbOptions, deck, coverImage ?? [], false);
     }

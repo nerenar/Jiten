@@ -68,7 +68,7 @@ public class AdminController(
                                     Description = model.Description?.Trim(), Image = coverImagePathOrUrl, Links = new List<Link>()
                                 };
 
-            // Parse links from form data
+            // Parse links and aliases from form data
             for (int i = 0; i < Request.Form.Keys.Count; i++)
             {
                 string urlKey = $"links[{i}].url";
@@ -81,6 +81,12 @@ public class AdminController(
                     Enum.TryParse<LinkType>(linkTypeValue, out var linkType))
                 {
                     metadata.Links.Add(new Link { Url = urlValue.ToString(), LinkType = linkType });
+                }
+
+                string aliasKey = $"aliases[{i}]";
+                if (Request.Form.TryGetValue(aliasKey, out var aliasValue) && !string.IsNullOrEmpty(aliasValue))
+                {
+                    metadata.Aliases.Add(aliasValue.ToString());
                 }
             }
 
@@ -175,6 +181,7 @@ public class AdminController(
         var deck = dbContext.Decks.AsNoTracking()
                             .Include(d => d.Children)
                             .Include(d => d.Links)
+                            .Include(d => d.Titles)
                             .FirstOrDefault(d => d.DeckId == id);
 
         if (deck == null)
@@ -210,7 +217,7 @@ public class AdminController(
                                   .Include(d => d.Links)
                                   .Include(d => d.RawText)
                                   .Include(d => d.Children)
-                                  .ThenInclude(deck => deck.RawText)
+                                  .ThenInclude(deck => deck.RawText).Include(deck => deck.Titles)
                                   .FirstOrDefaultAsync(d => d.DeckId == model.DeckId);
 
         if (deck == null)
@@ -224,6 +231,7 @@ public class AdminController(
         deck.ReleaseDate = model.ReleaseDate;
         deck.Description = model.Description?.Trim();
         deck.DifficultyOverride = model.DifficultyOverride;
+        deck.HideDialoguePercentage = model.HideDialoguePercentage;
 
         // Update cover image if provided
         if (model.CoverImage is { Length: > 0 })
@@ -266,6 +274,29 @@ public class AdminController(
                 else
                 {
                     deck.Links.Add(link);
+                }
+            }
+        }
+
+        // Update aliases
+        if (model.Aliases.Any())
+        {
+            var newAliases = model.Aliases.Where(a => !string.IsNullOrEmpty(a)).ToHashSet();
+
+            // Remove aliases that are no longer present
+            var aliasesToRemove = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias && !newAliases.Contains(t.Title));
+            dbContext.RemoveRange(aliasesToRemove);
+
+            // Add new aliases
+            foreach (var alias in model.Aliases)
+            {
+                var trimmed = alias.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+                
+                var existingAlias = deck.Titles.FirstOrDefault(l => l.Title == trimmed);
+                if (existingAlias == null)
+                {
+                    deck.Titles.Add(new DeckTitle { DeckId = deck.DeckId, Title = trimmed, TitleType = DeckTitleType.Alias });
                 }
             }
         }
@@ -449,7 +480,8 @@ public class AdminController(
     public async Task<IActionResult> FetchAllMissingMetadata()
     {
         var decks = await dbContext
-                          .Decks.Where(d => d.ParentDeck == null && (d.ReleaseDate == default || string.IsNullOrEmpty(d.Description)))
+                          .Decks.Where(d => d.ParentDeck == null)
+                          .Where(d => d.Titles.All(t => t.TitleType != DeckTitleType.Alias) || d.ReleaseDate == default || string.IsNullOrEmpty(d.Description))
                           .Include(deck => deck.Links).ToListAsync();
 
         foreach (var deck in decks)
@@ -472,7 +504,9 @@ public class AdminController(
                     }
                     else
                     {
-                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deck.DeckId));
+                        // For google books, don't fetch if it's missing aliases
+                        if (deck.ReleaseDate == default || string.IsNullOrEmpty(deck.Description))
+                            backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deck.DeckId));
                     }
 
                     break;
@@ -652,25 +686,5 @@ public class AdminController(
             return StatusCode(StatusCodes.Status500InternalServerError,
                               new { Message = "An unexpected error occurred while processing your request.", Details = ex.ToString() });
         }
-    }
-
-    [HttpPost("migrate-known-words-to-fsrs")]
-    public async Task<IActionResult> MigrateKnownWordsToFsrs()
-    {
-        var users = await userContext.Users.ToListAsync();
-        foreach (var user in users)
-        {
-            var knownWords = await userContext.UserKnownWords.Where(uk => uk.UserId == user.Id).ToListAsync();
-            foreach (var knownWord in knownWords)
-            {
-                var fsrsCard = new FsrsCard(user.Id, knownWord.WordId, knownWord.ReadingIndex, due: knownWord.LearnedDate.AddYears(100),
-                                            lastReview: knownWord.LearnedDate, state: FsrsState.Review);
-                userContext.FsrsCards.Add(fsrsCard);
-            }
-        }
-
-        await userContext.SaveChangesAsync();
-
-        return Ok();
     }
 }

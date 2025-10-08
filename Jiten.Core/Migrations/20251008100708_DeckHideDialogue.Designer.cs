@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Jiten.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Jiten.Core.Migrations
 {
     [DbContext(typeof(JitenDbContext))]
-    partial class JitenDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251008100708_DeckHideDialogue")]
+    partial class DeckHideDialogue
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -139,36 +142,6 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_DeckRawText_DeckId");
 
                     b.ToTable("DeckRawTexts", "jiten");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.DeckTitle", b =>
-                {
-                    b.Property<int>("DeckTitleId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DeckTitleId"));
-
-                    b.Property<int>("DeckId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int>("TitleType")
-                        .HasColumnType("integer");
-
-                    b.HasKey("DeckTitleId");
-
-                    b.HasIndex("Title")
-                        .HasDatabaseName("IX_DeckTitles_Title");
-
-                    b.HasIndex("DeckId", "TitleType")
-                        .HasDatabaseName("IX_DeckTitles_DeckId_TitleType");
-
-                    b.ToTable("DeckTitles", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckWord", b =>
@@ -442,17 +415,6 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
-            modelBuilder.Entity("Jiten.Core.Data.DeckTitle", b =>
-                {
-                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
-                        .WithMany("Titles")
-                        .HasForeignKey("DeckId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Deck");
-                });
-
             modelBuilder.Entity("Jiten.Core.Data.DeckWord", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
@@ -543,8 +505,6 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Links");
 
                     b.Navigation("RawText");
-
-                    b.Navigation("Titles");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>

@@ -121,7 +121,8 @@ public static partial class MetadataProviderHelper
               bannerImage
               coverImage {
                 extraLarge
-              }
+              },
+              synonyms
             }
           }
         }",
@@ -152,7 +153,7 @@ public static partial class MetadataProviderHelper
                                                                      Url = $"https://anilist.co/manga/{media.Id}"
                                                                  }
                                                              ],
-                                                             Image = media.CoverImage.ExtraLarge
+                                                             Image = media.CoverImage.ExtraLarge, Aliases = media.Synonyms
                                                          }).ToList() ?? [];
     }
 
@@ -179,7 +180,8 @@ public static partial class MetadataProviderHelper
                                                     bannerImage
                                                     coverImage {
                                                       extraLarge
-                                                    }
+                                                    },
+                                                    synonyms
                                                   }
                                               }
                                       """,
@@ -209,7 +211,7 @@ public static partial class MetadataProviderHelper
                    [
                        new Link { LinkType = LinkType.Anilist, Url = $"https://anilist.co/manga/{media.Id}" }
                    ],
-                   Image = media.CoverImage.ExtraLarge
+                   Image = media.CoverImage.ExtraLarge, Aliases = media.Synonyms
                };
     }
 
@@ -235,7 +237,8 @@ public static partial class MetadataProviderHelper
               bannerImage
               coverImage {
                 extraLarge
-              }
+              },
+              synonyms
             }
         }",
                               variables = new { id = anilistId }
@@ -259,16 +262,17 @@ public static partial class MetadataProviderHelper
             return new Metadata();
         }
 
+        var media = result.Data.Media;
         return new Metadata
                {
-                   OriginalTitle = result.Data.Media.Title.Native, RomajiTitle = result.Data.Media.Title.Romaji,
-                   EnglishTitle = result.Data.Media.Title.English, ReleaseDate = result.Data.Media.ReleaseDate, Links =
+                   OriginalTitle = media.Title.Native, RomajiTitle = media.Title.Romaji,
+                   EnglishTitle = media.Title.English, ReleaseDate = media.ReleaseDate, Links =
                    [
-                       new Link { LinkType = LinkType.Anilist, Url = $"https://anilist.co/anime/{result.Data.Media.Id}" },
-                       new Link { LinkType = LinkType.Mal, Url = $"https://myanimelist.net/anime/{result.Data.Media.IdMal}" }
+                       new Link { LinkType = LinkType.Anilist, Url = $"https://anilist.co/anime/{media.Id}" },
+                       new Link { LinkType = LinkType.Mal, Url = $"https://myanimelist.net/anime/{media.IdMal}" }
                    ],
-                   Image = result.Data.Media.CoverImage.ExtraLarge
-               } ?? new Metadata();
+                   Image = media.CoverImage.ExtraLarge, Aliases = media.Synonyms
+               };
     }
 
     public static async Task<List<Metadata>> VndbSearchApi(string query)
@@ -281,7 +285,7 @@ public static partial class MetadataProviderHelper
         var requestContent = new StringContent(JsonSerializer.Serialize(new
                                                                         {
                                                                             filters = filter, fields =
-                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}",
+                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}, aliases",
                                                                             results = 10, page = 1
                                                                         }));
         var http = new HttpClient();
@@ -310,7 +314,7 @@ public static partial class MetadataProviderHelper
                                ReleaseDate = requestResult.Released,
                                Description = Regex.Replace(requestResult.Description ?? "", @"\[.*\]", ""),
                                Links = [new Link { LinkType = LinkType.Vndb, Url = $"https://vndb.org/{requestResult.Id}" }],
-                               Image = requestResult.Image?.Url
+                               Image = requestResult.Image?.Url, Aliases = requestResult.Aliases
                            };
 
             metadatas.Add(metadata);
@@ -329,7 +333,7 @@ public static partial class MetadataProviderHelper
         var requestContent = new StringContent(JsonSerializer.Serialize(new
                                                                         {
                                                                             filters = filter, fields =
-                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}"
+                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}, aliases",
                                                                         }));
         var http = new HttpClient();
         requestContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
@@ -356,7 +360,7 @@ public static partial class MetadataProviderHelper
                    EnglishTitle = requestResult.Titles.FirstOrDefault(t => t.Lang == "en")?.Title, ReleaseDate = requestResult.Released,
                    Description = Regex.Replace(requestResult.Description ?? "", @"\[.*\]", ""),
                    Links = [new Link { LinkType = LinkType.Vndb, Url = $"https://vndb.org/{requestResult.Id}" }],
-                   Image = requestResult.Image?.Url
+                   Image = requestResult.Image?.Url, Aliases = requestResult.Aliases
                };
     }
 
@@ -372,7 +376,18 @@ public static partial class MetadataProviderHelper
 
         if (result == null)
             return new Metadata();
-
+        
+        // Get aliases
+        List<string> aliases = new();
+        response = await http.GetAsync($"https://api.themoviedb.org/3/movie/{tmdbId}/alternative_titles?api_key={tmdbApiKey}");
+        if (response.IsSuccessStatusCode)
+        {
+            content = await response.Content.ReadAsStringAsync();
+            var alternativeTitles = JsonSerializer.Deserialize<TmdbMovieAlternativeTitle>(content);
+            if (alternativeTitles != null)
+                aliases = alternativeTitles.Titles.Select(t => t.Title).ToList();
+        }
+        
         if (result.PosterPath != null)
             result.PosterPath = $"https://image.tmdb.org/t/p/w500/{result.PosterPath}";
 
@@ -387,7 +402,7 @@ public static partial class MetadataProviderHelper
         return new Metadata
                {
                    OriginalTitle = result.OriginalTitle, EnglishTitle = result.Title, ReleaseDate = result.ReleaseDate, Links = links,
-                   Image = result.PosterPath, Description = result.Description
+                   Image = result.PosterPath, Description = result.Description, Aliases = aliases
                };
     }
 
@@ -403,6 +418,17 @@ public static partial class MetadataProviderHelper
 
         if (result == null)
             return new Metadata();
+        
+        // Get aliases
+        List<string> aliases = new();
+        response = await http.GetAsync($"https://api.themoviedb.org/3/tv/{tmdbId}/alternative_titles?api_key={tmdbApiKey}");
+        if (response.IsSuccessStatusCode)
+        {
+            content = await response.Content.ReadAsStringAsync();
+            var alternativeTitles = JsonSerializer.Deserialize<TmdbTvAlternativeTitle>(content);
+            if (alternativeTitles != null)
+                aliases = alternativeTitles.Titles.Select(t => t.Title).ToList();
+        }
 
         if (result.PosterPath != null)
             result.PosterPath = $"https://image.tmdb.org/t/p/w500/{result.PosterPath}";
@@ -412,7 +438,7 @@ public static partial class MetadataProviderHelper
                    OriginalTitle = result.OriginalName, EnglishTitle = result.Name, ReleaseDate = result.FirstAirDate,
                    Image = result.PosterPath,
                    Links = [new Link { LinkType = LinkType.Tmdb, Url = $"https://www.themoviedb.org/tv/{tmdbId}" }],
-                   Description = result.Description
+                   Description = result.Description, Aliases = aliases
                };
     }
 }

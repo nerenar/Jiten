@@ -9,6 +9,7 @@ public class AnilistMedia
     public required AnilistDate StartDate { get; set; }
     public required string BannerImage { get; set; }
     public required AnilistImage CoverImage { get; set; }
+    public List<string> Synonyms { get; set; } = new ();
 
     public DateTime ReleaseDate => new(
                                        StartDate.Year.GetValueOrDefault(1),

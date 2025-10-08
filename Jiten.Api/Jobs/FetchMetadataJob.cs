@@ -18,7 +18,7 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
     {
         try
         {
-            var deck = context.Decks.Include(d => d.Links).First(d => d.DeckId == deckId);
+            var deck = context.Decks.Include(d => d.Links).Include(deck => deck.Titles).First(d => d.DeckId == deckId);
             var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Anilist);
 
             if (link == null)
@@ -39,6 +39,12 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
             if (string.IsNullOrEmpty(deck.Description))
                 deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
 
+            foreach (var alias in metadata.Aliases)
+            {
+                if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
+                    deck.Titles.Add(new DeckTitle(){DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias});
+            }
+            
             await context.SaveChangesAsync();
         }
         finally
@@ -52,7 +58,7 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
     {
         try
         {
-            var deck = context.Decks.Include(d => d.Links).First(d => d.DeckId == deckId);
+            var deck = context.Decks.Include(d => d.Links).Include(deck => deck.Titles).First(d => d.DeckId == deckId);
             var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.GoogleBooks);
 
             if (link == null)
@@ -73,6 +79,12 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
             if (string.IsNullOrEmpty(deck.Description))
                 deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
 
+            foreach (var alias in metadata.Aliases)
+            {
+                if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
+                    deck.Titles.Add(new DeckTitle(){DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias});
+            }
+            
             await context.SaveChangesAsync();
         }
         finally
@@ -86,7 +98,7 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
     {
         try
         {
-            var deck = context.Decks.Include(d => d.Links).First(d => d.DeckId == deckId);
+            var deck = context.Decks.Include(d => d.Links).Include(deck => deck.Titles).First(d => d.DeckId == deckId);
             var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Vndb);
 
             if (link == null)
@@ -107,6 +119,12 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
             if (string.IsNullOrEmpty(deck.Description))
                 deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
 
+            foreach (var alias in metadata.Aliases)
+            {
+                if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
+                    deck.Titles.Add(new DeckTitle(){DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias});
+            }
+            
             await context.SaveChangesAsync();
         }
         finally
@@ -120,7 +138,7 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
     {
         try
         {
-            var deck = context.Decks.Include(d => d.Links).First(d => d.DeckId == deckId);
+            var deck = context.Decks.Include(d => d.Links).Include(d => d.Titles).First(d => d.DeckId == deckId);
             var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Tmdb);
 
             if (link == null)
@@ -145,7 +163,13 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
                 deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
 
             if (string.IsNullOrEmpty(deck.Description))
-                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
+                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;
+
+            foreach (var alias in metadata.Aliases)
+            {
+                if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
+                    deck.Titles.Add(new DeckTitle(){DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias});
+            }
 
             await context.SaveChangesAsync();
         }

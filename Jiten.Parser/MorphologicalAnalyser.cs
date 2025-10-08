@@ -122,13 +122,13 @@ public class MorphologicalAnalyser
             var word = wordInfos[i];
             if (word.Text is "なん" or "フン" or "ふん")
                 word.PartOfSpeech = PartOfSpeech.Prefix;
-            
+
             if (word.Text == "そう")
-                word.PartOfSpeech = PartOfSpeech.Adverb;        
-            
+                word.PartOfSpeech = PartOfSpeech.Adverb;
+
             if (word.Text == "おい")
-                word.PartOfSpeech = PartOfSpeech.Interjection;  
-            
+                word.PartOfSpeech = PartOfSpeech.Interjection;
+
             if (word is { Text: "つ", PartOfSpeech: PartOfSpeech.Suffix })
                 word.PartOfSpeech = PartOfSpeech.Counter;
 
@@ -168,6 +168,9 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "。", " 。\n");
         text = Regex.Replace(text, "！", " ！\n");
         text = Regex.Replace(text, "？", " ？\n");
+        
+        // Replace line ending ellipsis with a sentence ender to be able to flatten later
+        text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
     }
 
     /// <summary>
@@ -842,7 +845,7 @@ public class MorphologicalAnalyser
 
         var sb = new StringBuilder();
         bool seenEnder = false;
-
+        
         // Need a flat text for the sentence to corresponds if they're cut between 2 lines
         text = text.Replace("\r", "").Replace("\n", "");
 
@@ -855,15 +858,6 @@ public class MorphologicalAnalyser
             if (_sentenceEnders.Contains(current))
             {
                 seenEnder = true;
-                continue;
-            }
-
-            // Flush the sentence if there's an ellipsis at the end of a line
-            if (current == '\n' && text[i - 1] == '…')
-            {
-                sentences.Add(new SentenceInfo(sb.ToString()));
-                sb.Clear();
-                seenEnder = false;
                 continue;
             }
 

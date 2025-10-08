@@ -178,7 +178,7 @@
                 </div>
 
                 <div class="w-full md:w-64">
-                  <div v-if="deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100" class="flex justify-between flex-wrap stat-row">
+                  <div v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100" class="flex justify-between flex-wrap stat-row">
                     <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Dialogue</span>
                     <span class="tabular-nums font-semibold">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
                   </div>

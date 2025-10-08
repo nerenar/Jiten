@@ -114,6 +114,11 @@ public class Deck
         }
         set => _dialoguePercentage = value;
     }
+    
+    /// <summary>
+    /// Whether to hide the dialogue percentage on the deck card
+    /// </summary>
+    public bool HideDialoguePercentage { get; set; } = false;
 
     /// <summary>
     /// Parent deck, null if no parent
@@ -155,6 +160,12 @@ public class Deck
     /// </summary>
     public ICollection<ExampleSentence>? ExampleSentences { get; set; } = new List<ExampleSentence>();
 
+    /// <summary>
+    /// List of titles and aliases
+    /// </summary>
+    public ICollection<DeckTitle> Titles { get; set; } = new List<DeckTitle>();
+
+    
     private float _dialoguePercentage;
 
     public float GetDifficulty() => DifficultyOverride > -1 ? DifficultyOverride : Difficulty;

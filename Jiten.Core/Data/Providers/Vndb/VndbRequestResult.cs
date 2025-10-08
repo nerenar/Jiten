@@ -8,4 +8,5 @@ public class VndbRequestResult
     public List<VnTitle>? Titles { get; set; }
     public VnImage? Image { get; set; }
     public string? Description { get; set; }
+    public List<string> Aliases { get; set; }
 }

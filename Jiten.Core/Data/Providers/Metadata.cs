@@ -11,4 +11,5 @@ public class Metadata
     public DateTime? ReleaseDate { get; set; }
     public List<Link> Links { get; set; } = new();
     public List<Metadata> Children { get; set; } = new();
+    public List<string> Aliases { get; set; } = new();
 }

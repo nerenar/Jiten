@@ -13,6 +13,7 @@
   import type { DeckDetail, Link, MediaType } from '~/types';
   import { getMediaTypeText, getChildrenCountText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import Checkbox from 'primevue/checkbox';
 
   const route = useRoute();
   const mediaId = route.params.id;
@@ -40,6 +41,7 @@
   const releaseDate = ref<Date>();
   const description = ref('');
   const difficultyOverride = ref(0);
+  const hideDialoguePercentage = ref(false);
 
   const coverImage = ref<File | null>(null);
   const coverImageUrl = ref<string | null>(null);
@@ -53,6 +55,11 @@
     linkType: LinkType.Web,
   });
   const editingLink = ref<{ index: number; url: string; linkType: LinkType } | null>(null);
+
+  // Aliases state
+  const aliases = ref<string[]>([]);
+  const showAddAliasDialog = ref(false);
+  const newAlias = ref('');
 
   const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
 
@@ -118,12 +125,14 @@
       description.value = mainDeck.description || '';
       releaseDate.value = new Date(mainDeck.releaseDate) || new Date();
       difficultyOverride.value = mainDeck.difficultyOverride || 0;
+      hideDialoguePercentage.value = mainDeck.hideDialoguePercentage || false;
 
       if (mainDeck.coverName) {
         coverImageUrl.value = `${mainDeck.coverName}`;
       }
 
       links.value = mainDeck.links || [];
+      aliases.value = mainDeck.aliases || [];
 
       if (response.value.subDecks && response.value.subDecks.length > 0) {
         subdecks.value = response.value.subDecks.map((subdeck, index) => ({
@@ -255,6 +264,25 @@
     links.value.splice(index, 1);
   }
 
+  // Aliases handlers
+  function openAddAliasDialog() {
+    newAlias.value = '';
+    showAddAliasDialog.value = true;
+  }
+
+  function addAlias() {
+    if (!newAlias.value.trim()) {
+      showToast('warn', 'Validation Error', 'Alias is required');
+      return;
+    }
+    aliases.value.push(newAlias.value.trim());
+    showAddAliasDialog.value = false;
+  }
+
+  function removeAlias(index: number) {
+    aliases.value.splice(index, 1);
+  }
+
   async function fetchMetadata() {
     try {
       const data = await $api('admin/fetch-metadata/' + mediaId, {
@@ -301,6 +329,7 @@
       formData.append('releaseDate', formatDateAsYyyyMmDd(releaseDate.value));
       formData.append('description', description.value);
       formData.append('difficultyOverride', difficultyOverride.value);
+      formData.append('hideDialoguePercentage', hideDialoguePercentage.value);
 
       if (coverImage.value) {
         formData.append('coverImage', coverImage.value);
@@ -316,6 +345,12 @@
           if (link.linkId > 0) {
             formData.append(`links[${i}].linkId`, link.linkId.toString());
           }
+        }
+      }
+
+      if (aliases.value && aliases.value.length > 0) {
+        for (let i = 0; i < aliases.value.length; i++) {
+          formData.append(`aliases[${i}]`, aliases.value[i]);
         }
       }
 
@@ -411,6 +446,11 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Difficulty Override</label>
                   <InputNumber v-model="difficultyOverride" class="w-full" :min-fraction-digits="1" />
+                </div>
+
+                <div class="flex items-center">
+                  <Checkbox id="hideDialoguePercentage" v-model="hideDialoguePercentage" :binary="true" />
+                  <label for="hideDialoguePercentage" class="ml-2">Hide Dialogue Percentage</label>
                 </div>
               </div>
               <div>
@@ -536,6 +576,46 @@
                 <template #footer>
                   <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showEditLinkDialog = false" />
                   <Button label="Save" icon="pi pi-check" class="p-button-text" @click="saveEditedLink" />
+                </template>
+              </Dialog>
+            </div>
+
+            <!-- Aliases Section -->
+            <div class="mt-6">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="text-lg font-medium">Aliases</h3>
+                <Button @click="openAddAliasDialog">
+                  <Icon name="material-symbols-light:add-circle-outline" size="1.5em" />
+                  Add Alias
+                </Button>
+              </div>
+
+              <div v-if="aliases.length === 0" class="p-4 border rounded text-center text-gray-500">No aliases available. Click "Add Alias" to add one.</div>
+
+              <div v-else class="mb-4">
+                <ul class="list-none p-0">
+                  <li v-for="(alias, index) in aliases" :key="index" class="flex justify-between items-center p-2 border-b">
+                    <div>{{ alias }}</div>
+                    <div class="flex">
+                      <Button class="p-button-text p-button-danger" @click="removeAlias(index)">
+                        <Icon name="material-symbols-light:delete" size="1.5em" />
+                      </Button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Add Alias Dialog -->
+              <Dialog v-model:visible="showAddAliasDialog" header="Add Alias" :modal="true" class="w-full md:w-1/2">
+                <div class="p-fluid">
+                  <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">Alias</label>
+                    <InputText v-model="newAlias" placeholder="Enter alias" class="w-full" />
+                  </div>
+                </div>
+                <template #footer>
+                  <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showAddAliasDialog = false" />
+                  <Button label="Add" icon="pi pi-check" class="p-button-text" @click="addAlias" />
                 </template>
               </Dialog>
             </div>

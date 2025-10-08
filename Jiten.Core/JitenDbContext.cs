@@ -13,6 +13,7 @@ public class JitenDbContext : DbContext
     public DbSet<Deck> Decks { get; set; }
     public DbSet<DeckWord> DeckWords { get; set; }
     public DbSet<DeckRawText> DeckRawTexts { get; set; }
+    public DbSet<DeckTitle> DeckTitles { get; set; }
 
     public DbSet<JmDictWord> JMDictWords { get; set; }
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
@@ -68,7 +69,21 @@ public class JitenDbContext : DbContext
                   .HasForeignKey(d => d.ParentDeckId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
+        
+        modelBuilder.Entity<DeckTitle>(entity =>
+        {
+              entity.HasKey(dt => dt.DeckTitleId);
+              entity.Property(dt => dt.Title).IsRequired().HasMaxLength(200);
+              entity.Property(dt => dt.TitleType).IsRequired();
 
+              entity.HasOne(dt => dt.Deck)
+                    .WithMany(d => d.Titles)
+                    .HasForeignKey(dt => dt.DeckId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+              entity.HasIndex(dt => dt.Title).HasDatabaseName("IX_DeckTitles_Title");
+              entity.HasIndex(dt => new { dt.DeckId, dt.TitleType }).HasDatabaseName("IX_DeckTitles_DeckId_TitleType");
+        });
 
         modelBuilder.Entity<DeckWord>(entity =>
         {

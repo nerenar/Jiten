@@ -20,17 +20,13 @@
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const mediaType = computed(() => (route.query.mediaType ? route.query.mediaType : null));
 
-  const titleFilter = ref(
-    route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null
-  );
+  const titleFilter = ref(route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null);
   const debouncedTitleFilter = ref(titleFilter.value);
 
   const sortByOptions = ref([
     { label: 'Title', value: 'title' },
     { label: 'Difficulty', value: 'difficulty' },
     { label: 'Character Count', value: 'charCount' },
-    { label: 'Average Sentence Length', value: 'sentenceLength' },
-    { label: 'Dialogue Percentage', value: 'dialoguePercentage' },
     { label: 'Word Count', value: 'wordCount' },
     { label: 'Unique Kanji', value: 'uKanji' },
     { label: 'Unique Word Count', value: 'uWordCount' },
@@ -39,13 +35,13 @@
   ]);
 
   const authStore = useAuthStore();
-  const isConnected = computed(() => (authStore.isAuthenticated));
+  const isConnected = computed(() => authStore.isAuthenticated);
 
   if (isConnected.value) {
-    if (!sortByOptions.value.some(o => o.value === 'coverage')) {
+    if (!sortByOptions.value.some((o) => o.value === 'coverage')) {
       sortByOptions.value.push({ label: 'Coverage', value: 'coverage' });
     }
-    if (!sortByOptions.value.some(o => o.value === 'uCoverage')) {
+    if (!sortByOptions.value.some((o) => o.value === 'uCoverage')) {
       sortByOptions.value.push({ label: 'Unique Coverage', value: 'uCoverage' });
     }
   }
@@ -55,20 +51,64 @@
   const wordIdRef = ref(props.word?.wordId);
   const readingIndexRef = ref(props.word?.mainReading?.readingIndex);
 
-  watch(() => props.word, (newWord) => {
-    if (newWord) {
-      wordIdRef.value = newWord.wordId;
-      readingIndexRef.value = newWord.mainReading?.readingIndex;
-
-      // Reset sorting when word changes
-      if (!sortByOptions.value.some(opt => opt.value === 'occurrences')) {
-        sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
-      }
-      sortBy.value = 'occurrences';
-      sortOrder.value = SortOrder.Descending;
+  watch(
+    () => mediaType.value,
+    (newMediaType) => {
+      updateOptions();
     }
-  }, { immediate: true, deep: true });
+  );
 
+  const updateOptions = () => {
+    const showDialogueOptionMediaTypes = [MediaType.Novel, MediaType.VisualNovel, MediaType.WebNovel, MediaType.NonFiction];
+
+    if (mediaType.value == null || showDialogueOptionMediaTypes.includes(Number(mediaType.value))) {
+      if (!sortByOptions.value.some((o) => o.value === 'dialoguePercentage')) {
+        sortByOptions.value.splice(4, 0, { label: 'Dialogue Percentage', value: 'dialoguePercentage' });
+      }
+    } else {
+      if (sortByOptions.value.some((o) => o.value === 'dialoguePercentage')) {
+        sortByOptions.value = sortByOptions.value.filter((o) => o.value !== 'dialoguePercentage');
+      }
+      if (sortBy.value === 'dialoguePercentage') {
+        sortBy.value = 'title';
+      }
+    }
+
+    const showAvgSentenceLengthOptionMediaTypes = [MediaType.Novel, MediaType.VisualNovel, MediaType.WebNovel, MediaType.NonFiction, MediaType.VideoGame];
+
+    if (mediaType.value == null || showAvgSentenceLengthOptionMediaTypes.includes(Number(mediaType.value))) {
+      if (!sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
+        sortByOptions.value.splice(4, 0, { label: 'Average Sentence Length', value: 'sentenceLength' });
+      }
+    } else {
+      if (sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
+        sortByOptions.value = sortByOptions.value.filter((o) => o.value !== 'sentenceLength');
+      }
+      if (sortBy.value === 'sentenceLength') {
+        sortBy.value = 'title';
+      }
+    }
+  };
+
+  updateOptions();
+
+  watch(
+    () => props.word,
+    (newWord) => {
+      if (newWord) {
+        wordIdRef.value = newWord.wordId;
+        readingIndexRef.value = newWord.mainReading?.readingIndex;
+
+        // Reset sorting when word changes
+        if (!sortByOptions.value.some((opt) => opt.value === 'occurrences')) {
+          sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
+        }
+        sortBy.value = 'occurrences';
+        sortOrder.value = SortOrder.Descending;
+      }
+    },
+    { immediate: true, deep: true }
+  );
 
   if (props.word != null) {
     sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
@@ -138,9 +178,7 @@
   const end = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
 
   const previousLink = computed(() => {
-    return response.value?.hasPreviousPage
-      ? { query: { ...route.query, offset: response.value.previousOffset } }
-      : null;
+    return response.value?.hasPreviousPage ? { query: { ...route.query, offset: response.value.previousOffset } } : null;
   });
 
   const nextLink = computed(() => {
@@ -207,15 +245,8 @@
           />
           <label for="sortBy">Sort by</label>
         </FloatLabel>
-        <Button
-          class="w-12"
-          @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending"
-        >
-          <Icon
-            v-if="sortOrder == SortOrder.Descending"
-            name="mingcute:az-sort-descending-letters-line"
-            size="1.25em"
-          />
+        <Button class="w-12" @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending">
+          <Icon v-if="sortOrder == SortOrder.Descending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
           <Icon v-if="sortOrder == SortOrder.Ascending" name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
         </Button>
       </div>
@@ -238,16 +269,8 @@
       <div class="flex flex-col gap-1">
         <div class="flex flex-col md:flex-row justify-between">
           <div class="flex gap-8 pl-2">
-            <NuxtLink
-              :to="previousLink"
-              :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''"
-              no-rel
-            >
-              Previous
-            </NuxtLink>
-            <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
-              Next
-            </NuxtLink>
+            <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel> Previous </NuxtLink>
+            <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel> Next </NuxtLink>
           </div>
           <div class="pr-2 text-gray-500 dark:text-gray-300">
             viewing decks {{ start }}-{{ end }} from {{ totalItems }}
@@ -281,22 +304,8 @@
         </div>
       </div>
       <div class="flex gap-8 pl-2">
-        <NuxtLink
-          :to="previousLink"
-          :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''"
-          no-rel
-          @click="scrollToTop"
-        >
-          Previous
-        </NuxtLink>
-        <NuxtLink
-          :to="nextLink"
-          :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
-          no-rel
-          @click="scrollToTop"
-        >
-          Next
-        </NuxtLink>
+        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel @click="scrollToTop"> Previous </NuxtLink>
+        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel @click="scrollToTop"> Next </NuxtLink>
       </div>
     </div>
   </div>

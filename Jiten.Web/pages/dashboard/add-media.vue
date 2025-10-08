@@ -264,6 +264,14 @@
         }
       }
 
+      // Add aliases from metadata if available
+      if (selectedMetadata.value && selectedMetadata.value.aliases && selectedMetadata.value.aliases.length > 0) {
+        for (let i = 0; i < selectedMetadata.value.aliases.length; i++) {
+          const alias = selectedMetadata.value.aliases[i];
+          formData.append(`aliases[${i}]`, alias);
+        }
+      }
+
       if (subdecks.value.length === 0 && selectedFile.value) {
         // If no subdecks, include the main file
         formData.append('file', selectedFile.value);
