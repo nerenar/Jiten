@@ -413,7 +413,7 @@
                 :max="20000000"
                 :use-grouping="true"
                 fluid
-                class="max-w-28 flex-shrink-0"
+                class="max-w-34 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Min"
@@ -426,7 +426,7 @@
                 :max="20000000"
                 :use-grouping="true"
                 fluid
-                class="max-w-28 flex-shrink-0"
+                class="max-w-34 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Max"
@@ -444,7 +444,7 @@
                 :max="currentYear"
                 :use-grouping="false"
                 fluid
-                class="max-w-20 flex-shrink-0"
+                class="max-w-28 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Min"
@@ -456,7 +456,7 @@
                 :max="currentYear"
                 :use-grouping="false"
                 fluid
-                class="max-w-20 flex-shrink-0"
+                class="max-w-28 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Max"
@@ -473,7 +473,7 @@
                 :max="5000"
                 :use-grouping="false"
                 fluid
-                class="max-w-20 flex-shrink-0"
+                class="max-w-28 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Min"
@@ -486,7 +486,7 @@
                 :max="5000"
                 :use-grouping="false"
                 fluid
-                class="max-w-20 flex-shrink-0"
+                class="max-w-28 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Max"
@@ -504,7 +504,7 @@
                 :max="2000"
                 :use-grouping="false"
                 fluid
-                class="max-w-20 flex-shrink-0"
+                class="max-w-28 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Min"
@@ -516,7 +516,7 @@
                 :max="2000"
                 :use-grouping="false"
                 fluid
-                class="max-w-20 flex-shrink-0"
+                class="max-w-28 flex-shrink-0"
                 show-buttons
                 size="small"
                 placeholder="Max"
