@@ -10,12 +10,22 @@
   import MediaDeckTableView from '~/components/MediaDeckTableView.vue';
   import { useAuthStore } from '~/stores/authStore';
 
+  // Helpers for numeric parsing
+  const toNumOrNull = (v: unknown) => {
+    if (v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)) return null;
+    const s = Array.isArray(v) ? v[0] : v;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
   const props = defineProps<{
     word?: Word;
   }>();
 
   const route = useRoute();
   const router = useRouter();
+
+  const filters = ref();
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const mediaType = computed(() => (route.query.mediaType ? route.query.mediaType : null));
@@ -32,6 +42,7 @@
     { label: 'Unique Word Count', value: 'uWordCount' },
     { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
     { label: 'Release Date', value: 'releaseDate' },
+    { label: 'Subdeck Count', value: 'subdeckCount' },
   ]);
 
   const authStore = useAuthStore();
@@ -50,6 +61,125 @@
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
   const wordIdRef = ref(props.word?.wordId);
   const readingIndexRef = ref(props.word?.mainReading?.readingIndex);
+
+  // Advanced filter state
+  const currentYear = new Date().getFullYear();
+
+  const charCountMin = ref<number | null>(toNumOrNull(route.query.charCountMin));
+  const charCountMax = ref<number | null>(toNumOrNull(route.query.charCountMax));
+  const releaseYearMin = ref<number | null>(toNumOrNull(route.query.releaseYearMin));
+  const releaseYearMax = ref<number | null>(toNumOrNull(route.query.releaseYearMax));
+  const uniqueKanjiMin = ref<number | null>(toNumOrNull(route.query.uniqueKanjiMin));
+  const uniqueKanjiMax = ref<number | null>(toNumOrNull(route.query.uniqueKanjiMax));
+  const subdeckCountMin = ref<number | null>(toNumOrNull(route.query.subdeckCountMin));
+  const subdeckCountMax = ref<number | null>(toNumOrNull(route.query.subdeckCountMax));
+
+  const charCountRange = computed<[number, number]>({
+    get: () => [charCountMin.value ?? 0, charCountMax.value ?? 20000000],
+    set: (val) => {
+      charCountMin.value = val[0];
+      charCountMax.value = val[1];
+    },
+  });
+
+  const releaseYearRange = computed<[number, number]>({
+    get: () => [releaseYearMin.value ?? 1900, releaseYearMax.value ?? currentYear],
+    set: (val) => {
+      releaseYearMin.value = val[0];
+      releaseYearMax.value = val[1];
+    },
+  });
+
+  const uniqueKanjiRange = computed<[number, number]>({
+    get: () => [uniqueKanjiMin.value ?? 0, uniqueKanjiMax.value ?? 5000],
+    set: (val) => {
+      uniqueKanjiMin.value = val[0];
+      uniqueKanjiMax.value = val[1];
+    },
+  });
+
+  const subdeckCountRange = computed<[number, number]>({
+    get: () => [subdeckCountMin.value ?? 0, subdeckCountMax.value ?? 2000],
+    set: (val) => {
+      subdeckCountMin.value = val[0];
+      subdeckCountMax.value = val[1];
+    },
+  });
+
+  // Ensure min is not higher than max and values stay within bounds
+  const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
+  const normalizePair = (minRef: any, maxRef: any, floor: number, ceil: number) => {
+    if (minRef.value != null) minRef.value = clamp(minRef.value, floor, ceil);
+    if (maxRef.value != null) maxRef.value = clamp(maxRef.value, floor, ceil);
+    if (minRef.value != null && maxRef.value != null && minRef.value > maxRef.value) {
+      // keep ranges valid: when min surpasses max, move max up to min
+      maxRef.value = minRef.value;
+    }
+  };
+
+  // Normalize ranges when user edits inputs
+  watch([charCountMin, charCountMax], () => normalizePair(charCountMin, charCountMax, 0, 20000000));
+  watch([releaseYearMin, releaseYearMax], () => normalizePair(releaseYearMin, releaseYearMax, 1900, currentYear));
+  watch([uniqueKanjiMin, uniqueKanjiMax], () => normalizePair(uniqueKanjiMin, uniqueKanjiMax, 0, 5000));
+  watch([subdeckCountMin, subdeckCountMax], () => normalizePair(subdeckCountMin, subdeckCountMax, 0, 2000));
+
+  const debouncedFilters = ref({
+    charCountMin: charCountMin.value,
+    charCountMax: charCountMax.value,
+    releaseYearMin: releaseYearMin.value,
+    releaseYearMax: releaseYearMax.value,
+    uniqueKanjiMin: uniqueKanjiMin.value,
+    uniqueKanjiMax: uniqueKanjiMax.value,
+    subdeckCountMin: subdeckCountMin.value,
+    subdeckCountMax: subdeckCountMax.value,
+  });
+
+
+  const updateFiltersDebounced = debounce(() => {
+    debouncedFilters.value = {
+      charCountMin: charCountMin.value,
+      charCountMax: charCountMax.value,
+      releaseYearMin: releaseYearMin.value,
+      releaseYearMax: releaseYearMax.value,
+      uniqueKanjiMin: uniqueKanjiMin.value,
+      uniqueKanjiMax: uniqueKanjiMax.value,
+      subdeckCountMin: subdeckCountMin.value,
+      subdeckCountMax: subdeckCountMax.value,
+    };
+
+    const toUndef = (v: number | null) => (v === null ? undefined : v);
+    router.replace({
+      query: {
+        ...route.query,
+        charCountMin: toUndef(charCountMin.value) as any,
+        charCountMax: toUndef(charCountMax.value) as any,
+        releaseYearMin: toUndef(releaseYearMin.value) as any,
+        releaseYearMax: toUndef(releaseYearMax.value) as any,
+        uniqueKanjiMin: toUndef(uniqueKanjiMin.value) as any,
+        uniqueKanjiMax: toUndef(uniqueKanjiMax.value) as any,
+        subdeckCountMin: toUndef(subdeckCountMin.value) as any,
+        subdeckCountMax: toUndef(subdeckCountMax.value) as any,
+        offset: 0 as any,
+      },
+    });
+  }, 500, { leading: false });
+
+
+  watch(
+    [
+      charCountMin,
+      charCountMax,
+      releaseYearMin,
+      releaseYearMax,
+      uniqueKanjiMin,
+      uniqueKanjiMax,
+      subdeckCountMin,
+      subdeckCountMax,
+    ],
+    () => {
+      updateFiltersDebounced();
+    }
+  );
 
   watch(
     () => mediaType.value,
@@ -127,7 +257,7 @@
       },
     });
     sortBy.value = 'filter';
-  }, 300);
+  }, 500);
 
   watch(titleFilter, (newValue) => {
     updateDebounced(newValue);
@@ -166,6 +296,14 @@
       titleFilter: debouncedTitleFilter,
       sortBy: sortBy,
       sortOrder: sortOrder,
+      charCountMin: computed(() => debouncedFilters.value.charCountMin),
+      charCountMax: computed(() => debouncedFilters.value.charCountMax),
+      releaseYearMin: computed(() => debouncedFilters.value.releaseYearMin),
+      releaseYearMax: computed(() => debouncedFilters.value.releaseYearMax),
+      uniqueKanjiMin: computed(() => debouncedFilters.value.uniqueKanjiMin),
+      uniqueKanjiMax: computed(() => debouncedFilters.value.uniqueKanjiMax),
+      subdeckCountMin: computed(() => debouncedFilters.value.subdeckCountMin),
+      subdeckCountMax: computed(() => debouncedFilters.value.subdeckCountMax),
     },
     watch: [offset, mediaType],
   });
@@ -255,11 +393,138 @@
         <InputIcon>
           <Icon name="material-symbols:search-rounded" />
         </InputIcon>
-        <InputText v-model="titleFilter" type="text" placeholder="Search by name" class="w-full" />
+        <InputText v-model="titleFilter" type="text" placeholder="Search by title" class="w-full" />
         <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
           <Icon name="material-symbols:close" />
         </InputIcon>
       </IconField>
+
+      <!-- Advanced Filters -->
+      <Button class="w-32" @click="filters.toggle($event)"> Filters </Button>
+
+      <Popover ref="filters" class="w-full max-w-3xl">
+        <div class="flex flex-col gap-4 p-3 min-w-[280px]">
+          <div class="flex flex-col gap-2">
+            <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Character count</div>
+            <div class="flex items-center gap-3">
+              <InputNumber
+                v-model="charCountMin"
+                :min="0"
+                :max="20000000"
+                :use-grouping="true"
+                fluid
+                class="max-w-28 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Min"
+                :step="10000"
+              />
+              <Slider v-model="charCountRange" range :min="0" :max="20000000" class="flex-1" />
+              <InputNumber
+                v-model="charCountMax"
+                :min="0"
+                :max="20000000"
+                :use-grouping="true"
+                fluid
+                class="max-w-28 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Max"
+                :step="10000"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Release year</div>
+            <div class="flex items-center gap-3">
+              <InputNumber
+                v-model="releaseYearMin"
+                :min="1900"
+                :max="currentYear"
+                :use-grouping="false"
+                fluid
+                class="max-w-20 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Min"
+              />
+              <Slider v-model="releaseYearRange" range :min="1900" :max="currentYear" class="flex-1" />
+              <InputNumber
+                v-model="releaseYearMax"
+                :min="1900"
+                :max="currentYear"
+                :use-grouping="false"
+                fluid
+                class="max-w-20 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Max"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique kanji</div>
+            <div class="flex items-center gap-3">
+              <InputNumber
+                v-model="uniqueKanjiMin"
+                :min="0"
+                :max="5000"
+                :use-grouping="false"
+                fluid
+                class="max-w-20 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Min"
+                :step="10"
+              />
+              <Slider v-model="uniqueKanjiRange" range :min="0" :max="5000" class="flex-1" />
+              <InputNumber
+                v-model="uniqueKanjiMax"
+                :min="0"
+                :max="5000"
+                :use-grouping="false"
+                fluid
+                class="max-w-20 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Max"
+                :step="10"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Subdecks</div>
+            <div class="flex items-center gap-3">
+              <InputNumber
+                v-model="subdeckCountMin"
+                :min="0"
+                :max="2000"
+                :use-grouping="false"
+                fluid
+                class="max-w-20 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Min"
+              />
+              <Slider v-model="subdeckCountRange" range :min="0" :max="2000" class="flex-1" />
+              <InputNumber
+                v-model="subdeckCountMax"
+                :min="0"
+                :max="2000"
+                :use-grouping="false"
+                fluid
+                class="max-w-20 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Max"
+              />
+            </div>
+          </div>
+        </div>
+      </Popover>
 
       <div class="flex flex-row gap-2 items-center">
         <DisplayStyleSelector />

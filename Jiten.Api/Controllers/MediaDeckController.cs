@@ -60,7 +60,8 @@ public class MediaDeckController(
     [ProducesResponseType(typeof(List<DeckDto>), StatusCodes.Status200OK)]
     public async Task<List<DeckDto>> GetMediaDecksByType(MediaType mediaType)
     {
-        var decks = await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null && d.MediaType == mediaType).OrderBy(d => d.RomajiTitle).ToListAsync();
+        var decks = await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null && d.MediaType == mediaType)
+                                 .OrderBy(d => d.RomajiTitle).Include(d => d.Links).Include(d => d.Titles).ToListAsync();
         var dtos = new List<DeckDto>();
         foreach (var deck in decks)
         {
@@ -81,6 +82,14 @@ public class MediaDeckController(
     /// <param name="titleFilter">Full‑text filter on title (supports romaji/english/japanese).</param>
     /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, etc.).</param>
     /// <param name="sortOrder">Ascending or Descending.</param>
+    /// <param name="charCountMin"></param>
+    /// <param name="charCountMax"></param>
+    /// <param name="releaseYearMin"></param>
+    /// <param name="releaseYearMax"></param>
+    /// <param name="uniqueKanjiMin"></param>
+    /// <param name="uniqueKanjiMax"></param>
+    /// <param name="subdeckCountMin"></param>
+    /// <param name="subdeckCountMax"></param>
     /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
     // [ResponseCache(Duration = 300, VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
@@ -91,7 +100,11 @@ public class MediaDeckController(
     public async Task<PaginatedResponse<List<DeckDto>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
                                                                       int wordId = 0, int readingIndex = 0, string? titleFilter = "",
                                                                       string? sortBy = "",
-                                                                      SortOrder sortOrder = SortOrder.Ascending)
+                                                                      SortOrder sortOrder = SortOrder.Ascending,
+                                                                      int? charCountMin = null, int? charCountMax = null,
+                                                                      int? releaseYearMin = null, int? releaseYearMax = null,
+                                                                      int? uniqueKanjiMin = null, int? uniqueKanjiMax = null,
+                                                                      int? subdeckCountMin = null, int? subdeckCountMax = null)
     {
         int pageSize = 50;
         var query = context.Decks.AsNoTracking();
@@ -129,6 +142,32 @@ public class MediaDeckController(
         if (mediaType != null)
             query = query.Where(d => d.MediaType == mediaType);
 
+        // Advanced filters
+        if (charCountMin != null)
+            query = query.Where(d => d.CharacterCount >= charCountMin);
+
+        if (charCountMax != null)
+            query = query.Where(d => d.CharacterCount <= charCountMax);
+
+        if (releaseYearMin != null)
+            query = query.Where(d => d.ReleaseDate.Year >= releaseYearMin);
+
+        if (releaseYearMax != null)
+            query = query.Where(d => d.ReleaseDate.Year <= releaseYearMax);
+
+        if (uniqueKanjiMin != null)
+            query = query.Where(d => d.UniqueKanjiCount >= uniqueKanjiMin);
+
+        if (uniqueKanjiMax != null)
+            query = query.Where(d => d.UniqueKanjiCount <= uniqueKanjiMax);
+
+        if (subdeckCountMin != null)
+            query = query.Where(d => d.Children.Count >= subdeckCountMin);
+
+        if (subdeckCountMax != null)
+            query = query.Where(d => d.Children.Count <= subdeckCountMax);
+
+        // Filter by word
         if (wordId != 0)
         {
             var wordFilteredDeckIds = await context.DeckWords
@@ -293,8 +332,10 @@ public class MediaDeckController(
                 ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0)
                 : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.DialoguePercentage).Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100)
-                : query.OrderByDescending(d => d.DialoguePercentage).Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100),
+                ? query.OrderBy(d => d.DialoguePercentage)
+                       .Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100)
+                : query.OrderByDescending(d => d.DialoguePercentage)
+                       .Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100),
             "wordCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.WordCount)
                 : query.OrderByDescending(d => d.WordCount),
@@ -311,6 +352,9 @@ public class MediaDeckController(
             "releaseDate" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.ReleaseDate)
                 : query.OrderByDescending(d => d.ReleaseDate),
+            "subdeckCount" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(d => d.Children.Count)
+                : query.OrderByDescending(d => d.Children.Count),
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.RomajiTitle)
                 : query.OrderByDescending(d => d.RomajiTitle),
@@ -1216,8 +1260,10 @@ public class MediaDeckController(
                 {
                     sb.Append('\\'); // prepend backslash to escape
                 }
+
                 sb.Append(c);
             }
+
             return sb.ToString();
         }
 
