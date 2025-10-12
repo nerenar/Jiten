@@ -178,7 +178,10 @@
                 </div>
 
                 <div class="w-full md:w-64">
-                  <div v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100" class="flex justify-between flex-wrap stat-row">
+                  <div
+                    v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100"
+                    class="flex justify-between flex-wrap stat-row"
+                  >
                     <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Dialogue</span>
                     <span class="tabular-nums font-semibold">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
                   </div>
@@ -195,7 +198,23 @@
                       deck.mediaType == MediaType.VisualNovel ||
                       deck.mediaType == MediaType.WebNovel
                     "
-                    v-tooltip="'Based on your reading speed in the settings:\n ' + readingSpeed + ' characters per hour.'"
+                    v-tooltip.bottom="{
+                      value:
+                        'Based on your reading speed of:\n ' +
+                        '<strong>' +
+                        readingSpeed +
+                        '</strong>' +
+                        ' characters per hour.\n<i>You can adjust it in the quick settings cog at the top right.</i>',
+                      escape: false,
+                      pt: {
+                        root: {
+                          style: {
+                            maxWidth: '20rem',
+                            lineHeight: '1.8',
+                          },
+                        },
+                      },
+                    }"
                     class="flex justify-between flex-wrap stat-row"
                   >
                     <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">

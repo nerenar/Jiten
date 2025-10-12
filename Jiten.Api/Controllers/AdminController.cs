@@ -430,9 +430,9 @@ public class AdminController(
         var decks = await dbContext.Decks.AsNoTracking().Include(d => d.Links).ToListAsync();
         var issues = new IssuesDto();
 
-        // If the original title is equal to the english title, then it probably means the original title is an english name too, so we don't need a romaji title
+        // We always need the romaji title for ordering
         issues.MissingRomajiTitles = decks.Where(d => d.ParentDeckId == null)
-                                          .Where(d => string.IsNullOrEmpty(d.RomajiTitle) && d.OriginalTitle != d.EnglishTitle)
+                                          .Where(d => string.IsNullOrEmpty(d.RomajiTitle))
                                           .Select(d => d.DeckId).ToList();
         issues.ZeroCharacters = decks.Where(d => d.CharacterCount == 0).Select(d => d.DeckId).ToList();
         issues.MissingLinks = decks.Where(d => d.ParentDeckId == null).Where(d => d.Links.Count == 0).Select(d => d.DeckId).ToList();

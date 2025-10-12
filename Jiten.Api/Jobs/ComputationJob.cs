@@ -93,7 +93,8 @@ public class ComputationJob(
                                                      .ToListAsync();
             var existingDict = existingCoverages.ToDictionary(uc => uc.DeckId);
 
-            var newCoverages = new List<UserCoverage>();
+            var toUpdate = new List<UserCoverage>();
+            var toInsert = new List<UserCoverage>();
 
             foreach (var result in coverageResults)
             {
@@ -101,30 +102,40 @@ public class ComputationJob(
                 {
                     existing.Coverage = result.Coverage;
                     existing.UniqueCoverage = result.UniqueCoverage;
+                    toUpdate.Add(existing);
                 }
                 else
                 {
-                    newCoverages.Add(new UserCoverage
-                                     {
-                                         UserId = userId, DeckId = result.DeckId, Coverage = result.Coverage,
-                                         UniqueCoverage = result.UniqueCoverage
-                                     });
+                    toInsert.Add(new UserCoverage
+                                 {
+                                     UserId = userId,
+                                     DeckId = result.DeckId,
+                                     Coverage = result.Coverage,
+                                     UniqueCoverage = result.UniqueCoverage
+                                 });
                 }
             }
 
-            if (newCoverages.Any())
+            const int batchSize = 1000;
+
+            if (toInsert.Any())
             {
-                userContext.UserCoverages.AddRange(newCoverages);
+                for (int i = 0; i < toInsert.Count; i += batchSize)
+                {
+                    var batch = toInsert.Skip(i).Take(batchSize).ToList();
+                    userContext.UserCoverages.AddRange(batch);
+                    await userContext.SaveChangesAsync();
+                }
             }
 
-            await userContext.SaveChangesAsync();
-        }
-        finally
-        {
-            // Ensure removal even if an exception occurs
-            lock (CoverageComputeLock)
+            if (toUpdate.Any())
             {
-                CoverageComputingUserIds.Remove(userId);
+                for (int i = 0; i < toUpdate.Count; i += batchSize)
+                {
+                    var batch = toUpdate.Skip(i).Take(batchSize).ToList();
+                    userContext.UpdateRange(batch);
+                    await userContext.SaveChangesAsync();
+                }
             }
 
             var metadata = await userContext.UserMetadatas
@@ -141,6 +152,14 @@ public class ComputationJob(
             }
 
             await userContext.SaveChangesAsync();
+        }
+        finally
+        {
+            // Ensure removal even if an exception occurs
+            lock (CoverageComputeLock)
+            {
+                CoverageComputingUserIds.Remove(userId);
+            }
         }
     }
 
