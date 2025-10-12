@@ -5,6 +5,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Hangfire;
 using Jiten.Core.Data.User;
 
@@ -58,86 +59,63 @@ public class ComputationJob(
                 return;
             }
 
-            var sql = @"
-                SET LOCAL join_collapse_limit = 1;
-                SET LOCAL from_collapse_limit = 1;
+            var sql = """
 
-                SELECT 
-                    d.""DeckId"",
-                    CASE 
-                        WHEN d.""WordCount"" = 0 THEN 0.0 
-                        ELSE ROUND((SUM(CASE WHEN kw.""WordId"" IS NOT NULL THEN dw.""Occurrences"" ELSE 0 END)::NUMERIC / d.""WordCount""::NUMERIC * 100), 2)
-                    END AS ""Coverage"",
-                    CASE 
-                        WHEN d.""UniqueWordCount"" = 0 THEN 0.0 
-                        ELSE ROUND((COUNT(CASE WHEN kw.""WordId"" IS NOT NULL THEN 1 END)::NUMERIC / d.""UniqueWordCount""::NUMERIC * 100), 2)
-                    END AS ""UniqueCoverage""
-                FROM ""jiten"".""Decks"" d
-                LEFT JOIN ""jiten"".""DeckWords"" dw ON d.""DeckId"" = dw.""DeckId""
-                LEFT JOIN ""user"".""FsrsCards"" kw 
-                    ON kw.""UserId"" = {0}::uuid
-                    AND kw.""WordId"" = dw.""WordId""
-                    AND kw.""ReadingIndex"" = dw.""ReadingIndex""
-                WHERE d.""ParentDeckId"" IS NULL
-                GROUP BY d.""DeckId"", d.""WordCount"", d.""UniqueWordCount"";
-                ";
+                                      SELECT 
+                                          d."DeckId",
+                                          CASE 
+                                              WHEN d."WordCount" = 0 THEN 0.0 
+                                              ELSE ROUND((SUM(CASE WHEN kw."WordId" IS NOT NULL THEN dw."Occurrences" ELSE 0 END)::NUMERIC / d."WordCount"::NUMERIC * 100), 2)
+                                          END AS "Coverage",
+                                          CASE 
+                                              WHEN d."UniqueWordCount" = 0 THEN 0.0 
+                                              ELSE ROUND((COUNT(CASE WHEN kw."WordId" IS NOT NULL THEN 1 END)::NUMERIC / d."UniqueWordCount"::NUMERIC * 100), 2)
+                                          END AS "UniqueCoverage"
+                                      FROM "jiten"."Decks" d
+                                      LEFT JOIN "jiten"."DeckWords" dw ON d."DeckId" = dw."DeckId"
+                                      LEFT JOIN "user"."FsrsCards" kw 
+                                          ON kw."UserId" = {0}::uuid
+                                          AND kw."WordId" = dw."WordId"
+                                          AND kw."ReadingIndex" = dw."ReadingIndex"
+                                      WHERE d."ParentDeckId" IS NULL
+                                      GROUP BY d."DeckId", d."WordCount", d."UniqueWordCount";
+                                      
+                      """;
 
             var coverageResults = await context.Database
                                                .SqlQueryRaw<DeckCoverageResult>(sql, userId)
                                                .ToListAsync();
 
-            // Load existing coverages
-            var deckIds = coverageResults.Select(r => r.DeckId).ToList();
-            var existingCoverages = await userContext.UserCoverages
-                                                     .Where(uc => uc.UserId == userId && deckIds.Contains(uc.DeckId))
-                                                     .ToListAsync();
-            var existingDict = existingCoverages.ToDictionary(uc => uc.DeckId);
-
-            var toUpdate = new List<UserCoverage>();
-            var toInsert = new List<UserCoverage>();
-
-            foreach (var result in coverageResults)
-            {
-                if (existingDict.TryGetValue(result.DeckId, out var existing))
-                {
-                    existing.Coverage = result.Coverage;
-                    existing.UniqueCoverage = result.UniqueCoverage;
-                    toUpdate.Add(existing);
-                }
-                else
-                {
-                    toInsert.Add(new UserCoverage
-                                 {
-                                     UserId = userId,
-                                     DeckId = result.DeckId,
-                                     Coverage = result.Coverage,
-                                     UniqueCoverage = result.UniqueCoverage
-                                 });
-                }
-            }
-
             const int batchSize = 1000;
 
-            if (toInsert.Any())
+            for (int i = 0; i < coverageResults.Count; i += batchSize)
             {
-                for (int i = 0; i < toInsert.Count; i += batchSize)
-                {
-                    var batch = toInsert.Skip(i).Take(batchSize).ToList();
-                    userContext.UserCoverages.AddRange(batch);
-                    await userContext.SaveChangesAsync();
-                }
+                var batch = coverageResults.Skip(i).Take(batchSize).ToList();
+            
+                var valuesList = string.Join(", ", batch.Select(r => 
+                                                                    $"('{userId}'::uuid, {r.DeckId}::numeric, {r.Coverage}::numeric, {r.UniqueCoverage}::numeric)"));
+            
+                var upsertSql = $"""
+                                                 INSERT INTO "user"."UserCoverages" ("UserId", "DeckId", "Coverage", "UniqueCoverage")
+                                                 VALUES {valuesList}
+                                                 ON CONFLICT ("UserId", "DeckId") 
+                                                 DO UPDATE SET 
+                                                     "Coverage" = EXCLUDED."Coverage",
+                                                     "UniqueCoverage" = EXCLUDED."UniqueCoverage";
+                                                 
+                                 """;
+            
+                await context.Database.ExecuteSqlRawAsync(upsertSql);
             }
-
-            if (toUpdate.Any())
+        }
+        finally
+        {
+            // Ensure removal even if an exception occurs
+            lock (CoverageComputeLock)
             {
-                for (int i = 0; i < toUpdate.Count; i += batchSize)
-                {
-                    var batch = toUpdate.Skip(i).Take(batchSize).ToList();
-                    userContext.UpdateRange(batch);
-                    await userContext.SaveChangesAsync();
-                }
+                CoverageComputingUserIds.Remove(userId);
             }
-
+            
             var metadata = await userContext.UserMetadatas
                                             .SingleOrDefaultAsync(um => um.UserId == userId);
 
@@ -152,14 +130,6 @@ public class ComputationJob(
             }
 
             await userContext.SaveChangesAsync();
-        }
-        finally
-        {
-            // Ensure removal even if an exception occurs
-            lock (CoverageComputeLock)
-            {
-                CoverageComputingUserIds.Remove(userId);
-            }
         }
     }
 

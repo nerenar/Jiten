@@ -92,7 +92,7 @@ public class UserDbContext : IdentityDbContext<User>
 
         modelBuilder.Entity<UserCoverage>(entity =>
         {
-            entity.HasKey(uc => new { uc.UserId, uc.DeckId });
+            entity.HasKey(uc => new { uc.UserId, uc.DeckId }).HasName("PK_UserCoverages");
             entity.Property(uc => uc.Coverage).IsRequired();
             entity.Property(uc => uc.UniqueCoverage).IsRequired();
             entity.Property(uc => uc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
