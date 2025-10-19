@@ -21,6 +21,7 @@ public class TmdbTv
     [JsonPropertyName("first_air_date")] public DateTime FirstAirDate { get; set; }
 
     [JsonPropertyName("poster_path")] public string? PosterPath { get; set; }
-    
-    [JsonPropertyName("overview")] public required string Description { get; set; } 
+
+    [JsonPropertyName("overview")] public required string Description { get; set; }
+    [JsonPropertyName("vote_average")] public double VoteAverage { get; set; }
 }

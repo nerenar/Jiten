@@ -27,4 +27,7 @@ public class IgdbGame
 
     [JsonPropertyName("url")]
     public required string Url { get; set; }
+
+    [JsonPropertyName("rating")]
+    public double Rating { get; set; }
 }

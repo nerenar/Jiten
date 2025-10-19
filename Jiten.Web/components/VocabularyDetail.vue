@@ -136,7 +136,7 @@
           </div>
 
           <div>
-            <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Readings</h1>
+            <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Forms</h1>
             <div class="pl-2 flex flex-row flex-wrap gap-8">
               <span v-for="reading in sortedReadings" :key="reading.readingIndex">
                 <div :class="reading.readingIndex === currentReadingIndex ? 'font-bold !text-purple-500' : ' text-blue-500'">

@@ -303,6 +303,13 @@ builder.Services.AddHangfireServer((options) =>
 
 builder.Services.AddHangfireServer((options) =>
 {
+    options.ServerName = "IgdbServer";
+    options.Queues = ["igdb"];
+    options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
     options.ServerName = "CoverageServer";
     options.Queues = ["coverage"];
     options.WorkerCount = 4;

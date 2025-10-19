@@ -30,6 +30,7 @@ export interface Deck {
   coverage: number;
   uniqueCoverage: number;
   hideDialoguePercentage: boolean;
+  externalRating: number;
 }
 
 export interface DeckDetail {
@@ -135,6 +136,7 @@ export interface Metadata {
   description: string;
   links: Link[];
   aliases: string[];
+  rating: number;
 }
 
 export interface Issues {

@@ -11,7 +11,7 @@ public static partial class MetadataProviderHelper
 
     private static async Task<string> GetIgdbAccessToken(string clientId, string clientSecret)
     {
-        if (_igdbAccessToken != null && !_igdbAccessToken.IsExpired)
+        if (_igdbAccessToken is { IsExpired: false })
             return _igdbAccessToken.AccessToken;
 
         var http = new HttpClient();
@@ -64,7 +64,7 @@ public static partial class MetadataProviderHelper
     public static async Task<List<Metadata>> IgdbSearchApi(string clientId, string clientSecret, string search)
     {
         var accessToken = await GetIgdbAccessToken(clientId, clientSecret);
-        var query = $"fields id, url, storyline, summary, cover, first_release_date, name, game_localizations; search \"{search}\"; limit 10;";
+        var query = $"fields id, url, storyline, summary, cover, first_release_date, name, game_localizations, rating; search \"{search}\"; limit 10;";
 
         var games = await MakeIgdbRequest<List<IgdbGame>>("games", query, clientId, accessToken);
 
@@ -82,7 +82,7 @@ public static partial class MetadataProviderHelper
     public static async Task<Metadata?> IgdbApi(string url, string clientId, string clientSecret)
     {
         var accessToken = await GetIgdbAccessToken(clientId, clientSecret);
-        var query = $"fields id, url, summary, cover, first_release_date, name, game_localizations; where url = \"{url}\"; limit 10;";
+        var query = $"fields id, url, summary, cover, first_release_date, name, game_localizations, rating; where url = \"{url}\"; limit 10;";
 
         var games = await MakeIgdbRequest<List<IgdbGame>>("games", query, clientId, accessToken);
 
@@ -98,7 +98,8 @@ public static partial class MetadataProviderHelper
                        {
                            EnglishTitle = game.Name, Description = game.Storyline ?? game.Summary ?? "",
                            ReleaseDate = DateTimeOffset.FromUnixTimeSeconds((long)game.FirstReleaseDate).DateTime,
-                           Links = [new Link { LinkType = LinkType.Igdb, Url = game.Url }]
+                           Links = [new Link { LinkType = LinkType.Igdb, Url = game.Url }],
+                           Rating = (int)Math.Round(game.Rating)
                        };
 
         // Get Japanese title from game_localizations if available (region 3 is Japan)

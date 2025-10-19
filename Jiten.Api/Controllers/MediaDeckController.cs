@@ -90,6 +90,8 @@ public class MediaDeckController(
     /// <param name="uniqueKanjiMax"></param>
     /// <param name="subdeckCountMin"></param>
     /// <param name="subdeckCountMax"></param>
+    /// <param name="extRatingMin"></param>
+    /// <param name="extRatingMax"></param>
     /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
     // [ResponseCache(Duration = 300, VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
@@ -104,7 +106,8 @@ public class MediaDeckController(
                                                                       int? charCountMin = null, int? charCountMax = null,
                                                                       int? releaseYearMin = null, int? releaseYearMax = null,
                                                                       int? uniqueKanjiMin = null, int? uniqueKanjiMax = null,
-                                                                      int? subdeckCountMin = null, int? subdeckCountMax = null)
+                                                                      int? subdeckCountMin = null, int? subdeckCountMax = null,
+                                                                      int? extRatingMin = null, int? extRatingMax = null)
     {
         int pageSize = 50;
         var query = context.Decks.AsNoTracking();
@@ -166,6 +169,12 @@ public class MediaDeckController(
 
         if (subdeckCountMax != null)
             query = query.Where(d => d.Children.Count <= subdeckCountMax);
+        
+        if (extRatingMin != null)
+            query = query.Where(d => d.ExternalRating >= extRatingMin);
+        
+        if (extRatingMax != null)
+            query = query.Where(d => d.ExternalRating <= extRatingMax);
 
         // Filter by word
         if (wordId != 0)
@@ -355,6 +364,11 @@ public class MediaDeckController(
             "subdeckCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.Children.Count)
                 : query.OrderByDescending(d => d.Children.Count),
+            "extRating" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(d => d.ExternalRating)
+                       .Where(d => d.ExternalRating != 0)
+                : query.OrderByDescending(d => d.ExternalRating)
+                       .Where(d => d.ExternalRating != 0),
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.RomajiTitle)
                 : query.OrderByDescending(d => d.RomajiTitle),

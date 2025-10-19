@@ -37,30 +37,50 @@
     { label: 'Title', value: 'title' },
     { label: 'Difficulty', value: 'difficulty' },
     { label: 'Character Count', value: 'charCount' },
-    { label: 'Word Count', value: 'wordCount' },
+    { label: 'Subdeck Count', value: 'subdeckCount' },
+    { label: 'External Rating', value: 'extRating' },
     { label: 'Unique Kanji', value: 'uKanji' },
     { label: 'Unique Word Count', value: 'uWordCount' },
+    { label: 'Word Count', value: 'wordCount' },
     { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
     { label: 'Release Date', value: 'releaseDate' },
-    { label: 'Subdeck Count', value: 'subdeckCount' },
   ]);
+
+  // Array used to reorder the sortByOptions when some options are added or removed to keep the order consistent'
+  const sortByOrdering = [
+    'title',
+    'difficulty',
+    'charCount',
+    'coverage',
+    'uCoverage',
+    'extRating',
+    'dialoguePercentage',
+    'sentenceLength',
+    'uKanji',
+    'uWordCount',
+    'wordCount',
+    'subdeckCount',
+    'uKanjiOnce',
+    'releaseDate',
+  ];
 
   const authStore = useAuthStore();
   const isConnected = computed(() => authStore.isAuthenticated);
-
-  if (isConnected.value) {
-    if (!sortByOptions.value.some((o) => o.value === 'coverage')) {
-      sortByOptions.value.push({ label: 'Coverage', value: 'coverage' });
-    }
-    if (!sortByOptions.value.some((o) => o.value === 'uCoverage')) {
-      sortByOptions.value.push({ label: 'Unique Coverage', value: 'uCoverage' });
-    }
-  }
 
   const sortOrder = ref(route.query.sortOrder ? route.query.sortOrder : SortOrder.Ascending);
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
   const wordIdRef = ref(props.word?.wordId);
   const readingIndexRef = ref(props.word?.mainReading?.readingIndex);
+
+
+  if (isConnected.value) {
+    if (!sortByOptions.value.some((o) => o.value === 'uCoverage')) {
+      sortByOptions.value.push({ label: 'Unique Coverage', value: 'uCoverage' });
+    }
+    if (!sortByOptions.value.some((o) => o.value === 'coverage')) {
+      sortByOptions.value.push({ label: 'Coverage', value: 'coverage' });
+    }
+  }
 
   // Advanced filter state
   const currentYear = new Date().getFullYear();
@@ -73,6 +93,8 @@
   const uniqueKanjiMax = ref<number | null>(toNumOrNull(route.query.uniqueKanjiMax));
   const subdeckCountMin = ref<number | null>(toNumOrNull(route.query.subdeckCountMin));
   const subdeckCountMax = ref<number | null>(toNumOrNull(route.query.subdeckCountMax));
+  const extRatingMin = ref<number | null>(toNumOrNull(route.query.extRatingMin));
+  const extRatingMax = ref<number | null>(toNumOrNull(route.query.extRatingMax));
 
   const charCountRange = computed<[number, number]>({
     get: () => [charCountMin.value ?? 0, charCountMax.value ?? 20000000],
@@ -106,6 +128,14 @@
     },
   });
 
+  const extRatingRange = computed<[number, number]>({
+    get: () => [extRatingMin.value ?? 0, extRatingMax.value ?? 100],
+    set: (val) => {
+      extRatingMin.value = val[0];
+      extRatingMax.value = val[1];
+    },
+  })
+
   // Ensure min is not higher than max and values stay within bounds
   const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
   const normalizePair = (minRef: any, maxRef: any, floor: number, ceil: number) => {
@@ -122,6 +152,7 @@
   watch([releaseYearMin, releaseYearMax], () => normalizePair(releaseYearMin, releaseYearMax, 1900, currentYear));
   watch([uniqueKanjiMin, uniqueKanjiMax], () => normalizePair(uniqueKanjiMin, uniqueKanjiMax, 0, 5000));
   watch([subdeckCountMin, subdeckCountMax], () => normalizePair(subdeckCountMin, subdeckCountMax, 0, 2000));
+  watch([extRatingMin, extRatingMax], () => normalizePair(extRatingMin, extRatingMax, 0, 2000));
 
   const debouncedFilters = ref({
     charCountMin: charCountMin.value,
@@ -132,54 +163,50 @@
     uniqueKanjiMax: uniqueKanjiMax.value,
     subdeckCountMin: subdeckCountMin.value,
     subdeckCountMax: subdeckCountMax.value,
+    extRatingMin: extRatingMin.value,
+    extRatingMax: extRatingMax.value,
   });
 
-
-  const updateFiltersDebounced = debounce(() => {
-    debouncedFilters.value = {
-      charCountMin: charCountMin.value,
-      charCountMax: charCountMax.value,
-      releaseYearMin: releaseYearMin.value,
-      releaseYearMax: releaseYearMax.value,
-      uniqueKanjiMin: uniqueKanjiMin.value,
-      uniqueKanjiMax: uniqueKanjiMax.value,
-      subdeckCountMin: subdeckCountMin.value,
-      subdeckCountMax: subdeckCountMax.value,
-    };
-
-    const toUndef = (v: number | null) => (v === null ? undefined : v);
-    router.replace({
-      query: {
-        ...route.query,
-        charCountMin: toUndef(charCountMin.value) as any,
-        charCountMax: toUndef(charCountMax.value) as any,
-        releaseYearMin: toUndef(releaseYearMin.value) as any,
-        releaseYearMax: toUndef(releaseYearMax.value) as any,
-        uniqueKanjiMin: toUndef(uniqueKanjiMin.value) as any,
-        uniqueKanjiMax: toUndef(uniqueKanjiMax.value) as any,
-        subdeckCountMin: toUndef(subdeckCountMin.value) as any,
-        subdeckCountMax: toUndef(subdeckCountMax.value) as any,
-        offset: 0 as any,
-      },
-    });
-  }, 500, { leading: false });
-
-
-  watch(
-    [
-      charCountMin,
-      charCountMax,
-      releaseYearMin,
-      releaseYearMax,
-      uniqueKanjiMin,
-      uniqueKanjiMax,
-      subdeckCountMin,
-      subdeckCountMax,
-    ],
+  const updateFiltersDebounced = debounce(
     () => {
-      updateFiltersDebounced();
-    }
+      debouncedFilters.value = {
+        charCountMin: charCountMin.value,
+        charCountMax: charCountMax.value,
+        releaseYearMin: releaseYearMin.value,
+        releaseYearMax: releaseYearMax.value,
+        uniqueKanjiMin: uniqueKanjiMin.value,
+        uniqueKanjiMax: uniqueKanjiMax.value,
+        subdeckCountMin: subdeckCountMin.value,
+        subdeckCountMax: subdeckCountMax.value,
+        extRatingMin: extRatingMin.value,
+        extRatingMax: extRatingMax.value,
+      };
+
+      const toUndef = (v: number | null) => (v === null ? undefined : v);
+      router.replace({
+        query: {
+          ...route.query,
+          charCountMin: toUndef(charCountMin.value) as any,
+          charCountMax: toUndef(charCountMax.value) as any,
+          releaseYearMin: toUndef(releaseYearMin.value) as any,
+          releaseYearMax: toUndef(releaseYearMax.value) as any,
+          uniqueKanjiMin: toUndef(uniqueKanjiMin.value) as any,
+          uniqueKanjiMax: toUndef(uniqueKanjiMax.value) as any,
+          subdeckCountMin: toUndef(subdeckCountMin.value) as any,
+          subdeckCountMax: toUndef(subdeckCountMax.value) as any,
+          extRatingMin: toUndef(extRatingMin.value) as any,
+          extRatingMax: toUndef(extRatingMax.value) as any,
+          offset: 0 as any,
+        },
+      });
+    },
+    500,
+    { leading: false }
   );
+
+  watch([charCountMin, charCountMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax], () => {
+    updateFiltersDebounced();
+  });
 
   watch(
     () => mediaType.value,
@@ -193,7 +220,7 @@
 
     if (mediaType.value == null || showDialogueOptionMediaTypes.includes(Number(mediaType.value))) {
       if (!sortByOptions.value.some((o) => o.value === 'dialoguePercentage')) {
-        sortByOptions.value.splice(4, 0, { label: 'Dialogue Percentage', value: 'dialoguePercentage' });
+        sortByOptions.value.push({ label: 'Dialogue Percentage', value: 'dialoguePercentage' });
       }
     } else {
       if (sortByOptions.value.some((o) => o.value === 'dialoguePercentage')) {
@@ -208,7 +235,7 @@
 
     if (mediaType.value == null || showAvgSentenceLengthOptionMediaTypes.includes(Number(mediaType.value))) {
       if (!sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
-        sortByOptions.value.splice(4, 0, { label: 'Average Sentence Length', value: 'sentenceLength' });
+        sortByOptions.value.push({ label: 'Average Sentence Length', value: 'sentenceLength' });
       }
     } else {
       if (sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
@@ -218,6 +245,13 @@
         sortBy.value = 'title';
       }
     }
+
+    // reorder the options by sortByOrdering
+    sortByOptions.value.sort((a, b) => {
+      const indexA = sortByOrdering.indexOf(a.value);
+      const indexB = sortByOrdering.indexOf(b.value);
+      return indexA - indexB;
+    });
   };
 
   updateOptions();
@@ -304,6 +338,8 @@
       uniqueKanjiMax: computed(() => debouncedFilters.value.uniqueKanjiMax),
       subdeckCountMin: computed(() => debouncedFilters.value.subdeckCountMin),
       subdeckCountMax: computed(() => debouncedFilters.value.subdeckCountMax),
+      extRatingMin: computed(() => debouncedFilters.value.extRatingMin),
+      extRatingMax: computed(() => debouncedFilters.value.extRatingMax),
     },
     watch: [offset, mediaType],
   });
@@ -380,6 +416,7 @@
             placeholder="Sort by"
             input-id="sortBy"
             class="w-full md:w-56"
+            scroll-height="30vh"
           />
           <label for="sortBy">Sort by</label>
         </FloatLabel>
@@ -514,6 +551,35 @@
                 v-model="subdeckCountMax"
                 :min="0"
                 :max="2000"
+                :use-grouping="false"
+                fluid
+                class="max-w-28 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Max"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm font-medium text-gray-600 dark:text-gray-300">External Rating (0 = unknown rating)</div>
+            <div class="flex items-center gap-3">
+              <InputNumber
+                v-model="extRatingMin"
+                :min="0"
+                :max="100"
+                :use-grouping="false"
+                fluid
+                class="max-w-28 flex-shrink-0"
+                show-buttons
+                size="small"
+                placeholder="Min"
+              />
+              <Slider v-model="extRatingRange" range :min="0" :max="100" class="flex-1" />
+              <InputNumber
+                v-model="extRatingMax"
+                :min="0"
+                :max="100"
                 :use-grouping="false"
                 fluid
                 class="max-w-28 flex-shrink-0"

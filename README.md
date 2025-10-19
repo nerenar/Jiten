@@ -1,3 +1,7 @@
+**Official repository of [jiten.moe](https://jiten.moe):**
+
+A free, open-source platform for Japanese immersion learners. Jiten offers detailed statistics for thousands of Japanese media such as character count and difficulty, pre-built anki decks, vocabulary lists, frequency lists, user coverage, and more.
+
 # Credits
 - [Sudachi.rs](https://github.com/WorksApplications/sudachi.rs) - Morphological analyzer
 - [Nazeka](https://github.com/wareya/nazeka) - Original deconjugation rules, deconjugator

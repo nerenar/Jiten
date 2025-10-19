@@ -89,6 +89,11 @@ public class Deck
     /// Manual override of difficulty that will replace Difficulty if it's not equal to -1
     /// </summary>
     public float DifficultyOverride { get; set; }
+    
+    /// <summary>
+    /// External rating from 0 to 100, pulled from metadata providers
+    /// </summary>
+    public byte ExternalRating { get; set; }
 
     /// <summary>
     /// Amount of sentences

@@ -5,6 +5,7 @@
   "scripts": {
     "build": "nuxt build",
     "dev": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 nuxt dev --https --ssl-cert localhost.pem --ssl-key localhost-key.pem\n",
+    "dev-mobile": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 nuxt dev --host 0.0.0.0 --https --ssl-cert localhost.pem --ssl-key localhost-key.pem\n",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
@@ -14,6 +15,7 @@
     "lintfix": "eslint . --fix && prettier --write --list-different ."
   },
   "dependencies": {
+    "@floating-ui/vue": "^1.1.9",
     "@nuxt/eslint": "^1.9.0",
     "@nuxt/icon": "^1.15.0",
     "@nuxt/scripts": "0.11.5",

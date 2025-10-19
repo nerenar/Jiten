@@ -12,6 +12,7 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
     private const float GOOGLE_BOOKS_DELAY = 3f;
     private const float VNDB_DELAY = 2f;
     private const float TMDB_DELAY = 2f;
+    private const float IGDB_DELAY = 1f;
 
     [Queue("anilist")]
     public async Task FetchAnilistMissingMetadata(int deckId)
@@ -38,6 +39,9 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
 
             if (string.IsNullOrEmpty(deck.Description))
                 deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
+
+            if (metadata.Rating != null)
+                deck.ExternalRating = (byte)metadata.Rating;
 
             foreach (var alias in metadata.Aliases)
             {
@@ -79,6 +83,9 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
             if (string.IsNullOrEmpty(deck.Description))
                 deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
 
+            if (metadata.Rating != null)
+                deck.ExternalRating = (byte)metadata.Rating;
+            
             foreach (var alias in metadata.Aliases)
             {
                 if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
@@ -119,6 +126,9 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
             if (string.IsNullOrEmpty(deck.Description))
                 deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
 
+            if (metadata.Rating != null)
+                deck.ExternalRating = (byte)metadata.Rating;
+            
             foreach (var alias in metadata.Aliases)
             {
                 if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
@@ -165,6 +175,9 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
             if (string.IsNullOrEmpty(deck.Description))
                 deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;
 
+            if (metadata.Rating != null)
+                deck.ExternalRating = (byte)metadata.Rating;
+            
             foreach (var alias in metadata.Aliases)
             {
                 if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
@@ -176,6 +189,46 @@ public class FetchMetadataJob(JitenDbContext context, IConfiguration configurati
         finally
         {
             await Task.Delay(TimeSpan.FromSeconds(TMDB_DELAY));
+        }
+    }
+    
+    [Queue("igdb")]
+    public async Task FetchIgdbMissingMetadata(int deckId)
+    {
+        try
+        {
+            var deck = context.Decks.Include(d => d.Links).Include(d => d.Titles).First(d => d.DeckId == deckId);
+            var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Igdb);
+
+            if (link == null)
+                throw new Exception($"No IGDB link found for deck with ID {deckId}.");
+
+            var url = link.Url.TrimEnd('/');
+
+            Metadata metadata = await MetadataProviderHelper.IgdbApi(url,configuration["IgdbClientId"]!, configuration["IgdbClientSecret"]!);
+            if (metadata == null)
+                throw new Exception($"Metadata for IGDB URL {url} not found.");
+            
+            if (deck.ReleaseDate == default && metadata.ReleaseDate != null)
+                deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
+
+            if (string.IsNullOrEmpty(deck.Description))
+                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;
+
+            if (metadata.Rating != null)
+                deck.ExternalRating = (byte)metadata.Rating;
+            
+            foreach (var alias in metadata.Aliases)
+            {
+                if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
+                    deck.Titles.Add(new DeckTitle(){DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias});
+            }
+
+            await context.SaveChangesAsync();
+        }
+        finally
+        {
+            await Task.Delay(TimeSpan.FromSeconds(IGDB_DELAY));
         }
     }
 }

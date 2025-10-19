@@ -65,7 +65,8 @@ public class AdminController(
                                 {
                                     ReleaseDate = model.ReleaseDate.ToDateTime(new TimeOnly()), OriginalTitle = model.OriginalTitle.Trim(),
                                     RomajiTitle = model.RomajiTitle?.Trim(), EnglishTitle = model.EnglishTitle?.Trim(),
-                                    Description = model.Description?.Trim(), Image = coverImagePathOrUrl, Links = new List<Link>()
+                                    Description = model.Description?.Trim(), Image = coverImagePathOrUrl, Links = new List<Link>(),
+                                    Rating = model.Rating
                                 };
 
             // Parse links and aliases from form data
@@ -292,7 +293,7 @@ public class AdminController(
             {
                 var trimmed = alias.Trim();
                 if (string.IsNullOrEmpty(trimmed)) continue;
-                
+
                 var existingAlias = deck.Titles.FirstOrDefault(l => l.Title == trimmed);
                 if (existingAlias == null)
                 {
@@ -463,6 +464,9 @@ public class AdminController(
             case MediaType.VisualNovel:
                 backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchVndbMissingMetadata(deckId));
                 break;
+            case MediaType.VideoGame:
+                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchIgdbMissingMetadata(deckId));
+                break;
             case MediaType.Novel or MediaType.NonFiction:
                 if (deck.Links.Any(l => l.LinkType == LinkType.Anilist))
                     backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deckId));
@@ -481,7 +485,8 @@ public class AdminController(
     {
         var decks = await dbContext
                           .Decks.Where(d => d.ParentDeck == null)
-                          .Where(d => d.Titles.All(t => t.TitleType != DeckTitleType.Alias) || d.ReleaseDate == default || string.IsNullOrEmpty(d.Description))
+                          .Where(d => d.Titles.All(t => t.TitleType != DeckTitleType.Alias) || d.ReleaseDate == default ||
+                                      string.IsNullOrEmpty(d.Description) || d.ExternalRating == 0)
                           .Include(deck => deck.Links).ToListAsync();
 
         foreach (var deck in decks)
@@ -497,6 +502,9 @@ public class AdminController(
                 case MediaType.VisualNovel:
                     backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchVndbMissingMetadata(deck.DeckId));
                     break;
+                case MediaType.VideoGame:
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchIgdbMissingMetadata(deck.DeckId));
+                    break;
                 case MediaType.Novel or MediaType.NonFiction:
                     if (deck.Links.Any(l => l.LinkType == LinkType.Anilist))
                     {
@@ -504,7 +512,7 @@ public class AdminController(
                     }
                     else
                     {
-                        // For google books, don't fetch if it's missing aliases
+                        // For google books, don't fetch if it's missing aliases or rating
                         if (deck.ReleaseDate == default || string.IsNullOrEmpty(deck.Description))
                             backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deck.DeckId));
                     }

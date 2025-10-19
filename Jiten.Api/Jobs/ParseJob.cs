@@ -66,6 +66,7 @@ public class ParseJob(JitenDbContext context)
         deck.LastUpdate = DateTime.UtcNow;
         deck.DifficultyOverride = -1;
         deck.Titles = metadata.Aliases.Select(a => new DeckTitle { DeckId = deck.DeckId, Title = a, TitleType = DeckTitleType.Alias }).ToList();
+        deck.ExternalRating = metadata.Rating != null ? (byte)metadata.Rating : (byte)0;
 
         foreach (var link in deck.Links)
         {

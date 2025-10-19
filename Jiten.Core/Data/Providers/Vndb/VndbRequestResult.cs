@@ -9,4 +9,5 @@ public class VndbRequestResult
     public VnImage? Image { get; set; }
     public string? Description { get; set; }
     public List<string> Aliases { get; set; }
+    public double? Rating { get; set; }
 }

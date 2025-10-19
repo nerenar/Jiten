@@ -33,6 +33,7 @@ public class DeckDto
     public bool HideDialoguePercentage { get; set; }
     public float Coverage { get; set; }
     public float UniqueCoverage { get; set; }
+    public byte ExternalRating { get; set; }
 
     public DeckDto()
     {
@@ -67,6 +68,7 @@ public class DeckDto
         DialoguePercentage = deck.DialoguePercentage;
         HideDialoguePercentage = deck.HideDialoguePercentage;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
+        ExternalRating = deck.ExternalRating;
     }
 
     public DeckDto(Deck deck)
@@ -97,6 +99,7 @@ public class DeckDto
         DialoguePercentage = deck.DialoguePercentage;
         HideDialoguePercentage = deck.HideDialoguePercentage;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
+        ExternalRating = deck.ExternalRating;
     }
 
     /// <summary>

@@ -61,7 +61,11 @@
         <div class="flex-1 max-w-full overflow-hidden">
           <div class="flex flex-col md:flex-row gap-x-4 gap-y-2 w-full">
             <div v-if="!isCompact" class="text-left text-sm md:text-center">
-              <img :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName" :alt="deck.originalTitle" class="h-48 w-34 min-w-34" />
+              <img
+                :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
+                :alt="deck.originalTitle"
+                class="h-48 w-34 min-w-34 object-cover"
+              />
               <div>{{ formatDateAsYyyyMmDd(new Date(deck.releaseDate)).replace(/-/g, '/') }}</div>
               <template v-if="authStore.isAuthenticated && (deck.coverage != 0 || deck.uniqueCoverage != 0)">
                 <div>
@@ -123,15 +127,15 @@
                     <span class="tabular-nums font-semibold">{{ deck.averageSentenceLength.toFixed(1) }}</span>
                   </div>
                   <div v-if="deck.difficulty != -1" class="flex justify-between flex-wrap stat-row">
+                    <Tooltip :content="'This is a work in progress.\nIf you find scores that are way higher or lower than they should be, please report them so the algorithm can be refined further.'">
                     <span
-                      v-tooltip="
-                        'This is a work in progress.\nIf you find scores that are way higher or lower than they should be, please report them so the algorithm can be refined further.'
-                      "
+
                       class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium"
                     >
                       Difficulty
                       <span class="text-purple-500 text-xs align-super"> beta </span>
                     </span>
+                    </Tooltip>
                     <span
                       v-if="deck.difficulty == 0"
                       v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
@@ -191,6 +195,7 @@
                     <span class="tabular-nums font-semibold">{{ deck.childrenDeckCount.toLocaleString() }}</span>
                   </div>
 
+
                   <div
                     v-if="
                       deck.mediaType == MediaType.Novel ||
@@ -198,30 +203,27 @@
                       deck.mediaType == MediaType.VisualNovel ||
                       deck.mediaType == MediaType.WebNovel
                     "
-                    v-tooltip.bottom="{
-                      value:
-                        'Based on your reading speed of:\n ' +
+                    class="flex justify-between flex-wrap stat-row"
+                  >
+                    <Tooltip :content=" 'Based on your reading speed of:\n ' +
                         '<strong>' +
                         readingSpeed +
                         '</strong>' +
-                        ' characters per hour.\n<i>You can adjust it in the quick settings cog at the top right.</i>',
-                      escape: false,
-                      pt: {
-                        root: {
-                          style: {
-                            maxWidth: '20rem',
-                            lineHeight: '1.8',
-                          },
-                        },
-                      },
-                    }"
-                    class="flex justify-between flex-wrap stat-row"
-                  >
+                        ' characters per hour.\n<i>You can adjust it in the quick settings cog at the top right.</i>'">
                     <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">
                       Duration
                       <i class="pi pi-info-circle cursor-pointer text-primary-500" />
                     </span>
+                    </Tooltip>
+
                     <span class="tabular-nums font-semibold">{{ readingDuration > 0 ? readingDuration : '<1' }} h</span>
+                  </div>
+
+                  <div v-if="deck.externalRating != 0" class="flex justify-between flex-wrap stat-row">
+                    <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">External Rating</span>
+                    </Tooltip>
+                    <span class="tabular-nums font-semibold">{{ deck.externalRating }} %</span>
                   </div>
 
                   <div v-if="deck.selectedWordOccurrences != 0" class="flex justify-between flex-wrap stat-row">
