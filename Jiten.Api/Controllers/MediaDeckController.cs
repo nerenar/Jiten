@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using AnkiNet;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
@@ -1246,32 +1247,33 @@ public class MediaDeckController(
         if (deck == null)
             return BadRequest("Deck not found");
 
-        var rawEmbed = """
-                       {{
-                         "content": "A new report from user ID `{0}` came in.\n",
-                         "tts": false,
-                         "embeds": [
-                           {{
-                             "id": 652627557,
-                             "title": "{4}",
-                             "description": "[{1}](https://jiten.moe/decks/media/{2}/detail)\n\nComment:\n{3}",
-                             "color": 8266731,
-                             "fields": []
-                           }}
-                         ],
-                         "components": [],
-                         "actions": {{}},
-                         "flags": 0,
-                         "username": "IssueReporter"
-                       }}
-                       """;
-        
         var safeComment = SanitizeForDiscord(request.Comment);
         var safeIssueType = SanitizeForDiscord(request.IssueType);
-        var embed = String.Format(rawEmbed, currentUserService.UserId, deck.OriginalTitle, deck.DeckId, safeComment, safeIssueType);
+
+        var discordPayload = new
+        {
+            content = $"A new report from user ID `{currentUserService.UserId}` came in.\n",
+            tts = false,
+            embeds = new[]
+            {
+                new
+                {
+                    id = 652627557,
+                    title = safeIssueType,
+                    description = $"[{deck.OriginalTitle}](https://jiten.moe/decks/media/{deck.DeckId}/detail)\n\nComment:\n{safeComment}",
+                    color = 8266731,
+                    fields = Array.Empty<object>()
+                }
+            },
+            components = Array.Empty<object>(),
+            actions = new { },
+            flags = 0,
+            username = "IssueReporter"
+        };
+        var embedJson = JsonSerializer.Serialize(discordPayload);
         var webhook = configuration["DiscordWebhook"];
         using var httpClient = new HttpClient();
-        var content = new StringContent(embed, Encoding.UTF8, "application/json");
+        var content = new StringContent(embedJson, Encoding.UTF8, "application/json");
         var result = await httpClient.PostAsync(webhook, content);
 
         if (result.IsSuccessStatusCode)
