@@ -44,6 +44,7 @@
     { label: 'Word Count', value: 'wordCount' },
     { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
     { label: 'Release Date', value: 'releaseDate' },
+    { label: 'Added Date', value: 'addedDate' },
   ]);
 
   // Array used to reorder the sortByOptions when some options are added or removed to keep the order consistent'
@@ -62,6 +63,7 @@
     'subdeckCount',
     'uKanjiOnce',
     'releaseDate',
+    'addedDate'
   ];
 
   const authStore = useAuthStore();

@@ -459,7 +459,7 @@ public class MorphologicalAnalyser
             // Condition uses accumulator (verb) and next word (possible dependant + specific forms)
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
                 currentWord.PartOfSpeech == PartOfSpeech.Verb &&
-                nextWord.DictionaryForm is "得る" or "する" or "しまう" or "おる" or "きる" or "こなす" or "いく" or "貰う" or "いる")
+                nextWord.DictionaryForm is "得る" or "する" or "しまう" or "おる" or "きる" or "こなす" or "いく" or "貰う" or "いる" or "ない")
             {
                 currentWord.Text += nextWord.Text;
             }

@@ -136,6 +136,11 @@ public static class PartOfSpeechExtension
         return pos.Select(p => p.ToPartOfSpeech()).ToList();
     }
 
+    public static List<PartOfSpeechSection> ToPartOfSpeechSection(this List<string> pos)
+    {
+        return pos.Select(p => p.ToPartOfSpeechSection()).ToList();
+    }
+
     public static PartOfSpeechSection ToPartOfSpeechSection(this string pos)
     {
         return pos switch
@@ -145,14 +150,14 @@ public static class PartOfSpeechExtension
             "アルファベット" => PartOfSpeechSection.Alphabet,
             "句点" => PartOfSpeechSection.FullStop,
             "空白" => PartOfSpeechSection.BlankSpace,
-            "接尾" => PartOfSpeechSection.Suffix,
-            "代名詞" => PartOfSpeechSection.Pronoun,
+            "接尾" or "suf" => PartOfSpeechSection.Suffix,
+            "代名詞" or "pn" => PartOfSpeechSection.Pronoun,
             "自立" => PartOfSpeechSection.Independant,
             "フィラー" => PartOfSpeechSection.Filler,
             "一般" => PartOfSpeechSection.Common,
             "非自立" => PartOfSpeechSection.Dependant,
             "終助詞" => PartOfSpeechSection.SentenceEndingParticle,
-            "助数詞" => PartOfSpeechSection.Counter,
+            "助数詞" or "ctr" => PartOfSpeechSection.Counter,
             "並立助詞" => PartOfSpeechSection.ParallelMarker,
             "係助詞" => PartOfSpeechSection.BindingParticle,
             "副詞可能" => PartOfSpeechSection.PotentialAdverb,
@@ -181,7 +186,7 @@ public static class PartOfSpeechExtension
             "括弧閉" => PartOfSpeechSection.ClosingBracket,
             "地域" => PartOfSpeechSection.Region,
             "国" => PartOfSpeechSection.Country,
-            "数詞" => PartOfSpeechSection.Numeral,
+            "数詞" or "num" => PartOfSpeechSection.Numeral,
             "非自立可能" => PartOfSpeechSection.PossibleDependant,
             "普通名詞" => PartOfSpeechSection.CommonNoun,
             "名詞的" => PartOfSpeechSection.SubstantiveAdjective,
@@ -192,7 +197,9 @@ public static class PartOfSpeechExtension
             "動詞的" => PartOfSpeechSection.VerbLike,
             "サ変形状詞可能" => PartOfSpeechSection.PossibleVerbSuruNoun,
             "形容詞的" => PartOfSpeechSection.Adjectival,
-            "名" => PartOfSpeechSection.Name,
+            "名"  or "company" or "given" or "place" or "person" or "product" or "ship" or "surname" or "unclass" or "name-fem" or "name-masc" or "station"
+                or "group" or "char" or "creat" or "dei" or "doc" or "ev" or "fem" or "fict" or "leg" or "masc" or "myth" or "obj"
+                or "organization" or "oth" or "relig" or "serv" or "ship" or "surname" or "work" or "unc" => PartOfSpeechSection.Name,
             "文字" => PartOfSpeechSection.Letter,
             "形状詞的" => PartOfSpeechSection.NaAdjectiveLike,
             "地名" => PartOfSpeechSection.PlaceName,

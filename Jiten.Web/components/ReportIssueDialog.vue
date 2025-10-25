@@ -79,7 +79,7 @@
 </script>
 
 <template>
-  <Dialog v-model:visible="localVisible" modal header="Report an issue" :style="{ width: '36rem' }">
+  <Dialog v-model:visible="localVisible" modal header="Report an issue" :style="{ width: '36rem', maxWidth: '90vw' }">
     <div>
       You're reporting an issue with the deck <b>{{ localiseTitle(deck) }}</b>
     </div>
