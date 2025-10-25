@@ -567,9 +567,7 @@ namespace Jiten.Parser
                     if (!wordCache.TryGetValue(id, out var word)) continue;
 
                     List<PartOfSpeech> pos = word.PartsOfSpeech.ToPartOfSpeech();
-                    List<PartOfSpeechSection> posSection = word.PartsOfSpeech.ToPartOfSpeechSection();
-                    if (!pos.Contains(wordData.wordInfo.PartOfSpeech) &&
-                        !posSection.Any(p => wordData.wordInfo.HasPartOfSpeechSection(p))) continue;
+                    if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
 
                     matches.Add(word);
                 }

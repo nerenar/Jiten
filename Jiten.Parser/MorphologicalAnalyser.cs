@@ -308,6 +308,9 @@ public class MorphologicalAnalyser
             if (w1.Text is "よう")
                 w1.PartOfSpeech = PartOfSpeech.Noun;
 
+            if (w1.Text is "十五")
+                w1.PartOfSpeech = PartOfSpeech.Numeral;
+            
             newList.Add(w1);
             i++;
         }
