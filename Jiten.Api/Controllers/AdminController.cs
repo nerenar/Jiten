@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SharpCompress.Archives;
 using SharpCompress.Common;
+using StackExchange.Redis;
 using MetadataProviderHelper = Jiten.Core.MetadataProviderHelper;
 
 namespace Jiten.Api.Controllers;
@@ -694,5 +695,17 @@ public class AdminController(
             return StatusCode(StatusCodes.Status500InternalServerError,
                               new { Message = "An unexpected error occurred while processing your request.", Details = ex.ToString() });
         }
+    }
+
+    [HttpPost("flush-redis-cache")]
+    public async Task<IResult> FlushRedisCache()
+    {
+        var connection = await ConnectionMultiplexer.ConnectAsync(config.GetConnectionString("Redis")!);
+        var redisDb = connection.GetDatabase();
+        redisDb.Execute("FLUSHALL");
+        
+        await connection.CloseAsync();
+
+        return Results.Ok();
     }
 }

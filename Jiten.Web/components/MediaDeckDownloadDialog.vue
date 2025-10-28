@@ -206,7 +206,7 @@
             show-buttons
             fluid
             size="small"
-            class="max-w-20 flex-shrink-0"
+            class="max-w-28 flex-shrink-0"
             @update:model-value="updateMinFrequency"
           />
           <Slider v-model="frequencyRange" range :min="0" :max="currentSliderMax" class="flex-grow mx-2 flex-basis-auto" />
@@ -215,7 +215,7 @@
             show-buttons
             fluid
             size="small"
-            class="max-w-20 flex-shrink-0"
+            class="max-w-28 flex-shrink-0"
             @update:model-value="updateMaxFrequency"
           />
         </div>

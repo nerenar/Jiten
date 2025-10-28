@@ -58,7 +58,7 @@
       meta: [
         {
           name: 'description',
-          content: `Detail for the deck ${title.value}. Get statistics and download the anki deck.`,
+          content: `Anki deck, vocabulary list and statistics for ${title.value} (${response.value?.data.mainDeck.originalTitle}).`,
         },
       ],
     };

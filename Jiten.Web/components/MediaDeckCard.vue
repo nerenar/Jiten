@@ -136,48 +136,7 @@
                       <span class="text-purple-500 text-xs align-super"> beta </span>
                     </span>
                     </Tooltip>
-                    <span
-                      v-if="deck.difficulty == 0"
-                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
-                      class="tabular-nums text-green-700 dark:text-green-300 font-bold"
-                    >
-                      Beginner
-                    </span>
-                    <span
-                      v-else-if="deck.difficulty == 1"
-                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
-                      class="tabular-nums text-green-500 dark:text-green-200 font-bold"
-                    >
-                      Easy
-                    </span>
-                    <span
-                      v-else-if="deck.difficulty == 2"
-                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
-                      class="tabular-nums text-yellow-600 dark:text-yellow-300 font-bold"
-                    >
-                      Moderate
-                    </span>
-                    <span
-                      v-else-if="deck.difficulty == 3"
-                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
-                      class="tabular-nums text-amber-600 dark:text-amber-300 font-bold"
-                    >
-                      Hard
-                    </span>
-                    <span
-                      v-else-if="deck.difficulty == 4"
-                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
-                      class="tabular-nums text-orange-600 dark:text-orange-300 font-bold"
-                    >
-                      Very hard
-                    </span>
-                    <span
-                      v-else-if="deck.difficulty == 5"
-                      v-tooltip="`${(deck.difficultyRaw + 1).toFixed(1)}/6`"
-                      class="tabular-nums text-red-600 dark:text-red-300 font-bold"
-                    >
-                      Expert
-                    </span>
+                    <DifficultyDisplay :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" />
                   </div>
                 </div>
 
@@ -242,6 +201,8 @@
                 </div>
               </div>
 
+              <ExampleSentenceEntry v-if="deck.exampleSentence != undefined" :example-sentence="deck.exampleSentence" />
+
               <div class="mt-4 flex flex-col md:flex-row gap-4">
                 <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{ getLinkTypeText(Number(link.linkType)) }}</a>
               </div>
@@ -251,7 +212,7 @@
                   <Button as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" label="View vocabulary" class="" />
                   <Button label="Download deck" class="" @click="showDownloadDialog = true" />
                   <Button v-if="!isCompact && displayAdminFunctions" as="router-link" :to="`/dashboard/media/${deck.deckId}`" label="Edit" class="" />
-                  <Button v-if="!isCompact && authStore.isAuthenticated" @click="showIssueDialog = true" label=" Report an issue"class="pi pi-exclamation-triangle " />
+                  <Button v-if="!isCompact && authStore.isAuthenticated" @click="showIssueDialog = true" label=" Report an issue" icon="pi pi-exclamation-triangle"/>
                 </div>
               </div>
             </div>

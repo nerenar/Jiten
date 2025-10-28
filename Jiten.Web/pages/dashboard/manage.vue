@@ -182,6 +182,31 @@
     } finally {
     }
   };
+
+
+  const flushRedisCache = async () => {
+    try {
+      const data = await $api(`/admin/flush-redis-cache`, {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `FLUSHALL done`,
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to FLUSHALL',
+        life: 5000,
+      });
+      console.error('Error with FLUSHALL:', error);
+    } finally {
+    }
+  };
 </script>
 
 <template>
@@ -271,6 +296,22 @@
               icon="pi pi-table"
               class="p-button-warning"
               @click="fetchMissingMetadata"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Flush Redis Cache</template>
+        <template #content>
+          <p class="mb-4">Instantly flush the redis cache, for parser changes.</p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Flush Redis Cache"
+              icon="pi pi-table"
+              class="p-button-warning"
+              @click="flushRedisCache"
             />
           </div>
         </template>
