@@ -39,7 +39,7 @@
 <template>
   <div class="flex flex-col">
     <blockquote class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
-      <div v-html="formattedText" class="text-lg transition-filter duration-200" :class="{ 'blur-sm': isNsfw && !isRevealed }" @click="handleReveal"></div>
+      <div v-html="formattedText" class="md:text-lg text-sm transition-filter duration-200" :class="{ 'blur-sm': isNsfw && !isRevealed }" @click="handleReveal"></div>
       <div v-if="isNsfw && !isRevealed" class="absolute top-0 left-0 w-full h-full flex items-center justify-center cursor-pointer z-10" @click="handleReveal">
         <div class="text-center px-3 py-2 bg-white/80 backdrop-blur-md border border-red-300 text-red-600 text-sm font-semibold rounded shadow">
           This text is potentially not safe for work. Click to reveal.
@@ -48,7 +48,7 @@
     </blockquote>
     <div v-if="showSource" class="flex items-center mb-2">
       <span class="text-xs italic mr-2 ml-4">Source:</span>
-      <div class="inline-flex items-center text-xs">
+      <div class="inline-flex items-center text-xs flex-wrap">
         <NuxtLink
           v-if="exampleSentence.sourceDeckParent != null"
           :to="`/decks/media/${exampleSentence.sourceDeckParent.deckId}/detail`"

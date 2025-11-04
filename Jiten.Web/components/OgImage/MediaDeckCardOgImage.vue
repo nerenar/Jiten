@@ -25,13 +25,33 @@
     }
     return undefined;
   });
+
+  const statsItems = computed(() => {
+    const items = [
+      { label: 'Character count:', value: deck.value?.characterCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Words:', value: deck.value?.wordCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Unique Words:', value: deck.value?.uniqueWordCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Unique Kanji:', value: deck.value?.uniqueKanjiCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Kanji (1-occurence):', value: deck.value?.uniqueKanjiUsedOnceCount?.toLocaleString() ?? 'N/A' },
+    ];
+
+    if (deck.value?.averageSentenceLength !== 0) {
+      items.push({ label: 'Average sentence length:', value: deck.value?.averageSentenceLength.toFixed(1) ?? 'N/A' });
+    }
+
+    if (!deck.value?.hideDialoguePercentage && deck.value?.dialoguePercentage != 0 && deck.value?.dialoguePercentage != 100) {
+      items.push({ label: 'Dialogue:', value: `${deck.value?.dialoguePercentage.toFixed(1)}%` });
+    }
+
+    return items;
+  });
 </script>
 
 <template>
   <div
     v-if="status !== 'pending' && deck"
     class="og-card-container bg-white text-black border border-gray-300 flex flex-row overflow-hidden"
-    style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif"
+    style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif; align-items: flex-start"
   >
     <div class="flex-shrink-0 h-full" style="width: 340px; margin-right: 32px">
       <img
@@ -43,7 +63,7 @@
     </div>
 
     <div class="flex flex-col flex-grow">
-      <h1 class="font-bold truncate" style="font-size: 2.25rem; margin-bottom: 8px; max-height: 2.8em">
+      <h1 class="font-bold truncate" style="font-size: 2rem; margin-bottom: 8px; line-height: 1.2; ">
         {{ deck.originalTitle.slice(0, 20) }}
       </h1>
 
@@ -53,30 +73,31 @@
 
       <div class="flex-grow"></div>
 
-      <div class="flex flex-col" style="font-size: 1.75rem">
-        <div class="flex justify-between" style="margin-bottom: 8px">
-          <span class="text-gray-700">Character count:</span>
-          <span class="font-mono">{{ deck.characterCount?.toLocaleString() ?? 'N/A' }}</span>
-        </div>
-        <div class="flex justify-between" style="margin-bottom: 8px">
-          <span class="text-gray-700">Words:</span>
-          <span class="font-mono">{{ deck.wordCount?.toLocaleString() ?? 'N/A' }}</span>
-        </div>
-        <div class="flex justify-between" style="margin-bottom: 8px">
-          <span class="text-gray-700">Unique Words:</span>
-          <span class="font-mono">{{ deck.uniqueWordCount?.toLocaleString() ?? 'N/A' }}</span>
-        </div>
-
-        <div class="flex justify-between" style="margin-bottom: 8px">
-          <span class="text-gray-700">Kanji:</span>
-          <span class="font-mono">{{ deck.uniqueKanjiCount?.toLocaleString() ?? 'N/A' }}</span>
-        </div>
-        <div class="flex justify-between" style="margin-bottom: 8px">
-          <span class="text-gray-700">Unique Kanji:</span>
-          <span class="font-mono">{{ deck.uniqueKanjiUsedOnceCount?.toLocaleString() ?? 'N/A' }}</span>
+      <div class="flex flex-col" style="font-size: 1.5rem">
+        <div
+          v-for="(item, index) in statsItems"
+          :key="index"
+          class="flex justify-between mb-8 px-4 py-2 rounded-md"
+          :style="{
+            marginBottom: '2px',
+            padding: '2px 2px',
+            borderRadius: '4px',
+            backgroundColor: index % 2 === 0 ? '#f6f6f6' : '#e2e2e2',
+          }"
+        >
+          <span class="text-gray-700">{{ item.label }}</span>
+          <span class="font-mono">{{ item.value }}</span>
         </div>
 
-        <div v-if="deck.difficulty != -1" class="flex justify-between">
+        <div
+          v-if="deck.difficulty != -1"
+          class="flex justify-between mb-8 px-4 py-2 rounded-md"
+          :style="{
+            padding: '2px 2px',
+            borderRadius: '4px',
+            backgroundColor: '#ad45fe11',
+          }"
+        >
           <span class="text-gray-700">Difficulty:</span>
           <span v-if="deck.difficulty == 0" class="font-mono text-green-700 dark:text-green-300"> ★☆☆☆☆☆ </span>
           <span v-else-if="deck.difficulty == 1" class="font-mono text-green-500"> ★★☆☆☆☆ </span>

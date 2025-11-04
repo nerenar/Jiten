@@ -183,7 +183,7 @@
           </ClientOnly>
         </div>
 
-        <div class="min-w-64">
+        <div class="md:min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
             <VocabularyStatus :word="response.data" />
             Rank #{{ response.data.mainReading.frequencyRank }}

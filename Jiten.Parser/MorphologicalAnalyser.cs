@@ -70,9 +70,9 @@ public class MorphologicalAnalyser
                 : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi.json");
         var dic = configuration.GetValue<string>("DictionaryPath");
 
-        var allLines = text.Split("\n");
-
         var output = SudachiInterop.ProcessText(configPath, text, dic, mode: morphemesOnly ? 'A' : 'C').Split("\n");
+
+        text = text.Replace(" ", "");
 
         List<WordInfo> wordInfos = new();
 
@@ -103,7 +103,6 @@ public class MorphologicalAnalyser
 
         wordInfos = CombineFinal(wordInfos);
 
-        wordInfos = SeparateSuffixHonorifics(wordInfos);
         wordInfos = FilterMisparse(wordInfos);
 
         return SplitIntoSentences(text, wordInfos);
@@ -168,7 +167,7 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "。", " 。\n");
         text = Regex.Replace(text, "！", " ！\n");
         text = Regex.Replace(text, "？", " ？\n");
-        
+
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
     }
@@ -310,7 +309,7 @@ public class MorphologicalAnalyser
 
             if (w1.Text is "十五")
                 w1.PartOfSpeech = PartOfSpeech.Numeral;
-            
+
             newList.Add(w1);
             i++;
         }
@@ -760,54 +759,6 @@ public class MorphologicalAnalyser
     }
 
     /// <summary>
-    /// Tries to separate the honorifics from the proper names
-    /// This still doesn't work for all cases
-    /// </summary>
-    /// <param name="wordInfos"></param>
-    /// <returns></returns>
-    private List<WordInfo> SeparateSuffixHonorifics(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo> newList = new List<WordInfo>();
-
-        for (var i = 0; i < wordInfos.Count; i++)
-        {
-            WordInfo currentWord = new WordInfo(wordInfos[i]);
-            bool separated = false;
-            foreach (var honorific in HonorificsSuffixes)
-            {
-                if (!currentWord.Text.EndsWith(honorific) || currentWord.Text.Length <= honorific.Length ||
-                    (!currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PersonName) &&
-                     !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ProperNoun))) continue;
-
-                currentWord.Text = currentWord.Text[..^honorific.Length];
-                if (currentWord.DictionaryForm.EndsWith(honorific))
-                {
-                    currentWord.DictionaryForm =
-                        currentWord.DictionaryForm[..^honorific.Length];
-                }
-
-                var suffix = new WordInfo()
-                             {
-                                 Text = honorific, PartOfSpeech = PartOfSpeech.Suffix, Reading = honorific, DictionaryForm = honorific
-                             };
-                newList.Add(currentWord);
-                newList.Add(suffix);
-                separated = true;
-
-                break;
-            }
-
-            if (!separated)
-                newList.Add(currentWord);
-        }
-
-        return wordInfos;
-    }
-
-    /// <summary>
     /// Cleanup method / 2nd pass for some cases
     /// </summary>
     /// <param name="wordInfos"></param>
@@ -848,7 +799,7 @@ public class MorphologicalAnalyser
 
         var sb = new StringBuilder();
         bool seenEnder = false;
-        
+
         // Need a flat text for the sentence to corresponds if they're cut between 2 lines
         text = text.Replace("\r", "").Replace("\n", "");
 
@@ -889,7 +840,7 @@ public class MorphologicalAnalyser
         int currentCharIndex = 0;
         foreach (var word in wordInfos)
         {
-            if (string.IsNullOrEmpty(word.Text))
+            if (string.IsNullOrEmpty(word.Text) || word.PartOfSpeech == PartOfSpeech.BlankSpace)
                 continue;
 
             bool wordAssigned = false;

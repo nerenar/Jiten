@@ -2,8 +2,8 @@
 
 <template>
   <footer class="bg-indigo-900 text-white p-4 bottom-0 w-full">
-    <div class="flex justify-evenly items-center max-w-6xl mx-auto">
-      <div class="flex items-center gap-4">
+    <div class="flex flex-col md:flex-row justify-evenly items-center gap-4 max-w-6xl mx-auto">
+      <div class="flex flex-col sm:flex-row items-center gap-4">
         <p class="text-sm">© {{ new Date().getFullYear() }} Jiten</p>
         <NuxtLink :to="`/terms`" target="_blank" class="!text-white text-sm">Terms of Service</NuxtLink>
         <NuxtLink :to="`/privacy`" target="_blank" class="!text-white text-sm">Privacy Policy</NuxtLink>

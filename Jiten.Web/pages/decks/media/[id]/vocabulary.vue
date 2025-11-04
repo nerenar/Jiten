@@ -50,7 +50,7 @@
         display: newValue,
       },
     });
-  })
+  });
 
   const {
     data: response,
@@ -61,7 +61,7 @@
       offset: offset,
       sortBy: sortBy,
       sortOrder: sortOrder,
-      displayFilter: display
+      displayFilter: display,
     },
     watch: [offset],
   });
@@ -125,23 +125,26 @@
         {{ title }}
       </NuxtLink>
     </div>
-    <div class="flex flex-row gap-2">
-      <FloatLabel variant="on">
-        <Select
-          v-model="sortBy"
-          :options="sortByOptions"
-          option-label="label"
-          option-value="value"
-          placeholder="Sort by"
-          input-id="sortBy"
-          class="w-full md:w-56"
-        />
-        <label for="sortBy">Sort by</label>
-      </FloatLabel>
-      <Button @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending" class="w-12">
-        <Icon v-if="sortOrder == SortOrder.Descending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
-        <Icon v-if="sortOrder == SortOrder.Ascending" name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
-      </Button>
+    <div class="flex flex-col md:flex-row gap-2 w-full">
+      <div class="flex gap-2">
+        <FloatLabel variant="on">
+          <Select
+            v-model="sortBy"
+            :options="sortByOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="Sort by"
+            input-id="sortBy"
+            class="w-full md:w-56"
+          />
+          <label for="sortBy">Sort by</label>
+        </FloatLabel>
+        <Button @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending" class="min-w-12 w-12">
+          <Icon v-if="sortOrder == SortOrder.Descending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
+          <Icon v-if="sortOrder == SortOrder.Ascending" name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
+        </Button>
+      </div>
+      <div>
       <FloatLabel variant="on">
         <Select
           v-model="display"
@@ -154,6 +157,7 @@
         />
         <label for="display">Display</label>
       </FloatLabel>
+      </div>
     </div>
     <div class="flex justify-between flex-col md:flex-row">
       <div class="flex gap-8 pl-2">
