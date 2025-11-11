@@ -61,25 +61,25 @@ public class ComputationJob(
 
             var sql = """
 
-                                      SELECT 
+                                      SELECT
                                           d."DeckId",
-                                          CASE 
-                                              WHEN d."WordCount" = 0 THEN 0.0 
+                                          CASE
+                                              WHEN d."WordCount" = 0 THEN 0.0
                                               ELSE ROUND((SUM(CASE WHEN kw."WordId" IS NOT NULL THEN dw."Occurrences" ELSE 0 END)::NUMERIC / d."WordCount"::NUMERIC * 100), 2)
                                           END AS "Coverage",
-                                          CASE 
-                                              WHEN d."UniqueWordCount" = 0 THEN 0.0 
+                                          CASE
+                                              WHEN d."UniqueWordCount" = 0 THEN 0.0
                                               ELSE ROUND((COUNT(CASE WHEN kw."WordId" IS NOT NULL THEN 1 END)::NUMERIC / d."UniqueWordCount"::NUMERIC * 100), 2)
                                           END AS "UniqueCoverage"
                                       FROM "jiten"."Decks" d
                                       LEFT JOIN "jiten"."DeckWords" dw ON d."DeckId" = dw."DeckId"
-                                      LEFT JOIN "user"."FsrsCards" kw 
+                                      LEFT JOIN "user"."FsrsCards" kw
                                           ON kw."UserId" = {0}::uuid
                                           AND kw."WordId" = dw."WordId"
                                           AND kw."ReadingIndex" = dw."ReadingIndex"
                                       WHERE d."ParentDeckId" IS NULL
                                       GROUP BY d."DeckId", d."WordCount", d."UniqueWordCount";
-                                      
+
                       """;
 
             var coverageResults = await context.Database
@@ -91,20 +91,20 @@ public class ComputationJob(
             for (int i = 0; i < coverageResults.Count; i += batchSize)
             {
                 var batch = coverageResults.Skip(i).Take(batchSize).ToList();
-            
-                var valuesList = string.Join(", ", batch.Select(r => 
+
+                var valuesList = string.Join(", ", batch.Select(r =>
                                                                     $"('{userId}'::uuid, {r.DeckId}::numeric, {r.Coverage}::numeric, {r.UniqueCoverage}::numeric)"));
-            
+
                 var upsertSql = $"""
                                                  INSERT INTO "user"."UserCoverages" ("UserId", "DeckId", "Coverage", "UniqueCoverage")
                                                  VALUES {valuesList}
-                                                 ON CONFLICT ("UserId", "DeckId") 
-                                                 DO UPDATE SET 
+                                                 ON CONFLICT ("UserId", "DeckId")
+                                                 DO UPDATE SET
                                                      "Coverage" = EXCLUDED."Coverage",
                                                      "UniqueCoverage" = EXCLUDED."UniqueCoverage";
-                                                 
+
                                  """;
-            
+
                 await context.Database.ExecuteSqlRawAsync(upsertSql);
             }
         }
@@ -115,7 +115,104 @@ public class ComputationJob(
             {
                 CoverageComputingUserIds.Remove(userId);
             }
-            
+
+            var metadata = await userContext.UserMetadatas
+                                            .SingleOrDefaultAsync(um => um.UserId == userId);
+
+            if (metadata is null)
+            {
+                metadata = new UserMetadata { UserId = userId, CoverageRefreshedAt = DateTime.UtcNow };
+                await userContext.UserMetadatas.AddAsync(metadata);
+            }
+            else
+            {
+                metadata.CoverageRefreshedAt = DateTime.UtcNow;
+            }
+
+            await userContext.SaveChangesAsync();
+        }
+    }
+
+    [Queue("coverage")]
+    public async Task ComputeUserDeckCoverage(string userId, int deckId)
+    {
+        // Prevent duplicate concurrent computations for the same user
+        lock (CoverageComputeLock)
+        {
+            if (!CoverageComputingUserIds.Add(userId))
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            // Only compute coverage for users with at least 10 known words
+            if (await userContext.FsrsCards.CountAsync(ukw => ukw.UserId == userId) < 10)
+            {
+                // Remove existing coverage if it exists, if the user cleared his words for example
+                await userContext.UserCoverages
+                    .Where(uc => uc.UserId == userId && uc.DeckId == deckId)
+                    .ExecuteDeleteAsync();
+
+                await userContext.SaveChangesAsync();
+
+                return;
+            }
+
+            var sql = """
+
+                                      SELECT
+                                          d."DeckId",
+                                          CASE
+                                              WHEN d."WordCount" = 0 THEN 0.0
+                                              ELSE ROUND((SUM(CASE WHEN kw."WordId" IS NOT NULL THEN dw."Occurrences" ELSE 0 END)::NUMERIC / d."WordCount"::NUMERIC * 100), 2)
+                                          END AS "Coverage",
+                                          CASE
+                                              WHEN d."UniqueWordCount" = 0 THEN 0.0
+                                              ELSE ROUND((COUNT(CASE WHEN kw."WordId" IS NOT NULL THEN 1 END)::NUMERIC / d."UniqueWordCount"::NUMERIC * 100), 2)
+                                          END AS "UniqueCoverage"
+                                      FROM "jiten"."Decks" d
+                                      LEFT JOIN "jiten"."DeckWords" dw ON d."DeckId" = dw."DeckId"
+                                      LEFT JOIN "user"."FsrsCards" kw
+                                          ON kw."UserId" = {0}::uuid
+                                          AND kw."WordId" = dw."WordId"
+                                          AND kw."ReadingIndex" = dw."ReadingIndex"
+                                      WHERE d."DeckId" = {1}
+                                      GROUP BY d."DeckId", d."WordCount", d."UniqueWordCount";
+
+                      """;
+
+            var coverageResults = await context.Database
+                                               .SqlQueryRaw<DeckCoverageResult>(sql, userId, deckId)
+                                               .ToListAsync();
+
+            // Should only have one result for a single deck
+            if (coverageResults.Count > 0)
+            {
+                var result = coverageResults[0];
+
+                var upsertSql = $"""
+                                                 INSERT INTO "user"."UserCoverages" ("UserId", "DeckId", "Coverage", "UniqueCoverage")
+                                                 VALUES ('{userId}'::uuid, {result.DeckId}::numeric, {result.Coverage}::numeric, {result.UniqueCoverage}::numeric)
+                                                 ON CONFLICT ("UserId", "DeckId")
+                                                 DO UPDATE SET
+                                                     "Coverage" = EXCLUDED."Coverage",
+                                                     "UniqueCoverage" = EXCLUDED."UniqueCoverage";
+
+                                 """;
+
+                await context.Database.ExecuteSqlRawAsync(upsertSql);
+            }
+        }
+        finally
+        {
+            // Ensure removal even if an exception occurs
+            lock (CoverageComputeLock)
+            {
+                CoverageComputingUserIds.Remove(userId);
+            }
+
             var metadata = await userContext.UserMetadatas
                                             .SingleOrDefaultAsync(um => um.UserId == userId);
 

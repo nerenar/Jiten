@@ -1,11 +1,14 @@
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Providers;
+using Jiten.Core.Data.User;
 using Microsoft.EntityFrameworkCore;
+using Hangfire;
+using Jiten.Cli;
 
 namespace Jiten.Api.Jobs;
 
-public class ParseJob(JitenDbContext context)
+public class ParseJob(JitenDbContext context, UserDbContext userContext, IBackgroundJobClient backgroundJobs)
 {
     public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
     {
@@ -28,6 +31,16 @@ public class ParseJob(JitenDbContext context)
                 if (string.IsNullOrEmpty(text))
                 {
                     throw new Exception("No text found in the ebook.");
+                }
+            }
+            else if (Path.GetExtension(filePath).ToLower() == ".mokuro")
+            {
+                var extractor = new MokuroExtractor();
+                text = await extractor.Extract(filePath, false);
+
+                if (string.IsNullOrEmpty(text))
+                {
+                    throw new Exception("No text found in the mokuro file.");
                 }
             }
             else
@@ -74,9 +87,12 @@ public class ParseJob(JitenDbContext context)
         }
 
         var coverImage = await File.ReadAllBytesAsync(metadata.Image ?? throw new Exception("No cover image found."));
-        
+
         // Insert the deck into the database
         await JitenHelper.InsertDeck(context.DbOptions, deck, coverImage ?? [], false);
+
+        // Queue coverage computation jobs for all users with at least 10 known words
+        await QueueCoverageJobsForDeck(deck);
     }
 
     private async Task<Deck> ParseChild(Metadata metadata, Deck parentDeck, MediaType deckType, int deckOrder, bool storeRawText)
@@ -127,5 +143,18 @@ public class ParseJob(JitenDbContext context)
         }
 
         return deck;
+    }
+
+    private async Task QueueCoverageJobsForDeck(Deck deck)
+    {
+        var userIds = await userContext.Users
+                                       .Where(u => userContext.FsrsCards.Count(c => c.UserId == u.Id) >= 10)
+                                       .Select(u => u.Id)
+                                       .ToListAsync();
+
+        foreach (var userId in userIds)
+        {
+                backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserDeckCoverage(userId, deck.DeckId));
+        }
     }
 }

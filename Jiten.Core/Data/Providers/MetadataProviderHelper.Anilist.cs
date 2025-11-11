@@ -11,23 +11,23 @@ public static partial class MetadataProviderHelper
 {
     public static async Task<List<Metadata>> AnilistNovelSearchApi(string query)
     {
-        return await AnilistSearchApi(query, "NOVEL");
+        return await AnilistSearchApi(query, ["NOVEL"]);
     }
 
     public static async Task<List<Metadata>> AnilistMangaSearchApi(string query)
     {
-        return await AnilistSearchApi(query, "MANGA");
+        return await AnilistSearchApi(query, ["MANGA", "ONE_SHOT"]);
     }
 
-    public static async Task<List<Metadata>> AnilistSearchApi(string query, string format)
+    public static async Task<List<Metadata>> AnilistSearchApi(string query, string[] format)
     {
         var requestBody = new
                           {
                               query = """
 
-                                              query ($search: String, $type: MediaType, $format: MediaFormat) {
+                                              query ($search: String, $type: MediaType, $format: [MediaFormat]) {
                                                 Page {
-                                                  media (search: $search, type: $type, format: $format) {
+                                                  media (search: $search, type: $type, format_in: $format) {
                                                     id
                                                     idMal
                                                     description

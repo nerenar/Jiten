@@ -142,7 +142,7 @@
           <nuxt-link v-else to="/login" class="!text-white">Login</nuxt-link>
           <Button
             type="button"
-            label="Share"
+            label="Settings"
             severity="secondary"
             @mouseover="showSettings($event)"
             @mouseleave="onSettingsMouseLeave"
@@ -195,7 +195,7 @@
           <div class="flex items-center gap-3 py-3 px-3">
             <Button
               type="button"
-              label="Share"
+              label="Settings"
               severity="secondary"
               class="w-full justify-center"
               @click="toggleSettings($event)"
@@ -211,8 +211,12 @@
     </div>
   </header>
 
-  <Popover ref="settings" @mouseenter="onSettingsMouseEnter" @mouseleave="onSettingsMouseLeave">
+  <Popover ref="settings" @mouseenter="onSettingsMouseEnter" @mouseleave="onSettingsMouseLeave" :pt="{ root: { class: 'w-[90vw] max-w-sm md:w-auto' }, content: { class: 'p-3 md:p-4 max-h-[80vh] overflow-y-auto' } }">
     <div class="flex flex-col gap-2">
+      <div class="flex justify-between items-center mb-2 md:hidden">
+        <span class="font-semibold text-base">Settings</span>
+        <Button icon="pi pi-times" text rounded size="small" @click="settings.hide()" aria-label="Close settings" />
+      </div>
       <FloatLabel variant="on" class="">
         <Select
           v-model="titleLanguage"
@@ -227,46 +231,46 @@
         <label for="titleLanguage">Titles Language</label>
       </FloatLabel>
 
-      <Divider class="!m-2" />
+      <Divider class="!my-1 md:!my-2 !mx-2" />
 
-      <div class="flex flex-col gap-4">
+      <div class="flex flex-col gap-2 md:gap-4">
         <label for="readingSpeed" class="text-sm font-medium">Reading Speed (chars/hour)</label>
         <div class="w-full">
-          <InputNumber v-model="readingSpeed" show-buttons :min="100" :max="100000" :step="100" size="small" class="w-full" />
+          <InputNumber v-model="readingSpeed" show-buttons :min="100" :max="100000" :step="100" size="small" class="w-full" fluid />
         </div>
-        <div class="w-full">
+        <div class="w-full px-1">
           <Slider v-model="readingSpeed" :min="100" :max="100000" :step="100" class="w-full" />
         </div>
       </div>
 
-      <Divider class="!m-2" />
+      <Divider class="!my-1 md:!my-2 !mx-2" />
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="displayFurigana" input-id="displayFurigana" name="furigana" :binary="true" />
-        <label for="displayFurigana">Display Furigana</label>
+        <label for="displayFurigana" class="text-sm cursor-pointer">Display Furigana</label>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="hideVocabularyDefinitions" input-id="hideVocabularyDefinitions" name="hideVocabularyDefinitions" :binary="true" />
-        <label for="hideVocabularyDefinitions">Hide Vocabulary Definitions</label>
+        <label for="hideVocabularyDefinitions" class="text-sm cursor-pointer">Hide Vocabulary Definitions</label>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="displayAllNsfw" input-id="displayAllNsfw" name="nsfw" :binary="true" />
-        <label for="displayAllNsfw">Unblur all NSFW sentences</label>
+        <label for="displayAllNsfw" class="text-sm cursor-pointer">Unblur all NSFW sentences</label>
       </div>
 
-      <div v-if="auth.isAuthenticated" class="flex items-center gap-2">
+      <div v-if="auth.isAuthenticated" class="flex items-center gap-2 py-1">
         <Checkbox v-model="hideCoverageBorders" input-id="hideCoverageBorders" name="hideCoverageBorders" :binary="true" />
-        <label for="hideCoverageBorders">Hide coverage borders</label>
+        <label for="hideCoverageBorders" class="text-sm cursor-pointer">Hide coverage borders</label>
       </div>
 
-      <div v-if="auth.isAuthenticated && auth.isAdmin" class="flex items-center gap-2">
+      <div v-if="auth.isAuthenticated && auth.isAdmin" class="flex items-center gap-2 py-1">
         <Checkbox v-model="displayAdminFunctions" input-id="displayAdminFunctions" name="adminFunctions" :binary="true" />
-        <label for="displayAdminFunctions">Display admin functions</label>
+        <label for="displayAdminFunctions" class="text-sm cursor-pointer">Display admin functions</label>
       </div>
 
-      <Divider class="!m-2" />
+      <Divider class="!my-1 md:!my-2 !mx-2" />
 
       <FloatLabel variant="on" class="">
         <Select

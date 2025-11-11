@@ -16,9 +16,104 @@
   const message = ref<string | null>(null);
   const error = ref<string | null>(null);
 
+  const usernameError = ref<string | null>(null);
+  const passwordError = ref<string | null>(null);
+  const emailError = ref<string | null>(null);
+
+  function validateUsername() {
+    const username = form.username.trim();
+
+    if (!username) {
+      usernameError.value = 'Username is required';
+      return false;
+    }
+
+    if (username.length < 2) {
+      usernameError.value = 'Username must be at least 2 characters';
+      return false;
+    }
+
+    if (username.length > 20) {
+      usernameError.value = 'Username must be at most 20 characters';
+      return false;
+    }
+
+    if (username.includes(' ')) {
+      usernameError.value = 'Username cannot contain spaces';
+      return false;
+    }
+
+    usernameError.value = null;
+    return true;
+  }
+
+  function validatePassword() {
+    const password = form.password;
+
+    if (!password) {
+      passwordError.value = 'Password is required';
+      return false;
+    }
+
+    if (password.length < 10) {
+      passwordError.value = 'Password must be at least 10 characters';
+      return false;
+    }
+
+    if (password.length > 100) {
+      passwordError.value = 'Password must be at most 100 characters';
+      return false;
+    }
+
+    if (!/[a-z]/.test(password)) {
+      passwordError.value = 'Password must contain at least one lowercase letter';
+      return false;
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      passwordError.value = 'Password must contain at least one uppercase letter';
+      return false;
+    }
+
+    if (!/\d/.test(password)) {
+      passwordError.value = 'Password must contain at least one digit';
+      return false;
+    }
+
+    passwordError.value = null;
+    return true;
+  }
+
+  function validateEmail() {
+    const email = form.email.trim();
+
+    if (!email) {
+      emailError.value = 'Email is required';
+      return false;
+    }
+
+    if (email.length > 100) {
+      emailError.value = 'Email must be at most 100 characters';
+      return false;
+    }
+
+    emailError.value = null;
+    return true;
+  }
+
   async function handleRegister() {
     error.value = null;
     message.value = null;
+
+    const isUsernameValid = validateUsername();
+    const isPasswordValid = validatePassword();
+    const isEmailValid = validateEmail();
+
+    if (!isUsernameValid || !isPasswordValid || !isEmailValid) {
+      error.value = 'Please fix the validation errors before submitting';
+      return;
+    }
+
     isLoading.value = true;
     try {
       if (!recaptchaResponse.value) {
@@ -47,15 +142,17 @@
       <form @submit.prevent="handleRegister" class="flex flex-col gap-6 pt-4">
         <div class="w-full">
           <FloatLabel>
-            <InputText id="username" v-model.trim="form.username" required class="w-full" />
+            <InputText id="username" v-model.trim="form.username" required class="w-full" @blur="validateUsername" @focus="usernameError = null" />
             <label for="username">Username</label>
           </FloatLabel>
+          <small v-if="usernameError" class="text-red-500">{{ usernameError }}</small>
         </div>
         <div class="w-full">
           <FloatLabel>
-            <InputText id="email" v-model.trim="form.email" type="email" required class="w-full" />
+            <InputText id="email" v-model.trim="form.email" type="email" required class="w-full" @blur="validateEmail" @focus="emailError = null" />
             <label for="email">Email</label>
           </FloatLabel>
+          <small v-if="emailError" class="text-red-500">{{ emailError }}</small>
         </div>
         <div class="w-full">
           <FloatLabel>
@@ -71,9 +168,12 @@
               :inputProps="{ autocomplete: 'new-password', minlength: 10 }"
               :inputClass="'w-full'"
               required
+              @blur="validatePassword"
+              @focus="passwordError = null"
             />
             <label for="password">Password</label>
           </FloatLabel>
+          <small v-if="passwordError" class="text-red-500">{{ passwordError }}</small>
         </div>
 
         <div class="flex flex-col gap-4 pt-2">

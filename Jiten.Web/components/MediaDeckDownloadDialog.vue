@@ -168,24 +168,24 @@
 </script>
 
 <template>
-  <Dialog v-model:visible="localVisible" modal :header="`Download deck ${localiseTitle(deck)}`" :style="{ width: '35rem' }">
+  <Dialog v-model:visible="localVisible" modal :header="`Download deck ${localiseTitle(deck)}`" class="w-[95vw] sm:w-[90vw] md:w-[35rem]" :pt="{ root: { class: 'max-w-full' }, content: { class: 'p-3 sm:p-6' } }">
     <div class="flex flex-col gap-2">
       <div>
         <div class="text-gray-500 text-sm">Format</div>
         <SelectButton v-model="format" :options="deckFormats" option-value="value" option-label="label" size="small" />
       </div>
-      <span v-if="format == DeckFormat.Anki" class="text-sm">
+      <span v-if="format == DeckFormat.Anki" class="text-xs sm:text-sm">
         Uses the Lapis template from <a href="https://github.com/donkuri/lapis/tree/main">Lapis</a>
       </span>
-      <span v-if="format == DeckFormat.Txt" class="text-sm">
+      <span v-if="format == DeckFormat.Txt" class="text-xs sm:text-sm">
         Plain text format, one word per line, vocabulary only. <br />
         Perfect for importing in other websites.
       </span>
-      <span v-if="format == DeckFormat.TxtRepeated" class="text-sm">
+      <span v-if="format == DeckFormat.TxtRepeated" class="text-xs sm:text-sm">
         Plain text format, one word per line, vocabulary only. <br />
         The vocabulary is repeated for each occurrence to handle frequency on some websites.
       </span>
-      <span v-if="format == DeckFormat.Yomitan" class="text-sm">
+      <span v-if="format == DeckFormat.Yomitan" class="text-xs sm:text-sm">
         A zip file that can be imported as a yomitan dictionary. <br />
         It will show the number of occurrences of a word in the selected media.
       </span>
@@ -200,22 +200,22 @@
       </div>
       <div v-if="downloadType != DeckDownloadType.Full">
         <div class="text-gray-500 text-sm">Range</div>
-        <div class="flex flex-row flex-wrap gap-2 items-center">
+        <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
           <InputNumber
             :model-value="frequencyRange?.[0] ?? 0"
             show-buttons
             fluid
             size="small"
-            class="max-w-28 flex-shrink-0"
+            class="w-full sm:max-w-28 sm:flex-shrink-0"
             @update:model-value="updateMinFrequency"
           />
-          <Slider v-model="frequencyRange" range :min="0" :max="currentSliderMax" class="flex-grow mx-2 flex-basis-auto" />
+          <Slider v-model="frequencyRange" range :min="0" :max="currentSliderMax" class="flex-grow sm:mx-2 my-2 sm:my-0 min-w-0" />
           <InputNumber
             :model-value="frequencyRange?.[1] ?? 0"
             show-buttons
             fluid
             size="small"
-            class="max-w-28 flex-shrink-0"
+            class="w-full sm:max-w-28 sm:flex-shrink-0"
             @update:model-value="updateMaxFrequency"
           />
         </div>
@@ -225,18 +225,18 @@
           <AccordionHeader> Advanced</AccordionHeader>
           <AccordionContent>
             <div class="flex flex-col gap-2">
-              <div class="text-sm text-gray-500">These options might not be reflected in the card count below.</div>
+              <div class="text-xs sm:text-sm text-gray-500">These options might not be reflected in the card count below.</div>
               <div class="flex items-center gap-2">
                 <Checkbox v-model="excludeKana" input-id="excludeKana" name="kanaOnly" :binary="true" />
-                <label for="excludeKana">Exclude kana-only vocabulary</label>
+                <label for="excludeKana" class="text-sm">Exclude kana-only vocabulary</label>
               </div>
               <div class="flex items-center gap-2">
                 <Checkbox v-model="excludeExampleSentences" input-id="excludeExampleSentences" name="noExampleSentences" :binary="true" />
-                <label for="excludeExampleSentences">Don't include example sentences</label>
+                <label for="excludeExampleSentences" class="text-sm">Don't include example sentences</label>
               </div>
               <div class="flex items-center gap-2">
                 <Checkbox v-model="excludeKnownWords" input-id="excludeKnownWords" name="excludeKnownWords" :binary="true" />
-                <label for="excludeKnownWords">Don't download known words</label>
+                <label for="excludeKnownWords" class="text-sm">Don't download known words</label>
               </div>
             </div>
           </AccordionContent>
@@ -253,8 +253,8 @@
     </div>
   </Dialog>
 
-  <div v-if="downloading" class="!fixed top-1/3 left-1/3 text-center" style="z-index: 9999">
-    <div class="text-white font-bold text-lg">Preparing your deck, please wait a few seconds…</div>
+  <div v-if="downloading" class="!fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center px-4" style="z-index: 9999">
+    <div class="text-white font-bold text-base sm:text-lg">Preparing your deck, please wait a few seconds…</div>
     <ProgressSpinner style="width: 50px; height: 50px" stroke-width="8" fill="transparent" animation-duration=".5s" aria-label="Creating your deck" />
   </div>
   <BlockUI :blocked="downloading" full-screen />

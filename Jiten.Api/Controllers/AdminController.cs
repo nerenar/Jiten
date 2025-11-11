@@ -4,6 +4,7 @@ using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Jobs;
+using Jiten.Cli;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
@@ -368,6 +369,16 @@ public class AdminController(
                 if (string.IsNullOrEmpty(text))
                 {
                     throw new Exception("No text found in the ebook.");
+                }
+            }
+            else if (fileExtension == ".mokuro")
+            {
+                var extractor = new MokuroExtractor();
+                text = await extractor.Extract(filePath, false);
+
+                if (string.IsNullOrEmpty(text))
+                {
+                    throw new Exception("No text found in the mokuro file.");
                 }
             }
             else
