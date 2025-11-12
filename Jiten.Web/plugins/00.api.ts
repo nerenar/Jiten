@@ -3,11 +3,23 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   const api = $fetch.create({
     baseURL: config.public.baseURL,
-    onRequest({ options }) {
-      const token = useCookie('token');
-      if (token?.value) {
+    async onRequest({ request, options }) {
+      const authStore = useAuthStore();
+
+      // Extract URL to check if this is an auth endpoint
+      const url = request.toString();
+      const isAuthEndpoint = url.includes('/auth/');
+
+      // Determine if this specific auth endpoint needs Authorization header
+      // Most auth endpoints don't need it (login, register, refresh, etc.)
+      // Only /auth/me and /auth/revoke-token require authentication
+      const needsAuthHeader = url.includes('/auth/me') || url.includes('/auth/revoke-token');
+
+      // Use token from authStore (reactive, always current) instead of re-reading cookies
+      // This prevents stale reads during SSR when cookies have just been updated
+      if (authStore.accessToken && (!isAuthEndpoint || needsAuthHeader)) {
         options.headers = options.headers || {};
-        options.headers.set('Authorization', `Bearer ${token.value}`);
+        options.headers.set('Authorization', `Bearer ${authStore.accessToken}`);
       }
     },
     onResponse({ response }) {
@@ -31,11 +43,11 @@ export default defineNuxtPlugin((nuxtApp) => {
           if (refreshSuccess) {
             console.log('Token refreshed, retrying original request...');
 
-            // Update the authorization header with the new token
-            const newToken = useCookie('token');
-            if (newToken?.value) {
+            // Use token from authStore instead of re-reading cookie
+            // This prevents context errors and stale reads
+            if (authStore.accessToken) {
               options.headers = options.headers || {};
-              options.headers.set('Authorization', `Bearer ${newToken.value}`);
+              options.headers.set('Authorization', `Bearer ${authStore.accessToken}`);
             }
 
             // Retry the original request with the new token

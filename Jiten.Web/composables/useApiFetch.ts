@@ -9,7 +9,7 @@ export function useApiFetch<T>(
   status: Ref<AsyncDataRequestStatus>;
   error: Ref<Error | null>;
 }> {
-  const tokenCookie = useCookie('token');
+  const authStore = useAuthStore();
 
   // Create a unique key for this request to prevent duplicates
   const key = generateRequestKey(request);
@@ -19,8 +19,9 @@ export function useApiFetch<T>(
   const headers = new Headers(opts?.headers || {});
 
   // Add authorization header if token exists
-  if (tokenCookie.value) {
-    headers.set('Authorization', `Bearer ${tokenCookie.value}`);
+  // Use authStore.accessToken instead of cookie to get fresh token during SSR
+  if (authStore.accessToken) {
+    headers.set('Authorization', `Bearer ${authStore.accessToken}`);
   }
 
   // Merge options with headers
@@ -49,7 +50,7 @@ export  function useApiFetchPaginated<T>(
   error: Ref<Error | null>;
 }> {
   const config = useRuntimeConfig();
-  const tokenCookie = useCookie('token');
+  const authStore = useAuthStore();
 
   // Create a unique key for this request to prevent duplicates
   const key = generateRequestKey(request);
@@ -59,8 +60,9 @@ export  function useApiFetchPaginated<T>(
   const headers = new Headers(opts?.headers || {});
 
   // Add authorization header if token exists
-  if (tokenCookie.value) {
-    headers.set('Authorization', `Bearer ${tokenCookie.value}`);
+  // Use authStore.accessToken instead of cookie to get fresh token during SSR
+  if (authStore.accessToken) {
+    headers.set('Authorization', `Bearer ${authStore.accessToken}`);
   }
 
   // Merge options with headers

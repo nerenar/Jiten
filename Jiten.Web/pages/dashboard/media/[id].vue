@@ -209,6 +209,43 @@
     subdecks.value.splice(index, 1);
   }
 
+  function moveSubdeckUp(id: number) {
+    const index = subdecks.value.findIndex((sd) => sd.id === id);
+    if (index <= 0) return;
+
+    const newSubdecks = [...subdecks.value];
+    const temp = newSubdecks[index];
+    newSubdecks[index] = newSubdecks[index - 1];
+    newSubdecks[index - 1] = temp;
+    subdecks.value = newSubdecks;
+  }
+
+  function moveSubdeckDown(id: number) {
+    const index = subdecks.value.findIndex((sd) => sd.id === id);
+    if (index === -1 || index >= subdecks.value.length - 1) return;
+
+    const newSubdecks = [...subdecks.value];
+    const temp = newSubdecks[index];
+    newSubdecks[index] = newSubdecks[index + 1];
+    newSubdecks[index + 1] = temp;
+    subdecks.value = newSubdecks;
+  }
+
+  function moveSubdeckToPosition(id: number, targetPosition: number | null) {
+    if (targetPosition === null) return;
+
+    const currentIndex = subdecks.value.findIndex((sd) => sd.id === id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = targetPosition - 1;
+    if (targetIndex < 0 || targetIndex >= subdecks.value.length || targetIndex === currentIndex) return;
+
+    const newSubdecks = [...subdecks.value];
+    const [subdeck] = newSubdecks.splice(currentIndex, 1);
+    newSubdecks.splice(targetIndex, 0, subdeck);
+    subdecks.value = newSubdecks;
+  }
+
   function openAddLinkDialog() {
     newLink.value = {
       url: '',
@@ -650,22 +687,61 @@
             </DataTable>
           </div>
 
-          <Card v-for="subdeck in subdecks" :key="subdeck.id" class="mb-4">
+          <TransitionGroup name="subdeck-list" tag="div">
+            <Card v-for="(subdeck, index) in subdecks" :key="subdeck.id" class="mb-4 subdeck-card">
             <template #title>
-              <div class="flex justify-between items-center">
-                <div class="flex flex-row gap-2">
+              <div class="flex flex-col gap-3 w-full">
+                <div class="flex items-center justify-between w-full">
+                  <div class="flex items-center gap-3">
+                    <div class="flex flex-col gap-1">
+                      <Button
+                        class="p-button-text p-button-sm h-6"
+                        :disabled="index === 0"
+                        @click="moveSubdeckUp(subdeck.id)"
+                        title="Move up"
+                      >
+                        <Icon name="material-symbols-light:arrow-upward" size="1.2em" />
+                      </Button>
+                      <Button
+                        class="p-button-text p-button-sm h-6"
+                        :disabled="index === subdecks.length - 1"
+                        @click="moveSubdeckDown(subdeck.id)"
+                        title="Move down"
+                      >
+                        <Icon name="material-symbols-light:arrow-downward" size="1.2em" />
+                      </Button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-lg font-semibold text-muted-color min-w-8">#{{ index + 1 }}</span>
+                      <div class="flex flex-col">
+                        <label class="block text-xs font-medium mb-1">Position</label>
+                        <InputNumber
+                          :model-value="index + 1"
+                          :min="1"
+                          :max="subdecks.length"
+                          :step="1"
+                          class="w-16"
+                          :allow-empty="false"
+                          @update:model-value="(val) => moveSubdeckToPosition(subdeck.id, val)"
+                          title="Jump to position"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <Button class="p-button-danger p-button-text" icon-class="text-2xl" @click="removeSubdeck(subdeck.id)">
+                    <Icon name="material-symbols-light:delete" size="1.5em" />
+                  </Button>
+                </div>
+                <div class="flex flex-row gap-4">
                   <div>
                     <label class="block text-sm font-medium mb-1">Title</label>
-                    <InputText v-model="subdeck.originalTitle" class="w-64" />
+                    <InputText v-model="subdeck.originalTitle" class="w-96" />
                   </div>
                   <div>
                     <label class="block text-sm font-medium mb-1">Difficulty Override</label>
-                    <InputNumber v-model="subdeck.difficultyOverride" class="w-12" :min-fraction-digits="1" />
+                    <InputNumber v-model="subdeck.difficultyOverride" class="w-32" :min-fraction-digits="1" />
                   </div>
                 </div>
-                <Button class="p-button-danger p-button-text" icon-class="text-2xl" @click="removeSubdeck(subdeck.id)">
-                  <Icon name="material-symbols-light:delete" size="1.5em" />
-                </Button>
               </div>
             </template>
             <template #content>
@@ -701,6 +777,7 @@
               </div>
             </template>
           </Card>
+          </TransitionGroup>
 
           <Card class="mb-4">
             <template #title>
@@ -795,5 +872,32 @@
 
   .p-fileupload.p-fileupload-advanced .p-fileupload-content > div > span[data-pc-section='dndmessage'] {
     font-weight: bold;
+  }
+
+  .subdeck-card {
+    transition: all 0.3s ease;
+  }
+
+  .subdeck-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .subdeck-list-move {
+    transition: transform 0.5s ease;
+  }
+
+  .subdeck-list-enter-active,
+  .subdeck-list-leave-active {
+    transition: all 0.5s ease;
+  }
+
+  .subdeck-list-enter-from,
+  .subdeck-list-leave-to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+
+  .subdeck-list-leave-active {
+    position: absolute;
   }
 </style>

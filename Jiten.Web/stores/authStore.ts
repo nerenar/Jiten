@@ -107,9 +107,12 @@ export const useAuthStore = defineStore('auth', () => {
       console.error('Token refresh failed:', err);
       clearAuthData();
 
-      const router = useRouter();
-      if (router.currentRoute.value.path !== '/login') {
-        router.push('/login');
+      // Only redirect on client-side (router unavailable during SSR)
+      if (process.client) {
+        const router = useRouter();
+        if (router.currentRoute.value.path !== '/login') {
+          router.push('/login');
+        }
       }
 
       return false;
@@ -234,29 +237,20 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchCurrentUser() {
-    if (!(await ensureValidToken())) {
-      return;
-    }
+    // Caller is responsible for ensuring valid token via ensureValidToken()
 
     try {
       const data = await $api('/auth/me');
       user.value = data;
     } catch (err: any) {
       console.error('Failed to fetch current user:', err);
+
+      // If 401, clear auth data and let error handler/middleware handle redirect
+      // Don't attempt nested refresh or logout (prevents cascading errors during SSR)
       if (err.status === 401) {
-        // Try to refresh token once more
-        if (await refreshAccessToken()) {
-          // Retry fetching user after refresh
-          try {
-            const data = await $api('/auth/me');
-            user.value = data;
-            return;
-          } catch (retryErr) {
-            console.error('Failed to fetch user after token refresh:', retryErr);
-          }
-        }
-        await logout();
+        clearAuthData();
       }
+
       user.value = null;
     }
   }
@@ -275,8 +269,12 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       clearAuthData();
       isLoading.value = false;
-      const router = useRouter();
-      router.push('/login');
+
+      // Only redirect on client-side (router unavailable during SSR)
+      if (process.client) {
+        const router = useRouter();
+        router.push('/login');
+      }
     }
   }
 
@@ -332,5 +330,8 @@ export const useAuthStore = defineStore('auth', () => {
     initializeAuth,
     refreshAccessToken,
     ensureValidToken,
+
+    // utilities
+    isTokenExpired,
   };
 });
