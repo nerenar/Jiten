@@ -42,15 +42,52 @@ public class ReaderController(JitenDbContext context, ICurrentUserService curren
         List<ReaderWord> allWords = new();
         List<List<DeckWord>> parsedParagraphs = new();
 
-        foreach (var paragraph in request.Text)
+        const string stopToken = "\n|\n";
+        var combinedText = string.Join(stopToken, request.Text);
+        var allParsedWords = await Parser.Parser.ParseText(context, combinedText);
+
+        var paragraphOffsets = new int[request.Text.Length];
+        var currentOffset = 0;
+        for (var i = 0; i < request.Text.Length; i++)
         {
-            var parsedWords = await Parser.Parser.ParseText(context, paragraph);
-            parsedParagraphs.Add(parsedWords);
+            paragraphOffsets[i] = currentOffset;
+            currentOffset += request.Text[i].Length + stopToken.Length;
+        }
+
+        var wordIndex = 0;
+        var positionInCombined = 0;
+        for (var i = 0; i < request.Text.Length; i++)
+        {
+            var paragraphWords = new List<DeckWord>();
+            var paragraphEnd = paragraphOffsets[i] + request.Text[i].Length;
+
+            while (wordIndex < allParsedWords.Count)
+            {
+                var word = allParsedWords[wordIndex];
+                var wordPosition = combinedText.IndexOf(word.OriginalText, positionInCombined, StringComparison.Ordinal);
+
+                if (wordPosition >= paragraphEnd)
+                    break;
+
+                if (wordPosition >= paragraphOffsets[i] && wordPosition < paragraphEnd)
+                {
+                    paragraphWords.Add(word);
+                    positionInCombined = wordPosition + word.OriginalText.Length;
+                }
+
+                wordIndex++;
+            }
+
+            parsedParagraphs.Add(paragraphWords);
         }
 
         var wordIds = parsedParagraphs.SelectMany(p => p).Select(w => w.WordId).ToList();
         var jmdictWords = await context.JMDictWords.Where(w => wordIds.Contains(w.WordId)).Include(w => w.Definitions).ToListAsync();
-        
+        var frequencyData = await context.JmDictWordFrequencies
+            .AsNoTracking()
+            .Where(f => wordIds.Contains(f.WordId))
+            .ToDictionaryAsync(f => f.WordId, f => f);
+
 
         for (var i = 0; i < parsedParagraphs.Count; i++)
         {
@@ -79,7 +116,10 @@ public class ReaderController(JitenDbContext context, ICurrentUserService curren
                                          PartsOfSpeech = jmdictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
                                          MeaningsChunks = jmdictWord.Definitions.Where(d => d.EnglishMeanings.Count > 0).Select(d => d.EnglishMeanings).ToList(),
                                          MeaningsPartOfSpeech = jmdictWord.Definitions.SelectMany(d => d.PartsOfSpeech).ToList() ?? [""],
-                                         FrequencyRank = 0, KnownState = knownState,
+                                         FrequencyRank = frequencyData.TryGetValue(word.WordId, out var freq)
+                                             ? freq.ReadingsFrequencyRank[word.ReadingIndex]
+                                             : 0,
+                                         KnownState = knownState,
                                      };
                     allWords.Add(readerWord);
 
@@ -91,5 +131,22 @@ public class ReaderController(JitenDbContext context, ICurrentUserService curren
         }
 
         return Results.Ok(new { tokens = allTokens, vocabulary = allWords });
+    }
+
+    [HttpPost("lookup-vocabulary")]
+    [SwaggerOperation(Summary = "Lookup vocabulary known states",
+                      Description = "Returns the known state for each word/reading combination for the authenticated user.")]
+    public async Task<IResult> LookupVocabulary(LookupVocabularyRequest request)
+    {
+        var keys = request.Words.Select(w => (w[0], (byte)w[1])).ToList();
+        var knownStates = await currentUserService.GetKnownWordsState(keys);
+
+        var result = request.Words.Select(w =>
+            knownStates.TryGetValue((w[0], (byte)w[1]), out var state)
+                ? new[] { state.ToString().ToLower() }
+                : new[] { nameof(KnownState.Unknown).ToLower() }
+                                         ).ToList();
+
+        return Results.Ok(new { result = result });
     }
 }

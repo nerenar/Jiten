@@ -38,7 +38,7 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
         if (!IsAuthenticated)
             return new Dictionary<(int, byte), KnownState>();
 
-        var keysList = keys.ToList();
+        var keysList = keys.Distinct().ToList();
         if (!keysList.Any())
             return new Dictionary<(int, byte), KnownState>();
 
@@ -48,9 +48,17 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
                                           .Where(u => u.UserId == UserId && wordIds.Contains(u.WordId))
                                           .ToListAsync();
 
-        return candidates
-               .Where(w => keysList.Contains((w.WordId, w.ReadingIndex)))
-               .ToDictionary(w => (w.WordId, w.ReadingIndex), w => (w.Due - w.LastReview!.Value).TotalDays < 21 ? KnownState.Young : KnownState.Mature);
+        var candidateDict = candidates
+                            .Where(w => keysList.Contains((w.WordId, w.ReadingIndex)))
+                            .ToDictionary(w => (w.WordId, w.ReadingIndex),
+                                          w => w.State == FsrsState.Blacklisted
+                                                   ? KnownState.Blacklisted
+                                                   : w.LastReview == null || (w.Due - w.LastReview.Value).TotalDays < 21
+                                                       ? KnownState.Young
+                                                       : KnownState.Mature);
+
+        return keysList.ToDictionary(k => k,
+                                     k => candidateDict.GetValueOrDefault(k, KnownState.Unknown));
     }
 
     public async Task<KnownState> GetKnownWordState(int wordId, byte readingIndex)
@@ -63,6 +71,9 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
 
         if (word == null)
             return KnownState.Unknown;
+        
+        if (word.State == FsrsState.Blacklisted)
+            return KnownState.Blacklisted;
 
         var dueIn = (word.Due - word.LastReview!.Value).TotalDays;
         return dueIn < 21 ? KnownState.Young : KnownState.Mature;

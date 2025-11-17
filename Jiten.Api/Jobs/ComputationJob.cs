@@ -77,6 +77,11 @@ public class ComputationJob(
                                           ON kw."UserId" = {0}::uuid
                                           AND kw."WordId" = dw."WordId"
                                           AND kw."ReadingIndex" = dw."ReadingIndex"
+                                          AND (
+                                              kw."State" = 4
+                                              OR (kw."LastReview" IS NOT NULL
+                                                  AND (kw."Due" - kw."LastReview") >= INTERVAL '21 days')
+                                          )
                                       WHERE d."ParentDeckId" IS NULL
                                       GROUP BY d."DeckId", d."WordCount", d."UniqueWordCount";
 
@@ -178,6 +183,11 @@ public class ComputationJob(
                                           ON kw."UserId" = {0}::uuid
                                           AND kw."WordId" = dw."WordId"
                                           AND kw."ReadingIndex" = dw."ReadingIndex"
+                                          AND (
+                                              kw."State" = 4
+                                              OR (kw."LastReview" IS NOT NULL
+                                                  AND (kw."Due" - kw."LastReview") >= INTERVAL '21 days')
+                                          )
                                       WHERE d."DeckId" = {1}
                                       GROUP BY d."DeckId", d."WordCount", d."UniqueWordCount";
 

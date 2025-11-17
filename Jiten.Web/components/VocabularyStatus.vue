@@ -41,6 +41,10 @@
           <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
           <span aria-hidden="true">|</span>
         </template>
+        <template v-if="word.knownState == KnownState.Blacklisted">
+          <span class="text-gray-600 dark:text-gray-300">Blacklisted</span>
+          <span aria-hidden="true">|</span>
+        </template>
         <template v-else>
           <Button icon="pi pi-plus" size="small" text severity="success" @click="toggleWordKnown" />
           <span aria-hidden="true">|</span>

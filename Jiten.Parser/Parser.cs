@@ -115,7 +115,7 @@ namespace Jiten.Parser
 
             Deconjugator deconjugator = new Deconjugator();
 
-            const int BATCH_SIZE = 5000;
+            const int BATCH_SIZE = 1000;
             List<DeckWord> allProcessedWords = new List<DeckWord>();
 
             for (int i = 0; i < wordInfos.Count; i += BATCH_SIZE)
@@ -196,7 +196,7 @@ namespace Jiten.Parser
 
             timer.Restart();
 
-            const int BATCH_SIZE = 5000;
+            const int BATCH_SIZE = 1000;
             List<DeckWord> allProcessedWords = new List<DeckWord>();
 
             for (int i = 0; i < uniqueWords.Count; i += BATCH_SIZE)

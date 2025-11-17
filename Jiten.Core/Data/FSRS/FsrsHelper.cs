@@ -117,7 +117,9 @@ public static class FsrsHelper
         var factor = Math.Pow(0.9, 1.0 / decay) - 1;
         var elapsedDays = Math.Max(0, (currentDateTime.Value - card.LastReview.Value).TotalDays);
 
-        return Math.Pow(1 + factor * elapsedDays / card.Stability!.Value, decay);
+        var stability = card.Stability ?? 1.0d;
+        
+        return Math.Pow(1 + factor * elapsedDays / stability, decay);
     }
 
     /// <summary>

@@ -5,7 +5,7 @@ public enum KnownState
     Unknown = 0,
     Young = 1,
     Mature = 2,
-    Suspended = 3
+    Blacklisted = 3
 }
 
 public class UserKnownWord

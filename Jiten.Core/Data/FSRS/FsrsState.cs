@@ -18,5 +18,10 @@ public enum FsrsState
     /// <summary>
     /// Card was forgotten and needs to be relearned
     /// </summary>
-    Relearning = 3
+    Relearning = 3,
+    
+    /// <summary>
+    /// Card is blacklisted and will never be reviewed
+    /// </summary>
+    Blacklisted = 4,
 }

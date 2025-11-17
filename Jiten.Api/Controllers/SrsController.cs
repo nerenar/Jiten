@@ -26,9 +26,6 @@ public class SrsController(JitenDbContext context, UserDbContext userContext, IC
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IResult> Review(SrsReviewRequest request)
     {
-        if (!currentUserService.IsAuthenticated)
-            return Results.Unauthorized();
-
         var card = await userContext.FsrsCards.FirstOrDefaultAsync(c => c.UserId == currentUserService.UserId &&
                                                                         c.WordId == request.WordId &&
                                                                         c.ReadingIndex == request.ReadingIndex);
@@ -58,6 +55,85 @@ public class SrsController(JitenDbContext context, UserDbContext userContext, IC
         await userContext.FsrsReviewLogs.AddAsync(cardAndLog.ReviewLog);
         await userContext.SaveChangesAsync();
 
-        return Results.Ok();
+        return Results.Json(new { success = true });
+    }
+
+    [HttpPost("set-vocabulary-state")]
+    [SwaggerOperation(Summary = "Set vocabulary state",
+                      Description = "Set vocabulary state to neverForget or blacklist.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> SetVocabularyState(SetVocabularyStateRequest request)
+    {
+        var userId = currentUserService.UserId;
+        var card = await userContext.FsrsCards.FirstOrDefaultAsync(c =>
+                                                                       c.UserId == userId &&
+                                                                       c.WordId == request.WordId &&
+                                                                       c.ReadingIndex == request.ReadingIndex);
+
+        switch (request.State)
+        {
+            case "neverForget-add":
+                if (card == null)
+                {
+                    card = new FsrsCard(userId!, request.WordId, request.ReadingIndex,
+                                        due: DateTime.UtcNow.AddYears(100),
+                                        lastReview: DateTime.UtcNow,
+                                        state: FsrsState.Review);
+                    await userContext.FsrsCards.AddAsync(card);
+                }
+                else
+                {
+                    // Fallback remove, TODO get better logic
+                    if (card.Due > DateTime.UtcNow.AddYears(90))
+                    {
+                        userContext.FsrsCards.Remove(card);
+                        break;
+                    }
+
+                    card.Due = DateTime.UtcNow.AddYears(100);
+                    card.State = FsrsState.Review;
+                }
+
+                break;
+
+            case "neverForget-remove":
+                if (card != null)
+                    userContext.FsrsCards.Remove(card);
+                break;
+
+            case "blacklist-add":
+                if (card == null)
+                {
+                    card = new FsrsCard(userId!, request.WordId, request.ReadingIndex,
+                                        state: FsrsState.Blacklisted);
+                    await userContext.FsrsCards.AddAsync(card);
+                }
+                else
+                {
+                    // Fallback remove TODO get better logic
+                    if (card.State == FsrsState.Blacklisted)
+                    {
+                        card.State = FsrsState.Review;
+                        break;
+                    }
+                    
+                    card.State = FsrsState.Blacklisted;
+                }
+
+                break;
+
+            case "blacklist-remove":
+                if (card != null)
+                    card.State = FsrsState.Review;
+                break;
+
+            default:
+                return Results.BadRequest($"Invalid state: {request.State}");
+        }
+
+        await userContext.SaveChangesAsync();
+        return Results.Json(new { success = true });
     }
 }

@@ -116,23 +116,27 @@ public class FsrsScheduler
 
     private void UpdateCardParameters(FsrsCard card, FsrsRating rating, DateTime reviewDateTime, int? daysSinceLastReview)
     {
+        var stability = card.Stability ?? 1.0d;
+        var difficulty = card.Difficulty ?? 1.0d;
         if (card is { State: FsrsState.Learning, Stability: null, Difficulty: null })
         {
             card.Stability = FsrsHelper.CalculateInitialStability(rating, Parameters);
             card.Difficulty = FsrsHelper.CalculateInitialDifficulty(rating, Parameters);
         }
-        else if (daysSinceLastReview != null && daysSinceLastReview < 1)
+        else if (daysSinceLastReview is < 1)
         {
-            card.Stability = FsrsHelper.CalculateShortTermStability(card.Stability!.Value, rating, Parameters);
-            card.Difficulty = FsrsHelper.CalculateNextDifficulty(card.Difficulty!.Value, rating, Parameters);
+
+            
+            card.Stability = FsrsHelper.CalculateShortTermStability(stability, rating, Parameters);
+            card.Difficulty = FsrsHelper.CalculateNextDifficulty(difficulty, rating, Parameters);
         }
         else
         {
             var retrievability = GetCardRetrievability(card, reviewDateTime);
             card.Stability = FsrsHelper.CalculateNextStability(
-                                                               card.Difficulty!.Value, card.Stability!.Value, retrievability, rating,
+                                                               difficulty, stability, retrievability, rating,
                                                                Parameters);
-            card.Difficulty = FsrsHelper.CalculateNextDifficulty(card.Difficulty.Value, rating, Parameters);
+            card.Difficulty = FsrsHelper.CalculateNextDifficulty(difficulty, rating, Parameters);
         }
     }
 
@@ -143,17 +147,20 @@ public class FsrsScheduler
             FsrsState.Learning => CalculateLearningInterval(card, rating),
             FsrsState.Review => CalculateReviewInterval(card, rating),
             FsrsState.Relearning => CalculateRelearningInterval(card, rating),
+            FsrsState.Blacklisted => TimeSpan.MaxValue,
             _ => throw new ArgumentException($"Unknown card state: {card.State}")
         };
     }
 
     private TimeSpan CalculateLearningInterval(FsrsCard card, FsrsRating rating)
     {
+        var stability = card.Stability ?? 1.0d;
+        
         if (LearningSteps.Length == 0 || (card.Step >= LearningSteps.Length && rating != FsrsRating.Again))
         {
             card.State = FsrsState.Review;
             card.Step = null;
-            var days = FsrsHelper.CalculateNextInterval(card.Stability!.Value, DesiredRetention, Parameters, MaximumInterval);
+            var days = FsrsHelper.CalculateNextInterval(stability, DesiredRetention, Parameters, MaximumInterval);
             return TimeSpan.FromDays(days);
         }
 
@@ -169,11 +176,13 @@ public class FsrsScheduler
 
     private TimeSpan CalculateReviewInterval(FsrsCard card, FsrsRating rating)
     {
+        var stability = card.Stability ?? 1.0d;
+        
         if (rating == FsrsRating.Again)
         {
             if (RelearningSteps.Length == 0)
             {
-                var days = FsrsHelper.CalculateNextInterval(card.Stability!.Value, DesiredRetention, Parameters, MaximumInterval);
+                var days = FsrsHelper.CalculateNextInterval(stability, DesiredRetention, Parameters, MaximumInterval);
                 return TimeSpan.FromDays(days);
             }
 
@@ -182,17 +191,19 @@ public class FsrsScheduler
             return RelearningSteps[0];
         }
 
-        var intervalDays = FsrsHelper.CalculateNextInterval(card.Stability!.Value, DesiredRetention, Parameters, MaximumInterval);
+        var intervalDays = FsrsHelper.CalculateNextInterval(stability, DesiredRetention, Parameters, MaximumInterval);
         return TimeSpan.FromDays(intervalDays);
     }
 
     private TimeSpan CalculateRelearningInterval(FsrsCard card, FsrsRating rating)
     {
+        var stability = card.Stability ?? 1.0d;
+        
         if (RelearningSteps.Length == 0 || (card.Step >= RelearningSteps.Length && rating != FsrsRating.Again))
         {
             card.State = FsrsState.Review;
             card.Step = null;
-            var days = FsrsHelper.CalculateNextInterval(card.Stability!.Value, DesiredRetention, Parameters, MaximumInterval);
+            var days = FsrsHelper.CalculateNextInterval(stability, DesiredRetention, Parameters, MaximumInterval);
             return TimeSpan.FromDays(days);
         }
 
@@ -225,11 +236,13 @@ public class FsrsScheduler
 
     private TimeSpan HandleGoodRating(FsrsCard card, TimeSpan[] steps, FsrsState nextState)
     {
+        var stability = card.Stability ?? 1.0d;
+        
         if (card.Step + 1 == steps.Length)
         {
             card.State = nextState;
             card.Step = null;
-            var days = FsrsHelper.CalculateNextInterval(card.Stability!.Value, DesiredRetention, Parameters, MaximumInterval);
+            var days = FsrsHelper.CalculateNextInterval(stability, DesiredRetention, Parameters, MaximumInterval);
 
             return TimeSpan.FromDays(days);
         }
@@ -240,9 +253,11 @@ public class FsrsScheduler
 
     private TimeSpan HandleEasyRating(FsrsCard card)
     {
+        var stability = card.Stability ?? 1.0d;
+        
         card.State = FsrsState.Review;
         card.Step = null;
-        var days = FsrsHelper.CalculateNextInterval(card.Stability!.Value, DesiredRetention, Parameters, MaximumInterval);
+        var days = FsrsHelper.CalculateNextInterval(stability, DesiredRetention, Parameters, MaximumInterval);
         return TimeSpan.FromDays(days);
     }
 }
