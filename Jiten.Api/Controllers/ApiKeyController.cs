@@ -26,6 +26,7 @@ public class ApiKeyController(
         {
             var apiKey = await context.ApiKeys
                                       .Where(k => k.UserId == userId)
+                                      .OrderByDescending(k => k.Id)
                                       .Select(k => new
                                                    {
                                                        id = k.Id, createdAt = k.CreatedAt, lastUsedAt = k.LastUsedAt,
@@ -95,6 +96,7 @@ public class ApiKeyController(
     {
         if (!currentUserService.IsAuthenticated)
             return Unauthorized();
+
         var userId = currentUserService.UserId;
 
         try

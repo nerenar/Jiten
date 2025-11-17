@@ -15,17 +15,17 @@ public class FsrsReviewLog
     /// <summary>
     /// Rating given during the review
     /// </summary>
-    public FsrsRating Rating { get; }
+    public FsrsRating Rating { get; set; }
 
     /// <summary>
     /// When the review took place
     /// </summary>
-    public DateTime ReviewDateTime { get; }
+    public DateTime ReviewDateTime { get; set; }
 
     /// <summary>
     /// How long the review took in milliseconds (optional)
     /// </summary>
-    public int? ReviewDuration { get; }
+    public int? ReviewDuration { get; set; }
 
     public FsrsReviewLog()
     {
