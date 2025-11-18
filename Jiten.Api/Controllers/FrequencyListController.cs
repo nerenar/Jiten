@@ -8,9 +8,8 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/frequency-list")]
-public class FrequencyListController(JitenDbContext context) : ControllerBase
+public class FrequencyListController(JitenDbContext context, ILogger<FrequencyListController> logger) : ControllerBase
 {
-    
     /// <summary>
     /// DON'T TOUCH THIS
     /// IT'S BEING USED BY THE YOMITAN EXTENSION
@@ -39,6 +38,8 @@ public class FrequencyListController(JitenDbContext context) : ControllerBase
                 }
 
                 bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                logger.LogInformation("User downloaded frequency list: MediaType={MediaType}, DownloadType={DownloadType}, FileName={FileName}",
+                                      mediaType?.ToString() ?? "global", downloadType, fileName);
                 return Results.File(bytes, "application/zip", fileName);
 
             case "csv":
@@ -52,6 +53,8 @@ public class FrequencyListController(JitenDbContext context) : ControllerBase
                 }
 
                 bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                logger.LogInformation("User downloaded frequency list: MediaType={MediaType}, DownloadType={DownloadType}, FileName={FileName}",
+                                      mediaType?.ToString() ?? "global", downloadType, fileName);
                 return Results.File(bytes, "text/csv", fileName);
         }
     }
