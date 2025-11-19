@@ -133,7 +133,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // If no access token at all
     if (!accessToken.value) {
-      console.log('No access token available');
+      // console.log('No access token available');
       return false;
     }
 
@@ -143,7 +143,7 @@ export const useAuthStore = defineStore('auth', () => {
       return await refreshAccessToken();
     }
 
-    console.log('Access token is valid');
+    // console.log('Access token is valid');
     return true;
   }
 

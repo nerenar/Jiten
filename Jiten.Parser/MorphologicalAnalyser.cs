@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Jiten.Core.Data;
+using Jiten.Core.Utils;
 using Microsoft.Extensions.Configuration;
 using WanaKanaShaapu;
 
@@ -14,6 +15,7 @@ public class MorphologicalAnalyser
         ("で", "は", "ない", PartOfSpeech.Expression),
         ("それ", "で", "も", PartOfSpeech.Conjunction),
         ("なく", "なっ", "た", PartOfSpeech.Verb),
+        ("さ", "せ", "て", PartOfSpeech.Verb),
     ];
 
     private static HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
@@ -42,6 +44,8 @@ public class MorphologicalAnalyser
         ("ん", "です", PartOfSpeech.Expression),
         ("ん", "だ", PartOfSpeech.Expression),
         ("です", "か", PartOfSpeech.Expression),
+        ("し", "て", PartOfSpeech.Verb),
+        ("し", "ちゃ", PartOfSpeech.Verb),
     ];
 
     private static readonly List<string> HonorificsSuffixes = ["さん", "ちゃん", "くん"];
@@ -101,6 +105,7 @@ public class MorphologicalAnalyser
         wordInfos = CombineConjunctiveParticle(wordInfos);
         wordInfos = CombineParticles(wordInfos);
 
+        wordInfos = CombineHiraganaElongation(wordInfos);
         wordInfos = CombineFinal(wordInfos);
 
         wordInfos = FilterMisparse(wordInfos);
@@ -130,8 +135,16 @@ public class MorphologicalAnalyser
 
             if (word is { Text: "つ", PartOfSpeech: PartOfSpeech.Suffix })
                 word.PartOfSpeech = PartOfSpeech.Counter;
+            
+            if (word.Text is "だー" or "だあ")
+            {
+                word.Text = "だ";
+                word.DictionaryForm = "です";
+                word.PartOfSpeech = PartOfSpeech.Auxiliary;
+            }
 
-            if (word.Text is "そ" or "ー" or "る" or "ま" or "ふ" or "ち" or "ほ" or "す" or "じ" or "なさ" ||
+
+            if (word.Text is "そ" or "ー" or "る" or "ま" or "ふ" or "ち" or "ほ" or "す" or "じ" or "なさ" or "い" ||
                 word.PartOfSpeech == PartOfSpeech.Noun && (
                     (word.Text.Length == 1 && WanaKana.IsKana(word.Text)) ||
                     word.Text.Length == 2 && WanaKana.IsKana(word.Text[0].ToString()) && word.Text[1] == 'ー'
@@ -150,6 +163,7 @@ public class MorphologicalAnalyser
     {
         text = text.Replace("<", " ");
         text = text.Replace(">", " ");
+        text = text.ToFullWidthDigits();
         text = Regex.Replace(text,
                              "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500()。！？「」）]",
                              "");
@@ -189,7 +203,7 @@ public class MorphologicalAnalyser
         {
             WordInfo w1 = wordInfos[i];
 
-            if (w1 is { PartOfSpeech: PartOfSpeech.Conjunction, Text: "で" })
+            if (w1 is { PartOfSpeech: PartOfSpeech.Conjunction or PartOfSpeech.Auxiliary, Text: "で" })
             {
                 w1.PartOfSpeech = PartOfSpeech.Particle;
                 newList.Add(w1);
@@ -298,6 +312,29 @@ public class MorphologicalAnalyser
                 continue;
             }
 
+            // TODO: prune from dictionary
+            if (w1.NormalizedForm == "囁き合う")
+            {
+                int kiIndex = w1.Text.IndexOf('き');
+                if (kiIndex > 0)
+                {
+                    var sasayaki = new WordInfo
+                                   {
+                                       Text = w1.Text[..(kiIndex + 1)], DictionaryForm = "囁く", PartOfSpeech = PartOfSpeech.Verb,
+                                       Reading = "ささやき"
+                                   };
+                    var au = new WordInfo
+                             {
+                                 Text = w1.Text[(kiIndex + 1)..], DictionaryForm = "合う", PartOfSpeech = PartOfSpeech.Verb, Reading = "あう"
+                             };
+
+                    newList.Add(sasayaki);
+                    newList.Add(au);
+                    i++;
+                    continue;
+                }
+            }
+
             // Always process な as the particle and not the vegetable
             // Always process に as the particle and not the baggage
             if (w1.Text is "な" or "に")
@@ -309,7 +346,7 @@ public class MorphologicalAnalyser
 
             if (w1.Text is "十五")
                 w1.PartOfSpeech = PartOfSpeech.Numeral;
-
+            
             newList.Add(w1);
             i++;
         }
@@ -328,7 +365,7 @@ public class MorphologicalAnalyser
         for (int i = 1; i < wordInfos.Count; i++)
         {
             var nextWord = wordInfos[i];
-            if (currentWord.PartOfSpeech == PartOfSpeech.Prefix && currentWord.NormalizedForm != "御")
+            if (currentWord.PartOfSpeech == PartOfSpeech.Prefix && currentWord.NormalizedForm != "御" && currentWord.NormalizedForm != "大" && currentWord.NormalizedForm != "下" && currentWord.NormalizedForm != "約")
             {
                 var newText = currentWord.Text + nextWord.Text;
                 currentWord = new WordInfo(nextWord);
@@ -460,7 +497,7 @@ public class MorphologicalAnalyser
 
             // Condition uses accumulator (verb) and next word (possible dependant + specific forms)
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
-                currentWord.PartOfSpeech == PartOfSpeech.Verb &&
+                currentWord.PartOfSpeech == PartOfSpeech.Verb && !currentWord.Text.EndsWith("たり") &&
                 nextWord.DictionaryForm is "得る" or "する" or "しまう" or "おる" or "きる" or "こなす" or "いく" or "貰う" or "いる" or "ない")
             {
                 currentWord.Text += nextWord.Text;
@@ -495,7 +532,7 @@ public class MorphologicalAnalyser
                 {
                     WordInfo combinedWord = new WordInfo(currentWord);
                     combinedWord.Text += nextWord.Text;
-                    combinedWord.PartOfSpeech = PartOfSpeech.Verb;
+                    // combinedWord.PartOfSpeech = PartOfSpeech.Verb;
                     newList.Add(combinedWord);
                     i += 2;
                     continue;
@@ -640,7 +677,9 @@ public class MorphologicalAnalyser
                 && currentWord.DictionaryForm != "べし"
                 && currentWord.DictionaryForm != "ようだ"
                 && currentWord.DictionaryForm != "やがる"
+                && currentWord.DictionaryForm != "たり"
                 && currentWord.Text != "だろう"
+                && currentWord.Text != "で"
                )
             {
                 previousWord.Text += currentWord.Text;
@@ -755,6 +794,43 @@ public class MorphologicalAnalyser
             i++;
         }
 
+        return newList;
+    }
+    
+    private List<WordInfo> CombineHiraganaElongation(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2) return wordInfos;
+
+        var newList = new List<WordInfo>(wordInfos.Count);
+        var currentWord = new WordInfo(wordInfos[0]);
+
+        for (int i = 1; i < wordInfos.Count; i++)
+        {
+            var nextWord = wordInfos[i];
+
+            // CHECK: Does the current word end in 'ー'?
+            bool endsInBar = currentWord.Text.EndsWith("ー");
+
+            // CHECK: Are we dealing with Hiragana? (Ignore Katakana words like コーヒー)
+            // We strip the 'ー' to check if the 'root' is Hiragana.
+            bool isHiraganaBase = WanaKana.IsHiragana(currentWord.Text.Replace("ー", ""));
+            bool nextIsHiragana = WanaKana.IsHiragana(nextWord.Text.Replace("ー", ""));
+
+            // LOGIC: If current is [Hiragana]ー and next is [Hiragana], they are likely one spoken word.
+            // Example: どー (Do-) + いう (Iu) -> どーいう
+            // Example: だー (Da-) + かー (Ka-) -> だーかー
+            if (endsInBar && isHiraganaBase && nextIsHiragana)
+            {
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
+            }
+        }
+
+        newList.Add(currentWord);
         return newList;
     }
 

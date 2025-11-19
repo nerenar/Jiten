@@ -520,6 +520,22 @@
   },
   {
     "type": "stdrule",
+    "dec_end": ["する"],
+    "con_end": ["しよ"],
+    "dec_tag": ["vs-i"],
+    "con_tag": ["form-volition"],
+    "detail": "shortened volitional"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["する", "する"],
+    "con_end": ["したろ", "したろう"],
+    "dec_tag": ["vs-i", "vs-i"],
+    "con_tag": ["form-volition", "form-volition"],
+    "detail": "contracted -te yarou (kansaiben)"
+  },
+  {
+    "type": "stdrule",
     "dec_end": ["い"],
     "con_end": ["く"],
     "dec_tag": ["adj-i"],
@@ -701,6 +717,14 @@
     "dec_tag": ["stem-mizenkei"],
     "con_tag": ["adj-i"],
     "detail": "negative"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["ねえ"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["adj-i"],
+    "detail": "slang negative"
   },
   {
     "type": "stdrule",
@@ -1354,5 +1378,109 @@
     "dec_tag": ["uninflectable"],
     "con_tag": ["uninflectable"],
     "detail": "slang negative conditional"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [
+      "ない", "ない",
+      "たい", "たい",
+      "かい", "かい",
+      "がい", "がい",
+      "さい", "さい",
+      "まい", "まい",
+      "ばい", "ばい",
+      "らい", "らい",
+      "わい",
+      "ちゃい",
+      "ごい", "ごい",
+      "どい", "どい",
+      "むい", "むい", "むい", "むい",
+      "つい", "つい", "つい",
+      "すい", "すい",
+      "ずい", "ずい", "ずい", "ずい",
+      "れい", "れい"
+    ],
+    "con_end": [
+      "ねえ", "ねぇ",
+      "てえ", "てぇ",
+      "けえ", "けぇ",
+      "げえ", "げぇ",
+      "せえ", "せぇ",
+      "めえ", "めぇ",
+      "べえ", "べぇ",
+      "れえ", "れぇ",
+      "うぇえ",
+      "ちぇえ",
+      "げえ", "げぇ",
+      "でえ", "でぇ",
+      "めえ", "めぇ", "みい", "みぃ",
+      "ちぇえ", "ちい", "ちぃ",
+      "せえ", "せぇ",
+      "ぜえ", "ぜぇ", "っぜえ", "っぜぇ",
+      "れえ", "れぇ"
+    ],
+    "dec_tag": [
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i",
+      "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i", "adj-i", "adj-i",
+      "adj-i", "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i", "adj-i", "adj-i",
+      "adj-i", "adj-i"
+    ],
+    "con_tag": [
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i",
+      "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i", "adj-i", "adj-i",
+      "adj-i", "adj-i", "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i", "adj-i", "adj-i",
+      "adj-i", "adj-i"
+    ],
+    "detail": "slang (ee/ii)"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [
+      "いい",
+      "よい", "よい",
+      "わい", "わい"
+    ],
+    "con_end": [
+      "ええ",
+      "ええ", "いぇえ",
+      "ええ", "うぇえ"
+    ],
+    "dec_tag": [
+      "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i"
+    ],
+    "con_tag": [
+      "adj-i",
+      "adj-i", "adj-i",
+      "adj-i", "adj-i"
+    ],
+    "detail": "slang (irregular)"
   }
 ]

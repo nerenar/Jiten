@@ -421,10 +421,17 @@ namespace Jiten.Parser
                             var nounResult = await DeconjugateWord(wordData);
                             if (!nounResult.success || nounResult.word == null)
                             {
-                                // The word might be a verb or an adjective misparsed as a noun like らしく
-                                var oldPos = wordData.wordInfo.PartOfSpeech;
-                                wordData.wordInfo.PartOfSpeech = PartOfSpeech.Verb;
+                                // The word might be a conjugated noun + suru
                                 var verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
+
+                                var oldPos = wordData.wordInfo.PartOfSpeech;
+                                // The word might be a verb or an adjective misparsed as a noun like らしく
+                                if (!verbResult.success || verbResult.word == null)
+                                {
+                                    wordData.wordInfo.PartOfSpeech = PartOfSpeech.Verb;
+                                    verbResult = await DeconjugateVerbOrAdjective(wordData, deconjugator);
+                                }
+
                                 if (!verbResult.success || verbResult.word == null)
                                 {
                                     wordData.wordInfo.PartOfSpeech = PartOfSpeech.IAdjective;
@@ -524,16 +531,48 @@ namespace Jiten.Parser
             }
 
             _lookups.TryGetValue(text, out List<int>? candidates);
-            var textInHiragana = WanaKana.ToHiragana(wordData.wordInfo.Text, new DefaultOptions { ConvertLongVowelMark = false });
+            var textInHiragana = WanaKana.ToHiragana(wordData.wordInfo.Text, new DefaultOptions() { ConvertLongVowelMark = false, });
             _lookups.TryGetValue(textInHiragana, out var candidatesHiragana);
+
+            candidates ??= new List<int>();
+
+            var textNormalized = KanaNormalizer.Normalize(textInHiragana);
+            if (textNormalized != textInHiragana)
+            {
+                _lookups.TryGetValue(textNormalized, out List<int>? candidatesNormalized);
+                if (candidatesNormalized is { Count: not 0 })
+                    candidates.AddRange(candidatesNormalized);
+            }
+
 
             // Add candidatesInHiragana to candidates, deduplicate 
             if (candidatesHiragana is { Count: not 0 })
             {
-                candidates ??= new List<int>();
                 var newCandidates = new List<int>(candidates);
                 newCandidates.AddRange(candidatesHiragana);
                 candidates = newCandidates.Distinct().ToList();
+            }
+
+            if (text.Contains('ー'))
+            {
+                var textStripped = text.Replace("ー", "");
+    
+                // HEURISTIC:
+                // If the word ends with 'ー' and the stripped version is very short (<= 2 chars),
+                // it is almost certainly a slang adjective (e.g., すげー -> すげ, やべー -> やべ).
+                // We should SKIP the stripped lookup here to avoid matching random nouns like "Sedge" (すげ).
+                //
+                // However, allow it if the 'ー' was in the middle (e.g., だーかーら -> だから).
+                bool endsInBar = text.EndsWith("ー");
+                bool isShort = textStripped.Length <= 2;
+
+                if (!endsInBar || !isShort)
+                {
+                    var textStrippedHira = WanaKana.ToHiragana(textStripped);
+                    _lookups.TryGetValue(textStrippedHira, out List<int>? stripIds);
+                    if (stripIds != null) candidates ??= new List<int>();
+                    if (stripIds != null) candidates.AddRange(stripIds);
+                }
             }
 
             if (candidates is { Count: not 0 })
@@ -626,7 +665,9 @@ namespace Jiten.Parser
         private static async Task<(bool success, DeckWord? word)> DeconjugateVerbOrAdjective(
             (WordInfo wordInfo, int occurrences) wordData, Deconjugator deconjugator)
         {
-            var deconjugated = deconjugator.Deconjugate(WanaKana.ToHiragana(wordData.wordInfo.Text))
+            var normalizedText = KanaNormalizer.Normalize(WanaKana.ToHiragana(wordData.wordInfo.Text));
+
+            var deconjugated = deconjugator.Deconjugate(normalizedText)
                                            .OrderByDescending(d => d.Text.Length).ToList();
 
             List<(DeconjugationForm form, List<int> ids)> candidates = new();

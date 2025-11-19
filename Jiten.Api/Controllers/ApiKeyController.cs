@@ -18,9 +18,7 @@ public class ApiKeyController(
     [Authorize]
     public async Task<IActionResult> GetApiKeyInfo()
     {
-        if (!currentUserService.IsAuthenticated)
-            return Unauthorized();
-        var userId = currentUserService.UserId;
+        var userId = currentUserService.UserId!;
 
         try
         {
@@ -48,9 +46,7 @@ public class ApiKeyController(
     [Authorize]
     public async Task<IActionResult> CreateApiKey()
     {
-        if (!currentUserService.IsAuthenticated)
-            return Unauthorized();
-        var userId = currentUserService.UserId;
+        var userId = currentUserService.UserId!;
 
         try
         {
@@ -94,10 +90,7 @@ public class ApiKeyController(
     [Authorize]
     public async Task<IActionResult> RevokeApiKey(int keyId)
     {
-        if (!currentUserService.IsAuthenticated)
-            return Unauthorized();
-
-        var userId = currentUserService.UserId;
+        var userId = currentUserService.UserId!;
 
         try
         {
@@ -111,7 +104,9 @@ public class ApiKeyController(
 
             if (apiKey.IsRevoked)
             {
-                return BadRequest(new { error = "API key is already revoked" });
+                // Idempotent: revoking an already-revoked key is a no-op
+                logger.LogInformation("API key {KeyId} already revoked for user {UserId}", keyId, userId);
+                return Ok(new { message = "API key revoked successfully" });
             }
 
             apiKey.IsRevoked = true;

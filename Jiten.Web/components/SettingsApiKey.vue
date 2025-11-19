@@ -53,7 +53,12 @@
 
     try {
       isLoading.value = true;
-      await $api(`api-key/${apiKeyInfo.value.id}/revoke`, { method: 'POST' });
+
+      // Only revoke if not already revoked
+      if (!apiKeyInfo.value.isRevoked) {
+        await $api(`api-key/${apiKeyInfo.value.id}/revoke`, { method: 'POST' });
+      }
+
       const result = await $api<CreateApiKeyResponse>('api-key/create', { method: 'POST' });
       newlyCreatedKey.value = result.apiKey;
       await fetchApiKeyInfo();
@@ -188,7 +193,7 @@
               {{ apiKeyInfo.lastUsedAt ? formatDate(apiKeyInfo.lastUsedAt) : 'Never' }}
             </p>
           </div>
-          <Button icon="pi pi-refresh" label="Regenerate API Key" severity="warn" :loading="isLoading" @click="confirmRegenerate" />
+          <Button icon="pi pi-refresh" label="Regenerate API Key" severity="warn" :loading="isLoading" :disabled="isLoading || apiKeyInfo.isRevoked" @click="confirmRegenerate" />
         </div>
       </template>
     </Card>
