@@ -366,11 +366,14 @@ builder.Services.AddRateLimiter(options =>
     options.OnRejected = async (context, token) =>
     {
         var origin = context.HttpContext.Request.Headers.Origin.FirstOrDefault();
-        var allowedOrigins = new[] { "https://localhost:3000", "https://jiten.moe" };
-
-        if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
+        if (!string.IsNullOrEmpty(origin))
         {
-            context.HttpContext.Response.Headers.Append("Access-Control-Allow-Origin", origin);
+            if (origin.StartsWith("http://localhost:") ||
+                origin.StartsWith("https://localhost:") ||
+                origin == "https://jiten.moe")
+            {
+                context.HttpContext.Response.Headers.Append("Access-Control-Allow-Origin", origin);
+            }
         }
 
         if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
@@ -390,15 +393,27 @@ builder.Services.AddMemoryCache();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: "AllowSpecificOrigin",
-                      policy =>
-                      {
-                          policy.WithOrigins("https://localhost:3000",
-                                             "https://jiten.moe")
-                                .AllowAnyHeader()
-                                .AllowAnyMethod();
-                      });
+    options.AddPolicy("AllowSpecificOrigin", policy =>
+    {
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                if (origin is null)
+                    return false;
+
+                if (origin.StartsWith("http://localhost:") ||
+                    origin.StartsWith("https://localhost:"))
+                {
+                    return true;
+                }
+
+                return origin == "https://jiten.moe";
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
 });
+
 
 // Hangfire jobs
 builder.Services.AddScoped<ParseJob>();
