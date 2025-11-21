@@ -32,9 +32,10 @@ public static class ExampleSentenceExtractor
                     distinctChars.Add(c);
                     if (distinctChars.Count >= 6) break;
                 }
+
                 if (distinctChars.Count >= 6) break;
             }
-            
+
             if (distinctChars.Count >= 6)
             {
                 validSentences.Add(sentence);
@@ -52,31 +53,33 @@ public static class ExampleSentenceExtractor
         }
 
         // Group words by text for O(1) lookup instead of linear search
-        var wordsByText = new Dictionary<string, Queue<DeckWord>>();
+        var wordsByText = new Dictionary<string, List<DeckWord>>();
         foreach (var word in words)
         {
             if (!wordsByText.ContainsKey(word.OriginalText))
             {
-                wordsByText[word.OriginalText] = new Queue<DeckWord>();
+                wordsByText[word.OriginalText] = new List<DeckWord>();
             }
-            wordsByText[word.OriginalText].Enqueue(new DeckWord 
-            { 
-                WordId = word.WordId, 
-                ReadingIndex = word.ReadingIndex, 
-                OriginalText = word.OriginalText, 
-                PartsOfSpeech = word.PartsOfSpeech 
-            });
+
+            wordsByText[word.OriginalText].Add(new DeckWord
+                                               {
+                                                   WordId = word.WordId, ReadingIndex = word.ReadingIndex,
+                                                   OriginalText = word.OriginalText, PartsOfSpeech = word.PartsOfSpeech
+                                               });
         }
 
         var exampleSentences = new List<ExampleSentence>();
         var usedSentences = new HashSet<SentenceInfo>();
 
         var passes = new[]
-        {
-            new { MinLength = FIRST_PASS_MIN_LENGTH, MaxLength = FIRST_PASS_MAX_LENGTH, Percentage = FIRST_PASS_PERCENTAGE },
-            new { MinLength = SECOND_PASS_MIN_LENGTH, MaxLength = SECOND_PASS_MAX_LENGTH, Percentage = SECOND_PASS_PERCENTAGE },
-            new { MinLength = THIRD_PASS_MIN_LENGTH, MaxLength = THIRD_PASS_MAX_LENGTH, Percentage = THIRD_PASS_PERCENTAGE }
-        };
+                     {
+                         new { MinLength = FIRST_PASS_MIN_LENGTH, MaxLength = FIRST_PASS_MAX_LENGTH, Percentage = FIRST_PASS_PERCENTAGE },
+                         new
+                         {
+                             MinLength = SECOND_PASS_MIN_LENGTH, MaxLength = SECOND_PASS_MAX_LENGTH, Percentage = SECOND_PASS_PERCENTAGE
+                         },
+                         new { MinLength = THIRD_PASS_MIN_LENGTH, MaxLength = THIRD_PASS_MAX_LENGTH, Percentage = THIRD_PASS_PERCENTAGE }
+                     };
 
         foreach (var pass in passes)
         {
@@ -104,32 +107,45 @@ public static class ExampleSentenceExtractor
             {
                 var sentence = candidateSentences[i];
                 var exampleSentence = new ExampleSentence
-                {
-                    Text = sentence.Text,
-                    Position = sentencePositions[sentence],
-                    Words = new List<ExampleSentenceWord>()
-                };
+                                      {
+                                          Text = sentence.Text, Position = sentencePositions[sentence],
+                                          Words = new List<ExampleSentenceWord>()
+                                      };
 
                 bool foundAnyWord = false;
 
                 foreach (var (wordInfo, position, length) in sentence.Words)
                 {
-                    if (wordsByText.TryGetValue(wordInfo.Text, out var wordQueue) && wordQueue.Count > 0)
+                    if (!wordsByText.TryGetValue(wordInfo.Text, out var wordList) || wordList.Count <= 0) continue;
+
+                    // Find first word with matching POS
+                    int matchIndex = -1;
+                    for (int j = 0; j < wordList.Count; j++)
                     {
-                        var foundWord = wordQueue.Dequeue();
-                        
-                        exampleSentence.Words.Add(new ExampleSentenceWord
+                        if (wordList[j].PartsOfSpeech.Any(pos => pos == wordInfo.PartOfSpeech))
                         {
-                            WordId = foundWord.WordId,
-                            ReadingIndex = foundWord.ReadingIndex,
-                            Position = position,
-                            Length = length
-                        });
+                            matchIndex = j;
+                            break;
+                        }
+                    }
+
+                    // If we found a match, add it and remove from the list
+                    if (matchIndex >= 0)
+                    {
+                        var foundWord = wordList[matchIndex];
+                        exampleSentence.Words.Add(new ExampleSentenceWord
+                                                  {
+                                                      WordId = foundWord.WordId, ReadingIndex = foundWord.ReadingIndex, Position = position,
+                                                      Length = length
+                                                  });
 
                         foundAnyWord = true;
 
-                        // Remove empty queues to avoid future lookups
-                        if (wordQueue.Count == 0)
+                        // Remove the matched word from the list
+                        wordList.RemoveAt(matchIndex);
+
+                        // Remove empty lists to avoid future lookups
+                        if (wordList.Count == 0)
                         {
                             wordsByText.Remove(wordInfo.Text);
                         }
