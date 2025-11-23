@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -24,6 +25,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Jiten.Api.Middleware;
+using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,23 +38,24 @@ builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals;
+    options.JsonSerializerOptions.NumberHandling =
+        JsonNumberHandling.AllowNamedFloatingPointLiterals;
 });
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1",
-                       new Microsoft.OpenApi.Models.OpenApiInfo
-                       {
-                           Title = "Jiten API", Version = "v1",
-                           Description = "OpenAPI documentation for Jiten. Use the Authorize button to provide a Bearer token.",
-                           Contact = new Microsoft.OpenApi.Models.OpenApiContact { Name = "Jiten", Url = new Uri("https://jiten.moe") },
-                           License = new Microsoft.OpenApi.Models.OpenApiLicense
-                                     {
-                                         Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
-                                     }
-                       });
+                 new Microsoft.OpenApi.Models.OpenApiInfo
+                 {
+                     Title = "Jiten API", Version = "v1",
+                     Description = "OpenAPI documentation for Jiten. Use the Authorize button to provide a Bearer token.",
+                     Contact = new Microsoft.OpenApi.Models.OpenApiContact { Name = "Jiten", Url = new Uri("https://jiten.moe") },
+                     License = new Microsoft.OpenApi.Models.OpenApiLicense
+                               {
+                                   Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
+                               }
+                 });
 
     c.UseInlineDefinitionsForEnums();
     c.EnableAnnotations();
@@ -84,24 +87,20 @@ builder.Services.AddSwaggerGen(c =>
 
     // API Key auth definition (X-Api-Key header)
     var apiKeyScheme = new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-    {
-        Description = "API Key needed to access the endpoints. Use the 'X-Api-Key' header or 'Authorization: ApiKey <key>'.",
-        Name = "X-Api-Key",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Reference = new Microsoft.OpenApi.Models.OpenApiReference
-        {
-            Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-            Id = "ApiKey"
-        }
-    };
+                       {
+                           Description =
+                               "API Key needed to access the endpoints. Use the 'X-Api-Key' header or 'Authorization: ApiKey <key>'.",
+                           Name = "X-Api-Key", In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                           Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+                           Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                                       {
+                                           Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "ApiKey"
+                                       }
+                       };
     c.AddSecurityDefinition("ApiKey", apiKeyScheme);
 
     // Allow either Bearer OR ApiKey for endpoints
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-    {
-        { apiKeyScheme, new List<string>() }
-    });
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement { { apiKeyScheme, new List<string>() } });
 });
 
 builder.Services.AddHttpClient();
@@ -117,94 +116,92 @@ if (enableOtlpExporter)
     var enableConsoleExporter = otelConfig.GetValue<bool>("EnableConsoleExporter");
 
     var resourceBuilder = ResourceBuilder.CreateDefault()
-        .AddService(serviceName: serviceName, serviceVersion: serviceVersion)
-        .AddAttributes(new Dictionary<string, object>
-        {
-            ["deployment.environment"] = builder.Environment.EnvironmentName,
-            ["host.name"] = Environment.MachineName
-        });
+                                         .AddService(serviceName: serviceName, serviceVersion: serviceVersion)
+                                         .AddAttributes(new Dictionary<string, object>
+                                                        {
+                                                            ["deployment.environment"] = builder.Environment.EnvironmentName,
+                                                            ["host.name"] = Environment.MachineName
+                                                        });
 
     // Configure OpenTelemetry Tracing
     builder.Services.AddOpenTelemetry()
-        .WithTracing(tracerProviderBuilder =>
-        {
-            tracerProviderBuilder
-                .SetResourceBuilder(resourceBuilder)
-                .AddAspNetCoreInstrumentation(options =>
-                {
-                    options.RecordException = true;
-                    options.Filter = httpContext =>
-                    {
-                        // Exclude health checks and static files from tracing
-                        var path = httpContext.Request.Path.Value ?? "";
-                        return !path.Contains("/health") && !path.Contains("/static") && !path.StartsWith("/swagger");
-                    };
-                })
-                .AddHttpClientInstrumentation(options =>
-                {
-                    options.RecordException = true;
-                })
-                .AddEntityFrameworkCoreInstrumentation(options =>
-                {
-                    options.SetDbStatementForText = true;
-                });
+           .WithTracing(tracerProviderBuilder =>
+           {
+               tracerProviderBuilder
+                   .SetResourceBuilder(resourceBuilder)
+                   .AddAspNetCoreInstrumentation(options =>
+                   {
+                       options.RecordException = true;
+                       options.Filter = httpContext =>
+                       {
+                           // Exclude health checks and static files from tracing
+                           var path = httpContext.Request.Path.Value ?? "";
+                           return !path.Contains("/health") && !path.Contains("/static") && !path.StartsWith("/swagger");
+                       };
+                   })
+                   .AddHttpClientInstrumentation(options => { options.RecordException = true; })
+                   .AddEntityFrameworkCoreInstrumentation(options => { options.SetDbStatementForText = true; });
 
-            if (enableConsoleExporter)
-            {
-                tracerProviderBuilder.AddConsoleExporter();
-            }
+               if (enableConsoleExporter)
+               {
+                   tracerProviderBuilder.AddConsoleExporter();
+               }
 
-            var otlpEndpoint = otelConfig["Otlp:Endpoint"];
-            var otlpHeaders = otelConfig["Otlp:Headers"];
-            var otlpProtocol = otelConfig["Otlp:Protocol"];
+               var otlpEndpoint = otelConfig["Otlp:Endpoint"];
+               var otlpHeaders = otelConfig["Otlp:Headers"];
+               var otlpProtocol = otelConfig["Otlp:Protocol"];
 
-            tracerProviderBuilder.AddOtlpExporter(options =>
-            {
-                if (!string.IsNullOrEmpty(otlpEndpoint))
-                {
-                    options.Endpoint = new Uri(otlpEndpoint);
-                }
-                if (!string.IsNullOrEmpty(otlpHeaders))
-                {
-                    options.Headers = otlpHeaders;
-                }
-                options.Protocol = otlpProtocol?.ToLower() == "http"
-                    ? OtlpExportProtocol.HttpProtobuf
-                    : OtlpExportProtocol.Grpc;
-            });
-        })
-        .WithMetrics(meterProviderBuilder =>
-        {
-            meterProviderBuilder
-                .SetResourceBuilder(resourceBuilder)
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation();
+               tracerProviderBuilder.AddOtlpExporter(options =>
+               {
+                   if (!string.IsNullOrEmpty(otlpEndpoint))
+                   {
+                       options.Endpoint = new Uri(otlpEndpoint);
+                   }
 
-            if (enableConsoleExporter)
-            {
-                meterProviderBuilder.AddConsoleExporter();
-            }
+                   if (!string.IsNullOrEmpty(otlpHeaders))
+                   {
+                       options.Headers = otlpHeaders;
+                   }
 
-            var otlpEndpoint = otelConfig["Otlp:Endpoint"];
-            var otlpHeaders = otelConfig["Otlp:Headers"];
-            var otlpProtocol = otelConfig["Otlp:Protocol"];
+                   options.Protocol = otlpProtocol?.ToLower() == "http"
+                       ? OtlpExportProtocol.HttpProtobuf
+                       : OtlpExportProtocol.Grpc;
+               });
+           })
+           .WithMetrics(meterProviderBuilder =>
+           {
+               meterProviderBuilder
+                   .SetResourceBuilder(resourceBuilder)
+                   .AddAspNetCoreInstrumentation()
+                   .AddHttpClientInstrumentation()
+                   .AddRuntimeInstrumentation();
 
-            meterProviderBuilder.AddOtlpExporter(options =>
-            {
-                if (!string.IsNullOrEmpty(otlpEndpoint))
-                {
-                    options.Endpoint = new Uri(otlpEndpoint);
-                }
-                if (!string.IsNullOrEmpty(otlpHeaders))
-                {
-                    options.Headers = otlpHeaders;
-                }
-                options.Protocol = otlpProtocol?.ToLower() == "http"
-                    ? OtlpExportProtocol.HttpProtobuf
-                    : OtlpExportProtocol.Grpc;
-            });
-        });
+               if (enableConsoleExporter)
+               {
+                   meterProviderBuilder.AddConsoleExporter();
+               }
+
+               var otlpEndpoint = otelConfig["Otlp:Endpoint"];
+               var otlpHeaders = otelConfig["Otlp:Headers"];
+               var otlpProtocol = otelConfig["Otlp:Protocol"];
+
+               meterProviderBuilder.AddOtlpExporter(options =>
+               {
+                   if (!string.IsNullOrEmpty(otlpEndpoint))
+                   {
+                       options.Endpoint = new Uri(otlpEndpoint);
+                   }
+
+                   if (!string.IsNullOrEmpty(otlpHeaders))
+                   {
+                       options.Headers = otlpHeaders;
+                   }
+
+                   options.Protocol = otlpProtocol?.ToLower() == "http"
+                       ? OtlpExportProtocol.HttpProtobuf
+                       : OtlpExportProtocol.Grpc;
+               });
+           });
 
     // Configure OpenTelemetry Logging
     builder.Logging.ClearProviders();
@@ -230,10 +227,12 @@ if (enableOtlpExporter)
             {
                 exporterOptions.Endpoint = new Uri(otlpEndpoint);
             }
+
             if (!string.IsNullOrEmpty(otlpHeaders))
             {
                 exporterOptions.Headers = otlpHeaders;
             }
+
             exporterOptions.Protocol = otlpProtocol?.ToLower() == "http"
                 ? OtlpExportProtocol.HttpProtobuf
                 : OtlpExportProtocol.Grpc;
@@ -241,7 +240,8 @@ if (enableOtlpExporter)
     });
 }
 
-builder.Services.AddDbContextFactory<JitenDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("JitenDatabase"),
+builder.Services.AddDbContextFactory<JitenDbContext>(options =>
+                                                         options.UseNpgsql(builder.Configuration.GetConnectionString("JitenDatabase"),
                                                                            o =>
                                                                            {
                                                                                o.UseQuerySplittingBehavior(QuerySplittingBehavior
@@ -251,11 +251,11 @@ builder.Services.AddDbContextFactory<JitenDbContext>(options => options.UseNpgsq
 // Authentication
 
 builder.Services.AddDbContextFactory<UserDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("JitenDatabase"),
-                                                                          o =>
-                                                                          {
-                                                                              o.UseQuerySplittingBehavior(QuerySplittingBehavior
-                                                                                  .SplitQuery);
-                                                                          }));
+                                                                                 o =>
+                                                                                 {
+                                                                                     o.UseQuerySplittingBehavior(QuerySplittingBehavior
+                                                                                         .SplitQuery);
+                                                                                 }));
 
 builder.Services.AddIdentity<User, IdentityRole>(options =>
        {
@@ -318,10 +318,7 @@ builder.Services.AddAuthentication(options =>
                                                    IssuerSigningKey = new SymmetricSecurityKey(key), ClockSkew = TimeSpan.Zero
                                                };
        })
-       .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>("ApiKey", options =>
-       {
-           options.HeaderName = "X-Api-Key";
-       });
+       .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>("ApiKey", options => { options.HeaderName = "X-Api-Key"; });
 
 builder.Services.AddAuthorization(options =>
 {
@@ -511,14 +508,8 @@ using (var scope = app.Services.CreateScope())
 app.UseForwardedHeaders(new ForwardedHeadersOptions
                         {
                             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-                            KnownNetworks =
-                            {
-                                new IPNetwork(System.Net.IPAddress.Parse("172.16.0.0"), 12),
-                                new IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8)
-                            },
-                            KnownProxies = { },
-                            RequireHeaderSymmetry = false,
-                            ForwardLimit = 2
+                            KnownNetworks = { new IPNetwork(IPAddress.Parse("10.0.4.0"), 24) },
+                            KnownProxies = { IPAddress.Parse("10.0.4.2") }, RequireHeaderSymmetry = false, ForwardLimit = 1
                         });
 
 // Configure the HTTP request pipeline.
@@ -568,6 +559,7 @@ if (enableOtlpExporter)
 {
     app.UseRequestLogging();
 }
+
 app.UseAuthorization();
 app.MapControllers();
 app.MapHangfireDashboard();
