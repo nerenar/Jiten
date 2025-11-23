@@ -1,10 +1,33 @@
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
 
+  const proxyHeaders = import.meta.server
+    ? useRequestHeaders(['x-forwarded-for', 'cf-connecting-ip', 'user-agent'])
+    : {};
+
   const api = $fetch.create({
     baseURL: config.public.baseURL,
     async onRequest({ request, options }) {
       const authStore = useAuthStore();
+
+      options.headers = new Headers(options.headers);
+
+      if (import.meta.server) {
+        // Pass the Client IP chain
+        if (proxyHeaders['x-forwarded-for']) {
+          options.headers.set('X-Forwarded-For', proxyHeaders['x-forwarded-for']);
+        }
+
+        // Pass Cloudflare specific IP if it exists
+        if (proxyHeaders['cf-connecting-ip']) {
+          options.headers.set('CF-Connecting-IP', proxyHeaders['cf-connecting-ip']);
+        }
+
+        // Pass User-Agent (otherwise API sees "node-fetch" or similar)
+        if (proxyHeaders['user-agent']) {
+          options.headers.set('User-Agent', proxyHeaders['user-agent']);
+        }
+      }
 
       // Extract URL to check if this is an auth endpoint
       const url = request.toString();

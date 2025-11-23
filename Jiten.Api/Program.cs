@@ -508,7 +508,7 @@ using (var scope = app.Services.CreateScope())
 app.UseForwardedHeaders(new ForwardedHeadersOptions
                         {
                             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-                            KnownNetworks = { new IPNetwork(IPAddress.Parse("10.0.4.0"), 24) },
+                            KnownNetworks = { new IPNetwork(IPAddress.Parse("10.0.0.0"), 8) },
                             KnownProxies = { IPAddress.Parse("10.0.4.2") }, RequireHeaderSymmetry = false, ForwardLimit = 1
                         });
 
