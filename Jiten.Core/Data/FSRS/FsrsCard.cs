@@ -44,6 +44,11 @@ public class FsrsCard
     /// </summary>
     public DateTime? LastReview { get; set; }
 
+    /// <summary>
+    /// Review history for this card
+    /// </summary>
+    public ICollection<FsrsReviewLog> ReviewLogs { get; set; } = new List<FsrsReviewLog>();
+
     public FsrsCard()
     {
     }

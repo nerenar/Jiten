@@ -13,6 +13,11 @@ public class FsrsReviewLog
     public long CardId { get; set; }
 
     /// <summary>
+    /// Navigation property to the reviewed card
+    /// </summary>
+    public FsrsCard Card { get; set; } = null!;
+
+    /// <summary>
     /// Rating given during the review
     /// </summary>
     public FsrsRating Rating { get; set; }

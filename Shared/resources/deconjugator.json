@@ -735,6 +735,22 @@
     "detail": "slurred negative"
   },
   {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["へん"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["uninflectable"],
+    "detail": "negative (kansaiben)"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["へんかった"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["uninflectable"],
+    "detail": "negative past (kansaiben)"
+  },
+  {
     "type": "onlyfinalrule",
     "dec_end": [""],
     "con_end": ["ず"],
@@ -1065,6 +1081,14 @@
   {
     "type": "stdrule",
     "dec_end": [""],
+    "con_end": ["なさい"],
+    "dec_tag": ["stem-ren"],
+    "con_tag": ["uninflectable"],
+    "detail": "polite command"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
     "con_end": ["あげる"],
     "dec_tag": ["stem-te"],
     "con_tag": ["v5r"],
@@ -1182,6 +1206,30 @@
     "dec_tag": ["stem-ren"],
     "con_tag": ["uninflectable"],
     "detail": "kind request"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["る"],
+    "con_end": ["まい"],
+    "dec_tag": ["v1"],
+    "con_tag": ["uninflectable"],
+    "detail": "mai"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["する"],
+    "con_end": ["しまい"],
+    "dec_tag": ["vs-i"],
+    "con_tag": ["uninflectable"],
+    "detail": "mai"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["する"],
+    "con_end": ["すまい"],
+    "dec_tag": ["vs-i"],
+    "con_tag": ["uninflectable"],
+    "detail": "mai"
   },
   {
     "type": "onlyfinalrule",
@@ -1482,5 +1530,13 @@
       "adj-i", "adj-i"
     ],
     "detail": "slang (irregular)"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["い"],
+    "con_end": ["かろう"],
+    "dec_tag": ["adj-i"],
+    "con_tag": ["form-volition"],
+    "detail": "presumptive"
   }
 ]

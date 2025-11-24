@@ -177,8 +177,8 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<FsrsReviewLog>(entity =>
         {
             entity.HasKey(l => l.ReviewLogId);
-            entity.HasOne<FsrsCard>()
-                  .WithMany()
+            entity.HasOne(r => r.Card)
+                  .WithMany(c => c.ReviewLogs)
                   .HasForeignKey(r => r.CardId)
                   .OnDelete(DeleteBehavior.Cascade);
 

@@ -15,7 +15,11 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [Route("api/reader")]
 [Authorize]
-public class ReaderController(JitenDbContext context, IDbContextFactory<JitenDbContext> contextFactory, ICurrentUserService currentUserService, ILogger<ReaderController> logger) : ControllerBase
+public class ReaderController(
+    JitenDbContext context,
+    IDbContextFactory<JitenDbContext> contextFactory,
+    ICurrentUserService currentUserService,
+    ILogger<ReaderController> logger) : ControllerBase
 {
     [HttpPost("ping")]
     public IResult Ping()
@@ -84,9 +88,9 @@ public class ReaderController(JitenDbContext context, IDbContextFactory<JitenDbC
         var wordIds = parsedParagraphs.SelectMany(p => p).Select(w => w.WordId).ToList();
         var jmdictWords = await context.JMDictWords.Where(w => wordIds.Contains(w.WordId)).Include(w => w.Definitions).ToListAsync();
         var frequencyData = await context.JmDictWordFrequencies
-            .AsNoTracking()
-            .Where(f => wordIds.Contains(f.WordId))
-            .ToDictionaryAsync(f => f.WordId, f => f);
+                                         .AsNoTracking()
+                                         .Where(f => wordIds.Contains(f.WordId))
+                                         .ToDictionaryAsync(f => f.WordId, f => f);
 
 
         for (var i = 0; i < parsedParagraphs.Count; i++)
@@ -95,8 +99,8 @@ public class ReaderController(JitenDbContext context, IDbContextFactory<JitenDbC
             List<ReaderToken> tokens = new();
             int currentPosition = 0;
 
-            var knownStates = await currentUserService.GetKnownWordsState(parsedWords.Select(dw => (dw.WordId, dw.ReadingIndex)).ToList());
-            
+            var knownStates = await currentUserService.GetKnownWordsState(parsedWords.Select(dw => (dw.WordId, dw.ReadingIndex)).ToList(), true);
+
             foreach (var word in parsedWords)
             {
                 int position = request.Text[i].IndexOf(word.OriginalText, currentPosition, StringComparison.Ordinal);
@@ -105,16 +109,18 @@ public class ReaderController(JitenDbContext context, IDbContextFactory<JitenDbC
                     tokens.Add(new ReaderToken
                                {
                                    WordId = word.WordId, ReadingIndex = word.ReadingIndex, Start = position,
-                                   End = position + word.OriginalText.Length, Length = word.OriginalText.Length
+                                   End = position + word.OriginalText.Length, Length = word.OriginalText.Length,
+                                   Conjugations = word.Conjugations
                                });
                     var jmdictWord = jmdictWords.First(jw => jw.WordId == word.WordId);
-                    knownStates.TryGetValue((word.WordId,word.ReadingIndex), out var knownState);
+                    knownStates.TryGetValue((word.WordId, word.ReadingIndex), out var knownState);
                     var readerWord = new ReaderWord()
                                      {
-                                         WordId = word.WordId, ReadingIndex = word.ReadingIndex, Spelling = word.OriginalText, Reading =
+                                         WordId = word.WordId, ReadingIndex = word.ReadingIndex, Spelling = jmdictWord.Readings[word.ReadingIndex], Reading =
                                              jmdictWord.ReadingsFurigana[word.ReadingIndex],
                                          PartsOfSpeech = jmdictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
-                                         MeaningsChunks = jmdictWord.Definitions.Where(d => d.EnglishMeanings.Count > 0).Select(d => d.EnglishMeanings).ToList(),
+                                         MeaningsChunks = jmdictWord.Definitions.Where(d => d.EnglishMeanings.Count > 0)
+                                                                    .Select(d => d.EnglishMeanings).ToList(),
                                          MeaningsPartOfSpeech = jmdictWord.Definitions.SelectMany(d => d.PartsOfSpeech).ToList() ?? [""],
                                          FrequencyRank = frequencyData.TryGetValue(word.WordId, out var freq)
                                              ? freq.ReadingsFrequencyRank[word.ReadingIndex]
@@ -131,7 +137,7 @@ public class ReaderController(JitenDbContext context, IDbContextFactory<JitenDbC
         }
 
         logger.LogInformation("Reader parsed text: ParagraphCount={ParagraphCount}, TotalWords={TotalWords}",
-            request.Text.Length, parsedParagraphs.Sum(p => p.Count));
+                              request.Text.Length, parsedParagraphs.Sum(p => p.Count));
         return Results.Ok(new { tokens = allTokens, vocabulary = allWords });
     }
 
@@ -144,9 +150,9 @@ public class ReaderController(JitenDbContext context, IDbContextFactory<JitenDbC
         var knownStates = await currentUserService.GetKnownWordsState(keys);
 
         var result = request.Words.Select(w =>
-            knownStates.TryGetValue((w[0], (byte)w[1]), out var state)
-                ? new[] { state.ToString().ToLower() }
-                : new[] { nameof(KnownState.Unknown).ToLower() }
+                                              knownStates.TryGetValue((w[0], (byte)w[1]), out var state)
+                                                  ? new[] { state.ToString().ToLower() }
+                                                  : new[] { nameof(KnownState.Unknown).ToLower() }
                                          ).ToList();
 
         return Results.Ok(new { result = result });

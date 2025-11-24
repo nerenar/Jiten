@@ -33,7 +33,7 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
     }
 
     public async Task<Dictionary<(int WordId, byte ReadingIndex), KnownState>> GetKnownWordsState(
-        IEnumerable<(int WordId, byte ReadingIndex)> keys)
+        IEnumerable<(int WordId, byte ReadingIndex)> keys, bool getDue = false)
     {
         if (!IsAuthenticated)
             return new Dictionary<(int, byte), KnownState>();
@@ -52,10 +52,12 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
                             .Where(w => keysList.Contains((w.WordId, w.ReadingIndex)))
                             .ToDictionary(w => (w.WordId, w.ReadingIndex),
                                           w => w.State == FsrsState.Blacklisted
-                                                   ? KnownState.Blacklisted
-                                                   : w.LastReview == null || (w.Due - w.LastReview.Value).TotalDays < 21
-                                                       ? KnownState.Young
-                                                       : KnownState.Mature);
+                                              ? KnownState.Blacklisted
+                                              : w.LastReview == null || (getDue && (w.Due - DateTime.Now).TotalDays <= 0)
+                                                  ? KnownState.Due
+                                                  : (w.Due - w.LastReview.Value).TotalDays < 21
+                                                      ? KnownState.Young
+                                                      : KnownState.Mature);
 
         return keysList.ToDictionary(k => k,
                                      k => candidateDict.GetValueOrDefault(k, KnownState.Unknown));
@@ -71,7 +73,7 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, JitenD
 
         if (word == null)
             return KnownState.Unknown;
-        
+
         if (word.State == FsrsState.Blacklisted)
             return KnownState.Blacklisted;
 

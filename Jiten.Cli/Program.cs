@@ -155,6 +155,9 @@ public class Program
 
         [Option(longName: "prune-sudachi", Required = false, HelpText = "Prune CSV files from sudachi directory")]
         public string PruneSudachiCsvDirectory { get; set; }
+
+        [Option(longName: "sync-jmnedict", Required = false, HelpText = "Sync missing JMNedict entries and update partial entries with missing readings/definitions.")]
+        public string SyncJMNedict { get; set; }
     }
 
     static async Task Main(string[] args)
@@ -299,6 +302,19 @@ public class Program
                             Console.WriteLine("Importing vocabulary origin...");
                             await JmDictHelper.ImportVocabularyOrigin(o.Verbose, _contextFactory, o.ImportVocabularyOrigin);
                             Console.WriteLine("Vocabulary origin imported.");
+                        }
+
+                        if (!string.IsNullOrEmpty(o.SyncJMNedict))
+                        {
+                            if (string.IsNullOrEmpty(o.XmlPath))
+                            {
+                                Console.WriteLine("For JMNedict sync, you need to specify -xml path/to/jmdict_dtd.xml");
+                                return;
+                            }
+
+                            Console.WriteLine("Syncing JMNedict entries with database...");
+                            await JmDictHelper.SyncMissingJMNedict(_contextFactory, o.XmlPath, o.SyncJMNedict);
+                            Console.WriteLine("JMNedict sync complete.");
                         }
 
                         if (!string.IsNullOrEmpty(o.ExtractFeatures))
