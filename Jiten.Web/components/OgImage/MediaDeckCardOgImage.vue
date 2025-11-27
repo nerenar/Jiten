@@ -13,7 +13,7 @@
     data: response,
     status,
     error,
-  } = useApiFetchPaginated<DeckDetail[]>(`media-deck/${props.deckId}/detail`, {
+  } = await useApiFetchPaginated<DeckDetail[]>(`media-deck/${props.deckId}/detail`, {
     query: {
       offset: 0,
     },

@@ -17,7 +17,7 @@
     data: response,
     status,
     error,
-  } = useApiFetchPaginated<Deck[]>(url, {
+  } = await useApiFetchPaginated<Deck[]>(url, {
     query: {
       offset: offset,
     },

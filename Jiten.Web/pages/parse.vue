@@ -20,7 +20,7 @@
     data: response,
     status,
     error,
-  } = useApiFetch<DeckWord[]>(url.value, { query: { text: searchContent }, watch: [searchContent] });
+  } = await useApiFetch<DeckWord[]>(url.value, { query: { text: searchContent }, watch: [searchContent] });
 
   watch(
     () => route.query.text,
