@@ -499,6 +499,8 @@ public static class JmDictHelper
         wordInfos.First(w => w.WordId == 2815290).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 1157170).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2855934).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1245290).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1075810).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2029110).Definitions.Add(new JmDictDefinition()
                                                                   {
                                                                       PartsOfSpeech = ["prt"], EnglishMeanings = ["indicates na-adjective"]

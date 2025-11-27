@@ -88,6 +88,13 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IDbConte
             link.Deck = deck;
         }
 
+        // Apply genre and tag mappings based on first link
+        if (metadata.Links.Any())
+        {
+            var firstLink = metadata.Links.First();
+            await MetadataProviderHelper.ApplyGenreAndTagMappings(context, deck, metadata, firstLink.LinkType);
+        }
+
         var coverImage = await File.ReadAllBytesAsync(metadata.Image ?? throw new Exception("No cover image found."));
 
         // Insert the deck into the database
@@ -118,6 +125,16 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IDbConte
                 if (string.IsNullOrEmpty(text))
                 {
                     throw new Exception("No text found in the ebook.");
+                }
+            }
+            else if (Path.GetExtension(filePath).ToLower() == ".mokuro")
+            {
+                var extractor = new MokuroExtractor();
+                text = await extractor.Extract(filePath, false);
+
+                if (string.IsNullOrEmpty(text))
+                {
+                    throw new Exception("No text found in the mokuro file.");
                 }
             }
             else
