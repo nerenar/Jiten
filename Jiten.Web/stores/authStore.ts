@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import type { CompleteGoogleRegistrationRequest, GoogleSignInResponse, GoogleRegistrationData, LoginRequest, TokenResponse } from '~/types/types';
+import { TabSyncManager } from '~/utils/tabSync';
+import { CookieMonitor } from '~/utils/cookieMonitor';
 
 export const useAuthStore = defineStore('auth', () => {
   const tokenCookie = useCookie('token', {
@@ -28,6 +30,9 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoading = ref<boolean>(false);
   const error = ref<string | null>(null);
   const isRefreshing = ref<boolean>(false);
+  const refreshingTabId = ref<string | null>(null);
+  let tabSyncManager: TabSyncManager | null = null;
+  let cookieMonitor: CookieMonitor | null = null;
 
   // Temporary storage for Google registration flow
   const googleRegistrationData = ref<GoogleRegistrationData | null>(null);
@@ -36,6 +41,63 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.roles?.includes('Administrator') || false);
 
   const { $api } = useNuxtApp();
+
+  // Initialise tab synchronisation (client-side only)
+  if (process.client) {
+    tabSyncManager = new TabSyncManager();
+    const hasBroadcastChannel = typeof BroadcastChannel !== 'undefined';
+    cookieMonitor = new CookieMonitor(hasBroadcastChannel);
+
+    // Listen for token updates from other tabs
+    tabSyncManager.on('TOKEN_REFRESHED', (payload) => {
+      if (payload.accessToken && payload.refreshToken) {
+        console.log('Token refreshed in another tab, syncing...');
+        setTokens(payload.accessToken, payload.refreshToken);
+        isRefreshing.value = false;
+        refreshingTabId.value = null;
+      }
+    });
+
+    // Listen for refresh started events
+    tabSyncManager.on('TOKEN_REFRESH_STARTED', (payload) => {
+      console.log('Another tab started refreshing...');
+      isRefreshing.value = true;
+      refreshingTabId.value = payload.tabId;
+    });
+
+    // Listen for refresh failures
+    tabSyncManager.on('TOKEN_REFRESH_FAILED', () => {
+      console.log('Token refresh failed in another tab');
+      clearAuthData();
+      isRefreshing.value = false;
+      refreshingTabId.value = null;
+    });
+
+    // Listen for logout events
+    tabSyncManager.on('LOGOUT', () => {
+      console.log('User logged out in another tab');
+      clearAuthData();
+      const router = useRouter();
+      router.push('/login');
+    });
+
+    // Monitor cookie changes (fallback mechanism)
+    cookieMonitor.onChange(({ token, refreshToken }) => {
+      console.log('Cookie changed in another tab');
+
+      // Only update if we're not currently refreshing
+      if (!isRefreshing.value) {
+        if (token && refreshToken) {
+          // Tokens were updated externally - sync state
+          accessToken.value = token;
+          refreshToken.value = refreshToken;
+        } else if (!token && !refreshToken) {
+          // Tokens were cleared externally - logout
+          clearAuthData();
+        }
+      }
+    });
+  }
 
   function setTokens(newAccessToken: string, newRefreshToken: string) {
     accessToken.value = newAccessToken;
@@ -70,8 +132,21 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function refreshAccessToken(): Promise<boolean> {
-    if (isRefreshing.value) {
-      // Wait for ongoing refresh to complete
+    // Check if another tab is already refreshing
+    if (isRefreshing.value && refreshingTabId.value !== tabSyncManager?.tabId) {
+      console.log('Another tab is refreshing, waiting...');
+      // Wait for the other tab to complete (max 10 seconds)
+      const startTime = Date.now();
+      while (isRefreshing.value && Date.now() - startTime < 10000) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      // Check if we now have a valid token
+      return !!accessToken.value && !isTokenExpired(accessToken.value);
+    }
+
+    // Check if this tab is already refreshing
+    if (isRefreshing.value && refreshingTabId.value === tabSyncManager?.tabId) {
+      console.log('This tab is already refreshing, waiting...');
       while (isRefreshing.value) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
@@ -85,6 +160,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     isRefreshing.value = true;
+    refreshingTabId.value = tabSyncManager?.tabId || null;
+
+    // Notify other tabs that we're starting refresh
+    tabSyncManager?.broadcast('TOKEN_REFRESH_STARTED', {
+      tabId: tabSyncManager.tabId,
+      timestamp: Date.now()
+    });
 
     try {
       console.log('Attempting to refresh token...');
@@ -98,6 +180,14 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (data.accessToken && data.refreshToken) {
         setTokens(data.accessToken, data.refreshToken);
+
+        // Broadcast new tokens to other tabs
+        tabSyncManager?.broadcast('TOKEN_REFRESHED', {
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          timestamp: Date.now()
+        });
+
         console.log('Token refreshed successfully');
         return true;
       } else {
@@ -105,9 +195,14 @@ export const useAuthStore = defineStore('auth', () => {
       }
     } catch (err: any) {
       console.error('Token refresh failed:', err);
+
+      // Notify other tabs that refresh failed
+      tabSyncManager?.broadcast('TOKEN_REFRESH_FAILED', {
+        timestamp: Date.now()
+      });
+
       clearAuthData();
 
-      // Only redirect on client-side (router unavailable during SSR)
       if (process.client) {
         const router = useRouter();
         if (router.currentRoute.value.path !== '/login') {
@@ -118,6 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
       return false;
     } finally {
       isRefreshing.value = false;
+      refreshingTabId.value = null;
     }
   }
 
@@ -267,6 +363,9 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (err) {
       console.error('Error revoking token:', err.data?.message || err.message);
     } finally {
+      // Notify other tabs to logout
+      tabSyncManager?.broadcast('LOGOUT', { timestamp: Date.now() });
+
       clearAuthData();
       isLoading.value = false;
 
@@ -333,5 +432,11 @@ export const useAuthStore = defineStore('auth', () => {
 
     // utilities
     isTokenExpired,
+
+    // cleanup
+    $dispose() {
+      tabSyncManager?.destroy();
+      cookieMonitor?.destroy();
+    }
   };
 });

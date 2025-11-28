@@ -26,6 +26,7 @@
   const selectedDeck = ref<number>(0);
   const selectedField = ref<number>(0);
   const fields = ref<Array<[string, { order: number; value: string }]>>([]);
+  const overwriteExisting = ref(false);
 
   const fieldsOptions = computed(() =>
     (fields.value || []).map((entry, idx) => ({
@@ -84,56 +85,188 @@
         return;
       }
 
-      const batchSize = 500;
-      cards.value = [];
+      // Retrieve cards info in batches
+      const batchSize = 200;
+      const allCardsInfo: any[] = [];
+
       for (let i = 0; i < cardsIds.length; i += batchSize) {
         const batch = cardsIds.slice(i, i + batchSize);
         const cardsBatch = await client.card.cardsInfo({ cards: batch });
-        const mapped = (cardsBatch || []).map((card: any) => {
-          const field = (card.fields as Record<string, { order: number; value: string }>)[fieldName];
-          const val = field ? field.value : '';
-          return { value: val, reps: card.reps ?? 0 };
-        });
-        cards.value = cards.value.concat(mapped);
+        allCardsInfo.push(...(cardsBatch || []));
       }
 
+      // Retrieve all reviews
+      const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+      if (!deckName) {
+        console.warn('Deck not found');
+        return;
+      }
+
+      const reviews = await client.statistic.cardReviews({
+        deck: deckName,
+        startID: 1,
+      });
+
+      // Build review map (limit to 10 most recent per card)
+      const reviewByCard = new Map<number, any[]>();
+      for (const [reviewTime, cardID, _usn, buttonPressed, _newInterval, _previousInterval, _newFactor, reviewDuration, _reviewType] of reviews) {
+        const existing = reviewByCard.get(cardID) ?? [];
+        existing.push({
+          Rating: buttonPressed,
+          ReviewDateTime: new Date(reviewTime),
+          ReviewDuration: reviewDuration,
+        });
+        reviewByCard.set(cardID, existing);
+      }
+
+      // Limit to 10 most recent reviews
+      for (const [key, arr] of reviewByCard.entries()) {
+        arr.sort((a, b) => b.ReviewDateTime.getTime() - a.ReviewDateTime.getTime());
+        reviewByCard.set(key, arr.slice(0, 10));
+      }
+
+      // Build cards payload
+      const enrichedCards: any[] = [];
+      for (const card of allCardsInfo) {
+        // Skip suspended cards (queue = -1)
+        if (card.queue === -1) continue;
+
+        const field = card.fields[fieldName];
+        const word = field?.value?.trim() || '';
+        if (!word) continue;
+
+        const reviews = reviewByCard.get(card.cardId) ?? [];
+        const latestReview = reviews[0];
+
+        // Convert Anki state to FSRS state
+        let state: number;
+        if (card.queue === 0) state = 1; // New → Learning (FSRS doesn't have "New" state)
+        else if (card.queue === 1 || card.queue === 3) state = 1; // Learning
+        else if (card.queue === 2) state = 2; // Review
+        else state = 2; // Default to Review
+
+        // Convert interval to stability
+        const stability = card.interval > 0 ? card.interval : 0;
+
+        // Convert ease factor to difficulty (1300-2500 → 10-1)
+        const difficulty = Math.max(1, Math.min(10, 10 - (card.factor - 1300) / 170.0));
+
+        // Convert due date
+        let due: Date;
+        if (card.queue === 0) {
+          due = new Date(); // New cards due now
+        } else if (card.queue === 1 || card.queue === 3) {
+          // Learning cards: due is timestamp in seconds
+          due = new Date(card.due * 1000);
+          console.log("learning : " + due);
+        } else {
+          // Review cards: days since collection creation
+          if (latestReview) {
+            // If we have history, this is the most accurate method
+            const lastReviewDate = latestReview.ReviewDateTime;
+            // Add interval (days) to last review
+            due = new Date(lastReviewDate.getTime() + (card.interval * 86400000));
+          } else {
+            // Fallback if no reviews found (rare, or if review log was cleared)
+            // We use 'mod' (Last Modified Date) as a proxy for Last Review Date
+            // Anki stores 'mod' in SECONDS
+            due = new Date((card.mod * 1000) + (card.interval * 86400000));
+          }
+
+          console.log("review : " + due)
+        }
+
+        // Last review timestamp
+        const lastReview = card.mod > 0 ? new Date(card.mod * 1000) : null;
+
+        enrichedCards.push({
+          Card: {
+            Word: word,
+            Stability: stability,
+            Difficulty: difficulty,
+            Reps: card.reps,
+            Lapses: card.lapses,
+            Due: due.toISOString(),
+            State: state,
+            LastReview: lastReview?.toISOString(),
+          },
+          ReviewLogs: reviews.map((r) => ({
+            Rating: r.Rating,
+            ReviewDateTime: r.ReviewDateTime.toISOString(),
+            ReviewDuration: r.ReviewDuration,
+          })),
+        });
+      }
+
+      cards.value = enrichedCards;
       isLoading.value = false;
     }
 
     if (currentStep.value == 4) {
       isLoading.value = true;
 
-      // We already stored only the selected field's value and reps, so just collect those values
-      const lines = cardsToKeep.value.map((c) => (c.value ?? '').trim()).filter((v) => v.length > 0);
-      const textContent = lines.join('\n');
+      try {
+        const payload = {
+          cards: cards.value,
+          overwrite: overwriteExisting.value
+        };
 
-      try{
-      const file = new File([textContent], 'anki-words.txt', { type: 'text/plain' });
+        const result = await $api<{ imported: number; updated: number; skipped: number; reviewLogs: number; skippedWords: string[] }>(
+          'user/vocabulary/import-from-anki',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
 
-      const formData = new FormData();
-      formData.append('file', file);
+        if (result) {
+          let message = '';
+          if (result.imported > 0) {
+            message += `Imported ${result.imported} new card${result.imported === 1 ? '' : 's'}`;
+          }
+          if (result.updated > 0) {
+            if (message) message += ', ';
+            message += `updated ${result.updated} existing card${result.updated === 1 ? '' : 's'}`;
+          }
+          if (result.reviewLogs) {
+            message += ` with ${result.reviewLogs} review log${result.reviewLogs === 1 ? '' : 's'}`;
+          }
+          if (result.skipped > 0) {
+            if (message) message += '. ';
+            message += `${result.skipped} card${result.skipped === 1 ? '' : 's'} skipped`;
+          }
+          if (!message) {
+            message = 'No cards were imported';
+          } else {
+            message += '.';
+          }
 
-      const result = await $api<{ parsed: number; added: number; }>('user/vocabulary/import-from-anki-txt', {
-        method: 'POST',
-        body: formData,
-      });
+          toast.add({
+            severity: 'success',
+            summary: 'Anki Data Imported',
+            detail: message,
+            life: 6000,
+          });
 
-      if (result) {
-        toast.add({
-          severity: 'success',
-          summary: 'Known words updated',
-          detail: `Parsed ${result.parsed} words, added ${result.added} forms.`,
-          life: 6000,
-        });
-      }
+          // Show skipped words if any
+          if (result.skippedWords && result.skippedWords.length > 0) {
+            console.log('Skipped words (not in JMDict):', result.skippedWords);
+            toast.add({
+              severity: 'warn',
+              summary: 'Some words not found',
+              detail: `${result.skippedWords.length} words not in dictionary. Check console for list.`,
+              life: 10000,
+            });
+          }
+        }
       } catch (error) {
-        console.error('Error processing words:', error);
-        toast.add({ severity: 'error', detail: 'Failed to process words.', life: 5000 });
+        console.error('Error importing Anki data:', error);
+        toast.add({ severity: 'error', detail: 'Failed to import data.', life: 5000 });
       } finally {
         isLoading.value = false;
         currentStep.value = 1;
       }
-
     }
   };
 </script>
@@ -194,14 +327,20 @@
           <p>Loading cards: {{ cards.length }}/{{ cardsIds.length }} ({{ ((cards.length / cardsIds.length) * 100).toFixed(0) }}%)...</p>
         </div>
         <div v-else>
-          <p>Minimum amount of reviews for a word to be considered as known <InputNumber v-model="reviewsForKnown" show-buttons :min="0" /></p>
           <p>
-            This will keep <b>{{ cardsToKeep.length }} words out of {{ cards.length }}</b
-            >. All other words will stay unknown.
+            This will import <b>{{ cards.length }} words</b>.
           </p>
-          <div class="flex flex-row gap-2 p-4">
-            <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
-            <Button label="Import" :disabled="!selectedDeck || cardsToKeep.length <= 0" @click="NextStep()" />
+          <div class="flex flex-col gap-3 p-4">
+            <div class="flex items-center gap-2">
+              <Checkbox v-model="overwriteExisting" inputId="overwrite" :binary="true" />
+              <label for="overwrite" class="cursor-pointer">
+                Overwrite existing cards (replace cards you already have with Anki versions, even if they are more recent)
+              </label>
+            </div>
+            <div class="flex flex-row gap-2">
+              <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
+              <Button label="Import" :disabled="!selectedDeck" @click="NextStep()" />
+            </div>
           </div>
         </div>
       </div>

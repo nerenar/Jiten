@@ -330,6 +330,7 @@ builder.Services.AddSingleton<ApiKeyService>();
 builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSender, Jiten.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<ISrsService, SrsService>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -411,6 +412,10 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+});
 
 // Hangfire jobs
 builder.Services.AddScoped<ParseJob>();
@@ -504,6 +509,7 @@ using (var scope = app.Services.CreateScope())
                                               Cron.Daily());
 }
 
+app.UseResponseCompression();
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions
                         {
