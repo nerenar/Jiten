@@ -142,9 +142,12 @@
 
         // Convert Anki state to FSRS state
         let state: number;
-        if (card.queue === 0) state = 1; // New → Learning (FSRS doesn't have "New" state)
-        else if (card.queue === 1 || card.queue === 3) state = 1; // Learning
-        else if (card.queue === 2) state = 2; // Review
+        if (card.queue === 0)
+          state = 1; // New → Learning (FSRS doesn't have "New" state)
+        else if (card.queue === 1 || card.queue === 3)
+          state = 1; // Learning
+        else if (card.queue === 2)
+          state = 2; // Review
         else state = 2; // Default to Review
 
         // Convert interval to stability
@@ -155,9 +158,7 @@
 
         // Last review timestamp
         const cardReviews = reviewByCard.get(card.cardId) ?? [];
-        const lastReview = cardReviews.length > 0
-          ? cardReviews[0].ReviewDateTime
-          : null;
+        const lastReview = cardReviews.length > 0 ? cardReviews[0].ReviewDateTime : null;
 
         let due: Date;
         if (card.queue === 0) {
@@ -171,12 +172,12 @@
           if (lastReview) {
             // If we have history, this is the most accurate method
             // Add interval (days) to last review
-            due = new Date(lastReview.getTime() + (card.interval * 86400000));
+            due = new Date(lastReview.getTime() + card.interval * 86400000);
           } else {
             // Fallback if no reviews found (rare, or if review log was cleared)
             // We use 'mod' (Last Modified Date) as a proxy for Last Review Date
             // Anki stores 'mod' in SECONDS
-            due = new Date((card.mod * 1000) + (card.interval * 86400000));
+            due = new Date(card.mod * 1000 + card.interval * 86400000);
           }
 
           // console.log("review : " + due)
@@ -211,17 +212,22 @@
       try {
         const payload = {
           cards: cards.value,
-          overwrite: overwriteExisting.value
+          overwrite: overwriteExisting.value,
         };
 
-        const result = await $api<{ imported: number; updated: number; skipped: number; reviewLogs: number; skippedWords: string[] }>(
-          'user/vocabulary/import-from-anki',
-          {
-            method: 'POST',
-            body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'application/json' },
-          }
-        );
+        const result = await $api<{
+          imported: number;
+          updated: number;
+          skipped: number;
+          reviewLogs: number;
+          skippedWords: string[];
+          skippedCountNoReviews: number;
+          skippedWordsNoReviews: string[];
+        }>('user/vocabulary/import-from-anki', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'application/json' },
+        });
 
         if (result) {
           let message = '';
@@ -239,6 +245,10 @@
             if (message) message += '. ';
             message += `${result.skipped} card${result.skipped === 1 ? '' : 's'} skipped`;
           }
+          if (result.skippedCountNoReviews > 0) {
+            if (message) message += '. ';
+            message += `${result.skippedCountNoReviews} card${result.skippedCountNoReviews === 1 ? '' : 's'} skipped (no reviews)`;
+          }
           if (!message) {
             message = 'No cards were imported';
           } else {
@@ -254,11 +264,11 @@
 
           // Show skipped words if any
           if (result.skippedWords && result.skippedWords.length > 0) {
-            console.log('Skipped words (not in JMDict):', result.skippedWords);
+            console.log('Skipped words (not parsed):', result.skippedWords);
             toast.add({
               severity: 'warn',
               summary: 'Some words not found',
-              detail: `${result.skippedWords.length} words not in dictionary. Check console for list.`,
+              detail: `${result.skippedWords.length} words that could not be parsed correctly or were not in the dictionary. Check console for list.`,
               life: 10000,
             });
           }

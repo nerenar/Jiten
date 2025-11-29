@@ -1,9 +1,11 @@
 using Hangfire;
+using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
+using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,21 +35,28 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var uniqueWordCount = await userContext.FsrsCards
-                                               .AsNoTracking()
-                                               .Where(uk => uk.UserId == userId)
-                                               .Select(uk => uk.WordId)
-                                               .Distinct()
-                                               .CountAsync();
 
-        var totalFormsCount = await userContext.FsrsCards
-                                               .AsNoTracking()
-                                               .Where(uk => uk.UserId == userId)
-                                               .Select(uk => new { uk.WordId, uk.ReadingIndex })
-                                               .Distinct()
-                                               .CountAsync();
+        var ids = await userContext.FsrsCards
+                                   .AsNoTracking()
+                                   .Where(uk => uk.UserId == userId)
+                                   .Select(uk => new { uk.WordId, uk.ReadingIndex })
+                                   .ToListAsync();
 
-        return Results.Ok(new { words = uniqueWordCount, forms = totalFormsCount });
+
+        var states = await userService.GetKnownWordsState(ids.Select(i => (i.WordId, i.ReadingIndex)).ToList());
+        var statesDistinct = states.DistinctBy(s => s.Key.WordId).ToList();
+
+        KnownWordAmountDto dto = new KnownWordAmountDto
+                                 {
+                                     Young = statesDistinct.Count(s => s.Value == KnownState.Young),
+                                     YoungForm = states.Count(s => s.Value == KnownState.Young),
+                                     Mature = statesDistinct.Count(s => s.Value == KnownState.Mature),
+                                     MatureForm = states.Count(s => s.Value == KnownState.Mature),
+                                     Blacklisted = statesDistinct.Count(s => s.Value == KnownState.Blacklisted),
+                                     BlacklistedForm = states.Count(s => s.Value == KnownState.Blacklisted)
+                                 };
+
+        return Results.Ok(dto);
     }
 
     /// <summary>
@@ -62,9 +71,12 @@ public class UserController(
         var ids = await userContext.FsrsCards
                                    .AsNoTracking()
                                    .Where(uk => uk.UserId == userId)
-                                   .Select(uk => uk.WordId)
-                                   .Distinct()
+                                   .Select(uk => new { uk.WordId, uk.ReadingIndex })
                                    .ToListAsync();
+
+
+        return Results.Ok(ids);
+
 
         return Results.Ok(ids);
     }
@@ -226,6 +238,20 @@ public class UserController(
         if (uniqueWords.Count == 0)
             return Results.BadRequest("No valid words found.");
 
+        // Track skipped words (no reviews)
+        List<string> skippedWordsNoReviews = new List<string>();
+        int skippedCountNoReviews = 0;
+
+        for (int i = request.Cards.Count - 1; i >= 0; i--)
+        {
+            if (request.Cards[i].Card.LastReview != null)
+                continue;
+
+            skippedWordsNoReviews.Add(new string(request.Cards[i].Card.Word));
+            request.Cards.RemoveAt(i);
+            skippedCountNoReviews++;
+        }
+
         var combinedText = string.Join(Environment.NewLine, uniqueWords);
         var parsedWords = await Parser.Parser.ParseText(contextFactory, combinedText);
 
@@ -239,8 +265,6 @@ public class UserController(
             }
         }
 
-        // Track skipped words for user feedback
-        var skippedWords = new List<string>();
 
         // Step 2: Get existing cards
         var parsedWordIds = wordLookup.Values.Select(v => v.WordId).Distinct().ToList();
@@ -256,9 +280,12 @@ public class UserController(
         var cardsToAdd = new List<FsrsCard>();
         var cardsToUpdate = new List<FsrsCard>();
         var cardToAnkiMap = new Dictionary<FsrsCard, AnkiCardWrapper>();
-        int skippedCount = 0;
 
         var processedPairs = new Dictionary<(int WordId, byte ReadingIndex), (FsrsCard Card, List<AnkiReviewLogImport> AllReviewLogs)>();
+
+        // Track skipped words (not in dictionary)
+        int skippedCount = 0;
+        var skippedWords = new List<string>();
 
         foreach (var wrapper in request.Cards)
         {
@@ -432,7 +459,8 @@ public class UserController(
             return Results.Ok(new
                               {
                                   imported = cardsToAdd.Count, updated = cardsToUpdate.Count, skipped = skippedCount,
-                                  reviewLogs = logsToAdd.Count, skippedWords = skippedWords.Take(50).ToList()
+                                  reviewLogs = logsToAdd.Count, skippedWords = skippedWords,
+                                  skippedWordsNoReviews = skippedWordsNoReviews.ToList(), skippedCountNoReviews = skippedCountNoReviews
                               });
         }
         catch (Exception ex)
@@ -731,6 +759,57 @@ public class UserController(
                               userId, exportDto.TotalCards, exportDto.TotalReviews);
 
         return Results.Ok(exportDto);
+
+        double? EnsureValidNumber(double? value)
+        {
+            if (!value.HasValue) return null;
+            if (double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return null;
+            return value;
+        }
+    }
+
+    /// <summary>
+    /// Get all FSRS cards for the current user with word information.
+    /// </summary>
+    [HttpGet("vocabulary/cards")]
+    public async Task<IResult> GetCards()
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var cards = await userContext.FsrsCards
+                                     .AsNoTracking()
+                                     .Where(c => c.UserId == userId)
+                                     .OrderBy(c => c.Due)
+                                     .ToListAsync();
+
+        var wordIds = cards.Select(c => c.WordId).Distinct().ToList();
+
+        var words = await jitenContext.JMDictWords
+                                      .AsNoTracking()
+                                      .Where(w => wordIds.Contains(w.WordId))
+                                      .Select(w => new { w.WordId, w.Readings, w.ReadingTypes })
+                                      .ToListAsync();
+
+        var wordLookup = words.ToDictionary(w => w.WordId);
+
+        var result = cards.Select(c =>
+        {
+            var word = wordLookup.GetValueOrDefault(c.WordId);
+
+            return new FsrsCardWithWordDto
+                   {
+                       CardId = c.CardId, WordId = c.WordId, ReadingIndex = c.ReadingIndex, State = c.State, Step = c.Step,
+                       Stability = EnsureValidNumber(c.Stability), Difficulty = EnsureValidNumber(c.Difficulty), Due = c.Due,
+                       LastReview = c.LastReview, WordText = word?.Readings[c.ReadingIndex] ?? "",
+                       ReadingType = word?.ReadingTypes[c.ReadingIndex] ?? JmDictReadingType.Reading
+                   };
+        }).ToList();
+
+        logger.LogInformation("User fetched cards view: UserId={UserId}, CardCount={CardCount}",
+                              userId, result.Count);
+
+        return Results.Ok(result);
 
         double? EnsureValidNumber(double? value)
         {

@@ -53,7 +53,7 @@ public class MorphologicalAnalyser
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
 
     private static readonly HashSet<string> MisparsesRemove =
-        ["そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ"];
+        ["そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ"];
 
     public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false)
     {

@@ -258,6 +258,20 @@ export interface FsrsExportDto {
   cards: FsrsCardExportDto[];
 }
 
+export interface FsrsCardWithWordDto {
+  cardId: number;
+  wordId: number;
+  readingIndex: number;
+  state: FsrsState;
+  step?: number;
+  stability?: number;
+  difficulty?: number;
+  due: Date;
+  lastReview?: Date;
+  wordText: string;
+  readingType: ReadingType;
+}
+
 export interface FsrsImportResultDto {
   cardsImported: number;
   cardsSkipped: number;

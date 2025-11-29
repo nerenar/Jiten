@@ -20,17 +20,31 @@
   const confirm = useConfirm();
   const { JpdbApiClient } = useJpdbApi();
 
-  const knownWordsAmount = ref(0);
-  const knownFormsAmount = ref(0);
+  const youngWordsAmount = ref(0);
+  const matureWordsAmount = ref(0);
+  const blacklistedWordsAmount = ref(0);
+  const youngFormsAmount = ref(0);
+  const matureFormsAmount = ref(0);
+  const blacklistedFormsAmount = ref(0);
+
+  const totalWordsAmount = computed(() => youngWordsAmount.value + matureWordsAmount.value + blacklistedWordsAmount.value);
+  const totalFormsAmount = computed(() => youngFormsAmount.value + matureFormsAmount.value + blacklistedFormsAmount.value);
+
   onMounted(async () => {
     await fetchKnownWordsAmount();
   });
 
   async function fetchKnownWordsAmount() {
     try {
-      const result = await $api<{ words: number; forms: number }>('user/vocabulary/known-ids/amount');
-      knownWordsAmount.value = result.words;
-      knownFormsAmount.value = result.forms;
+      const result = await $api<{ young: number; mature: number; blacklisted: number; youngForm: number; matureForm: number; blacklistedForm: number }>(
+        'user/vocabulary/known-ids/amount'
+      );
+      youngWordsAmount.value = result.young;
+      matureWordsAmount.value = result.mature;
+      blacklistedWordsAmount.value = result.blacklisted;
+      youngFormsAmount.value = result.youngForm;
+      matureFormsAmount.value = result.matureForm;
+      blacklistedFormsAmount.value = result.blacklistedForm;
     } catch {}
   }
 
@@ -50,8 +64,13 @@
             detail: `Removed ${result?.removed ?? 0} known words from your account.`,
             life: 5000,
           });
-          knownWordsAmount.value = 0;
-          knownFormsAmount.value = 0;
+
+          youngWordsAmount.value = 0;
+          matureWordsAmount.value = 0;
+          blacklistedWordsAmount.value = 0;
+          youngFormsAmount.value = 0;
+          matureFormsAmount.value = 0;
+          blacklistedFormsAmount.value = 0;
         } catch (e) {
           console.error(e);
           toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to clear known words on server.', life: 5000 });
@@ -183,9 +202,12 @@
   };
 
   async function getVocabularyByFrequency() {
-    const data = await $api<{words:number,forms:number,skipped:number}>(`user/vocabulary/import-from-frequency/${frequencyRange.value[0]}/${frequencyRange.value[1]}`, {
-      method: 'POST',
-    });
+    const data = await $api<{ words: number; forms: number; skipped: number }>(
+      `user/vocabulary/import-from-frequency/${frequencyRange.value[0]}/${frequencyRange.value[1]}`,
+      {
+        method: 'POST',
+      }
+    );
     toast.add({ severity: 'success', detail: `Added ${data.words} words, ${data.forms} forms by frequency range.`, life: 5000 });
     await nextTick();
     await fetchKnownWordsAmount();
@@ -432,12 +454,37 @@
       </template>
       <template #subtitle>
         <p class="text-gray-600 dark:text-gray-300">
-          You currently have <span class="font-extrabold text-primary-500">{{ knownWordsAmount }}</span> known words and
-          <span class="font-extrabold text-primary-500">{{ knownFormsAmount }}</span> known forms.
+          You have currently saved <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ totalWordsAmount }}</span> words under
+          <b>{{ totalFormsAmount }}</b> forms. Of them,
         </p>
+        <ul class="text-gray-600 dark:text-gray-300 space-y-1 ml-3">
+          <li>
+            <span class="font-extrabold text-yellow-600 dark:text-yellow-300">{{ youngWordsAmount }}</span> are young (<b>{{ youngFormsAmount }}</b> forms).
+          </li>
+          <li>
+            <span class="font-extrabold text-green-600 dark:text-green-300">{{ matureWordsAmount }}</span> are mature (<b>{{ matureFormsAmount }}</b> forms).
+          </li>
+          <li>
+            <span class="font-extrabold text-gray-600 dark:text-gray-300">{{ blacklistedWordsAmount }}</span> are blacklisted (<b>{{
+              blacklistedFormsAmount
+            }}</b>
+            forms).
+          </li>
+        </ul>
       </template>
       <template #content>
         <p class="mb-3">You can upload a list of known words to calculate coverage and exclude them from downloads using one of the options below.</p>
+        <div class="mt-3">
+          <NuxtLink to="/settings/cards">
+            <Button
+              icon="pi pi-table"
+              label="View All Words"
+              severity="info"
+              outlined
+              class="w-full md:w-auto"
+            />
+          </NuxtLink>
+        </div>
       </template>
     </Card>
 
@@ -497,9 +544,7 @@
               </div>
               <div v-if="fsrsImportResult.validationErrors && fsrsImportResult.validationErrors.length > 0">
                 <details class="mt-2">
-                  <summary class="cursor-pointer text-red-600 font-semibold">
-                    Validation Errors ({{ fsrsImportResult.validationErrors.length }})
-                  </summary>
+                  <summary class="cursor-pointer text-red-600 font-semibold">Validation Errors ({{ fsrsImportResult.validationErrors.length }})</summary>
                   <ul class="list-disc list-inside mt-2 text-red-600 space-y-1">
                     <li v-for="(error, index) in fsrsImportResult.validationErrors" :key="index">{{ error }}</li>
                   </ul>
@@ -517,7 +562,7 @@
       </template>
       <template #content>
         <p class="mb-3">
-          Obsolete: Use the FSRS method above instead. <br/>
+          Obsolete: Use the FSRS method above instead. <br />
           You can export your known word IDs to a text file and import them later. This is useful for backing up your data or transferring it to another
           account.
         </p>

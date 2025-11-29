@@ -89,7 +89,7 @@ public class CurrentUserService(
 
         if (word.LastReview == null)
             return KnownState.New;
-        
+
         var dueIn = (word.Due - word.LastReview.Value).TotalDays;
         return dueIn < 21 ? KnownState.Young : KnownState.Mature;
     }

@@ -114,10 +114,12 @@ export enum DeckStatus {
 }
 
 export enum FsrsState {
+  New = 0,
   Learning = 1,
   Review = 2,
   Relearning = 3,
   Blacklisted = 4,
+  Mastered = 5,
 }
 
 export enum FsrsRating {
