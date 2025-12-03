@@ -147,8 +147,8 @@ public class UserController(
                 if (alreadyKnown.Any(uk => uk.WordId == word.WordId && uk.ReadingIndex == i))
                     continue;
 
-                toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow.AddYears(100), lastReview: DateTime.UtcNow,
-                                          state: FsrsState.Review));
+                toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow, lastReview: DateTime.UtcNow,
+                                          state: FsrsState.Mastered));
             }
         }
 
@@ -550,8 +550,8 @@ public class UserController(
                 if (alreadyKnown.Any(uk => uk.WordId == word.WordId && uk.ReadingIndex == i))
                     continue;
 
-                toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow.AddYears(100), lastReview: DateTime.UtcNow,
-                                          state: FsrsState.Review));
+                toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow, lastReview: DateTime.UtcNow,
+                                          state: FsrsState.Mastered));
             }
         }
 
