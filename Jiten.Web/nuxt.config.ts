@@ -125,10 +125,12 @@ export default defineNuxtConfig({
   googleSignIn:{
     clientId: process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID || '',
   },
-  devServer: {
-    https: {
-      key: fs.readFileSync(path.resolve(__dirname, 'localhost-key.pem')).toString(),
-      cert: fs.readFileSync(path.resolve(__dirname, 'localhost.pem')).toString()
+  devServer: process.env.NODE_ENV === 'development'
+    ? {
+      https: {
+        key: fs.readFileSync(path.resolve(__dirname, 'localhost-key.pem')).toString(),
+        cert: fs.readFileSync(path.resolve(__dirname, 'localhost.pem')).toString()
+      }
     }
-  }
+    : {}
 });
