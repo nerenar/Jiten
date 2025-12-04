@@ -90,6 +90,10 @@ public class JitenDbContext : DbContext
               entity.Property(dt => dt.Title).IsRequired().HasMaxLength(200);
               entity.Property(dt => dt.TitleType).IsRequired();
 
+              // TitleNoSpaces is a generated column computed by PostgreSQL
+              entity.Property(dt => dt.TitleNoSpaces)
+                    .HasComputedColumnSql("REPLACE(\"Title\", ' ', '')", stored: true);
+
               entity.HasOne(dt => dt.Deck)
                     .WithMany(d => d.Titles)
                     .HasForeignKey(dt => dt.DeckId)

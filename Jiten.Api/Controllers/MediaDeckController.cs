@@ -99,7 +99,14 @@ public class MediaDeckController(
     /// <param name="extRatingMax"></param>
     /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
-    // [ResponseCache(Duration = 300, VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
+    [ResponseCache(Duration = 300, VaryByHeader = "Authorization",
+                   VaryByQueryKeys =
+                   [
+                       "offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder", "status",
+                                         "charCountMin", "charCountMax", "releaseYearMin", "releaseYearMax", "uniqueKanjiMin",
+                                         "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax", "extRatingMin", "extRatingMax", "genres",
+                                         "excludeGenres", "tags", "excludeTags"
+                   ])]
     [SwaggerOperation(Summary = "List media decks",
                       Description =
                           "Returns a paginated list of decks with optional filters, sorting and user coverage when authenticated.")]
@@ -117,33 +124,90 @@ public class MediaDeckController(
                                                                       string? genres = null, string? excludeGenres = null,
                                                                       string? tags = null, string? excludeTags = null)
     {
+        // Disable response caching for authenticated users
+        if (currentUserService.IsAuthenticated)
+        {
+            Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+        }
+
         int pageSize = 50;
         var query = context.Decks.AsNoTracking();
 
-        // Apply title filter
+        // Use "Search then Load" pattern to preserve PGroonga ordering
+        List<int>? orderedDeckIds = null;
+
         if (!string.IsNullOrEmpty(titleFilter))
         {
+            var normalizedFilter = titleFilter.Trim();
+            var filterNoSpaces = normalizedFilter.Replace(" ", "");
+            var queryLength = normalizedFilter.Length;
+
+            // CTE-based query that prioritises exact matches, then uses pgroonga for fuzzy
+            // Each CTE uses a single index for efficient pgroonga_score calculation
+            // Length ratio ensures shorter titles matching the query rank higher
             FormattableString sql = $$"""
-                                      SELECT d.*
-                                      FROM jiten."Decks" d
-                                      JOIN (
-                                        SELECT dt."DeckId",
-                                               MIN(CASE dt."TitleType"
-                                                 WHEN 0 THEN 1
-                                                 WHEN 1   THEN 2
-                                                 WHEN 2  THEN 3
-                                                 ELSE 4 END) AS best_type_rank,
-                                               MAX(pgroonga_score(dt.tableoid, dt.ctid)) AS best_score
-                                        FROM jiten."DeckTitles" dt
-                                        WHERE dt."Title" &@~ {{titleFilter}}
-                                        OR ((dt."TitleType" = 1 OR dt."TitleType" = 3) AND REPLACE(dt."Title", ' ', '') &@~ {{titleFilter}})
-                                        GROUP BY dt."DeckId"
-                                      ) s ON s."DeckId" = d."DeckId"
+                                      WITH exact_matches AS (
+                                          SELECT DISTINCT dt."DeckId",
+                                                 0 AS match_priority,
+                                                 100.0 AS score,
+                                                 dt."TitleType",
+                                                 LENGTH(dt."Title") AS title_length
+                                          FROM jiten."DeckTitles" dt
+                                          WHERE LOWER(dt."Title") = LOWER({{normalizedFilter}})
+                                             OR LOWER(dt."TitleNoSpaces") = LOWER({{filterNoSpaces}})
+                                      ),
+                                      fuzzy_title_matches AS (
+                                          SELECT dt."DeckId",
+                                                 1 AS match_priority,
+                                                 pgroonga_score(dt.tableoid, dt.ctid) AS score,
+                                                 dt."TitleType",
+                                                 LENGTH(dt."Title") AS title_length
+                                          FROM jiten."DeckTitles" dt
+                                          WHERE dt."Title" &@~ {{normalizedFilter}}
+                                            AND dt."DeckId" NOT IN (SELECT "DeckId" FROM exact_matches)
+                                      ),
+                                      fuzzy_nospace_matches AS (
+                                          SELECT dt."DeckId",
+                                                 2 AS match_priority,
+                                                 pgroonga_score(dt.tableoid, dt.ctid) AS score,
+                                                 dt."TitleType",
+                                                 LENGTH(dt."TitleNoSpaces") AS title_length
+                                          FROM jiten."DeckTitles" dt
+                                          WHERE dt."TitleType" IN (1, 3)
+                                            AND dt."TitleNoSpaces" &@~ {{filterNoSpaces}}
+                                            AND dt."DeckId" NOT IN (SELECT "DeckId" FROM exact_matches)
+                                            AND dt."DeckId" NOT IN (SELECT "DeckId" FROM fuzzy_title_matches)
+                                      ),
+                                      all_matches AS (
+                                          SELECT * FROM exact_matches
+                                          UNION ALL
+                                          SELECT * FROM fuzzy_title_matches
+                                          UNION ALL
+                                          SELECT * FROM fuzzy_nospace_matches
+                                      ),
+                                      ranked AS (
+                                          SELECT "DeckId",
+                                                 MIN(match_priority) AS best_match,
+                                                 MIN(CASE "TitleType"
+                                                     WHEN 0 THEN 1
+                                                     WHEN 1 THEN 2
+                                                     WHEN 2 THEN 3
+                                                     ELSE 4
+                                                 END) AS best_type,
+                                                 MAX(score) AS best_score,
+                                                 {{queryLength}}::float / NULLIF(MIN(title_length), 0)::float AS length_ratio
+                                          FROM all_matches
+                                          GROUP BY "DeckId"
+                                      )
+                                      SELECT r."DeckId"
+                                      FROM ranked r
+                                      JOIN jiten."Decks" d ON r."DeckId" = d."DeckId"
                                       WHERE d."ParentDeckId" IS NULL
-                                      ORDER BY s.best_type_rank ASC, s.best_score DESC
+                                      ORDER BY r.best_match ASC, r.length_ratio DESC, r.best_type ASC, r.best_score DESC
                                       """;
 
-            query = context.Set<Deck>().FromSqlInterpolated(sql);
+            orderedDeckIds = await context.Database.SqlQuery<int>(sql).ToListAsync();
+            query = query.Where(d => orderedDeckIds.Contains(d.DeckId));
         }
         else
         {
@@ -183,7 +247,7 @@ public class MediaDeckController(
 
         if (extRatingMax != null)
             query = query.Where(d => d.ExternalRating <= extRatingMax);
-
+        
         // Genre filters
         if (!string.IsNullOrEmpty(genres))
         {
@@ -248,40 +312,41 @@ public class MediaDeckController(
             }
         }
 
-        // Filter by word
+        // Word filter
         if (wordId != 0)
         {
-            var wordFilteredDeckIds = await context.DeckWords
-                                                   .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
-                                                   .Select(dw => dw.DeckId)
-                                                   .Distinct()
-                                                   .ToListAsync();
-
-            query = query.Where(d => wordFilteredDeckIds.Contains(d.DeckId));
+            query = query.Where(d => context.DeckWords
+                                            .Any(dw => dw.DeckId == d.DeckId && dw.WordId == wordId && dw.ReadingIndex == readingIndex));
         }
 
-        // Filter by status (only when authenticated)
-        if (currentUserService.IsAuthenticated && !string.IsNullOrEmpty(status))
+        // User preferences
+        Dictionary<int, UserDeckPreference> allUserPrefs = new();
+        HashSet<int> favDeckIds = new();
+        HashSet<int> ignoredDeckIds = new();
+
+        if (currentUserService.IsAuthenticated)
         {
             var userId = currentUserService.UserId!;
+            var prefsList = await userContext.UserDeckPreferences
+                                             .AsNoTracking()
+                                             .Where(p => p.UserId == userId)
+                                             .ToListAsync();
+
+            allUserPrefs = prefsList.ToDictionary(p => p.DeckId);
+            favDeckIds = prefsList.Where(p => p.IsFavourite).Select(p => p.DeckId).ToHashSet();
+            ignoredDeckIds = prefsList.Where(p => p.IsIgnored).Select(p => p.DeckId).ToHashSet();
+        }
+
+        if (currentUserService.IsAuthenticated && !string.IsNullOrEmpty(status))
+        {
             var normalizedStatus = status.ToLowerInvariant();
 
             if (normalizedStatus == "fav")
             {
-                var favDeckIds = await userContext.UserDeckPreferences
-                                                  .AsNoTracking()
-                                                  .Where(p => p.UserId == userId && p.IsFavourite)
-                                                  .Select(p => p.DeckId)
-                                                  .ToListAsync();
                 query = query.Where(d => favDeckIds.Contains(d.DeckId));
             }
             else if (normalizedStatus == "ignore")
             {
-                var ignoredDeckIds = await userContext.UserDeckPreferences
-                                                      .AsNoTracking()
-                                                      .Where(p => p.UserId == userId && p.IsIgnored)
-                                                      .Select(p => p.DeckId)
-                                                      .ToListAsync();
                 query = query.Where(d => ignoredDeckIds.Contains(d.DeckId));
             }
             else if (normalizedStatus != "none")
@@ -297,34 +362,20 @@ public class MediaDeckController(
 
                 if (deckStatus.HasValue)
                 {
-                    var statusDeckIds = await userContext.UserDeckPreferences
-                                                         .AsNoTracking()
-                                                         .Where(p => p.UserId == userId && p.Status == deckStatus.Value)
-                                                         .Select(p => p.DeckId)
-                                                         .ToListAsync();
+                    var statusDeckIds = allUserPrefs
+                                        .Where(p => p.Value.Status == deckStatus.Value)
+                                        .Select(p => p.Key)
+                                        .ToHashSet();
                     query = query.Where(d => statusDeckIds.Contains(d.DeckId));
                 }
             }
         }
 
-        // Exclude ignored decks (only when authenticated and status is not "ignore")
+        // Exclude ignored decks
         if (currentUserService.IsAuthenticated && status?.ToLowerInvariant() != "ignore")
         {
-            var userId = currentUserService.UserId!;
-            var ignoredDeckIds = await userContext.UserDeckPreferences
-                                                  .AsNoTracking()
-                                                  .Where(p => p.UserId == userId && p.IsIgnored)
-                                                  .Select(p => p.DeckId)
-                                                  .ToListAsync();
             query = query.Where(d => !ignoredDeckIds.Contains(d.DeckId));
         }
-
-        query = query.Include(d => d.Children)
-                     .Include(d => d.Links)
-                     .Include(d => d.Titles)
-                     .Include(d => d.DeckGenres)
-                     .Include(d => d.DeckTags)
-                     .ThenInclude(dt => dt.Tag);
 
         // Create projected query for word-based searches
         IQueryable<DeckWithOccurrences>? projectedQuery = null;
@@ -345,7 +396,6 @@ public class MediaDeckController(
 
         Dictionary<int, float> coverageDict = new();
         Dictionary<int, float> uniqueCoverageDict = new();
-        Dictionary<int, UserDeckPreference> preferencesDict = new();
 
         if (currentUserService.IsAuthenticated)
         {
@@ -359,34 +409,60 @@ public class MediaDeckController(
             coverageDict = coverageList.ToDictionary(x => x.DeckId, x => (float)x.Coverage);
             uniqueCoverageDict = coverageList.ToDictionary(x => x.DeckId, x => (float)x.UniqueCoverage);
 
-            var preferencesList = await userContext.UserDeckPreferences
-                                                   .AsNoTracking()
-                                                   .Where(p => p.UserId == userId && allDeckIds.Contains(p.DeckId))
-                                                   .ToListAsync();
-            preferencesDict = preferencesList.ToDictionary(p => p.DeckId);
+            // Reuse allUserPrefs from earlier instead of querying again
 
             if ((sortBy is "coverage" or "uCoverage"))
             {
                 bool sortByUnique = sortBy == "uCoverage";
                 return await HandleCoverageSorting(query, projectedQuery, sortOrder, offset ?? 0, pageSize, coverageDict,
-                                                   uniqueCoverageDict, sortByUnique, preferencesDict);
+                                                   uniqueCoverageDict, sortByUnique, allUserPrefs);
             }
         }
 
         if (wordId != 0)
         {
             return await HandleWordBasedQuery(projectedQuery!, wordId, readingIndex, sortBy, sortOrder, offset ?? 0, pageSize, coverageDict,
-                                              uniqueCoverageDict, preferencesDict);
+                                              uniqueCoverageDict, allUserPrefs);
         }
 
         // Handle regular queries
         query = ApplySorting(query, sortBy, sortOrder);
         var totalCount = await query.CountAsync();
-        var paginatedDecks = await query
+
+        // Apply includes before materialising
+        query = query.Include(d => d.Children)
+                     .Include(d => d.Links)
+                     .Include(d => d.Titles)
+                     .Include(d => d.DeckGenres)
+                     .Include(d => d.DeckTags)
+                     .ThenInclude(dt => dt.Tag);
+
+        // Fetch unordered decks
+        var unorderedDecks = await query
                                    .Skip(offset ?? 0)
                                    .Take(pageSize)
                                    .AsSplitQuery()
                                    .ToListAsync();
+
+        // If we have a title filter, re-sort in memory to match the PGroonga ordering
+        List<Deck> paginatedDecks;
+        if (orderedDeckIds is { Count: > 0 })
+        {
+            // Create lookup dictionary for O(1) access
+            var deckLookup = unorderedDecks.ToDictionary(d => d.DeckId);
+
+            // Re-apply the order from PGroonga, but only for the paginated subset
+            var paginatedIds = orderedDeckIds.Skip(offset ?? 0).Take(pageSize).ToList();
+            paginatedDecks = paginatedIds
+                .Where(id => deckLookup.ContainsKey(id))
+                .Select(id => deckLookup[id])
+                .ToList();
+        }
+        else
+        {
+            // No title filter, order is already correct from ApplySorting
+            paginatedDecks = unorderedDecks;
+        }
 
         var dtos = paginatedDecks.Select(deck => new DeckDto(deck)).ToList();
 
@@ -396,7 +472,7 @@ public class MediaDeckController(
             {
                 if (coverageDict.TryGetValue(dto.DeckId, out var c)) dto.Coverage = c;
                 if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uc)) dto.UniqueCoverage = uc;
-                if (preferencesDict.TryGetValue(dto.DeckId, out var pref))
+                if (allUserPrefs.TryGetValue(dto.DeckId, out var pref))
                 {
                     dto.Status = pref.Status;
                     dto.IsFavourite = pref.IsFavourite;
@@ -633,33 +709,17 @@ public class MediaDeckController(
                                            .Select(g => g.First())
                                            .ToListAsync();
 
-        var exampleSentences = minimalExamples
-                               .Select(x => new ExampleSentence
-                                            {
-                                                DeckId = x.EffectiveDeckId, Text = x.Text, Words =
-                                                [
-                                                    new ExampleSentenceWord
-                                                    {
-                                                        WordId = wordId, ReadingIndex = (byte)readingIndex, Position = x.Match!.Position,
-                                                        Length = x.Match!.Length
-                                                    }
-                                                ]
-                                            })
-                               .ToList();
-
+        // Create dictionary for O(1) lookup instead of O(n) per deck
+        var exampleSentencesByDeck = minimalExamples
+            .ToDictionary(
+                          x => x.EffectiveDeckId,
+                          x => new ExampleSentenceDto { Text = x.Text, WordPosition = x.Match!.Position, WordLength = x.Match!.Length });
 
         var dtos = paginatedResults
                    .Select(r => new DeckDto(
                                             r.Deck,
                                             r.Occurrences,
-                                            exampleSentences
-                                                .Where(es => es.DeckId == r.Deck.DeckId)
-                                                .Select(es => new ExampleSentenceDto
-                                                              {
-                                                                  Text = es.Text, WordPosition = es.Words[0].Position,
-                                                                  WordLength = es.Words[0].Length
-                                                              })
-                                                .FirstOrDefault()))
+                                            exampleSentencesByDeck.GetValueOrDefault(r.Deck.DeckId)))
                    .ToList();
 
         // Populate user coverage if authenticated
