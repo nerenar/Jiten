@@ -156,9 +156,11 @@
   });
 
   const sortedLinks = computed(() => {
+    if (!props.deck.links || props.deck.links.length === 0) return [];
+
     return [...props.deck.links].sort((a, b) => {
-      const textA = getLinkTypeText(Number(a.linkType));
-      const textB = getLinkTypeText(Number(b.linkType));
+      const textA = getLinkTypeText(a.linkType);
+      const textB = getLinkTypeText(b.linkType);
       return textA.localeCompare(textB);
     });
   });
@@ -380,8 +382,8 @@
                   <GenreTagDisplay v-if="!store.hideTags && deck.tags?.length" :tags="deck.tags" label="Tags" />
                 </div>
 
-                <div class="mt-4 flex flex-col md:flex-row gap-4">
-                  <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{ getLinkTypeText(Number(link.linkType)) }}</a>
+                <div v-if="sortedLinks.length" class="mt-4 flex flex-col md:flex-row gap-4">
+                  <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{ getLinkTypeText(link.linkType) }}</a>
                 </div>
                 <div v-if="!hideControl" class="mt-4">
                   <div class="flex flex-col md:flex-row gap-2">

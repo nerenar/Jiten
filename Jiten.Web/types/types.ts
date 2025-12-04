@@ -63,7 +63,7 @@ export interface DeckWord {
 export interface Link {
   linkId: number;
   url: string;
-  linkType: string;
+  linkType: LinkType;
   deckId: number;
 }
 

@@ -103,9 +103,9 @@ public class MediaDeckController(
                    VaryByQueryKeys =
                    [
                        "offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder", "status",
-                                         "charCountMin", "charCountMax", "releaseYearMin", "releaseYearMax", "uniqueKanjiMin",
-                                         "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax", "extRatingMin", "extRatingMax", "genres",
-                                         "excludeGenres", "tags", "excludeTags"
+                       "charCountMin", "charCountMax", "releaseYearMin", "releaseYearMax", "uniqueKanjiMin",
+                       "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax", "extRatingMin", "extRatingMax", "genres",
+                       "excludeGenres", "tags", "excludeTags"
                    ])]
     [SwaggerOperation(Summary = "List media decks",
                       Description =
@@ -247,7 +247,7 @@ public class MediaDeckController(
 
         if (extRatingMax != null)
             query = query.Where(d => d.ExternalRating <= extRatingMax);
-        
+
         // Genre filters
         if (!string.IsNullOrEmpty(genres))
         {
@@ -377,6 +377,14 @@ public class MediaDeckController(
             query = query.Where(d => !ignoredDeckIds.Contains(d.DeckId));
         }
 
+        query = query.Include(d => d.Children)
+                     .Include(d => d.Links)
+                     .Include(d => d.Titles)
+                     .Include(d => d.DeckGenres)
+                     .Include(d => d.DeckTags)
+                     .ThenInclude(dt => dt.Tag);
+
+
         // Create projected query for word-based searches
         IQueryable<DeckWithOccurrences>? projectedQuery = null;
         if (wordId != 0)
@@ -422,20 +430,12 @@ public class MediaDeckController(
         if (wordId != 0)
         {
             return await HandleWordBasedQuery(projectedQuery!, wordId, readingIndex, sortBy, sortOrder, offset ?? 0, pageSize, coverageDict,
-                                              uniqueCoverageDict, allUserPrefs);
+                                              uniqueCoverageDict, allUserPrefs, orderedDeckIds);
         }
 
         // Handle regular queries
         query = ApplySorting(query, sortBy, sortOrder);
         var totalCount = await query.CountAsync();
-
-        // Apply includes before materialising
-        query = query.Include(d => d.Children)
-                     .Include(d => d.Links)
-                     .Include(d => d.Titles)
-                     .Include(d => d.DeckGenres)
-                     .Include(d => d.DeckTags)
-                     .ThenInclude(dt => dt.Tag);
 
         // Fetch unordered decks
         var unorderedDecks = await query
@@ -454,9 +454,9 @@ public class MediaDeckController(
             // Re-apply the order from PGroonga, but only for the paginated subset
             var paginatedIds = orderedDeckIds.Skip(offset ?? 0).Take(pageSize).ToList();
             paginatedDecks = paginatedIds
-                .Where(id => deckLookup.ContainsKey(id))
-                .Select(id => deckLookup[id])
-                .ToList();
+                             .Where(id => deckLookup.ContainsKey(id))
+                             .Select(id => deckLookup[id])
+                             .ToList();
         }
         else
         {
@@ -512,14 +512,37 @@ public class MediaDeckController(
         // Use projectedQuery if it's word based
         if (projectedQuery != null)
         {
-            var pagedResults = await projectedQuery
-                                     .Where(p => pagedIds.Contains(p.Deck.DeckId))
-                                     .ToListAsync();
+            var paginatedProjections = await projectedQuery
+                                         .Where(p => pagedIds.Contains(p.Deck.DeckId))
+                                         .ToListAsync();
+
+            var deckIdsToHydrate = paginatedProjections.Select(p => p.Deck.DeckId).ToList();
+
+            var fullDecks = await context.Decks.AsNoTracking()
+                                         .Where(d => deckIdsToHydrate.Contains(d.DeckId))
+                                         .Include(d => d.Children)
+                                         .Include(d => d.Links)
+                                         .Include(d => d.Titles)
+                                         .Include(d => d.DeckGenres)
+                                         .Include(d => d.DeckTags)
+                                         .ThenInclude(dt => dt.Tag)
+                                         .AsSplitQuery()
+                                         .ToListAsync();
+            
+            var fullDeckMap = fullDecks.ToDictionary(d => d.DeckId);
 
             var orderIndex = pagedIds.Select((id, idx) => new { id, idx }).ToDictionary(k => k.id, v => v.idx);
-            pagedResults = pagedResults.OrderBy(r => orderIndex[r.Deck.DeckId]).ToList();
+            var paginatedResults = paginatedProjections
+                               .Where(p => fullDeckMap.ContainsKey(p.Deck.DeckId))
+                               .Select(p => new DeckWithOccurrences 
+                                            { 
+                                                Deck = fullDeckMap[p.Deck.DeckId], 
+                                                Occurrences = p.Occurrences 
+                                            })
+                               .OrderBy(r => orderIndex[r.Deck.DeckId])
+                               .ToList();
 
-            var dtos = pagedResults.Select(r => new DeckDto(r.Deck, r.Occurrences)).ToList();
+            var dtos = paginatedResults.Select(r => new DeckDto(r.Deck, r.Occurrences)).ToList();
 
             foreach (var dto in dtos)
             {
@@ -676,18 +699,53 @@ public class MediaDeckController(
     private async Task<PaginatedResponse<List<DeckDto>>> HandleWordBasedQuery(
         IQueryable<DeckWithOccurrences> projectedQuery, int wordId, int readingIndex, string sortBy, SortOrder sortOrder, int offset,
         int pageSize, Dictionary<int, float> coverageDict, Dictionary<int, float> uniqueCoverageDict,
-        Dictionary<int, UserDeckPreference> preferencesDict)
+        Dictionary<int, UserDeckPreference> preferencesDict, List<int>? orderedDeckIds)
     {
         // Apply sorting to the projected query
         projectedQuery = ApplySorting(projectedQuery, sortBy, sortOrder);
 
+
         var totalCount = await projectedQuery.CountAsync();
-        var paginatedResults = await projectedQuery
+        var paginatedProjections = await projectedQuery
                                      .Skip(offset)
                                      .Take(pageSize)
                                      .AsSplitQuery()
                                      .ToListAsync();
 
+        var deckIdsToHydrate = paginatedProjections.Select(p => p.Deck.DeckId).ToList();
+        var fullDecks = await context.Decks.AsNoTracking()
+                                     .Where(d => deckIdsToHydrate.Contains(d.DeckId))
+                                     .Include(d => d.Children)
+                                     .Include(d => d.Links)
+                                     .Include(d => d.Titles)
+                                     .Include(d => d.DeckGenres)
+                                     .Include(d => d.DeckTags)
+                                     .ThenInclude(dt => dt.Tag)
+                                     .AsSplitQuery()
+                                     .ToListAsync();
+        
+        var fullDeckMap = fullDecks.ToDictionary(d => d.DeckId);
+        var paginatedResults = paginatedProjections
+                               .Where(p => fullDeckMap.ContainsKey(p.Deck.DeckId))
+                               .Select(p => new DeckWithOccurrences 
+                                            { 
+                                                Deck = fullDeckMap[p.Deck.DeckId], 
+                                                Occurrences = p.Occurrences 
+                                            })
+                               .ToList();
+
+        
+        // If we have a title filter, re-sort in memory to match the PGroonga ordering
+        if (orderedDeckIds is { Count: > 0 })
+        {
+            var deckLookup = paginatedResults.ToDictionary(d => d.Deck.DeckId);
+            var paginatedIds = orderedDeckIds.Skip(offset).Take(pageSize).ToList();
+            paginatedResults = paginatedIds
+                               .Where(id => deckLookup.ContainsKey(id))
+                               .Select(id => deckLookup[id])
+                               .ToList();
+        }
+        
         var targetDeckIds = paginatedResults.Select(r => r.Deck.DeckId).ToList();
 
         var minimalExamples = await context.ExampleSentences
