@@ -368,7 +368,9 @@ builder.Services.AddRateLimiter(options =>
         {
             if (origin.StartsWith("http://localhost:") ||
                 origin.StartsWith("https://localhost:") ||
-                origin == "https://jiten.moe")
+                origin == "https://jiten.moe" ||
+                origin == "https://kizuna-texthooker-ui.fly.dev" ||
+                origin == "https://kizuna-texthooker-ui.app")
             {
                 context.HttpContext.Response.Headers.Append("Access-Control-Allow-Origin", origin);
             }
@@ -405,7 +407,9 @@ builder.Services.AddCors(options =>
                     return true;
                 }
 
-                return origin == "https://jiten.moe";
+                return origin == "https://jiten.moe" ||
+                       origin == "https://kizuna-texthooker-ui.fly.dev" ||
+                       origin == "https://kizuna-texthooker-ui.app";
             })
             .AllowAnyHeader()
             .AllowAnyMethod();
