@@ -95,7 +95,7 @@ services:
       - "traefik.http.routers.web.rule=Host(`jiten.moe`)"
 
   umami:
-    image: docker.umami.is/umami-software/umami:postgresql-latest
+    image: docker.umami.is/umami-software/umami:latest
     restart: unless-stopped
     depends_on:
       postgres:
