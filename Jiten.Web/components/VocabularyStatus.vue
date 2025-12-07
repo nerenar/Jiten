@@ -11,18 +11,18 @@
   }>();
 
   const toggleWordKnown = async () => {
-    if (props.word.knownState == KnownState.Mature || props.word.knownState == KnownState.Young) {
+    if (props.word.knownStates.includes(KnownState.Mature) || props.word.knownStates.includes(KnownState.Young) || props.word.knownStates.includes(KnownState.Mastered)) {
       await $api<boolean>(`user/vocabulary/remove/${props.word.wordId}/${props.word.mainReading.readingIndex}`, {
         method: 'POST',
       });
 
-      props.word.knownState = KnownState.New;
+      props.word.knownStates = [KnownState.New];
     } else {
       await $api<boolean>(`user/vocabulary/add/${props.word.wordId}/${props.word.mainReading.readingIndex}`, {
         method: 'POST',
       });
 
-      props.word.knownState = KnownState.Mature;
+      props.word.knownStates = [KnownState.Mastered];
     }
   };
 </script>
@@ -31,17 +31,22 @@
   <ClientOnly>
     <span class="inline-flex items-center gap-1">
       <template v-if="auth.isAuthenticated">
-        <template v-if="word.knownState == KnownState.Mature">
+        <template v-if="word.knownStates.includes(KnownState.Mature)">
           <span class="text-green-600 dark:text-green-300">Mature</span>
           <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
           <span aria-hidden="true">|</span>
         </template>
-        <template v-else-if="word.knownState == KnownState.Young">
+        <template v-if="word.knownStates.includes(KnownState.Mastered)">
+          <span class="text-green-600 dark:text-green-300">Mastered</span>
+          <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
+          <span aria-hidden="true">|</span>
+        </template>
+        <template v-else-if="word.knownStates.includes(KnownState.Young)">
           <span class="text-yellow-600 dark:text-yellow-300">Young</span>
           <Button icon="pi pi-minus" size="small" text severity="danger" @click="toggleWordKnown" />
           <span aria-hidden="true">|</span>
         </template>
-        <template v-else-if="word.knownState == KnownState.Blacklisted">
+        <template v-else-if="word.knownStates.includes(KnownState.Blacklisted)">
           <span class="text-gray-600 dark:text-gray-300">Blacklisted</span>
           <span aria-hidden="true">|</span>
         </template>

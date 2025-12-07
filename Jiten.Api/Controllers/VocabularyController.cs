@@ -81,7 +81,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents, KnownState = await currentUserService.GetKnownWordState(wordId, readingIndex)
+                              PitchAccents = word.PitchAccents, KnownStates = await currentUserService.GetKnownWordState(wordId, readingIndex)
                           });
     }
 

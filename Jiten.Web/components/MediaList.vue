@@ -414,6 +414,61 @@
     }
   };
 
+  const resetAllFilters = () => {
+    // Text filters
+    titleFilter.value = null;
+    debouncedTitleFilter.value = null;
+
+    // Numeric range filters
+    charCountMin.value = null;
+    charCountMax.value = null;
+    releaseYearMin.value = null;
+    releaseYearMax.value = null;
+    uniqueKanjiMin.value = null;
+    uniqueKanjiMax.value = null;
+    subdeckCountMin.value = null;
+    subdeckCountMax.value = null;
+    extRatingMin.value = null;
+    extRatingMax.value = null;
+
+    // Genre and tag filters
+    includeGenres.value = [];
+    excludeGenres.value = [];
+    includeTags.value = [];
+    excludeTags.value = [];
+
+    // Search queries
+    genreSearchQuery.value = '';
+    tagSearchQuery.value = '';
+
+    // Status filter
+    statusFilter.value = 'none';
+
+    // Update URL state
+    router.replace({
+      query: {
+        ...route.query,
+        title: undefined,
+        charCountMin: undefined,
+        charCountMax: undefined,
+        releaseYearMin: undefined,
+        releaseYearMax: undefined,
+        uniqueKanjiMin: undefined,
+        uniqueKanjiMax: undefined,
+        subdeckCountMin: undefined,
+        subdeckCountMax: undefined,
+        extRatingMin: undefined,
+        extRatingMax: undefined,
+        genres: undefined,
+        excludeGenres: undefined,
+        tags: undefined,
+        excludeTags: undefined,
+        status: undefined,
+        offset: 0,
+      },
+    });
+  };
+
   watch(
     () => props.word,
     (newWord) => {
@@ -828,6 +883,14 @@
                 />
               </div>
             </ScrollPanel>
+          </div>
+
+          <!-- Reset Button -->
+          <div class="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
+            <Button severity="info" @click="resetAllFilters">
+              <Icon name="material-symbols:refresh" class="mr-2" />
+              Reset All Filters
+            </Button>
           </div>
         </div>
       </Popover>

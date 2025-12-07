@@ -35,15 +35,15 @@ public class CurrentUserService(
         }
     }
 
-    public async Task<Dictionary<(int WordId, byte ReadingIndex), KnownState>> GetKnownWordsState(
-        IEnumerable<(int WordId, byte ReadingIndex)> keys, bool getDue = false)
+    public async Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> GetKnownWordsState(
+        IEnumerable<(int WordId, byte ReadingIndex)> keys)
     {
         if (!IsAuthenticated)
-            return new Dictionary<(int, byte), KnownState>();
+            return new();
 
         var keysList = keys.Distinct().ToList();
         if (!keysList.Any())
-            return new Dictionary<(int, byte), KnownState>();
+            return new();
 
         var wordIds = keysList.Select(k => k.WordId).Distinct().ToList();
 
@@ -53,45 +53,87 @@ public class CurrentUserService(
 
         var candidateDict = candidates
                             .Where(w => keysList.Contains((w.WordId, w.ReadingIndex)))
-                            .ToDictionary<FsrsCard, (int WordId, byte ReadingIndex), KnownState>(w => (w.WordId, w.ReadingIndex), w =>
+                            .ToDictionary<FsrsCard, (int WordId, byte ReadingIndex), List<KnownState>>(w => (w.WordId, w.ReadingIndex), w =>
                             {
-                                if (w.State == FsrsState.Blacklisted) return KnownState.Blacklisted;
-                                if (w.State == FsrsState.Mastered) return KnownState.Mature;
-                                if (w.State == FsrsState.New) return KnownState.New;
+                                List<KnownState> knownState = new();
+                                switch (w.State)
+                                {
+                                    case FsrsState.Mastered:
+                                        knownState.Add(KnownState.Mastered);
+                                        break;
+                                    case FsrsState.Blacklisted:
+                                        knownState.Add(KnownState.Blacklisted);
+                                        break;
+                                    case FsrsState.New:
+                                        knownState.Add(KnownState.New);
+                                        break;
+                                }
 
-                                if (w.LastReview == null || (getDue && w.Due <= DateTime.UtcNow))
-                                    return KnownState.Due;
+                                // return early because those states are incompatible with the rest
+                                if (knownState.Count > 0)
+                                    return knownState;
+
+                                if (w.LastReview == null)
+                                {
+                                    knownState.Add(KnownState.Due);
+                                    return knownState;
+                                }
+
+                                if (w.Due <= DateTime.UtcNow)
+                                    knownState.Add(KnownState.Due);
 
                                 var interval = (w.Due - w.LastReview.Value).TotalDays;
-                                return interval < 21 ? KnownState.Young : KnownState.Mature;
+                                knownState.Add(interval < 21 ? KnownState.Young : KnownState.Mature);
+
+                                return knownState;
                             });
 
-        return keysList.ToDictionary(k => k,
-                                     k => candidateDict.GetValueOrDefault(k, KnownState.New));
+        return keysList.ToDictionary(k => k, k => candidateDict.GetValueOrDefault(k, [KnownState.New]));
     }
 
-    public async Task<KnownState> GetKnownWordState(int wordId, byte readingIndex)
+    public async Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex)
     {
         if (!IsAuthenticated)
-            return KnownState.New;
+            return [KnownState.New];
 
         var word = await userContext.FsrsCards.FirstOrDefaultAsync(u => u.UserId == UserId && u.WordId == wordId &&
                                                                         u.ReadingIndex == readingIndex);
 
-        if (word == null || word.State == FsrsState.New)
-            return KnownState.New;
+        if (word == null)
+            return [KnownState.New];
 
-        if (word.State == FsrsState.Blacklisted)
-            return KnownState.Blacklisted;
+        List<KnownState> knownState = new();
 
-        if (word.State == FsrsState.Mastered)
-            return KnownState.Mature;
+        switch (word.State)
+        {
+            case FsrsState.Mastered:
+                knownState.Add(KnownState.Mastered);
+                break;
+            case FsrsState.Blacklisted:
+                knownState.Add(KnownState.Blacklisted);
+                break;
+            case FsrsState.New:
+                knownState.Add(KnownState.New);
+                break;
+        }
+
+        // return early because those states are incompatible with the rest
+        if (knownState.Count > 0)
+            return knownState;
 
         if (word.LastReview == null)
-            return KnownState.New;
+        {
+            knownState.Add(KnownState.Due);
+            return knownState;
+        }
 
-        var dueIn = (word.Due - word.LastReview.Value).TotalDays;
-        return dueIn < 21 ? KnownState.Young : KnownState.Mature;
+        if (word.Due <= DateTime.UtcNow)
+            knownState.Add(KnownState.Due);
+
+        var interval = (word.Due - word.LastReview.Value).TotalDays;
+        knownState.Add(interval < 21 ? KnownState.Young : KnownState.Mature);
+
+        return knownState;
     }
 
     public async Task<int> AddKnownWords(IEnumerable<DeckWord> deckWords)

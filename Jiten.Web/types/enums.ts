@@ -91,6 +91,8 @@ export enum KnownState {
   Young = 1,
   Mature = 2,
   Blacklisted = 3,
+  Due = 4,
+  Mastered = 5
 }
 
 export enum DifficultyDisplayStyle {

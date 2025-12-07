@@ -86,7 +86,7 @@ export interface Word {
   definitions: Definition[];
   occurrences: number;
   pitchAccents: number[];
-  knownState: KnownState;
+  knownStates: KnownState[];
 }
 
 export interface Reading {

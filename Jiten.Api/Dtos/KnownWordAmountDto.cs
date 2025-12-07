@@ -6,6 +6,8 @@ public class KnownWordAmountDto
     public int YoungForm { get; set; }
     public int Mature { get; set; }
     public int MatureForm { get; set; }
+    public int Mastered { get; set; }
+    public int MasteredForm { get; set; }
     public int Blacklisted { get; set; }
     public int BlacklistedForm { get; set; }
 }

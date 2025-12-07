@@ -9,8 +9,8 @@ public interface ICurrentUserService
     string? UserId { get; }
     bool IsAuthenticated { get; }
     ClaimsPrincipal? Principal { get; }
-    Task<Dictionary<(int WordId, byte ReadingIndex), KnownState>> GetKnownWordsState(IEnumerable<(int WordId, byte ReadingIndex)> keys, bool getDue = false);
-    Task<KnownState> GetKnownWordState(int wordId, byte readingIndex);
+    Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> GetKnownWordsState(IEnumerable<(int WordId, byte ReadingIndex)> keys);
+    Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex);
     Task<int> AddKnownWords(IEnumerable<DeckWord> deckWords);
     Task AddKnownWord(int wordId, byte readingIndex);
     Task RemoveKnownWord(int wordId, byte readingIndex);

@@ -12,7 +12,7 @@ public class WordDto
     public List<DefinitionDto> Definitions { get; set; } = new();
     public int Occurrences { get; set; }
     public List<int>? PitchAccents { get; set; }
-    public KnownState KnownState { get; set; }
+    public List<KnownState> KnownStates { get; set; }
 }
 
 public class ReadingDto

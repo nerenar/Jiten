@@ -22,13 +22,15 @@
 
   const youngWordsAmount = ref(0);
   const matureWordsAmount = ref(0);
+  const masteredWordsAmount = ref(0);
   const blacklistedWordsAmount = ref(0);
   const youngFormsAmount = ref(0);
   const matureFormsAmount = ref(0);
+  const masteredFormsAmount = ref(0);
   const blacklistedFormsAmount = ref(0);
 
-  const totalWordsAmount = computed(() => youngWordsAmount.value + matureWordsAmount.value + blacklistedWordsAmount.value);
-  const totalFormsAmount = computed(() => youngFormsAmount.value + matureFormsAmount.value + blacklistedFormsAmount.value);
+  const totalWordsAmount = computed(() => youngWordsAmount.value + matureWordsAmount.value + masteredWordsAmount.value + blacklistedWordsAmount.value);
+  const totalFormsAmount = computed(() => youngFormsAmount.value + matureFormsAmount.value + masteredFormsAmount.value + blacklistedFormsAmount.value);
 
   onMounted(async () => {
     await fetchKnownWordsAmount();
@@ -36,14 +38,23 @@
 
   async function fetchKnownWordsAmount() {
     try {
-      const result = await $api<{ young: number; mature: number; blacklisted: number; youngForm: number; matureForm: number; blacklistedForm: number }>(
-        'user/vocabulary/known-ids/amount'
-      );
+      const result = await $api<{
+        young: number;
+        mature: number;
+        mastered: number;
+        blacklisted: number;
+        youngForm: number;
+        matureForm: number;
+        masteredForm: number;
+        blacklistedForm: number;
+      }>('user/vocabulary/known-ids/amount');
       youngWordsAmount.value = result.young;
       matureWordsAmount.value = result.mature;
+      masteredWordsAmount.value = result.mastered;
       blacklistedWordsAmount.value = result.blacklisted;
       youngFormsAmount.value = result.youngForm;
       matureFormsAmount.value = result.matureForm;
+      masteredFormsAmount.value = result.masteredForm;
       blacklistedFormsAmount.value = result.blacklistedForm;
     } catch {}
   }
@@ -67,9 +78,11 @@
 
           youngWordsAmount.value = 0;
           matureWordsAmount.value = 0;
+          masteredWordsAmount.value = 0;
           blacklistedWordsAmount.value = 0;
           youngFormsAmount.value = 0;
           matureFormsAmount.value = 0;
+          masteredFormsAmount.value = 0;
           blacklistedFormsAmount.value = 0;
         } catch (e) {
           console.error(e);
@@ -329,6 +342,14 @@
   const fsrsImportResult = ref<FsrsImportResultDto | null>(null);
   const fsrsIsLoading = ref(false);
 
+  // Export Words
+  const exportWordsLoading = ref(false);
+  const exportKanaOnly = ref(true);
+  const exportMastered = ref(true);
+  const exportMature = ref(true);
+  const exportYoung = ref(true);
+  const exportBlacklisted = ref(true);
+
   async function downloadFsrsVocabulary() {
     try {
       fsrsIsLoading.value = true;
@@ -365,6 +386,49 @@
       toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to export vocabulary data.', life: 5000 });
     } finally {
       fsrsIsLoading.value = false;
+    }
+  }
+
+  async function exportWords() {
+    try {
+      exportWordsLoading.value = true;
+      toast.add({ severity: 'info', summary: 'Exporting...', detail: 'Generating your vocabulary export...', life: 3000 });
+
+      const config = useRuntimeConfig();
+      const authStore = useAuthStore();
+
+      const params = new URLSearchParams({
+        exportKanaOnly: exportKanaOnly.value.toString(),
+        exportMastered: exportMastered.value.toString(),
+        exportMature: exportMature.value.toString(),
+        exportYoung: exportYoung.value.toString(),
+        exportBlacklisted: exportBlacklisted.value.toString(),
+      });
+
+      const response = await fetch(`${config.public.baseURL}user/vocabulary/export-words?${params}`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${authStore.accessToken}` },
+      });
+
+      if (!response.ok) throw new Error('Failed to export vocabulary');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const dateStr = new Date().toISOString().split('T')[0];
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jiten-vocabulary-export-${dateStr}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.add({ severity: 'success', summary: 'Export Successful', detail: 'Your vocabulary has been exported.', life: 5000 });
+    } catch (error) {
+      console.error('Error exporting words:', error);
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to export vocabulary.', life: 5000 });
+    } finally {
+      exportWordsLoading.value = false;
     }
   }
 
@@ -465,6 +529,10 @@
             <span class="font-extrabold text-green-600 dark:text-green-300">{{ matureWordsAmount }}</span> are mature (<b>{{ matureFormsAmount }}</b> forms).
           </li>
           <li>
+            <span class="font-extrabold text-green-600 dark:text-green-300">{{ masteredWordsAmount }}</span> are mastered (<b>{{ masteredFormsAmount }}</b>
+            forms).
+          </li>
+          <li>
             <span class="font-extrabold text-gray-600 dark:text-gray-300">{{ blacklistedWordsAmount }}</span> are blacklisted (<b>{{
               blacklistedFormsAmount
             }}</b>
@@ -476,13 +544,7 @@
         <p class="mb-3">You can upload a list of known words to calculate coverage and exclude them from downloads using one of the options below.</p>
         <div class="mt-3">
           <NuxtLink to="/settings/cards">
-            <Button
-              icon="pi pi-table"
-              label="View All Words"
-              severity="info"
-              outlined
-              class="w-full md:w-auto"
-            />
+            <Button icon="pi pi-table" label="View All Words" severity="info" outlined class="w-full md:w-auto" />
           </NuxtLink>
         </div>
       </template>
@@ -552,6 +614,64 @@
               </div>
             </div>
           </div>
+        </div>
+      </template>
+    </Card>
+
+    <Card class="mb-4">
+      <template #title>
+        <h3 class="text-lg font-semibold">Export Word List</h3>
+      </template>
+      <template #content>
+        <p class="mb-3">
+          Export your vocabulary as a text file organised by learning state. <br />
+          Each line contain a single word.
+        </p>
+
+        <div class="mb-3 flex flex-col gap-3">
+          <h4 class="text-md font-semibold mb-2">Export Options</h4>
+
+          <div class="mb-3 flex flex-col gap-2">
+            <div class="flex items-center">
+              <Checkbox id="exportKanaOnly" v-model="exportKanaOnly" :binary="true" />
+              <label for="exportKanaOnly" class="ml-2">
+                <span>Export <strong>kana only</strong> words</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400 block"> Include words that are written entirely in hiragana or katakana </span>
+              </label>
+            </div>
+
+            <div class="flex items-center">
+              <Checkbox id="exportMastered" v-model="exportMastered" :binary="true" />
+              <label for="exportMastered" class="ml-2">
+                <span>Export <strong>mastered</strong> words</span>
+              </label>
+            </div>
+
+            <div class="flex items-center">
+              <Checkbox id="exportMature" v-model="exportMature" :binary="true" />
+              <label for="exportMature" class="ml-2">
+                <span>Export <strong>mature</strong> words</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400 block"> Cards in review with interval ≥ 21 days </span>
+              </label>
+            </div>
+
+            <div class="flex items-center">
+              <Checkbox id="exportYoung" v-model="exportYoung" :binary="true" />
+              <label for="exportYoung" class="ml-2">
+                <span>Export <strong>young</strong> words</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400 block"> New, learning, relearning, or review with interval &lt; 21 days </span>
+              </label>
+            </div>
+
+            <div class="flex items-center">
+              <Checkbox id="exportBlacklisted" v-model="exportBlacklisted" :binary="true" />
+              <label for="exportBlacklisted" class="ml-2">
+                <span>Export <strong>blacklisted</strong> words</span>
+              </label>
+            </div>
+          </div>
+
+          <Button icon="pi pi-download" label="Export Words" :loading="exportWordsLoading" class="w-full md:w-auto" @click="exportWords" />
         </div>
       </template>
     </Card>
