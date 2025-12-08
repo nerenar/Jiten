@@ -76,7 +76,8 @@ namespace Jiten.Parser
             }
         }
 
-        public static async Task<List<DeckWord>> ParseText(IDbContextFactory<JitenDbContext> contextFactory, string text)
+        public static async Task<List<DeckWord>> ParseText(IDbContextFactory<JitenDbContext> contextFactory, string text,
+                                                           bool preserveStopToken = false)
         {
             _contextFactory = contextFactory;
             if (!_initialized)
@@ -97,7 +98,7 @@ namespace Jiten.Parser
             }
 
             var parser = new MorphologicalAnalyser();
-            var sentences = await parser.Parse(text);
+            var sentences = await parser.Parse(text, preserveStopToken: preserveStopToken);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
             // Only keep kanjis, kanas, digits,full width digits, latin characters, full width latin characters
@@ -645,8 +646,10 @@ namespace Jiten.Parser
                 }
                 else if (matches.Count > 1)
                     bestMatch = matches.OrderByDescending(m => m.GetPriorityScore(WanaKana.IsKana(wordData.wordInfo.Text)) +
-                                                               (m.Readings.All(r => r != wordData.wordInfo.Text) ? -50 : 0) // Deprioritize words where the long voxel mark has been stripped
-                                                               ).First();
+                                                               (m.Readings.All(r => r != wordData.wordInfo.Text)
+                                                                   ? -50
+                                                                   : 0) // Deprioritize words where the long voxel mark has been stripped
+                                                         ).First();
                 else
                     bestMatch = matches[0];
 

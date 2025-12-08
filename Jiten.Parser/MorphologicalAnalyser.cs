@@ -58,7 +58,15 @@ public class MorphologicalAnalyser
     // Token to separate some words in sudachi
     private static readonly string _stopToken = "|";
 
-    public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false)
+    /// <summary>
+    /// Parses the given text into a list of SentenceInfo objects by performing morphological analysis.
+    /// </summary>
+    /// <param name="text">The input text to be analyzed.</param>
+    /// <param name="morphemesOnly">A boolean indicating whether the parsing should output only morphemes. When true, parsing will use mode 'A' for morpheme parsing.</param>
+    /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved in the processed text. Used in the ReaderController</param>
+    /// <returns>A list of SentenceInfo objects representing the parsed output.</returns>
+    /// <exception cref="Exception">Thrown if an error occurs during parsing or processing.</exception>
+    public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false, bool preserveStopToken = false)
     {
         var configuration = new ConfigurationBuilder()
                             .SetBasePath(Directory.GetCurrentDirectory())
@@ -83,7 +91,9 @@ public class MorphologicalAnalyser
         var output = SudachiInterop.ProcessText(configPath, text, dic, mode: morphemesOnly ? 'A' : 'C').Split("\n");
 
         text = text.Replace(" ", "");
-        text = text.Replace(_stopToken, "");
+        
+        if (!preserveStopToken)
+            text = text.Replace(_stopToken, "");
 
         List<WordInfo> wordInfos = new();
 
@@ -174,7 +184,7 @@ public class MorphologicalAnalyser
         text = text.Replace(">", " ");
         text = text.ToFullWidthDigits();
         text = Regex.Replace(text,
-                             "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500()。！？「」）]",
+                             "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500()。！？「」）|]",
                              "");
 
         // Force spaces and line breaks with some characters so sudachi doesn't try to include them as part of a word

@@ -48,7 +48,7 @@ public class ReaderController(
 
         const string stopToken = "\n|\n";
         var combinedText = string.Join(stopToken, request.Text);
-        var allParsedWords = await Parser.Parser.ParseText(contextFactory, combinedText);
+        var allParsedWords = await Parser.Parser.ParseText(contextFactory, combinedText, preserveStopToken: true);
 
         var paragraphOffsets = new int[request.Text.Length];
         var currentOffset = 0;
@@ -151,7 +151,7 @@ public class ReaderController(
 
         var result = request.Words.Select(w =>
                                               knownStates.TryGetValue((w[0], (byte)w[1]), out var state)
-                                                  ? state.Select(s => (int)s) 
+                                                  ? state.Select(s => (int)s)
                                                   : [0]
                                          ).ToList();
 
