@@ -50,7 +50,7 @@ public class StatsController(JitenDbContext context, ILogger<StatsController> lo
             mediaByType.Add(mediaType, await decks.CountAsync(d => d.MediaType == mediaType));
         }
 
-        var totalMojis = await decks.SumAsync(d => d.CharacterCount);
+        double totalMojis = await decks.SumAsync(d => (double)d.CharacterCount);
         var totalMedias = mediaByType.Values.Sum();
 
         return new GlobalStatsDto { MediaByType = mediaByType, TotalMojis = totalMojis, TotalMedia = totalMedias };
