@@ -48,7 +48,11 @@ public class ReaderController(
 
         const string stopToken = "\n|\n";
         var combinedText = string.Join(stopToken, request.Text);
-        var allParsedWords = await Parser.Parser.ParseText(contextFactory, combinedText, preserveStopToken: true);
+        
+        // The parsed text is different to add stop tokens to characters that break because sudachi would ignore them and parse as a whole word
+        // But we need the original combined text for the paragraph logic position tracking
+        var parsedText = combinedText.Replace(" ", stopToken);
+        var allParsedWords = await Parser.Parser.ParseText(contextFactory, parsedText, preserveStopToken: true);
 
         var paragraphOffsets = new int[request.Text.Length];
         var currentOffset = 0;
@@ -71,7 +75,16 @@ public class ReaderController(
                 var wordPosition = combinedText.IndexOf(word.OriginalText, positionInCombined, StringComparison.Ordinal);
 
                 if (wordPosition >= paragraphEnd)
+                {
+                    // If the word position is too far, it's probably a misparse, so just discard the word completely to avoid breaking the logic
+                    if (wordPosition - paragraphEnd > 20 + word.OriginalText.Length * 2)
+                    {
+                        wordIndex++;
+                        continue;
+                    }
+
                     break;
+                }
 
                 if (wordPosition >= paragraphOffsets[i] && wordPosition < paragraphEnd)
                 {
@@ -116,11 +129,12 @@ public class ReaderController(
                     knownStates.TryGetValue((word.WordId, word.ReadingIndex), out var knownState);
                     var readerWord = new ReaderWord()
                                      {
-                                         WordId = word.WordId, ReadingIndex = word.ReadingIndex, Spelling = jmdictWord.Readings[word.ReadingIndex], Reading =
+                                         WordId = word.WordId, ReadingIndex = word.ReadingIndex,
+                                         Spelling = jmdictWord.Readings[word.ReadingIndex], Reading =
                                              jmdictWord.ReadingsFurigana[word.ReadingIndex],
-                                         PartsOfSpeech = jmdictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
-                                         MeaningsChunks = jmdictWord.Definitions.Where(d => d.EnglishMeanings.Count > 0)
-                                                                    .Select(d => d.EnglishMeanings).ToList(),
+                                         PartsOfSpeech = jmdictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(), MeaningsChunks =
+                                             jmdictWord.Definitions.Where(d => d.EnglishMeanings.Count > 0)
+                                                       .Select(d => d.EnglishMeanings).ToList(),
                                          MeaningsPartOfSpeech = jmdictWord.Definitions.SelectMany(d => d.PartsOfSpeech).ToList() ?? [""],
                                          FrequencyRank = frequencyData.TryGetValue(word.WordId, out var freq)
                                              ? freq.ReadingsFrequencyRank[word.ReadingIndex]
