@@ -44,7 +44,7 @@
   const hatsuonResult = computed(() => {
     if (props.reading && props.pitchAccent !== -1) {
       try {
-        const regex = /[\u4E00-\u9FFF\u3400-\u4DBF\[\]]/g;
+        const regex = /[\u4E00-\u9FFF\u3400-\u4DBF\uFF10-\uFF5A\[\]A-Za-z0-9]/g;
         const reading = props.reading.replace(regex, '');
 
         return hatsuon({ reading: reading, pitchNum: props.pitchAccent });
