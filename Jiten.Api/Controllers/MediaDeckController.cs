@@ -404,7 +404,7 @@ public class MediaDeckController(
         }
 
         if (string.IsNullOrEmpty(sortBy))
-            sortBy = "title";
+            sortBy = string.IsNullOrEmpty(titleFilter) ? "title" : "filter";
 
         Dictionary<int, float> coverageDict = new();
         Dictionary<int, float> uniqueCoverageDict = new();
@@ -471,7 +471,7 @@ public class MediaDeckController(
 
         // If we have a title filter, re-sort in memory to match the PGroonga ordering
         List<Deck> paginatedDecks;
-        if (orderedDeckIds is { Count: > 0 })
+        if (orderedDeckIds is { Count: > 0 } && sortBy == "filter")
         {
             // Create lookup dictionary for O(1) access
             var deckLookup = unorderedDecks.ToDictionary(d => d.DeckId);
@@ -761,7 +761,7 @@ public class MediaDeckController(
 
         
         // If we have a title filter, re-sort in memory to match the PGroonga ordering
-        if (orderedDeckIds is { Count: > 0 })
+        if (orderedDeckIds is { Count: > 0 } && sortBy == "filter")
         {
             var deckLookup = paginatedResults.ToDictionary(d => d.Deck.DeckId);
             var paginatedIds = orderedDeckIds.Skip(offset).Take(pageSize).ToList();

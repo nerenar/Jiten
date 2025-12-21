@@ -378,7 +378,7 @@
               </div>
 
               <div
-                v-if="downloadMode !== 'target'"
+                v-if="downloadMode !== 'target' && authStore.isAuthenticated"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
                 @click="excludeMatureMasteredBlacklisted = !excludeMatureMasteredBlacklisted"
               >
@@ -390,7 +390,7 @@
               </div>
 
               <div
-                v-if="downloadMode !== 'target'"
+                v-if="downloadMode !== 'target' && authStore.isAuthenticated"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
                 @click="excludeAllTrackedWords = !excludeAllTrackedWords"
               >
