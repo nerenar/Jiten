@@ -3,6 +3,7 @@
   import Card from 'primevue/card';
   import Button from 'primevue/button';
   import Select from 'primevue/select';
+  import DatePicker from 'primevue/datepicker';
   import ConfirmDialog from 'primevue/confirmdialog';
   import Toast from 'primevue/toast';
   import { useConfirm } from 'primevue/useconfirm';
@@ -23,8 +24,10 @@
 
   const confirm = useConfirm();
   const selectedMediaType = ref<MediaType | null>(null);
+  const selectedCutoffDate = ref<Date | null>(null);
   const isLoading = ref({
     reparse: false,
+    reparseBeforeDate: false,
     frequencies: false,
     coverages: false,
     difficulties: false,
@@ -80,6 +83,53 @@
       console.error('Error reparsing media:', error);
     } finally {
       isLoading.value.reparse = false;
+    }
+  };
+
+  const confirmReparseBeforeDate = () => {
+    if (!selectedCutoffDate.value) {
+      return;
+    }
+
+    confirm.require({
+      message: `Are you sure you want to reparse all decks updated before "${selectedCutoffDate.value.toLocaleString()}"? This operation may take a long time.`,
+      header: 'Confirmation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => reparseBeforeDate(),
+      reject: () => {},
+    });
+  };
+
+  const reparseBeforeDate = async () => {
+    if (!selectedCutoffDate.value) {
+      return;
+    }
+
+    try {
+      isLoading.value.reparseBeforeDate = true;
+      const data = await $api(`/admin/reparse-decks-before-date`, {
+        method: 'POST',
+        body: selectedCutoffDate.value.toISOString(),
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Reparsing ${data.count} decks updated before ${selectedCutoffDate.value.toLocaleString()}`,
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to reparse decks',
+        life: 5000,
+      });
+      console.error('Error reparsing decks:', error);
+    } finally {
+      isLoading.value.reparseBeforeDate = false;
     }
   };
 
@@ -304,6 +354,35 @@
               :disabled="!selectedMediaType || isLoading.reparse"
               :loading="isLoading.reparse"
               @click="confirmReparse"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Reparse All Before Date</template>
+        <template #content>
+          <p class="mb-4">Reparse all decks where the last update is before the specified date/time.</p>
+          <div class="mb-4">
+            <label for="cutoffDate" class="block text-sm font-medium mb-1">Cutoff Date</label>
+            <DatePicker
+              id="cutoffDate"
+              v-model="selectedCutoffDate"
+              show-time
+              hour-format="24"
+              placeholder="Select date and time"
+              class="w-full"
+            />
+          </div>
+
+          <div class="flex justify-center">
+            <Button
+              label="Reparse All Before This Date"
+              icon="pi pi-refresh"
+              class="p-button-warning"
+              :disabled="!selectedCutoffDate || isLoading.reparseBeforeDate"
+              :loading="isLoading.reparseBeforeDate"
+              @click="confirmReparseBeforeDate"
             />
           </div>
         </template>

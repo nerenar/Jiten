@@ -567,6 +567,27 @@ public partial class AdminController(
         return Ok(new { Message = $"Reparsing {count} media items of type {mediaType}", Count = count });
     }
 
+    [HttpPost("reparse-decks-before-date")]
+    public async Task<IActionResult> ReparseDecksBeforeDate([FromBody] DateTimeOffset cutoffDate)
+    {
+        var decksToReparse = await dbContext.Decks.AsNoTracking()
+            .Where(d => d.LastUpdate < cutoffDate && d.ParentDeck == null)
+            .ToListAsync();
+
+        if (!decksToReparse.Any())
+            return NotFound(new { Message = $"No decks found with last update before {cutoffDate:g}" });
+
+        int count = 0;
+        foreach (var deck in decksToReparse)
+        {
+            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
+            count++;
+        }
+
+        logger.LogInformation("Admin queued reparse for decks before: Date={Date}, Count={Count}", cutoffDate, count);
+        return Ok(new { Message = $"Reparsing {count} decks updated before {cutoffDate:g}", Count = count });
+    }
+
     [HttpPost("recompute-frequencies")]
     public IActionResult RecomputeFrequencies()
     {
