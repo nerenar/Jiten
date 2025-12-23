@@ -115,6 +115,8 @@
   const currentYear = new Date().getFullYear();
   const charCountMin = ref<number | null>(toNumOrNull(route.query.charCountMin));
   const charCountMax = ref<number | null>(toNumOrNull(route.query.charCountMax));
+  const difficultyMin = ref<number | null>(toNumOrNull(route.query.difficultyMin));
+  const difficultyMax = ref<number | null>(toNumOrNull(route.query.difficultyMax));
   const releaseYearMin = ref<number | null>(toNumOrNull(route.query.releaseYearMin));
   const releaseYearMax = ref<number | null>(toNumOrNull(route.query.releaseYearMax));
   const uniqueKanjiMin = ref<number | null>(toNumOrNull(route.query.uniqueKanjiMin));
@@ -164,6 +166,7 @@
 
   // Normalize ranges when user edits inputs
   watch([charCountMin, charCountMax], () => normalizePair(charCountMin, charCountMax, 0, 20000000));
+  watch([difficultyMin, difficultyMax], () => normalizePair(difficultyMin, difficultyMax, 0, 5));
   watch([releaseYearMin, releaseYearMax], () => normalizePair(releaseYearMin, releaseYearMax, 1900, currentYear));
   watch([uniqueKanjiMin, uniqueKanjiMax], () => normalizePair(uniqueKanjiMin, uniqueKanjiMax, 0, 5000));
   watch([subdeckCountMin, subdeckCountMax], () => normalizePair(subdeckCountMin, subdeckCountMax, 0, 2000));
@@ -174,6 +177,8 @@
   const debouncedFilters = ref({
     charCountMin: charCountMin.value,
     charCountMax: charCountMax.value,
+    difficultyMin: difficultyMin.value,
+    difficultyMax: difficultyMax.value,
     releaseYearMin: releaseYearMin.value,
     releaseYearMax: releaseYearMax.value,
     uniqueKanjiMin: uniqueKanjiMin.value,
@@ -198,6 +203,8 @@
       debouncedFilters.value = {
         charCountMin: charCountMin.value,
         charCountMax: charCountMax.value,
+        difficultyMin: difficultyMin.value,
+        difficultyMax: difficultyMax.value,
         releaseYearMin: releaseYearMin.value,
         releaseYearMax: releaseYearMax.value,
         uniqueKanjiMin: uniqueKanjiMin.value,
@@ -225,6 +232,8 @@
           ...route.query,
           charCountMin: toUndef(charCountMin.value) as any,
           charCountMax: toUndef(charCountMax.value) as any,
+          difficultyMin: toUndef(difficultyMin.value) as any,
+          difficultyMax: toUndef(difficultyMax.value) as any,
           releaseYearMin: toUndef(releaseYearMin.value) as any,
           releaseYearMax: toUndef(releaseYearMax.value) as any,
           uniqueKanjiMin: toUndef(uniqueKanjiMin.value) as any,
@@ -251,7 +260,7 @@
   );
 
   watch(
-    [charCountMin, charCountMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
+    [charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
     () => {
       updateFiltersDebounced();
     }
@@ -321,6 +330,8 @@
     // Numeric range filters
     charCountMin.value = null;
     charCountMax.value = null;
+    difficultyMin.value = null;
+    difficultyMax.value = null;
     releaseYearMin.value = null;
     releaseYearMax.value = null;
     uniqueKanjiMin.value = null;
@@ -351,6 +362,8 @@
         title: undefined,
         charCountMin: undefined,
         charCountMax: undefined,
+        difficultyMin: undefined,
+        difficultyMax: undefined,
         releaseYearMin: undefined,
         releaseYearMax: undefined,
         uniqueKanjiMin: undefined,
@@ -451,6 +464,8 @@
       status: statusFilter,
       charCountMin: computed(() => debouncedFilters.value.charCountMin),
       charCountMax: computed(() => debouncedFilters.value.charCountMax),
+      difficultyMin: computed(() => debouncedFilters.value.difficultyMin),
+      difficultyMax: computed(() => debouncedFilters.value.difficultyMax),
       releaseYearMin: computed(() => debouncedFilters.value.releaseYearMin),
       releaseYearMax: computed(() => debouncedFilters.value.releaseYearMax),
       uniqueKanjiMin: computed(() => debouncedFilters.value.uniqueKanjiMin),
@@ -578,6 +593,8 @@
         v-model:status-filter="statusFilter"
         v-model:char-count-min="charCountMin"
         v-model:char-count-max="charCountMax"
+        v-model:difficulty-min="difficultyMin"
+        v-model:difficulty-max="difficultyMax"
         v-model:release-year-min="releaseYearMin"
         v-model:release-year-max="releaseYearMax"
         v-model:unique-kanji-min="uniqueKanjiMin"

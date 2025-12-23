@@ -104,13 +104,13 @@
   ];
 
   const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
+    [DeckRelationshipType.Prequel]: 'Prequel',
     [DeckRelationshipType.Sequel]: 'Sequel',
     [DeckRelationshipType.Fandisc]: 'Fandisc',
     [DeckRelationshipType.Spinoff]: 'Spinoff',
     [DeckRelationshipType.SideStory]: 'Side Story',
     [DeckRelationshipType.Adaptation]: 'Adaptation',
     [DeckRelationshipType.Alternative]: 'Alternative',
-    [DeckRelationshipType.Prequel]: 'Prequel',
     [DeckRelationshipType.HasFandisc]: 'Has Fandisc',
     [DeckRelationshipType.HasSpinoff]: 'Has Spinoff',
     [DeckRelationshipType.HasSideStory]: 'Has Side Story',

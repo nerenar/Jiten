@@ -90,6 +90,8 @@ public class MediaDeckController(
     /// <param name="status">Status (none, fav, ignore, planning, ongoing, completed, dropped)</param>
     /// <param name="charCountMin"></param>
     /// <param name="charCountMax"></param>
+    /// <param name="difficultyMin"></param>
+    /// <param name="difficultyMax"></param>
     /// <param name="releaseYearMin"></param>
     /// <param name="releaseYearMax"></param>
     /// <param name="uniqueKanjiMin"></param>
@@ -104,7 +106,7 @@ public class MediaDeckController(
                    VaryByQueryKeys =
                    [
                        "offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder", "status",
-                       "charCountMin", "charCountMax", "releaseYearMin", "releaseYearMax", "uniqueKanjiMin",
+                       "charCountMin", "charCountMax", "difficultyMin", "difficultyMax", "releaseYearMin", "releaseYearMax", "uniqueKanjiMin",
                        "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax", "extRatingMin", "extRatingMax", "genres",
                        "excludeGenres", "tags", "excludeTags", "coverageMin", "coverageMax", "uniqueCoverageMin",
                        "uniqueCoverageMax"
@@ -119,6 +121,7 @@ public class MediaDeckController(
                                                                       SortOrder sortOrder = SortOrder.Ascending,
                                                                       string status = "",
                                                                       int? charCountMin = null, int? charCountMax = null,
+                                                                      float? difficultyMin = null, float? difficultyMax = null,
                                                                       int? releaseYearMin = null, int? releaseYearMax = null,
                                                                       int? uniqueKanjiMin = null, int? uniqueKanjiMax = null,
                                                                       int? subdeckCountMin = null, int? subdeckCountMax = null,
@@ -228,6 +231,12 @@ public class MediaDeckController(
 
         if (charCountMax != null)
             query = query.Where(d => d.CharacterCount <= charCountMax);
+
+        if (difficultyMin != null)
+            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty) >= difficultyMin);
+
+        if (difficultyMax != null)
+            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty) <= difficultyMax);
 
         if (releaseYearMin != null)
             query = query.Where(d => d.ReleaseDate.Year >= releaseYearMin);

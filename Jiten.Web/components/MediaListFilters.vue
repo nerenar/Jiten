@@ -16,6 +16,8 @@
   const statusFilter = defineModel<string>('statusFilter', { required: true });
   const charCountMin = defineModel<number | null>('charCountMin', { required: true });
   const charCountMax = defineModel<number | null>('charCountMax', { required: true });
+  const difficultyMin = defineModel<number | null>('difficultyMin', { required: true });
+  const difficultyMax = defineModel<number | null>('difficultyMax', { required: true });
   const releaseYearMin = defineModel<number | null>('releaseYearMin', { required: true });
   const releaseYearMax = defineModel<number | null>('releaseYearMax', { required: true });
   const uniqueKanjiMin = defineModel<number | null>('uniqueKanjiMin', { required: true });
@@ -81,6 +83,14 @@
     set: (val) => {
       charCountMin.value = val[0];
       charCountMax.value = val[1];
+    },
+  });
+
+  const difficultyRange = computed<[number, number]>({
+    get: () => [difficultyMin.value ?? 0, difficultyMax.value ?? 5],
+    set: (val) => {
+      difficultyMin.value = val[0];
+      difficultyMax.value = val[1];
     },
   });
 
@@ -235,6 +245,43 @@
                     size="small"
                     placeholder="Max"
                     :step="10000"
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-2">
+                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Difficulty</div>
+                <div class="flex items-center gap-3">
+                  <InputNumber
+                    v-model="difficultyMin"
+                    :min="0"
+                    :max="5"
+                    :use-grouping="false"
+                    mode="decimal"
+                    :min-fraction-digits="0"
+                    :max-fraction-digits="1"
+                    fluid
+                    class="max-w-28 flex-shrink-0"
+                    show-buttons
+                    size="small"
+                    placeholder="Min"
+                    :step="0.5"
+                  />
+                  <Slider v-model="difficultyRange" range :min="0" :max="5" :step="0.5" class="flex-1" />
+                  <InputNumber
+                    v-model="difficultyMax"
+                    :min="0"
+                    :max="5"
+                    :use-grouping="false"
+                    mode="decimal"
+                    :min-fraction-digits="0"
+                    :max-fraction-digits="1"
+                    fluid
+                    class="max-w-28 flex-shrink-0"
+                    show-buttons
+                    size="small"
+                    placeholder="Max"
+                    :step="0.5"
                   />
                 </div>
               </div>

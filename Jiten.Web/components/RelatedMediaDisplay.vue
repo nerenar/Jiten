@@ -17,8 +17,8 @@
   });
 
   const relationshipSortOrder: DeckRelationshipType[] = [
-    DeckRelationshipType.Prequel,
     DeckRelationshipType.Sequel,
+    DeckRelationshipType.Prequel,
     DeckRelationshipType.Adaptation,
     DeckRelationshipType.Alternative,
     DeckRelationshipType.Fandisc,
@@ -31,13 +31,13 @@
   ];
 
   const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
-    [DeckRelationshipType.Sequel]: 'Sequel',
+    [DeckRelationshipType.Sequel]: 'Prequel',
     [DeckRelationshipType.Fandisc]: 'Source',
     [DeckRelationshipType.Spinoff]: 'Source',
     [DeckRelationshipType.SideStory]: 'Source',
     [DeckRelationshipType.Adaptation]: 'Adaptation',
     [DeckRelationshipType.Alternative]: 'Alternative',
-    [DeckRelationshipType.Prequel]: 'Prequel',
+    [DeckRelationshipType.Prequel]: 'Sequel',
     [DeckRelationshipType.HasFandisc]: 'Fandisc',
     [DeckRelationshipType.HasSpinoff]: 'Spinoff',
     [DeckRelationshipType.HasSideStory]: 'Side Story',

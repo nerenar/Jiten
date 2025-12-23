@@ -148,8 +148,8 @@ public static partial class MetadataProviderHelper
     {
         return relation switch
         {
-            "seq" => (DeckRelationshipType.Sequel, false),
-            "preq" => (DeckRelationshipType.Sequel, true),
+            "seq" => (DeckRelationshipType.Sequel, true),
+            "preq" => (DeckRelationshipType.Sequel, false),
             "alt" => (DeckRelationshipType.Alternative, false),
             "side" => (DeckRelationshipType.SideStory, true),
             "par" => (DeckRelationshipType.SideStory, false),
