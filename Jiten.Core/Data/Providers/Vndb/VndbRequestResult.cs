@@ -11,4 +11,5 @@ public class VndbRequestResult
     public List<string> Aliases { get; set; }
     public double? Rating { get; set; }
     public List<VndbTag> Tags { get; set; } = new();
+    public List<VndbRelation> Relations { get; set; } = new();
 }

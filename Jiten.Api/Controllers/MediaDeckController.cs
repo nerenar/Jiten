@@ -126,7 +126,8 @@ public class MediaDeckController(
                                                                       string? genres = null, string? excludeGenres = null,
                                                                       string? tags = null, string? excludeTags = null,
                                                                       float? coverageMin = null, float? coverageMax = null,
-                                                                      float? uniqueCoverageMin = null, float? uniqueCoverageMax = null)
+                                                                      float? uniqueCoverageMin = null, float? uniqueCoverageMax = null,
+                                                                      bool? excludeSequels = null)
     {
         // Disable response caching for authenticated users
         if (currentUserService.IsAuthenticated)
@@ -316,6 +317,15 @@ public class MediaDeckController(
             }
         }
 
+        // Exclude sequels and fandiscs
+        if (excludeSequels == true)
+        {
+            query = query.Where(d =>
+                !d.RelationshipsAsSource.Any(r =>
+                    r.RelationshipType == DeckRelationshipType.Sequel ||
+                    r.RelationshipType == DeckRelationshipType.Fandisc));
+        }
+
         // Word filter
         if (wordId != 0)
         {
@@ -386,7 +396,11 @@ public class MediaDeckController(
                      .Include(d => d.Titles)
                      .Include(d => d.DeckGenres)
                      .Include(d => d.DeckTags)
-                     .ThenInclude(dt => dt.Tag);
+                     .ThenInclude(dt => dt.Tag)
+                     .Include(d => d.RelationshipsAsSource)
+                     .ThenInclude(r => r.TargetDeck)
+                     .Include(d => d.RelationshipsAsTarget)
+                     .ThenInclude(r => r.SourceDeck);
 
 
         // Create projected query for word-based searches
@@ -491,6 +505,9 @@ public class MediaDeckController(
 
         var dtos = paginatedDecks.Select(deck => new DeckDto(deck)).ToList();
 
+        foreach (var (dto, deck) in dtos.Zip(paginatedDecks))
+            dto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
+
         if (currentUserService.IsAuthenticated)
         {
             foreach (var dto in dtos)
@@ -551,6 +568,10 @@ public class MediaDeckController(
                                          .Include(d => d.DeckGenres)
                                          .Include(d => d.DeckTags)
                                          .ThenInclude(dt => dt.Tag)
+                                         .Include(d => d.RelationshipsAsSource)
+                                         .ThenInclude(r => r.TargetDeck)
+                                         .Include(d => d.RelationshipsAsTarget)
+                                         .ThenInclude(r => r.SourceDeck)
                                          .AsSplitQuery()
                                          .ToListAsync();
             
@@ -568,6 +589,9 @@ public class MediaDeckController(
                                .ToList();
 
             var dtos = paginatedResults.Select(r => new DeckDto(r.Deck, r.Occurrences)).ToList();
+
+            foreach (var (dto, result) in dtos.Zip(paginatedResults))
+                dto.Relationships = DeckRelationshipDto.FromDeck(result.Deck.RelationshipsAsSource, result.Deck.RelationshipsAsTarget);
 
             foreach (var dto in dtos)
             {
@@ -600,6 +624,9 @@ public class MediaDeckController(
             pagedDecks = pagedDecks.OrderBy(d => orderIndex[d.DeckId]).ToList();
 
             var dtos = pagedDecks.Select(deck => new DeckDto(deck)).ToList();
+
+            foreach (var (dto, deck) in dtos.Zip(pagedDecks))
+                dto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
 
             foreach (var dto in dtos)
             {
@@ -746,6 +773,10 @@ public class MediaDeckController(
                                      .Include(d => d.DeckGenres)
                                      .Include(d => d.DeckTags)
                                      .ThenInclude(dt => dt.Tag)
+                                     .Include(d => d.RelationshipsAsSource)
+                                     .ThenInclude(r => r.TargetDeck)
+                                     .Include(d => d.RelationshipsAsTarget)
+                                     .ThenInclude(r => r.SourceDeck)
                                      .AsSplitQuery()
                                      .ToListAsync();
         
@@ -804,6 +835,9 @@ public class MediaDeckController(
                                             r.Occurrences,
                                             exampleSentencesByDeck.GetValueOrDefault(r.Deck.DeckId)))
                    .ToList();
+
+        foreach (var (dto, result) in dtos.Zip(paginatedResults))
+            dto.Relationships = DeckRelationshipDto.FromDeck(result.Deck.RelationshipsAsSource, result.Deck.RelationshipsAsTarget);
 
         // Populate user coverage if authenticated
         if (currentUserService.IsAuthenticated)
@@ -1003,6 +1037,10 @@ public class MediaDeckController(
                           .Include(d => d.DeckGenres)
                           .Include(d => d.DeckTags)
                           .ThenInclude(dt => dt.Tag)
+                          .Include(d => d.RelationshipsAsSource)
+                          .ThenInclude(r => r.TargetDeck)
+                          .Include(d => d.RelationshipsAsTarget)
+                          .ThenInclude(r => r.SourceDeck)
                           .FirstOrDefault(d => d.DeckId == id);
 
         if (deck == null)
@@ -1020,6 +1058,7 @@ public class MediaDeckController(
                    .Take(pageSize);
 
         var mainDeckDto = new DeckDto(deck);
+        mainDeckDto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
         List<DeckDto> subdeckDtos = [];
 
         var subDeckList = subDecks.ToList();

@@ -294,6 +294,44 @@ public class ComputationJob(
             await File.WriteAllTextAsync(indexFilePath, index);
         }
     }
+    
+    public async Task RecomputeKanjiFrequencies()
+    {
+        string path = Path.Join(configuration["StaticFilesPath"], "yomitan");
+        Directory.CreateDirectory(path);
+
+        Console.WriteLine("Computing kanji frequencies...");
+        var kanjiFrequencies = await JitenHelper.ComputeKanjiFrequencies(contextFactory);
+
+        // Save to CSV
+        await SaveKanjiFrequenciesToCsv(kanjiFrequencies, Path.Join(path, "jiten_kanji_freq.csv"));
+
+        // Generate Yomitan deck
+        string index = YomitanHelper.GetKanjiIndexJson();
+        var bytes = YomitanHelper.GenerateYomitanKanjiFrequencyDeck(kanjiFrequencies);
+        var filePath = Path.Join(path, "jiten_kanji_freq.zip");
+        string indexFilePath = Path.Join(path, "jiten_kanji_freq.json");
+        await File.WriteAllBytesAsync(filePath, bytes);
+        await File.WriteAllTextAsync(indexFilePath, index);
+
+        Console.WriteLine("Kanji frequency computation complete.");
+    }
+
+    private async Task SaveKanjiFrequenciesToCsv(List<(string kanji, int rank)> frequencies, string filePath)
+    {
+        using var stream = new MemoryStream();
+        await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+        await using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
+
+        var frequencyListCsv = frequencies.Select(f => new { Kanji = f.kanji, Rank = f.rank }).ToArray();
+
+        await csv.WriteRecordsAsync(frequencyListCsv);
+        await writer.FlushAsync();
+
+        stream.Position = 0;
+        await using var fileStream = new FileStream(filePath, FileMode.Create);
+        await stream.CopyToAsync(fileStream);
+    }
 
     private async Task SaveFrequenciesToCsv(List<JmDictWordFrequency> frequencies, string filePath)
     {

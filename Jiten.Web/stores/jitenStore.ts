@@ -136,6 +136,20 @@ export const useJitenStore = defineStore('jiten', () => {
     hideTagsCookie.value = newValue;
   });
 
+  // Relations display
+  const hideRelationsCookie = useCookie<boolean>('jiten-hide-relations', {
+    default: () => false,
+    watch: true,
+    maxAge: 60 * 60 * 24 * 365, // 1 year
+    path: '/',
+  });
+
+  const hideRelations = ref<boolean>(hideRelationsCookie.value);
+
+  watch(hideRelations, (newValue) => {
+    hideRelationsCookie.value = newValue;
+  });
+
   const difficultyDisplayStyleCookie = useCookie<DifficultyDisplayStyle>('jiten-difficulty-display-style', {
     default: () => 0,
     watch: true,
@@ -205,6 +219,7 @@ export const useJitenStore = defineStore('jiten', () => {
     hideCoverageBorders,
     hideGenres,
     hideTags,
+    hideRelations,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle
   };

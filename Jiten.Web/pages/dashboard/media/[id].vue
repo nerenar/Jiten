@@ -9,8 +9,8 @@
   import DataTable from 'primevue/datatable';
   import Column from 'primevue/column';
   import { useToast } from 'primevue/usetoast';
-  import { LinkType } from '~/types';
-  import type { DeckDetail, Link, MediaType, Tag, Genre } from '~/types';
+  import { DeckRelationshipType, LinkType } from '~/types';
+  import type { Deck, DeckDetail, DeckRelationship, Link, MediaType, Tag, Genre } from '~/types';
   import { getMediaTypeText, getChildrenCountText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
@@ -78,6 +78,44 @@
     percentage: 50
   });
   const tagsLoading = ref(false);
+
+  // Relationships
+  const relationships = ref<Array<{
+    targetDeckId: number;
+    targetTitle: string;
+    relationshipType: DeckRelationshipType;
+    isInverse: boolean;
+  }>>([]);
+  const showAddRelationshipDialog = ref(false);
+  const newRelationship = ref<{
+    targetDeckId: number | null;
+    targetTitle: string;
+    relationshipType: DeckRelationshipType | null;
+  }>({ targetDeckId: null, targetTitle: '', relationshipType: null });
+  const fetchingDeckTitle = ref(false);
+
+  const relationshipTypeOptions = [
+    { label: 'Sequel', value: DeckRelationshipType.Sequel },
+    { label: 'Fandisc', value: DeckRelationshipType.Fandisc },
+    { label: 'Spinoff', value: DeckRelationshipType.Spinoff },
+    { label: 'Side Story', value: DeckRelationshipType.SideStory },
+    { label: 'Adaptation', value: DeckRelationshipType.Adaptation },
+    { label: 'Alternative', value: DeckRelationshipType.Alternative },
+  ];
+
+  const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
+    [DeckRelationshipType.Sequel]: 'Sequel',
+    [DeckRelationshipType.Fandisc]: 'Fandisc',
+    [DeckRelationshipType.Spinoff]: 'Spinoff',
+    [DeckRelationshipType.SideStory]: 'Side Story',
+    [DeckRelationshipType.Adaptation]: 'Adaptation',
+    [DeckRelationshipType.Alternative]: 'Alternative',
+    [DeckRelationshipType.Prequel]: 'Prequel',
+    [DeckRelationshipType.HasFandisc]: 'Has Fandisc',
+    [DeckRelationshipType.HasSpinoff]: 'Has Spinoff',
+    [DeckRelationshipType.HasSideStory]: 'Has Side Story',
+    [DeckRelationshipType.SourceMaterial]: 'Source Material',
+  };
 
   const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
 
@@ -157,6 +195,13 @@
         tagId: t.tagId,
         name: t.name,
         percentage: t.percentage
+      })) || [];
+
+      relationships.value = mainDeck.relationships?.map(r => ({
+        targetDeckId: r.targetDeckId,
+        targetTitle: r.targetTitle,
+        relationshipType: r.relationshipType,
+        isInverse: r.isInverse
       })) || [];
 
       loadAvailableTags();
@@ -301,6 +346,73 @@
 
   function removeTag(index: number) {
     selectedTags.value.splice(index, 1);
+  }
+
+  // Relationship functions
+  async function fetchDeckTitle() {
+    if (!newRelationship.value.targetDeckId) {
+      showToast('warn', 'Validation', 'Please enter a deck ID');
+      return;
+    }
+
+    if (newRelationship.value.targetDeckId === parseInt(mediaId as string)) {
+      showToast('warn', 'Validation', 'Cannot add a relationship to itself');
+      newRelationship.value.targetTitle = '';
+      return;
+    }
+
+    fetchingDeckTitle.value = true;
+    try {
+      const result = await $api<{ mainDeck: { originalTitle: string } }>(`admin/deck/${newRelationship.value.targetDeckId}`);
+      newRelationship.value.targetTitle = result.mainDeck.originalTitle;
+    } catch (error) {
+      showToast('error', 'Error', 'Deck not found');
+      newRelationship.value.targetTitle = '';
+    } finally {
+      fetchingDeckTitle.value = false;
+    }
+  }
+
+  function openAddRelationshipDialog() {
+    newRelationship.value = { targetDeckId: null, targetTitle: '', relationshipType: null };
+    showAddRelationshipDialog.value = true;
+  }
+
+  function addRelationship() {
+    if (!newRelationship.value.targetDeckId || !newRelationship.value.relationshipType) {
+      showToast('warn', 'Validation', 'Please select a deck and relationship type');
+      return;
+    }
+
+    if (!newRelationship.value.targetTitle) {
+      showToast('warn', 'Validation', 'Please verify the deck ID first');
+      return;
+    }
+
+    const exists = relationships.value.some(
+      r => r.targetDeckId === newRelationship.value.targetDeckId &&
+           r.relationshipType === newRelationship.value.relationshipType
+    );
+    if (exists) {
+      showToast('warn', 'Duplicate', 'This relationship already exists');
+      return;
+    }
+
+    relationships.value.push({
+      targetDeckId: newRelationship.value.targetDeckId,
+      targetTitle: newRelationship.value.targetTitle,
+      relationshipType: newRelationship.value.relationshipType,
+      isInverse: false
+    });
+    showAddRelationshipDialog.value = false;
+  }
+
+  function removeRelationship(index: number) {
+    relationships.value.splice(index, 1);
+  }
+
+  function getRelationshipTypeLabel(type: DeckRelationshipType): string {
+    return relationshipTypeLabels[type] ?? 'Unknown';
   }
 
   function moveSubdeckToPosition(id: number, targetPosition: number | null) {
@@ -472,6 +584,13 @@
       selectedTags.value.forEach((tag, index) => {
         formData.append(`tags[${index}].tagId`, tag.tagId.toString());
         formData.append(`tags[${index}].percentage`, tag.percentage.toString());
+      });
+
+      // Add relationships (only direct, not inverse - inverse are computed from other deck's data)
+      const directRelationships = relationships.value.filter(r => !r.isInverse);
+      directRelationships.forEach((rel, index) => {
+        formData.append(`relationships[${index}].targetDeckId`, rel.targetDeckId.toString());
+        formData.append(`relationships[${index}].relationshipType`, rel.relationshipType.toString());
       });
 
       if (subdecks.value.length > 0) {
@@ -850,6 +969,83 @@
           <template #footer>
             <Button label="Cancel" severity="secondary" text @click="showAddTagDialog = false" />
             <Button label="Add" @click="addTag" />
+          </template>
+        </Dialog>
+
+        <!-- Relationships Section -->
+        <Card class="mt-6">
+          <template #title>
+            <div class="flex justify-between items-center">
+              <span>Related Media</span>
+              <Button @click="openAddRelationshipDialog" size="small">
+                <Icon name="material-symbols-light:add-circle-outline" size="1.25em" class="mr-1" />
+                Add Relationship
+              </Button>
+            </div>
+          </template>
+          <template #content>
+            <div v-if="relationships.length === 0" class="text-center text-gray-500 py-4">
+              No relationships defined. Click "Add Relationship" to link related media.
+            </div>
+
+            <ul v-else class="list-none p-0 space-y-2">
+              <li
+                v-for="(rel, index) in relationships"
+                :key="`${rel.targetDeckId}-${rel.relationshipType}-${rel.isInverse}`"
+                class="flex justify-between items-center p-3 border rounded"
+                :class="{ 'opacity-75': rel.isInverse }"
+              >
+                <div>
+                  <span class="font-medium">{{ getRelationshipTypeLabel(rel.relationshipType) }}:</span>
+                  <NuxtLink :to="`/decks/media/${rel.targetDeckId}/detail`" class="ml-2 text-primary hover:underline">
+                    {{ rel.targetTitle }}
+                  </NuxtLink>
+                  <span v-if="rel.isInverse" class="ml-2 text-xs text-gray-500">(inverse)</span>
+                </div>
+                <Button v-if="!rel.isInverse" severity="danger" text @click="removeRelationship(index)">
+                  <Icon name="material-symbols-light:delete" size="1.5em" />
+                </Button>
+                <span v-else class="text-xs text-gray-400 italic">Edit on target deck</span>
+              </li>
+            </ul>
+          </template>
+        </Card>
+
+        <!-- Add Relationship Dialog -->
+        <Dialog v-model:visible="showAddRelationshipDialog" header="Add Relationship" :modal="true" class="w-full md:w-1/2">
+          <div class="p-fluid">
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2">Relationship Type</label>
+              <Select
+                v-model="newRelationship.relationshipType"
+                :options="relationshipTypeOptions"
+                option-label="label"
+                option-value="value"
+                placeholder="Select relationship type"
+                class="w-full"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2">Target Deck ID</label>
+              <div class="flex gap-2">
+                <InputNumber
+                  v-model="newRelationship.targetDeckId"
+                  placeholder="Enter deck ID"
+                  class="flex-1"
+                  :use-grouping="false"
+                />
+                <Button @click="fetchDeckTitle" :loading="fetchingDeckTitle" :disabled="!newRelationship.targetDeckId">
+                  Verify
+                </Button>
+              </div>
+              <div v-if="newRelationship.targetTitle" class="mt-2 p-2 bg-surface-100 dark:bg-surface-800 rounded">
+                Deck: <strong>{{ newRelationship.targetTitle }}</strong>
+              </div>
+            </div>
+          </div>
+          <template #footer>
+            <Button label="Cancel" severity="secondary" text @click="showAddRelationshipDialog = false" />
+            <Button label="Add" @click="addRelationship" :disabled="!newRelationship.targetDeckId || !newRelationship.relationshipType || !newRelationship.targetTitle" />
           </template>
         </Dialog>
 

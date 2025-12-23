@@ -126,11 +126,11 @@ public static class YomitanHelper
                     // because the Kanji WAS observed.
                     if (kanaText != mainKanaReading)
                         continue;
-                    
+
                     string entryKey2 = $"{kanjiTerm}:{kanaText}:kanji";
-                    if (addedEntries.Contains(entryKey2)) 
+                    if (addedEntries.Contains(entryKey2))
                         continue;
-                        
+
                     yomitanTermList.Add([
                         kanjiTerm, "freq",
                         new Dictionary<string, object>
@@ -452,5 +452,51 @@ public static class YomitanHelper
         }
 
         return kanaReadings;
+    }
+
+    /// <summary>
+    /// Generates the content for the index.json file in a Yomitan kanji frequency dictionary.
+    /// </summary>
+    public static string GetKanjiIndexJson()
+    {
+        string title = "Jiten (Kanji)";
+        string revision = $"Jiten (Kanji) {DateTime.UtcNow:yy-MM-dd}";
+        string description = "Kanji frequency dictionary based on all media from jiten.moe";
+
+        return
+            $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","sequenced":false,"indexUrl":"https://api.jiten.moe/api/frequency-list/index-kanji","frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
+    }
+
+    /// <summary>
+    /// Generates a zipped Yomitan kanji frequency dictionary from pre-computed frequencies.
+    /// </summary>
+    public static byte[] GenerateYomitanKanjiFrequencyDeck(List<(string kanji, int rank)> kanjiFrequencies)
+    {
+        var yomitanTermList = new List<object>();
+
+        foreach (var (kanji, rank) in kanjiFrequencies)
+        {
+            yomitanTermList.Add(new object[] { kanji, "freq", new { value = rank, displayValue = rank.ToString() } });
+        }
+
+        var options = new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        var termBankJson = JsonSerializer.Serialize(yomitanTermList, options);
+        var indexJson = GetKanjiIndexJson();
+
+        using var memoryStream = new MemoryStream();
+        using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
+        {
+            AddZipEntry(archive, "index.json", indexJson);
+            AddZipEntry(archive, "kanji_meta_bank_1.json", termBankJson);
+        }
+
+        return memoryStream.ToArray();
+    }
+
+    private static void AddZipEntry(ZipArchive archive, string fileName, string content)
+    {
+        var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
+        using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+        writer.Write(content);
     }
 }

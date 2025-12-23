@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Threading;
 using ImageMagick;
 using Jiten.Core.Data;
@@ -774,6 +775,98 @@ public static class JitenHelper
 
         Console.WriteLine("Database update complete.");
     }
+
+    /// <summary>
+    /// Computes kanji frequency data based on all deck raw texts.
+    /// </summary>
+    public static async Task<List<(string kanji, int rank)>> ComputeKanjiFrequencies(IDbContextFactory<JitenDbContext> contextFactory)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var kanjiStats = new Dictionary<Rune, (long Total, int LastDeckId, int UniqueDecks)>();
+
+        int batchSize = 5000;
+        int lastId = 0;
+
+        while (true)
+        {
+            var batch = await context.DeckRawTexts
+                                     .AsNoTracking()
+                                     .Where(r => r.DeckId > lastId)
+                                     .OrderBy(r => r.DeckId)
+                                     .Take(batchSize)
+                                     .Select(r => new { r.DeckId, r.RawText })
+                                     .ToListAsync();
+
+            if (batch.Count == 0) break;
+
+            foreach (var entry in batch)
+            {
+                if (string.IsNullOrEmpty(entry.RawText)) continue;
+
+                foreach (Rune r in entry.RawText.EnumerateRunes())
+                {
+                    if (!IsKanji(r)) continue;
+
+                    if (kanjiStats.TryGetValue(r, out var stats))
+                    {
+                        bool isNewDeck = stats.LastDeckId != entry.DeckId;
+                        kanjiStats[r] = (
+                            stats.Total + 1,
+                            entry.DeckId,
+                            isNewDeck ? stats.UniqueDecks + 1 : stats.UniqueDecks
+                        );
+                    }
+                    else
+                    {
+                        kanjiStats[r] = (1, entry.DeckId, 1);
+                    }
+                }
+                lastId = entry.DeckId;
+            }
+        }
+
+        var scoredKanji = kanjiStats
+                          .Select(kvp => new { Kanji = kvp.Key, Score = Math.Log(1 + kvp.Value.Total) * kvp.Value.UniqueDecks })
+                          .OrderByDescending(x => x.Score)
+                          .ToList();
+
+        var result = new List<(string kanji, int rank)>();
+        int currentRank = 0;
+        int itemsProcessed = 0;
+        double lastScore = -1;
+
+        foreach (var item in scoredKanji)
+        {
+            itemsProcessed++;
+            if (Math.Abs(item.Score - lastScore) > 0.0001)
+            {
+                currentRank = itemsProcessed;
+            }
+
+            result.Add((item.Kanji.ToString(), currentRank));
+            lastScore = item.Score;
+        }
+
+        return result;
+        
+        static bool IsKanji(Rune r)
+        {
+            int value = r.Value;
+
+            return value is 
+                (>= 0x4E00 and <= 0x9FFF) or   // Main block (Common)
+                (>= 0x3400 and <= 0x4DBF) or   // Extension A
+                (>= 0x20000 and <= 0x2A6DF) or // Extension B (Very common in names)
+                (>= 0x2A700 and <= 0x2B73F) or // Extension C
+                (>= 0x2B740 and <= 0x2B81F) or // Extension D
+                (>= 0x2B820 and <= 0x2CEAF) or // Extension E
+                (>= 0xF900 and <= 0xFAFF) or   // Compatibility Ideographs
+                (>= 0x2F800 and <= 0x2FA1F);   // Compatibility Supplement
+        }
+    }
+
+
 
     /// <summary>
     /// Get infos about a deck to debug the difficulty

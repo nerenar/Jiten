@@ -83,4 +83,64 @@ public class FrequencyListController(JitenDbContext context, ILogger<FrequencyLi
         byte[] bytes = await System.IO.File.ReadAllBytesAsync(filePath);
         return Results.File(bytes, "text/json", fileName);
     }
+
+    [HttpGet("download-kanji")]
+    [EnableRateLimiting("download")]
+    public async Task<IResult> GetKanjiFrequencyList(string downloadType = "yomitan")
+    {
+        var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        string path = Path.Join(configuration["StaticFilesPath"], "yomitan");
+
+        string fileName, filePath;
+        byte[] bytes;
+        switch (downloadType)
+        {
+            case "yomitan":
+                fileName = "jiten_kanji_freq.zip";
+                filePath = Path.Join(path, fileName);
+
+                if (!System.IO.File.Exists(filePath))
+                {
+                    return Results.NotFound($"Kanji requency list not found: {fileName}");
+                }
+
+                bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                logger.LogInformation("User downloaded kanji frequency list: MDownloadType={DownloadType}, FileName={FileName}",
+                                      downloadType, fileName);
+                return Results.File(bytes, "application/zip", fileName);
+
+            case "csv":
+            default:
+                fileName = "jiten_kanji_freq.csv";
+                filePath = Path.Join(path, fileName);
+
+                if (!System.IO.File.Exists(filePath))
+                {
+                    return Results.NotFound($"Kanji frequency list not found: {fileName}");
+                }
+
+                bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                logger.LogInformation("User downloaded kanji frequency list: DownloadType={DownloadType}, FileName={FileName}",
+                                      downloadType, fileName);
+                return Results.File(bytes, "text/csv", fileName);
+        }
+    }
+
+    [HttpGet("index-kanji")]
+    public async Task<IResult> GetKanjiFrequencyListIndex()
+    {
+        var configuration = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        string path = Path.Join(configuration["StaticFilesPath"], "yomitan");
+
+        string fileName = "jiten_kanji_freq.json";
+        string filePath = Path.Join(path, fileName);
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            return Results.NotFound($"Kanji frequency list not found: {fileName}");
+        }
+
+        byte[] bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+        return Results.File(bytes, "text/json", fileName);
+    }
 }

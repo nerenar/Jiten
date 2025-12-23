@@ -1,4 +1,4 @@
-import { type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type ReadingType } from '~/types';
+import { type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type ReadingType } from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -34,6 +34,7 @@ export interface Deck {
   exampleSentence?: ExampleSentence;
   genres?: Genre[];
   tags?: TagWithPercentage[];
+  relationships?: DeckRelationship[];
   status?: DeckStatus;
   isFavourite?: boolean;
   isIgnored?: boolean;
@@ -71,6 +72,13 @@ export interface TagWithPercentage {
   tagId: number;
   name: string;
   percentage: number;
+}
+
+export interface DeckRelationship {
+  targetDeckId: number;
+  targetDeck: Deck;
+  relationshipType: DeckRelationshipType;
+  isInverse: boolean;
 }
 
 export interface MetadataTag {
@@ -144,6 +152,14 @@ export interface GlobalStats {
   totalMedia: number;
 }
 
+export interface MetadataRelation {
+  externalId: string;
+  linkType: number;
+  relationshipType: number;
+  targetMediaType?: number;
+  swapDirection: boolean;
+}
+
 export interface Metadata {
   originalTitle: string;
   romajiTitle: string;
@@ -157,6 +173,7 @@ export interface Metadata {
   genres?: string[];
   tags?: MetadataTag[];
   isAdultOnly?: boolean;
+  relations?: MetadataRelation[];
 }
 
 export interface Issues {

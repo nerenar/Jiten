@@ -102,6 +102,19 @@ public partial class AdminController(
                 }
             }
 
+            // Map relations from request
+            if (model.Relations.Any())
+            {
+                metadata.Relations = model.Relations.Select(r => new Core.Data.Providers.MetadataRelation
+                {
+                    ExternalId = r.ExternalId,
+                    LinkType = r.LinkType,
+                    RelationshipType = r.RelationshipType,
+                    TargetMediaType = r.TargetMediaType,
+                    SwapDirection = r.SwapDirection
+                }).ToList();
+            }
+
             if (model.CoverImage is { Length: > 0 })
             {
                 await using var stream = new FileStream(coverImagePathOrUrl, FileMode.Create);
@@ -203,6 +216,10 @@ public partial class AdminController(
                             .Include(d => d.DeckGenres)
                             .Include(d => d.DeckTags)
                             .ThenInclude(dt => dt.Tag)
+                            .Include(d => d.RelationshipsAsSource)
+                            .ThenInclude(r => r.TargetDeck)
+                            .Include(d => d.RelationshipsAsTarget)
+                            .ThenInclude(r => r.SourceDeck)
                             .FirstOrDefault(d => d.DeckId == id);
 
         if (deck == null)
@@ -214,6 +231,8 @@ public partial class AdminController(
             .OrderBy(dw => dw.DeckOrder);
 
         var mainDeckDto = new DeckDto(deck);
+        mainDeckDto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
+
         List<DeckDto> subDeckDtos = new();
 
         foreach (var subDeck in subDecks)
@@ -243,6 +262,7 @@ public partial class AdminController(
                                   .Include(d => d.DeckGenres)
                                   .Include(d => d.DeckTags)
                                   .ThenInclude(dt => dt.Tag)
+                                  .Include(d => d.RelationshipsAsSource)
                                   .FirstOrDefaultAsync(d => d.DeckId == model.DeckId);
 
         if (deck == null)
@@ -420,6 +440,62 @@ public partial class AdminController(
             }
         }
 
+        // Update relationships
+        if (model.Relationships != null && model.Relationships.Any())
+        {
+            // Filter out inverse relationships from the input (only accept direct/primary relationships)
+            var primaryRelationships = model.Relationships
+                .Where(r => DeckRelationship.IsPrimaryRelationship(r.RelationshipType))
+                .ToList();
+
+            var existingRelationships = deck.RelationshipsAsSource.ToList();
+            var newRelationshipKeys = primaryRelationships
+                .Select(r => (r.TargetDeckId, r.RelationshipType))
+                .ToHashSet();
+
+            // Remove relationships no longer present
+            foreach (var existing in existingRelationships)
+            {
+                if (!newRelationshipKeys.Contains((existing.TargetDeckId, existing.RelationshipType)))
+                {
+                    dbContext.DeckRelationships.Remove(existing);
+                }
+            }
+
+            // Add new relationships
+            var existingKeys = existingRelationships
+                .Select(r => (r.TargetDeckId, r.RelationshipType))
+                .ToHashSet();
+
+            foreach (var rel in primaryRelationships)
+            {
+                if (existingKeys.Contains((rel.TargetDeckId, rel.RelationshipType)))
+                    continue;
+
+                // Check if the inverse relationship already exists
+                var inverseType = DeckRelationship.GetInverse(rel.RelationshipType);
+                var inverseExists = await dbContext.DeckRelationships.AnyAsync(r =>
+                    r.SourceDeckId == rel.TargetDeckId &&
+                    r.TargetDeckId == deck.DeckId &&
+                    r.RelationshipType == inverseType);
+
+                if (inverseExists)
+                    continue;
+
+                deck.RelationshipsAsSource.Add(new DeckRelationship
+                {
+                    SourceDeckId = deck.DeckId,
+                    TargetDeckId = rel.TargetDeckId,
+                    RelationshipType = rel.RelationshipType
+                });
+            }
+        }
+        else if (model.Relationships != null)
+        {
+            // Clear all if empty list provided
+            dbContext.RemoveRange(deck.RelationshipsAsSource);
+        }
+
         deck.LastUpdate = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync();
@@ -498,6 +574,15 @@ public partial class AdminController(
 
         logger.LogInformation("Admin queued recompute frequencies job");
         return Ok(new { Message = "Recomputing frequencies job has been queued" });
+    }
+    
+    [HttpPost("recompute-kanji-frequencies")]
+    public IActionResult RecomputeKanjiFrequencies()
+    {
+        backgroundJobs.Enqueue<ComputationJob>(job => job.RecomputeKanjiFrequencies());
+
+        logger.LogInformation("Admin queued recompute kanji frequencies job");
+        return Ok(new { Message = "Recomputing kanji frequencies job has been queued" });
     }
 
     [HttpPost("recompute-coverages")]

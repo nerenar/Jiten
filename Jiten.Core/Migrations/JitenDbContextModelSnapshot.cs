@@ -179,6 +179,28 @@ namespace Jiten.Core.Migrations
                     b.ToTable("DeckRawTexts", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckRelationship", b =>
+                {
+                    b.Property<int>("SourceDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RelationshipType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SourceDeckId", "TargetDeckId", "RelationshipType");
+
+                    b.HasIndex("SourceDeckId")
+                        .HasDatabaseName("IX_DeckRelationships_SourceDeckId");
+
+                    b.HasIndex("TargetDeckId")
+                        .HasDatabaseName("IX_DeckRelationships_TargetDeckId");
+
+                    b.ToTable("DeckRelationships", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckStats", b =>
                 {
                     b.Property<int>("DeckId")
@@ -631,6 +653,27 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckRelationship", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "SourceDeck")
+                        .WithMany("RelationshipsAsSource")
+                        .HasForeignKey("SourceDeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_DeckRelationships_Decks_SourceDeckId");
+
+                    b.HasOne("Jiten.Core.Data.Deck", "TargetDeck")
+                        .WithMany("RelationshipsAsTarget")
+                        .HasForeignKey("TargetDeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_DeckRelationships_Decks_TargetDeckId");
+
+                    b.Navigation("SourceDeck");
+
+                    b.Navigation("TargetDeck");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckStats", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
@@ -779,6 +822,10 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Links");
 
                     b.Navigation("RawText");
+
+                    b.Navigation("RelationshipsAsSource");
+
+                    b.Navigation("RelationshipsAsTarget");
 
                     b.Navigation("Titles");
                 });

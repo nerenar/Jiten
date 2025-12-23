@@ -9,7 +9,7 @@
 
   const { $api } = useNuxtApp();
 
-  // Create an array of all media types plus Global
+  // Create an array of all media types plus Global (sorted) and Kanji at the end
   const deckTypes = [
     { id: null, name: 'Global' },
     ...Object.values(MediaType)
@@ -17,13 +17,40 @@
       .map((value) => ({
         id: value as MediaType,
         name: getMediaTypeText(value as MediaType),
-      })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    { id: 'kanji' as const, name: 'Kanji' },
   ];
 
-  const downloadFrequencyList = async (mediaType: MediaType | null, downloadType: 'yomitan' | 'csv') => {
+  const downloadFrequencyList = async (mediaType: MediaType | null | 'kanji', downloadType: 'yomitan' | 'csv') => {
     try {
       let url = '';
       let fileName = '';
+
+      // Handle Kanji frequency list separately
+      if (mediaType === 'kanji') {
+        url = `frequency-list/download-kanji?downloadType=${downloadType}`;
+        fileName = downloadType === 'yomitan' ? 'jiten_kanji_freq.zip' : 'jiten_kanji_freq.csv';
+
+        const response = await $api<Blob>(url, {
+          method: 'GET',
+          responseType: 'blob',
+        });
+
+        if (response) {
+          const mimeType = downloadType === 'yomitan' ? 'application/zip' : 'text/csv';
+          const blob = new Blob([response], { type: mimeType });
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.setAttribute('download', fileName);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(blobUrl);
+        }
+        return;
+      }
 
       if (downloadType === 'yomitan') {
         // For Yomitan format, use the download endpoint

@@ -100,6 +100,13 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IDbConte
         // Insert the deck into the database
         await JitenHelper.InsertDeck(contextFactory, deck, coverImage ?? [], false);
 
+        // Process relations from metadata
+        if (metadata.Relations.Count > 0)
+        {
+            await using var relationContext = await contextFactory.CreateDbContextAsync();
+            await MetadataProviderHelper.ProcessRelations(relationContext, deck.DeckId, metadata.Relations);
+        }
+
         // Queue coverage computation jobs for all users with at least 10 known words
         await QueueCoverageJobsForDeck(deck);
 

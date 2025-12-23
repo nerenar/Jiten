@@ -54,7 +54,17 @@ public static partial class MetadataProviderHelper
                                                     },
                                                     synonyms,
                                                     averageScore,
-                                                    meanScore
+                                                    meanScore,
+                                                    relations {
+                                                      edges {
+                                                        relationType(version: 2)
+                                                        node {
+                                                          id
+                                                          type
+                                                          format
+                                                        }
+                                                      }
+                                                    }
                                                   }
                                                 }
                                               }
@@ -95,7 +105,8 @@ public static partial class MetadataProviderHelper
                                                                      Name = tag.Name,
                                                                      Percentage = tag.Rank
                                                                  }).ToList(),
-                                                             IsAdultOnly = media.IsAdult
+                                                             IsAdultOnly = media.IsAdult,
+                                                             Relations = MapAnilistRelations(media.Relations)
                                                          }).ToList() ?? [];
     }
 
@@ -132,7 +143,17 @@ public static partial class MetadataProviderHelper
                                                     },
                                                     synonyms,
                                                     averageScore,
-                                                    meanScore
+                                                    meanScore,
+                                                    relations {
+                                                      edges {
+                                                        relationType(version: 2)
+                                                        node {
+                                                          id
+                                                          type
+                                                          format
+                                                        }
+                                                      }
+                                                    }
                                                   }
                                               }
                                       """,
@@ -170,7 +191,8 @@ public static partial class MetadataProviderHelper
                    {
                        Name = tag.Name,
                        Percentage = tag.Rank
-                   }).ToList(), IsAdultOnly = media.IsAdult
+                   }).ToList(), IsAdultOnly = media.IsAdult,
+                   Relations = MapAnilistRelations(media.Relations)
                };
     }
 
@@ -207,7 +229,17 @@ public static partial class MetadataProviderHelper
                                                     },
                                                     synonyms,
                                                     averageScore,
-                                                    meanScore
+                                                    meanScore,
+                                                    relations {
+                                                      edges {
+                                                        relationType(version: 2)
+                                                        node {
+                                                          id
+                                                          type
+                                                          format
+                                                        }
+                                                      }
+                                                    }
                                                   }
                                               }
                                       """,
@@ -250,7 +282,65 @@ public static partial class MetadataProviderHelper
                    {
                        Name = tag.Name,
                        Percentage = tag.Rank
-                   }).ToList(), IsAdultOnly = media.IsAdult
+                   }).ToList(), IsAdultOnly = media.IsAdult,
+                   Relations = MapAnilistRelations(media.Relations)
                };
+    }
+
+    private static List<MetadataRelation> MapAnilistRelations(AnilistRelations? relations)
+    {
+        if (relations?.Edges == null)
+            return [];
+
+        var result = new List<MetadataRelation>();
+
+        foreach (var edge in relations.Edges)
+        {
+            var mapping = MapAnilistRelationType(edge.RelationType);
+            if (mapping == null)
+                continue;
+
+            var targetMediaType = MapAnilistTypeToMediaType(edge.Node.Type, edge.Node.Format);
+
+            result.Add(new MetadataRelation
+            {
+                ExternalId = edge.Node.Id.ToString(),
+                LinkType = LinkType.Anilist,
+                RelationshipType = mapping.Value.Type,
+                TargetMediaType = targetMediaType,
+                SwapDirection = mapping.Value.SwapDirection
+            });
+        }
+
+        return result;
+    }
+
+    private static (DeckRelationshipType Type, bool SwapDirection)? MapAnilistRelationType(string relationType)
+    {
+        return relationType switch
+        {
+            "SEQUEL" => (DeckRelationshipType.Sequel, false),
+            "PREQUEL" => (DeckRelationshipType.Sequel, true),
+            "SIDE_STORY" => (DeckRelationshipType.SideStory, false),
+            "PARENT" => (DeckRelationshipType.SideStory, true),
+            "SPIN_OFF" => (DeckRelationshipType.Spinoff, false),
+            "ALTERNATIVE" => (DeckRelationshipType.Alternative, false),
+            "ADAPTATION" => (DeckRelationshipType.Adaptation, false),
+            "SOURCE" => (DeckRelationshipType.Adaptation, true),
+            _ => null
+        };
+    }
+
+    private static MediaType? MapAnilistTypeToMediaType(string type, string? format)
+    {
+        return (type, format) switch
+        {
+            ("ANIME", _) => MediaType.Anime,
+            ("MANGA", "NOVEL") => MediaType.Novel,
+            ("MANGA", "ONE_SHOT") => MediaType.Manga,
+            ("MANGA", "MANGA") => MediaType.Manga,
+            ("MANGA", _) => MediaType.Manga,
+            _ => null
+        };
     }
 }

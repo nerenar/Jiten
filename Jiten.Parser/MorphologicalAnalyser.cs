@@ -53,7 +53,8 @@ public class MorphologicalAnalyser
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
 
     private static readonly HashSet<string> MisparsesRemove =
-        ["そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ", "イッ", "ほっ"];
+        ["そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ", "イッ", "ほっ",
+        "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー"];
 
     // Token to separate some words in sudachi
     private static readonly string _stopToken = "|";
@@ -215,10 +216,12 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "滴(.)流", $"滴$1{_stopToken}流");
         text = Regex.Replace(text, "蹴(.)倒", $"蹴$1{_stopToken}倒");
         text = Regex.Replace(text, "善がり狂", $"善がり{_stopToken}狂");
+        text = Regex.Replace(text, "いい知", $"いい{_stopToken}知");
         text = Regex.Replace(text, "伝(.)流", $"伝$1{_stopToken}流");
         text = Regex.Replace(text, "歩(.)出", $"歩$1{_stopToken}出");
         text = Regex.Replace(text, "持(.)得", $"持$1{_stopToken}得");
         text = Regex.Replace(text, "笑(.)崩", $"笑$1{_stopToken}崩");
+        text = Regex.Replace(text, "揚(.)だ", $"揚$1{_stopToken}だ");
         
 
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
@@ -705,6 +708,7 @@ public class MorphologicalAnalyser
                 && currentWord.DictionaryForm != "ようだ"
                 && currentWord.DictionaryForm != "やがる"
                 && currentWord.DictionaryForm != "たり"
+                && currentWord.DictionaryForm != "筈"
                 && currentWord.Text != "だろう"
                 && currentWord.Text != "で"
                 && currentWord.Text != "や"
@@ -713,6 +717,7 @@ public class MorphologicalAnalyser
                 && currentWord.Text != "し"
                 && currentWord.Text != "なのだ"
                 && currentWord.Text != "だろ"
+                && currentWord.Text != "ハズ"
                 && (currentWord.Text != "だ" || currentWord.Text == "だ" && previousWord.Text[^1] == 'ん')
                 )
             {

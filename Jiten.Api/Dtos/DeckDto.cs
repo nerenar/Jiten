@@ -38,6 +38,7 @@ public class DeckDto
     public ExampleSentenceDto? ExampleSentence { get; set; }
     public List<Genre> Genres { get; set; } = new();
     public List<TagWithPercentageDto> Tags { get; set; } = new();
+    public List<DeckRelationshipDto> Relationships { get; set; } = new();
     public DeckStatus? Status { get; set; }
     public bool? IsFavourite { get; set; }
     public bool? IsIgnored { get; set; }
@@ -149,5 +150,36 @@ public class DeckDto
             return 4;
 
         return 5;
+    }
+}
+
+public class DeckRelationshipDto
+{
+    public int TargetDeckId { get; set; }
+    public DeckDto TargetDeck { get; set; } = new();
+    public DeckRelationshipType RelationshipType { get; set; }
+    public bool IsInverse { get; set; }
+
+    public static List<DeckRelationshipDto> FromDeck(
+        ICollection<DeckRelationship> asSource,
+        ICollection<DeckRelationship> asTarget)
+    {
+        var direct = asSource.Select(r => new DeckRelationshipDto
+        {
+            TargetDeckId = r.TargetDeckId,
+            TargetDeck = new DeckDto(r.TargetDeck),
+            RelationshipType = r.RelationshipType,
+            IsInverse = false
+        });
+
+        var inverse = asTarget.Select(r => new DeckRelationshipDto
+        {
+            TargetDeckId = r.SourceDeckId,
+            TargetDeck = new DeckDto(r.SourceDeck),
+            RelationshipType = DeckRelationship.GetInverse(r.RelationshipType),
+            IsInverse = true
+        });
+
+        return direct.Concat(inverse).ToList();
     }
 }

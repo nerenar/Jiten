@@ -19,7 +19,7 @@ public static partial class MetadataProviderHelper
         var requestContent = new StringContent(JsonSerializer.Serialize(new
                                                                         {
                                                                             filters = filter, fields =
-                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}, aliases, rating, tags{spoiler,id,rating}",
+                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}, aliases, rating, tags{spoiler,id,rating}, relations{relation,relation_official,id}",
                                                                             results = 10, page = 1
                                                                         }));
         var http = new HttpClient();
@@ -58,7 +58,8 @@ public static partial class MetadataProviderHelper
                                Links = [new Link { LinkType = LinkType.Vndb, Url = $"https://vndb.org/{requestResult.Id}" }],
                                Image = requestResult.Image?.Url, Aliases = requestResult.Aliases,
                                Rating = (int)Math.Round(requestResult.Rating ?? 0), Genres = tags.Select(t => t.Name).ToList(), Tags = tags,
-                               IsAdultOnly = isAdultOnly
+                               IsAdultOnly = isAdultOnly,
+                               Relations = MapVndbRelations(requestResult.Relations)
                            };
 
             metadatas.Add(metadata);
@@ -77,7 +78,7 @@ public static partial class MetadataProviderHelper
         var requestContent = new StringContent(JsonSerializer.Serialize(new
                                                                         {
                                                                             filters = filter, fields =
-                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}, aliases, rating, tags{spoiler,id,rating}",
+                                                                                "id,title,released,description,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}, aliases, rating, tags{spoiler,id,rating}, relations{relation,relation_official,id}",
                                                                         }));
         var http = new HttpClient();
         requestContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
@@ -112,8 +113,50 @@ public static partial class MetadataProviderHelper
                    Description = Regex.Replace(requestResult.Description ?? "", @"\[.*\]", ""),
                    Links = [new Link { LinkType = LinkType.Vndb, Url = $"https://vndb.org/{requestResult.Id}" }],
                    Image = requestResult.Image?.Url, Aliases = requestResult.Aliases, Rating = (int)Math.Round(requestResult.Rating ?? 0),
-                   Genres = tags.Select(t => t.Name).ToList(), Tags = tags, IsAdultOnly = isAdultOnly
+                   Genres = tags.Select(t => t.Name).ToList(), Tags = tags, IsAdultOnly = isAdultOnly,
+                   Relations = MapVndbRelations(requestResult.Relations)
                };
+    }
+
+    private static List<MetadataRelation> MapVndbRelations(List<VndbRelation>? relations)
+    {
+        if (relations == null)
+            return [];
+
+        var result = new List<MetadataRelation>();
+
+        foreach (var rel in relations.Where(r => r.RelationOfficial))
+        {
+            var mapping = MapVndbRelationType(rel.Relation);
+            if (mapping == null)
+                continue;
+
+            result.Add(new MetadataRelation
+            {
+                ExternalId = rel.Id,
+                LinkType = LinkType.Vndb,
+                RelationshipType = mapping.Value.Type,
+                TargetMediaType = MediaType.VisualNovel,
+                SwapDirection = mapping.Value.SwapDirection
+            });
+        }
+
+        return result;
+    }
+
+    private static (DeckRelationshipType Type, bool SwapDirection)? MapVndbRelationType(string relation)
+    {
+        return relation switch
+        {
+            "seq" => (DeckRelationshipType.Sequel, false),
+            "preq" => (DeckRelationshipType.Sequel, true),
+            "alt" => (DeckRelationshipType.Alternative, false),
+            "side" => (DeckRelationshipType.SideStory, true),
+            "par" => (DeckRelationshipType.SideStory, false),
+            "orig" => (DeckRelationshipType.Fandisc, false),
+            "fan" => (DeckRelationshipType.Fandisc, true),
+            _ => null 
+        };
     }
 
     private static async Task<bool> FetchAdultStatus(string vnId)

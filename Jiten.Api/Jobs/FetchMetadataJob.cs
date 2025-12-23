@@ -58,6 +58,12 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
 
             await MetadataProviderHelper.ApplyGenreAndTagMappings(context, deck, metadata, LinkType.Anilist);
 
+            // Process relations from metadata
+            if (metadata.Relations.Count > 0)
+            {
+                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations);
+            }
+
             await context.SaveChangesAsync();
         }
         finally
@@ -161,6 +167,12 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
             }
 
             await MetadataProviderHelper.ApplyGenreAndTagMappings(context, deck, metadata, LinkType.Vndb);
+
+            // Process relations from metadata
+            if (metadata.Relations.Count > 0)
+            {
+                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations);
+            }
 
             await context.SaveChangesAsync();
         }

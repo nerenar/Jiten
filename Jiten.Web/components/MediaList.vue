@@ -18,6 +18,12 @@
     return Number.isFinite(n) ? n : null;
   };
 
+  const toBooleanOrNull = (v: unknown) => {
+    if (v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)) return null;
+    const s = Array.isArray(v) ? v[0] : v;
+    return s === 'true' ? true : s === 'false' ? false : null;
+  };
+
   const props = defineProps<{
     word?: Word;
     defaultMediaType?: MediaType | null;
@@ -121,6 +127,7 @@
   const coverageMax = ref<number | null>(toNumOrNull(route.query.coverageMax));
   const uniqueCoverageMin = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMin));
   const uniqueCoverageMax = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMax));
+  const excludeSequels = ref<boolean | null>(toBooleanOrNull(route.query.excludeSequels));
 
   // Genre and Tag filter state
   const includeGenres = ref<number[]>([]);
@@ -183,6 +190,7 @@
     excludeGenres: excludeGenres.value,
     includeTags: includeTags.value,
     excludeTags: excludeTags.value,
+    excludeSequels: excludeSequels.value
   });
 
   const updateFiltersDebounced = debounce(
@@ -206,6 +214,7 @@
         excludeGenres: excludeGenres.value,
         includeTags: includeTags.value,
         excludeTags: excludeTags.value,
+        excludeSequels: excludeSequels.value
       };
 
       const toUndef = (v: number | null) => (v === null ? undefined : v);
@@ -233,6 +242,7 @@
           tags: arrayToString(includeTags.value) as any,
           excludeTags: arrayToString(excludeTags.value) as any,
           offset: 0 as any,
+          excludeSequels: excludeSequels.value === true ? true : undefined
         },
       });
     },
@@ -241,7 +251,7 @@
   );
 
   watch(
-    [charCountMin, charCountMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax],
+    [charCountMin, charCountMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
     () => {
       updateFiltersDebounced();
     }
@@ -323,6 +333,7 @@
     coverageMax.value = null;
     uniqueCoverageMin.value = null;
     uniqueCoverageMax.value = null;
+    excludeSequels.value = false;
 
     // Genre and tag filters
     includeGenres.value = [];
@@ -358,6 +369,7 @@
         excludeTags: undefined,
         status: undefined,
         offset: 0,
+        excludeSequels: undefined
       },
     });
   };
@@ -455,6 +467,7 @@
       excludeGenres: computed(() => (debouncedFilters.value.excludeGenres.length > 0 ? debouncedFilters.value.excludeGenres.join(',') : undefined)),
       tags: computed(() => (debouncedFilters.value.includeTags.length > 0 ? debouncedFilters.value.includeTags.join(',') : undefined)),
       excludeTags: computed(() => (debouncedFilters.value.excludeTags.length > 0 ? debouncedFilters.value.excludeTags.join(',') : undefined)),
+      excludeSequels: computed(() => debouncedFilters.value.excludeSequels),
     },
     watch: [offset, mediaType],
   });
@@ -581,6 +594,7 @@
         v-model:exclude-genres="excludeGenres"
         v-model:include-tags="includeTags"
         v-model:exclude-tags="excludeTags"
+        v-model:exclude-sequels="excludeSequels"
         :is-connected="isConnected"
         @reset="resetAllFilters"
       />

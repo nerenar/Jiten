@@ -95,6 +95,18 @@
     });
   };
 
+  const confirmRecomputeKanjiFrequencies = () => {
+    confirm.require({
+      message: 'Are you sure you want to recompute all kanji frequencies? This operation may take a long time.',
+      header: 'Confirmation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => recomputeKanjiFrequencies(),
+      reject: () => {},
+    });
+  };
+
   const recomputeFrequencies = async () => {
     try {
       isLoading.value.frequencies = true;
@@ -116,6 +128,32 @@
         life: 5000,
       });
       console.error('Error recomputing frequencies:', error);
+    } finally {
+      isLoading.value.frequencies = false;
+    }
+  };
+
+  const recomputeKanjiFrequencies = async () => {
+    try {
+      isLoading.value.frequencies = true;
+      const data = await $api('/admin/recompute-kanji-frequencies', {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Recomputing kanji frequencies job has been queued',
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to recompute kanji frequencies',
+        life: 5000,
+      });
+      console.error('Error recomputing kanji frequencies:', error);
     } finally {
       isLoading.value.frequencies = false;
     }
@@ -284,6 +322,24 @@
               :disabled="isLoading.frequencies"
               :loading="isLoading.frequencies"
               @click="confirmRecomputeFrequencies"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Recompute Kanji Frequencies</template>
+        <template #content>
+          <p class="mb-4">Recompute kanji frequencies.</p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Recompute Kanji Frequencies"
+              icon="pi pi-chart-bar"
+              class="p-button-warning"
+              :disabled="isLoading.frequencies"
+              :loading="isLoading.frequencies"
+              @click="confirmRecomputeKanjiFrequencies"
             />
           </div>
         </template>

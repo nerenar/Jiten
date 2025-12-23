@@ -87,6 +87,11 @@
     set: (value) => (store.hideTags = value),
   });
 
+  const hideRelations = computed({
+    get: () => store.hideRelations,
+    set: (value) => (store.hideRelations = value),
+  });
+
   const displayAdminFunctions = computed({
     get: () => store.displayAdminFunctions,
     set: (value) => (store.displayAdminFunctions = value),
@@ -275,14 +280,19 @@
         <label for="hideCoverageBorders" class="text-sm cursor-pointer">Hide coverage borders</label>
       </div>
 
-      <div v-if="auth.isAuthenticated" class="flex items-center gap-2 py-1">
+      <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="hideGenres" input-id="hideGenres" name="hideGenres" :binary="true" />
         <label for="hideGenres" class="text-sm cursor-pointer">Hide genres</label>
       </div>
 
-      <div v-if="auth.isAuthenticated" class="flex items-center gap-2 py-1">
+      <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="hideTags" input-id="hideTags" name="hideTags" :binary="true" />
         <label for="hideTags" class="text-sm cursor-pointer">Hide tags</label>
+      </div>
+
+      <div class="flex items-center gap-2 py-1">
+        <Checkbox v-model="hideRelations" input-id="hideRelations" name="hideRelations" :binary="true" />
+        <label for="hideRelations" class="text-sm cursor-pointer">Hide relations</label>
       </div>
 
       <div v-if="auth.isAuthenticated && auth.isAdmin" class="flex items-center gap-2 py-1">

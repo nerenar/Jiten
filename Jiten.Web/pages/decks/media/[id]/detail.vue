@@ -7,7 +7,6 @@
   const route = useRoute();
   const deckId = computed(() => route.params.id as string);
 
-
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
 
@@ -100,6 +99,7 @@
           {{ localiseTitle(response.data.parentDeck) }}
         </NuxtLink>
       </div>
+
       <div v-if="response.data.subDecks.length > 0" class="pt-4">
         <span class="font-bold">Subdecks</span>
         <div v-if="previousLink != null || nextLink != null" class="flex flex-col md:flex-row justify-between">
