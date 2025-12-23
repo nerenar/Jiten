@@ -20,7 +20,7 @@ public static class ExampleSentenceExtractor
     public static List<ExampleSentence> ExtractSentences(List<SentenceInfo> sentences, DeckWord[] words)
     {
         // Pre-filter sentences with insufficient character diversity
-        var validSentences = new List<SentenceInfo>(sentences.Count);
+        var validSentences = new HashSet<SentenceInfo>(); 
         for (int i = 0; i < sentences.Count; i++)
         {
             var sentence = sentences[i];
@@ -43,7 +43,7 @@ public static class ExampleSentenceExtractor
         }
 
         // Create position lookup for valid sentences only
-        var sentencePositions = new Dictionary<SentenceInfo, int>(validSentences.Count);
+        var sentencePositions = new Dictionary<SentenceInfo, int>();
         for (int i = 0; i < sentences.Count; i++)
         {
             if (validSentences.Contains(sentences[i]))
