@@ -23,10 +23,10 @@
     {
       question: 'Which websites do you source the information from?',
       answer: `For the metadata, these APIs are used: <br />
-      <a href="https://vndb.org" target="_blank" rel="noopener noreferrer">VNDB</a>
+            Some metadata (descriptions, tags, and ratings) is derived from <a href="https://vndb.org" target="_blank" rel="noopener noreferrer">VNDB</a>, licensed under the <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener noreferrer">Open Database License (ODbL) 1.0.</a>
       <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer"><img src="/img/tmdb.svg" alt="tmdb" width="200px" /></a>
       <div class="text-gray-500 text-xs" style="margin-top: 4px;">This product uses the TMDB API but is not endorsed or certified by TMDB</div>
-      <div><a href="https://anilist.co" target="_blank" rel="noopener noreferrer">Anilist</a></div>
+      <div><a href="https://anilist.co" target="_blank" rel="noopener noreferrer">AniList</a></div>
       <div><a href="https://igdb.com" target="_blank" rel="noopener noreferrer">IGDB</a></div>
       <div><a href="https://www.google.com/books" target="_blank" rel="noopener noreferrer">Google Books</a></div>
       <br />
@@ -34,7 +34,7 @@
       Subtitles from <a href="https://www.jimaku.cc" target="_blank" rel="noopener noreferrer">Jimaku</a> <br />
       Game scripts from <a href="https://sites.google.com/view/jo-mako/resources/resources-list?authuser=0" target="_blank" rel="noopener noreferrer">Jo-Mako</a> <br />
       Some VN scripts from <a href="http://wiki.wareya.moe/Stats" target="_blank" rel="noopener noreferrer">Wareya</a>.<br />
-      Everything else comes from me or our generous contributors on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>: Zakamutt, 人木, Zwansanwan, Rock, Usagi, 櫻子, Armory, Sixsixsixsixsix, Pissolati`,
+      Everything else comes from me or our generous contributors on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>!`,
     },
     {
       question: "What's next for the website?",
@@ -42,7 +42,6 @@
       But in general, the next steps are, in no particular order:
       <ul class="list-disc pl-8">
         <li>Add more decks, always</li>
-        <li>A user system</li>
         <li>Add a complete SRS system integrated to the website</li>
         <li>Support for names and custom names</li>
         <li>Add a way for users to add their own, custom decks</li>
@@ -51,7 +50,7 @@
     },
     {
       question: 'Will you support more media types in the future?',
-      answer: `Yes, I plan to support YouTube and manga. <br />
+      answer: `Yes, I plan to support YouTube. <br />
       Each comes with its own set of challenges, which is why they will take more time. If you have any other suggestions, please let me know on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>.`,
     },
     {

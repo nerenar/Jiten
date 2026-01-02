@@ -19,12 +19,16 @@ namespace Jiten.Parser
         private static readonly SemaphoreSlim _initSemaphore = new SemaphoreSlim(1, 1);
 
         private static readonly bool UseCache = true;
+        private static readonly bool UseRescue = true;
         private static IDeckWordCache DeckWordCache;
         private static IJmDictCache JmDictCache;
 
         private static IDbContextFactory<JitenDbContext> _contextFactory;
         private static Dictionary<string, List<int>> _lookups;
 
+        // Cache for compound expression lookups
+        private static readonly Dictionary<string, (bool validExpression, int? wordId)> CompoundExpressionCache = new();
+        private static readonly Lock CompoundCacheLock = new();
 
         private static async Task InitDictionaries()
         {
@@ -114,36 +118,82 @@ namespace Jiten.Parser
 
             // Filter bad lines that cause exceptions
             wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
+            wordInfos = CombineCompounds(wordInfos);
 
-            Deconjugator deconjugator = new Deconjugator();
+            var deconjugator = Deconjugator.Instance;
 
             const int BATCH_SIZE = 1000;
-            List<DeckWord> allProcessedWords = new List<DeckWord>();
+            List<DeckWord?> allProcessedWords = new();
+            List<(int index, WordInfo wordInfo)> failedWords = new();
 
+            int globalIndex = 0;
             for (int i = 0; i < wordInfos.Count; i += BATCH_SIZE)
             {
                 var batch = wordInfos.Skip(i).Take(BATCH_SIZE).ToList();
                 var processBatch = batch.Select(word => ProcessWord((word, 0), deconjugator)).ToList();
                 var batchResults = await Task.WhenAll(processBatch);
 
-                allProcessedWords.AddRange(batchResults.Where(result => result != null).Select(result => result!));
+                for (int j = 0; j < batch.Count; j++)
+                {
+                    allProcessedWords.Add(batchResults[j]);
+                    if (batchResults[j] == null)
+                        failedWords.Add((globalIndex, batch[j]));
+                    globalIndex++;
+                }
             }
 
-            return allProcessedWords;
+            if (UseRescue && failedWords.Count > 0)
+            {
+                var rescueInput = failedWords.Select(f => (f.wordInfo, 0)).ToList();
+                var rescuedGroups = await RescueFailedWords(rescueInput, deconjugator);
+
+                int offset = 0;
+                for (int i = 0; i < failedWords.Count; i++)
+                {
+                    var (originalIndex, _) = failedWords[i];
+                    var adjustedIndex = originalIndex + offset;
+                    var rescuedGroup = rescuedGroups[i];
+
+                    allProcessedWords.RemoveAt(adjustedIndex);
+                    allProcessedWords.InsertRange(adjustedIndex, rescuedGroup);
+
+                    offset += (rescuedGroup.Count - 1);
+                }
+            }
+
+            return allProcessedWords.Where(w => w != null).Select(w => w!).ToList();
         }
 
+        /// <summary>
+        /// Parses a single text into a Deck. Delegates to ParseTextsToDeck for a single codepath.
+        /// </summary>
         public static async Task<Deck> ParseTextToDeck(IDbContextFactory<JitenDbContext> contextFactory, string text,
                                                        bool storeRawText = false,
                                                        bool predictDifficulty = true,
                                                        MediaType mediatype = MediaType.Novel)
         {
+            var results = await ParseTextsToDeck(contextFactory, [text], storeRawText, predictDifficulty, mediatype);
+            return results.Count > 0 ? results[0] : new Deck();
+        }
+
+        /// <summary>
+        /// Parses multiple texts into Decks in a single batch for efficiency.
+        /// </summary>
+        public static async Task<List<Deck>> ParseTextsToDeck(IDbContextFactory<JitenDbContext> contextFactory,
+                                                              List<string> texts,
+                                                              bool storeRawText = false,
+                                                              bool predictDifficulty = true,
+                                                              MediaType mediatype = MediaType.Novel)
+        {
+            if (texts.Count == 0) return [];
+
             _contextFactory = contextFactory;
             if (!_initialized)
             {
                 await _initSemaphore.WaitAsync();
                 try
                 {
-                    if (!_initialized) // Double-check to avoid race conditions
+                    if (!_initialized)
                     {
                         await InitDictionaries();
                         _initialized = true;
@@ -157,13 +207,50 @@ namespace Jiten.Parser
 
             var timer = new Stopwatch();
             timer.Start();
+
+            // Batch morphological analysis
             var parser = new MorphologicalAnalyser();
-            var sentences = await parser.Parse(text);
+            var batchedSentences = await parser.ParseBatch(texts);
+
+            timer.Stop();
+            double sudachiTime = timer.Elapsed.TotalMilliseconds;
+            Console.WriteLine($"Batch parsed {texts.Count} texts. Sudachi time: {sudachiTime:0.0}ms");
+
+            timer.Restart();
+
+            // Process each result through deconjugation/lookup pipeline
+            var decks = new List<Deck>();
+            Deconjugator deconjugator = Deconjugator.Instance;
+
+            for (int textIndex = 0; textIndex < batchedSentences.Count; textIndex++)
+            {
+                var sentences = batchedSentences[textIndex];
+                var text = texts[textIndex];
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype);
+                decks.Add(deck);
+            }
+
+            timer.Stop();
+            Console.WriteLine($"Processing time: {timer.Elapsed.TotalMilliseconds:0.0}ms");
+
+            return decks;
+        }
+
+        /// <summary>
+        /// Helper: Processes sentences into a Deck (deconjugation, rescue, statistics).
+        /// Extracted to share between batch and single-item paths.
+        /// </summary>
+        private static async Task<Deck> ProcessSentencesToDeck(
+            List<SentenceInfo> sentences,
+            string text,
+            Deconjugator deconjugator,
+            bool storeRawText,
+            bool predictDifficulty,
+            MediaType mediatype)
+        {
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
-            // TODO: support elongated vowels ふ～ -> ふう
-
-            // Only keep kanjis, kanas, digits,full width digits, latin characters, full width latin characters 
+            // Only keep kanjis, kanas, digits, full width digits, latin characters, full width latin characters
             wordInfos.ForEach(x => x.Text =
                                   Regex.Replace(x.Text,
                                                 "[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
@@ -172,10 +259,9 @@ namespace Jiten.Parser
             wordInfos = wordInfos.Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
 
             // Filter bad lines that cause exceptions
-            // wordInfos.RemoveAll(w => w.Text is "ッー");
             wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
 
-            Deconjugator deconjugator = new Deconjugator();
+            wordInfos = CombineCompounds(wordInfos);
 
             var uniqueWords = new List<(WordInfo wordInfo, int occurrences)>();
             var wordCount = new Dictionary<(string, PartOfSpeech), int>();
@@ -193,28 +279,46 @@ namespace Jiten.Parser
                 uniqueWords[i] = (uniqueWords[i].wordInfo, wordCount[(uniqueWords[i].wordInfo.Text, uniqueWords[i].wordInfo.PartOfSpeech)]);
             }
 
-            timer.Stop();
-            double mecabTime = timer.Elapsed.TotalMilliseconds;
-
-            timer.Restart();
-
             const int BATCH_SIZE = 1000;
-            List<DeckWord> allProcessedWords = new List<DeckWord>();
+            List<DeckWord?> allProcessedWords = new();
+            List<(int index, WordInfo wordInfo, int occurrences)> failedWords = new();
 
+            int globalIndex = 0;
             for (int i = 0; i < uniqueWords.Count; i += BATCH_SIZE)
             {
                 var batch = uniqueWords.Skip(i).Take(BATCH_SIZE).ToList();
                 var processBatch = batch.Select(word => ProcessWord(word, deconjugator)).ToList();
                 var batchResults = await Task.WhenAll(processBatch);
 
-                allProcessedWords.AddRange(batchResults.Where(result => result != null).Select(result => result!));
+                for (int j = 0; j < batch.Count; j++)
+                {
+                    allProcessedWords.Add(batchResults[j]);
+                    if (batchResults[j] == null)
+                        failedWords.Add((globalIndex, batch[j].wordInfo, batch[j].occurrences));
+                    globalIndex++;
+                }
             }
 
-            var processedWords = allProcessedWords.ToArray();
+            if (UseRescue && failedWords.Count > 0)
+            {
+                var rescueInput = failedWords.Select(f => (f.wordInfo, f.occurrences)).ToList();
+                var rescuedGroups = await RescueFailedWords(rescueInput, deconjugator);
 
-            processedWords = processedWords
-                             .Select(result => result)
-                             .ToArray();
+                int offset = 0;
+                for (int i = 0; i < failedWords.Count; i++)
+                {
+                    var (originalIndex, _, _) = failedWords[i];
+                    var adjustedIndex = originalIndex + offset;
+                    var rescuedGroup = rescuedGroups[i];
+
+                    allProcessedWords.RemoveAt(adjustedIndex);
+                    allProcessedWords.InsertRange(adjustedIndex, rescuedGroup);
+
+                    offset += (rescuedGroup.Count - 1);
+                }
+            }
+
+            var processedWords = allProcessedWords.Where(w => w != null).Select(w => w!).ToArray();
 
             // Sum occurrences while deduplicating by WordId and ReadingIndex for deconjugated words
             processedWords = processedWords
@@ -233,28 +337,7 @@ namespace Jiten.Parser
                 exampleSentences = ExampleSentenceExtractor.ExtractSentences(sentences, processedWords);
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
-
-            timer.Stop();
-
-            double deconjugationTime = timer.Elapsed.TotalMilliseconds;
-
-            double totalTime = mecabTime + deconjugationTime;
-
-            Console.WriteLine("Total words found : " + wordInfos.Count);
-
-            // Console.WriteLine("Unique words found before deconjugation : " + uniqueWordInfos.Count);
-            Console.WriteLine("Unique words found after deconjugation : " + processedWords.Length);
-
             var characterCount = wordInfos.Sum(x => x.Text.Length);
-            Console.WriteLine($"Time elapsed: {totalTime:0.0}ms");
-            Console.WriteLine($"Mecab time: {mecabTime:0.0}ms ({(mecabTime / totalTime * 100):0}%), Deconjugation time: {deconjugationTime:0.0}ms ({(deconjugationTime / totalTime * 100):0}%)");
-
-            // Character count
-            Console.WriteLine("Character count: " + characterCount);
-            // Time for 10000 characters
-            Console.WriteLine($"Time per 10000 characters: {(totalTime / characterCount * 10000):0.0}ms");
-            // Time for 1million characters
-            Console.WriteLine($"Time per 1 million characters: {(totalTime / characterCount * 1000000):0.0}ms");
 
             var textWithoutDialogues = Regex.Replace(text, @"[「『].{0,200}?[」』]", "", RegexOptions.Singleline);
             textWithoutDialogues = Regex.Replace(textWithoutDialogues,
@@ -265,9 +348,9 @@ namespace Jiten.Parser
                                                        "");
 
             int dialogueCharacterCount = textWithoutPunctuation.Length - textWithoutDialogues.Length;
-            float dialoguePercentage = (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f;
-
-            Console.WriteLine($"Dialogue percentage: {dialoguePercentage:0.0}%");
+            float dialoguePercentage = textWithoutPunctuation.Length > 0
+                ? (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f
+                : 0f;
 
             var deck = new Deck
                        {
@@ -292,13 +375,7 @@ namespace Jiten.Parser
                 DifficultyPredictor difficultyPredictor =
                     new(_contextFactory, Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", model));
                 deck.Difficulty = await difficultyPredictor.PredictDifficulty(deck, mediatype);
-                // DifficultyPredictorVae difficultyPredictor =
-                //     new(_dbContext.DbOptions,
-                //         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "vae_prediction.py"));
-                // deck.Difficulty = await difficultyPredictor.PredictDifficulty(deck, mediatype);
-                Console.WriteLine($"Predicted difficulty: {deck.Difficulty}");
             }
-
 
             return deck;
         }
@@ -330,7 +407,7 @@ namespace Jiten.Parser
             // Filter bad lines that cause exceptions
             wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
 
-            Deconjugator deconjugator = new Deconjugator();
+            Deconjugator deconjugator = Deconjugator.Instance;
 
             const int BATCH_SIZE = 5000;
             List<DeckWord?> allProcessedWords = new();
@@ -374,7 +451,7 @@ namespace Jiten.Parser
                     {
                         var cachedWord = await DeckWordCache.GetAsync(cacheKey);
 
-                        if (cachedWord != null)
+                        if (cachedWord != null && cachedWord.WordId != -1)
                         {
                             return new DeckWord
                                    {
@@ -941,15 +1018,261 @@ namespace Jiten.Parser
                 if (readingIndex == -1)
                     continue;
 
-                matchedWords.Add(new DeckWord()
-                                 {
-                                     WordId = bestMatch.WordId,
-                                     ReadingIndex = (byte)readingIndex,
-                                     OriginalText = word
-                                 });
+                matchedWords.Add(new DeckWord() { WordId = bestMatch.WordId, ReadingIndex = (byte)readingIndex, OriginalText = word });
             }
 
             return matchedWords;
+        }
+
+        private static async Task<List<List<DeckWord>>> RescueFailedWords(
+            List<(WordInfo wordInfo, int occurrences)> failedWords,
+            Deconjugator deconjugator)
+        {
+            var groupedResults = failedWords.Select(_ => new List<DeckWord>()).ToList();
+
+            var potentialCandidates = failedWords
+                                      .Select((w, idx) => (w, idx))
+                                      // .Where(x => x.w.wordInfo.Text.Length > 1 && x.w.wordInfo.Text.Any(IsKanji) || x.w.wordInfo.Text.Length > 4)
+                                      .ToList();
+
+            if (potentialCandidates.Count == 0)
+                return groupedResults;
+
+            // Filter out candidates that have already been attempted (cached with WordId = -1)
+            var rescueCandidates = new List<((WordInfo wordInfo, int occurrences) w, int idx)>();
+            if (UseCache)
+            {
+                foreach (var candidate in potentialCandidates)
+                {
+                    var cacheKey = new DeckWordCacheKey(
+                                                        candidate.w.wordInfo.Text,
+                                                        candidate.w.wordInfo.PartOfSpeech,
+                                                        candidate.w.wordInfo.DictionaryForm
+                                                       );
+
+                    try
+                    {
+                        var cached = await DeckWordCache.GetAsync(cacheKey);
+                        if (cached != null && cached.WordId == -1)
+                            continue; // Already attempted rescue, skip
+                    }
+                    catch
+                    {
+                        // Cache read failed, proceed with rescue attempt
+                    }
+
+                    rescueCandidates.Add(candidate);
+                }
+            }
+            else
+            {
+                rescueCandidates = potentialCandidates;
+            }
+
+            if (rescueCandidates.Count == 0)
+                return groupedResults;
+
+            var combinedText = string.Join("|", rescueCandidates.Select(x => x.w.wordInfo.Text));
+
+            var analyser = new MorphologicalAnalyser();
+            var sentences = await analyser.Parse(combinedText, morphemesOnly: true, preserveStopToken: true);
+            var allWords = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
+
+            int candidateIdx = 0;
+            var currentGroup = new List<WordInfo>();
+
+            foreach (var word in allWords)
+            {
+                if (word.Text == "|")
+                {
+                    if (candidateIdx < rescueCandidates.Count)
+                    {
+                        var (original, originalIdx) = rescueCandidates[candidateIdx];
+                        var processed = await ProcessRescueGroup(currentGroup, original, deconjugator);
+                        groupedResults[originalIdx] = processed;
+
+                        // Only cache the rescue marker if rescue failed (no results)
+                        if (UseCache && processed.Count == 0)
+                            await CacheRescueMarker(original.wordInfo);
+                    }
+
+                    currentGroup.Clear();
+                    candidateIdx++;
+                }
+                else
+                {
+                    currentGroup.Add(word);
+                }
+            }
+
+            if (currentGroup.Count > 0 && candidateIdx < rescueCandidates.Count)
+            {
+                var (original, originalIdx) = rescueCandidates[candidateIdx];
+                var processed = await ProcessRescueGroup(currentGroup, original, deconjugator);
+                groupedResults[originalIdx] = processed;
+
+                // Only cache the rescue marker if rescue failed (no results)
+                if (UseCache && processed.Count == 0)
+                    await CacheRescueMarker(original.wordInfo);
+            }
+
+            return groupedResults;
+        }
+
+        private static async Task CacheRescueMarker(WordInfo wordInfo)
+        {
+            try
+            {
+                var cacheKey = new DeckWordCacheKey(
+                                                    wordInfo.Text,
+                                                    wordInfo.PartOfSpeech,
+                                                    wordInfo.DictionaryForm
+                                                   );
+
+                await DeckWordCache.SetAsync(cacheKey,
+                                             new DeckWord { WordId = -1, OriginalText = wordInfo.Text },
+                                             CommandFlags.FireAndForget);
+            }
+            catch
+            {
+                // Cache write failed, ignore
+            }
+        }
+
+        private static async Task<List<DeckWord>> ProcessRescueGroup(
+            List<WordInfo> group,
+            (WordInfo wordInfo, int occurrences) original,
+            Deconjugator deconjugator)
+        {
+            var results = new List<DeckWord>();
+
+            if (group.Count == 0)
+                return results;
+
+            if (group.Count == 1 && group[0].Text == original.wordInfo.Text)
+                return results;
+
+            foreach (var splitWord in group)
+            {
+                var processed = await ProcessWord((splitWord, original.occurrences), deconjugator);
+                if (processed != null)
+                    results.Add(processed);
+            }
+
+            return results;
+        }
+
+        private static List<WordInfo> CombineCompounds(List<WordInfo> wordInfos)
+        {
+            if (wordInfos.Count < 2)
+                return wordInfos;
+
+            var result = new List<WordInfo>(wordInfos.Count);
+            int i = 0;
+
+            while (i < wordInfos.Count)
+            {
+                var word = wordInfos[i];
+
+                // Only check verbs/i-adjectives
+                if (word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective)
+                {
+                    var match = TryMatchCompounds(wordInfos, i);
+                    if (match.HasValue)
+                    {
+                        var (startIndex, dictForm, wordId) = match.Value;
+
+                        int tokensToRemove = i - startIndex;
+                        if (tokensToRemove > 0 && result.Count >= tokensToRemove)
+                        {
+                            result.RemoveRange(result.Count - tokensToRemove, tokensToRemove);
+                        }
+
+                        var originalText = string.Concat(wordInfos.Skip(startIndex).Take(i - startIndex + 1).Select(w => w.Text));
+                        result.Add(new WordInfo
+                                   {
+                                       Text = originalText, DictionaryForm = dictForm, PartOfSpeech = PartOfSpeech.Expression,
+                                       NormalizedForm = dictForm, Reading = WanaKana.ToHiragana(originalText)
+                                   });
+
+                        i++;
+                        continue;
+                    }
+                }
+
+                result.Add(word);
+                i++;
+            }
+
+            return result;
+        }
+
+        private static (int startIndex, string dictionaryForm, int wordId)? TryMatchCompounds(
+            List<WordInfo> wordInfos,
+            int wordIndex)
+        {
+            var verb = wordInfos[wordIndex];
+            
+            var dictForm = verb.DictionaryForm;
+            
+            // Try to deconjugate the dictionary form
+            if (string.IsNullOrEmpty(dictForm) || dictForm == verb.Text)
+            {
+                var deconjugated = Deconjugator.Instance.Deconjugate(WanaKana.ToHiragana(verb.Text));
+                if (deconjugated.Count == 0) return null;
+                dictForm = deconjugated.First().Text;
+            }
+
+            // Backward window scan for greedy matching
+            for (int windowSize = Math.Min(5, wordIndex + 1); windowSize >= 2; windowSize--)
+            {
+                int startIndex = wordIndex - windowSize + 1;
+
+                var prefix = string.Concat(wordInfos.Skip(startIndex).Take(windowSize - 1).Select(w => w.Text));
+                var candidate = prefix + dictForm;
+
+                lock (CompoundCacheLock)
+                {
+                    if (CompoundExpressionCache.TryGetValue(candidate, out var cached))
+                    {
+                        if (cached.validExpression)
+                            return (startIndex, candidate, cached.wordId!.Value);
+                        
+                        // If we have something in the cache but it's not marked as exist, then just skip it and try a smaller window
+                        continue;
+                    }
+                }
+
+                if (_lookups.TryGetValue(candidate, out var wordIds) && wordIds.Count > 0)
+                {
+                    lock (CompoundCacheLock)
+                    {
+                        CompoundExpressionCache[candidate] = (true, wordIds[0]);
+                    }
+
+                    return (startIndex, candidate, wordIds[0]);
+                }
+
+                // If we failed to find it, then try a pure hiragana version
+                var hiraganaCandidate = WanaKana.ToHiragana(candidate);
+                if (hiraganaCandidate != candidate && _lookups.TryGetValue(hiraganaCandidate, out wordIds) && wordIds.Count > 0)
+                {
+                    lock (CompoundCacheLock)
+                    {
+                        CompoundExpressionCache[candidate] = (true, wordIds[0]);
+                    }
+
+                    return (startIndex, candidate, wordIds[0]);
+                }
+
+                // If we failed, then it's not a valid expression
+                lock (CompoundCacheLock)
+                {
+                    CompoundExpressionCache[candidate] = (false, null);
+                }
+            }
+
+            return null;
         }
     }
 }

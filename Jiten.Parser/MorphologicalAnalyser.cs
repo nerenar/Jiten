@@ -54,21 +54,40 @@ public class MorphologicalAnalyser
 
     private static readonly HashSet<string> MisparsesRemove =
         ["そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ", "イッ", "ほっ",
-        "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー"];
+        "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー", "違"];
 
     // Token to separate some words in sudachi
     private static readonly string _stopToken = "|";
 
+    // Delimiter for batch processing multiple texts in a single Sudachi call
+    private static readonly string _batchDelimiter = "|||";
+
     /// <summary>
     /// Parses the given text into a list of SentenceInfo objects by performing morphological analysis.
+    /// Delegates to ParseBatch for a single codepath.
     /// </summary>
     /// <param name="text">The input text to be analyzed.</param>
     /// <param name="morphemesOnly">A boolean indicating whether the parsing should output only morphemes. When true, parsing will use mode 'A' for morpheme parsing.</param>
     /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved in the processed text. Used in the ReaderController</param>
     /// <returns>A list of SentenceInfo objects representing the parsed output.</returns>
-    /// <exception cref="Exception">Thrown if an error occurs during parsing or processing.</exception>
     public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false, bool preserveStopToken = false)
     {
+        var results = await ParseBatch([text], morphemesOnly, preserveStopToken);
+        return results.Count > 0 ? results[0] : [];
+    }
+
+    /// <summary>
+    /// Parses multiple texts in a single Sudachi call for efficiency.
+    /// This is the main implementation - Parse() delegates here.
+    /// </summary>
+    /// <param name="texts">List of texts to parse.</param>
+    /// <param name="morphemesOnly">A boolean indicating whether the parsing should output only morphemes.</param>
+    /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved.</param>
+    /// <returns>List of SentenceInfo lists, one per input text.</returns>
+    public async Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false)
+    {
+        if (texts.Count == 0) return [];
+
         var configuration = new ConfigurationBuilder()
                             .SetBasePath(Directory.GetCurrentDirectory())
                             .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true)
@@ -77,60 +96,105 @@ public class MorphologicalAnalyser
                             .AddEnvironmentVariables()
                             .Build();
 
-        // Build dictionary  sudachi ubuild Y:\CODE\Jiten\Shared\resources\user_dic.xml -s S:\Jiten\sudachi.rs\resources\system_full.dic -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"
+        // Preprocess each text separately (preserves transformations per-text)
+        var processedTexts = new List<string>(texts.Count);
+        var originalTexts = new List<string>(texts.Count);
+        foreach (var text in texts)
+        {
+            var copy = text;
+            PreprocessText(ref copy, preserveStopToken);
+            processedTexts.Add(copy);
 
-        // Preprocess the text to remove invalid characters
-        PreprocessText(ref text, preserveStopToken);
+            var cleanedOriginal = copy.Replace(" ", "");
+            if (!preserveStopToken)
+                cleanedOriginal = cleanedOriginal.Replace(_stopToken, "");
+            originalTexts.Add(cleanedOriginal);
+        }
 
-        // Custom stuff in the user dictionary interferes with the mode A morpheme parsing
-        var configPath =
-            morphemesOnly
-                ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi_nouserdic.json")
-                : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi.json");
+        // Join with batch delimiter (only if multiple texts)
+        var combinedText = texts.Count == 1
+            ? processedTexts[0]
+            : string.Join($" {_batchDelimiter} ", processedTexts);
+
+        // Single Sudachi call
+        var configPath = morphemesOnly
+            ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi_nouserdic.json")
+            : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi.json");
         var dic = configuration.GetValue<string>("DictionaryPath");
 
-        var output = SudachiInterop.ProcessText(configPath, text, dic, mode: morphemesOnly ? 'A' : 'C').Split("\n");
+        var output = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: morphemesOnly ? 'A' : 'C').Split("\n");
 
-        text = text.Replace(" ", "");
-        
-        if (!preserveStopToken)
-            text = text.Replace(_stopToken, "");
-
-        List<WordInfo> wordInfos = new();
-
+        // Parse all WordInfo objects
+        var allWordInfos = new List<WordInfo>();
         foreach (var line in output)
         {
             if (line == "EOS") continue;
-
             var wi = new WordInfo(line);
-            if (!wi.IsInvalid)
-                wordInfos.Add(wi);
+            if (!wi.IsInvalid) allWordInfos.Add(wi);
         }
 
-        if (morphemesOnly)
-            return [new SentenceInfo("") { Words = wordInfos.Select(w => (w, (byte)0, (byte)0)).ToList() }];
+        // Split by delimiter tokens (if batch)
+        var batches = new List<List<WordInfo>>();
+        if (texts.Count == 1)
+        {
+            batches.Add(allWordInfos);
+        }
+        else
+        {
+            var currentBatch = new List<WordInfo>();
+            for (int j = 0; j < allWordInfos.Count; j++)
+            {
+                var wi = allWordInfos[j];
 
-        wordInfos = ProcessSpecialCases(wordInfos);
+                // Sudachi tokenizes ||| as three separate | tokens
+                if (wi.Text == _stopToken &&
+                    j + 2 < allWordInfos.Count &&
+                    allWordInfos[j + 1].Text == _stopToken &&
+                    allWordInfos[j + 2].Text == _stopToken)
+                {
+                    batches.Add(currentBatch);
+                    currentBatch = new List<WordInfo>();
+                    j += 2;
+                }
+                else
+                {
+                    currentBatch.Add(wi);
+                }
+            }
+            batches.Add(currentBatch); // Last batch
+        }
 
-        // Disabled this, seems like it's doing more harm than good
-        // wordInfos = CombinePrefixes(wordInfos);
+        // Process each batch through normal pipeline
+        var results = new List<List<SentenceInfo>>();
+        for (int i = 0; i < batches.Count && i < originalTexts.Count; i++)
+        {
+            var wordInfos = batches[i];
 
-        wordInfos = CombineAmounts(wordInfos);
-        wordInfos = CombineTte(wordInfos);
-        wordInfos = CombineAuxiliaryVerbStem(wordInfos);
-        wordInfos = CombineAdverbialParticle(wordInfos);
-        wordInfos = CombineSuffix(wordInfos);
-        wordInfos = CombineConjunctiveParticle(wordInfos);
-        wordInfos = CombineAuxiliary(wordInfos);
-        wordInfos = CombineVerbDependant(wordInfos);
-        wordInfos = CombineParticles(wordInfos);
+            if (morphemesOnly)
+            {
+                results.Add([new SentenceInfo("") { Words = wordInfos.Select(w => (w, (byte)0, (byte)0)).ToList() }]);
+                continue;
+            }
+            
+            wordInfos = ProcessSpecialCases(wordInfos);
+            wordInfos = CombineInflections(wordInfos);
+            wordInfos = CombineAmounts(wordInfos);
+            wordInfos = CombineTte(wordInfos);
+            wordInfos = CombineAuxiliaryVerbStem(wordInfos);
+            wordInfos = CombineAdverbialParticle(wordInfos);
+            wordInfos = CombineSuffix(wordInfos);
+            wordInfos = CombineConjunctiveParticle(wordInfos);
+            wordInfos = CombineAuxiliary(wordInfos);
+            wordInfos = CombineVerbDependant(wordInfos);
+            wordInfos = CombineParticles(wordInfos);
+            wordInfos = CombineHiraganaElongation(wordInfos);
+            wordInfos = CombineFinal(wordInfos);
+            wordInfos = FilterMisparse(wordInfos);
 
-        wordInfos = CombineHiraganaElongation(wordInfos);
-        wordInfos = CombineFinal(wordInfos);
+            results.Add(SplitIntoSentences(originalTexts[i], wordInfos));
+        }
 
-        wordInfos = FilterMisparse(wordInfos);
-
-        return SplitIntoSentences(text, wordInfos);
+        return results;
     }
 
     /// <summary>
@@ -162,8 +226,7 @@ public class MorphologicalAnalyser
                 word.DictionaryForm = "です";
                 word.PartOfSpeech = PartOfSpeech.Auxiliary;
             }
-
-
+            
             if (MisparsesRemove.Contains(word.Text) ||
                 word.PartOfSpeech == PartOfSpeech.Noun && (
                     (word.Text.Length == 1 && WanaKana.IsKana(word.Text)) ||
@@ -222,6 +285,7 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "持(.)得", $"持$1{_stopToken}得");
         text = Regex.Replace(text, "笑(.)崩", $"笑$1{_stopToken}崩");
         text = Regex.Replace(text, "揚(.)だ", $"揚$1{_stopToken}だ");
+        text = Regex.Replace(text, "考(.)直", $"考$1{_stopToken}直");
         
 
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
@@ -379,6 +443,136 @@ public class MorphologicalAnalyser
         }
 
         return newList;
+    }
+
+    private static readonly HashSet<PartOfSpeech> InflectableBasePOS =
+    [
+        PartOfSpeech.Verb,
+        PartOfSpeech.IAdjective,
+        PartOfSpeech.NaAdjective
+    ];
+
+    private static readonly HashSet<PartOfSpeech> InflectionPartPOS =
+    [
+        PartOfSpeech.Auxiliary,
+        PartOfSpeech.Suffix,
+        PartOfSpeech.Particle
+    ];
+
+    /// <summary>
+    /// Combines inflected verb/adjective forms by verifying with the Deconjugator.
+    /// Uses a forward-rolling strategy to handle suffixes that change the dictionary base (e.g. わかる + かね → わかりかねる).
+    /// </summary>
+    private List<WordInfo> CombineInflections(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2) return wordInfos;
+
+        var deconjugator = Deconjugator.Instance;
+        var result = new List<WordInfo>(wordInfos.Count);
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var currentWord = new WordInfo(wordInfos[i]);
+
+            // Check if potential base for inflection
+            bool isBase = (InflectableBasePOS.Contains(currentWord.PartOfSpeech) ||
+                           currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru))
+                          && currentWord.NormalizedForm != "物";
+
+            if (!isBase)
+            {
+                result.Add(currentWord);
+                continue;
+            }
+
+            // Track current target dictionary form
+            var currentDictForm = currentWord.DictionaryForm;
+            var currentPOS = currentWord.PartOfSpeech;
+
+            // Iteratively try to merge subsequent tokens
+            while (i + 1 < wordInfos.Count)
+            {
+                var nextWord = wordInfos[i + 1];
+
+                // Safety filter: stop at particles
+                if (nextWord.Text is "は" or "な" or "よ" or "し" or "を" or "が" or "ください")
+                    break;
+
+                // Check if valid inflection part
+                bool isValidPart = InflectionPartPOS.Contains(nextWord.PartOfSpeech) ||
+                                   nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) ||
+                                   nextWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) ||
+                                   nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) ||
+                                   nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant);
+
+                if (!isValidPart) break;
+
+                string candidateText = currentWord.Text + nextWord.Text;
+                string candidateHiragana = KanaNormalizer.Normalize(WanaKana.ToHiragana(candidateText));
+                var forms = deconjugator.Deconjugate(candidateHiragana);
+
+                bool merged = false;
+                string? newDictForm = null;
+
+                // Scenario A: Standard inflection - deconjugates to current target
+                string targetHiragana = currentPOS == PartOfSpeech.Noun
+                    ? KanaNormalizer.Normalize(WanaKana.ToHiragana(currentDictForm)) + "する"
+                    : KanaNormalizer.Normalize(WanaKana.ToHiragana(currentDictForm));
+
+                if (forms.Any(f => f.Text == targetHiragana))
+                {
+                    merged = true;
+                    if (currentPOS == PartOfSpeech.Noun)
+                    {
+                        newDictForm = currentDictForm + "する";
+                        currentPOS = PartOfSpeech.Verb;
+                    }
+                }
+                // Scenario B: Suffix transition - creates new compound verb
+                // Handle both: Suffix with VerbLike (かねる) and Verb with PossibleDependant (切れる, 合う, etc.)
+                // IMPORTANT: Only apply when:
+                // 1. Base is a Verb, not a Noun (e.g. 提出+いただき should NOT combine)
+                // 2. Current word doesn't end in te-form or auxiliary patterns (these are grammatical constructions, not compounds)
+                //    - て/で: te-form (探して+みる is NOT a compound)
+                //    - たく/なく: adverbial form of auxiliaries (転げ回りたく+なる is NOT a compound)
+                else if (currentPOS == PartOfSpeech.Verb &&
+                         !currentWord.Text.EndsWith("て") &&
+                         !currentWord.Text.EndsWith("で") &&
+                         !currentWord.Text.EndsWith("たく") &&
+                         !currentWord.Text.EndsWith("なく") &&
+                         (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike) ||
+                          (nextWord.PartOfSpeech == PartOfSpeech.Verb && nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))))
+                {
+                    var suffixDict = KanaNormalizer.Normalize(WanaKana.ToHiragana(nextWord.DictionaryForm));
+                    var match = forms.FirstOrDefault(f => f.Text.EndsWith(suffixDict) && f.Text.Length > suffixDict.Length);
+
+                    if (match != null)
+                    {
+                        merged = true;
+                        newDictForm = match.Text;
+                        currentPOS = PartOfSpeech.Verb;
+                    }
+                }
+
+                if (merged)
+                {
+                    currentWord.Text = candidateText;
+                    currentWord.PartOfSpeech = currentPOS;
+                    if (newDictForm != null)
+                        currentWord.DictionaryForm = newDictForm;
+                    currentDictForm = currentWord.DictionaryForm;
+                    i++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            result.Add(currentWord);
+        }
+
+        return result;
     }
 
     private List<WordInfo> CombinePrefixes(List<WordInfo> wordInfos)

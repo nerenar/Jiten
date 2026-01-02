@@ -505,6 +505,9 @@ public class MorphologicalAnalyserTests
     [InlineData("俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳", "的な", "昂揚", "感" })]
     [InlineData("欠陥品め", new[] { "欠陥品", "め" })]
     [InlineData("本人たちは面白いと思ったのかもしれない", new[] { "本人","たち","は","面白い","と","思った","の","かもしれない" })]
+    [InlineData("わかりかねさせられない", new[] { "わかりかねさせられない" })]
+    [InlineData("読み切れなかった", new[] { "読み切れなかった" })]
+    [InlineData("話し合っている", new[] { "話し合っている" })]
     public async Task SegmentationTest(string text, string[] expectedResult)
     {
         (await Parse(text)).Select(r => r.Text).Should().Equal(expectedResult);
