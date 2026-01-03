@@ -30,6 +30,7 @@ namespace Jiten.Parser
         // Cache for compound expression lookups
         private static readonly Dictionary<string, (bool validExpression, int? wordId)> CompoundExpressionCache = new();
         private static readonly Lock CompoundCacheLock = new();
+        private const int MaxCompoundCacheSize = 200_000;
 
         // Valid POS for compound expressions
         private static readonly HashSet<PartOfSpeech> ValidCompoundPos = new()
@@ -1304,6 +1305,14 @@ namespace Jiten.Parser
             }
         }
 
+        private static void CleanCompoundCache()
+        {
+            if (CompoundExpressionCache.Count >= MaxCompoundCacheSize)
+            {
+                CompoundExpressionCache.Clear();
+            }
+        }
+
         private static async Task<(int startIndex, string dictionaryForm, int wordId)?> TryMatchCompounds(
             List<WordInfo> wordInfos,
             int wordIndex)
@@ -1347,6 +1356,7 @@ namespace Jiten.Parser
                     {
                         lock (CompoundCacheLock)
                         {
+                            CleanCompoundCache();
                             CompoundExpressionCache[candidate] = (true, validWordId.Value);
                         }
                         return (startIndex, candidate, validWordId.Value);
@@ -1362,6 +1372,7 @@ namespace Jiten.Parser
                     {
                         lock (CompoundCacheLock)
                         {
+                            CleanCompoundCache();
                             CompoundExpressionCache[candidate] = (true, validWordId.Value);
                         }
                         return (startIndex, candidate, validWordId.Value);
@@ -1371,6 +1382,7 @@ namespace Jiten.Parser
                 // If we failed, then it's not a valid expression
                 lock (CompoundCacheLock)
                 {
+                    CleanCompoundCache();
                     CompoundExpressionCache[candidate] = (false, null);
                 }
             }
