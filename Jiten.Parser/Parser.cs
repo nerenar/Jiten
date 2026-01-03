@@ -1097,7 +1097,7 @@ namespace Jiten.Parser
                                         {
                                             WordId = bestMatch.WordId,
                                             OriginalText = candidate,
-                                            ReadingIndex = 0,
+                                            ReadingIndex = GetBestReadingIndex(bestMatch, candidate),
                                             Occurrences = occurrences,
                                             PartsOfSpeech = bestMatch.PartsOfSpeech.ToPartOfSpeech(),
                                             Origin = bestMatch.Origin
@@ -1128,7 +1128,7 @@ namespace Jiten.Parser
                                         {
                                             WordId = bestMatch.WordId,
                                             OriginalText = candidate,
-                                            ReadingIndex = 0,
+                                            ReadingIndex = GetBestReadingIndex(bestMatch, candidate),
                                             Occurrences = occurrences,
                                             Conjugations = form.Process,
                                             PartsOfSpeech = bestMatch.PartsOfSpeech.ToPartOfSpeech(),
@@ -1173,6 +1173,67 @@ namespace Jiten.Parser
             }
 
             return groupedResults;
+        }
+
+        private static byte GetBestReadingIndex(JmDictWord word, string originalText)
+        {
+            var readings = word.Readings;
+            if (readings.Count == 0)
+                return 0;
+
+            var textHiragana = WanaKana.ToHiragana(originalText, new DefaultOptions { ConvertLongVowelMark = false });
+            var textHiraganaNormalized = KanaNormalizer.Normalize(textHiragana);
+
+            byte bestIndex = 0;
+            int maxScore = -1;
+
+            for (int i = 0; i < readings.Count; i++)
+            {
+                var reading = readings[i];
+                var readingHiragana = WanaKana.ToHiragana(reading, new DefaultOptions { ConvertLongVowelMark = false });
+
+                // Check phonetic match
+                if (KanaNormalizer.Normalize(readingHiragana) != textHiraganaNormalized)
+                {
+                    if (KanaNormalizer.Normalize(WanaKana.ToHiragana(reading)) != textHiraganaNormalized)
+                        continue;
+                }
+
+                // Score by script match (prefer readings that match the input script)
+                int score = GetPrefixLength(originalText, reading);
+                if (score > maxScore)
+                {
+                    maxScore = score;
+                    bestIndex = (byte)i;
+                }
+            }
+
+            // Fallback if no phonetic match: find any reading matching hiragana
+            if (maxScore == -1)
+            {
+                var normalizedReadings = readings.Select(r => WanaKana.ToHiragana(r, new DefaultOptions { ConvertLongVowelMark = false })).ToList();
+                var idx = normalizedReadings.IndexOf(textHiragana);
+                if (idx != -1) return (byte)idx;
+
+                // Try with long vowel conversion
+                normalizedReadings = readings.Select(r => WanaKana.ToHiragana(r)).ToList();
+                idx = normalizedReadings.IndexOf(textHiragana);
+                if (idx != -1) return (byte)idx;
+            }
+
+            return bestIndex;
+
+            static int GetPrefixLength(string s1, string s2)
+            {
+                int len = Math.Min(s1.Length, s2.Length);
+                int match = 0;
+                for (int i = 0; i < len; i++)
+                {
+                    if (s1[i] == s2[i]) match++;
+                    else break;
+                }
+                return match;
+            }
         }
 
         private static async Task<List<WordInfo>> CombineCompounds(List<WordInfo> wordInfos)
