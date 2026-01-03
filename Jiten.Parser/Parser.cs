@@ -30,6 +30,16 @@ namespace Jiten.Parser
         private static readonly Dictionary<string, (bool validExpression, int? wordId)> CompoundExpressionCache = new();
         private static readonly Lock CompoundCacheLock = new();
 
+        // Valid POS for compound expressions
+        private static readonly HashSet<PartOfSpeech> ValidCompoundPos = new()
+        {
+            PartOfSpeech.Expression,
+            PartOfSpeech.Verb,
+            PartOfSpeech.IAdjective,
+            PartOfSpeech.NaAdjective,
+            PartOfSpeech.Auxiliary
+        };
+
         private static async Task InitDictionaries()
         {
             var configuration = new ConfigurationBuilder()
@@ -118,7 +128,7 @@ namespace Jiten.Parser
 
             // Filter bad lines that cause exceptions
             wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
-            wordInfos = CombineCompounds(wordInfos);
+            wordInfos = await CombineCompounds(wordInfos);
 
             var deconjugator = Deconjugator.Instance;
 
@@ -261,7 +271,7 @@ namespace Jiten.Parser
             // Filter bad lines that cause exceptions
             wordInfos.ForEach(x => x.Text = Regex.Replace(x.Text, "ッー", ""));
 
-            wordInfos = CombineCompounds(wordInfos);
+            wordInfos = await CombineCompounds(wordInfos);
 
             var uniqueWords = new List<(WordInfo wordInfo, int occurrences)>();
             var wordCount = new Dictionary<(string, PartOfSpeech), int>();
@@ -1162,7 +1172,7 @@ namespace Jiten.Parser
             return results;
         }
 
-        private static List<WordInfo> CombineCompounds(List<WordInfo> wordInfos)
+        private static async Task<List<WordInfo>> CombineCompounds(List<WordInfo> wordInfos)
         {
             if (wordInfos.Count < 2)
                 return wordInfos;
@@ -1177,7 +1187,7 @@ namespace Jiten.Parser
                 // Only check verbs/i-adjectives
                 if (word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective)
                 {
-                    var match = TryMatchCompounds(wordInfos, i);
+                    var match = await TryMatchCompounds(wordInfos, i);
                     if (match.HasValue)
                     {
                         var (startIndex, dictForm, wordId) = match.Value;
@@ -1207,14 +1217,14 @@ namespace Jiten.Parser
             return result;
         }
 
-        private static (int startIndex, string dictionaryForm, int wordId)? TryMatchCompounds(
+        private static async Task<(int startIndex, string dictionaryForm, int wordId)?> TryMatchCompounds(
             List<WordInfo> wordInfos,
             int wordIndex)
         {
             var verb = wordInfos[wordIndex];
-            
+
             var dictForm = verb.DictionaryForm;
-            
+
             // Try to deconjugate the dictionary form
             if (string.IsNullOrEmpty(dictForm) || dictForm == verb.Text)
             {
@@ -1237,32 +1247,38 @@ namespace Jiten.Parser
                     {
                         if (cached.validExpression)
                             return (startIndex, candidate, cached.wordId!.Value);
-                        
-                        // If we have something in the cache but it's not marked as exist, then just skip it and try a smaller window
+
+                        // If we have something in the cache but it's not marked as valid, try a smaller window
                         continue;
                     }
                 }
 
                 if (_lookups.TryGetValue(candidate, out var wordIds) && wordIds.Count > 0)
                 {
-                    lock (CompoundCacheLock)
+                    var validWordId = await FindValidCompoundWordId(wordIds);
+                    if (validWordId.HasValue)
                     {
-                        CompoundExpressionCache[candidate] = (true, wordIds[0]);
+                        lock (CompoundCacheLock)
+                        {
+                            CompoundExpressionCache[candidate] = (true, validWordId.Value);
+                        }
+                        return (startIndex, candidate, validWordId.Value);
                     }
-
-                    return (startIndex, candidate, wordIds[0]);
                 }
 
                 // If we failed to find it, then try a pure hiragana version
-                var hiraganaCandidate = WanaKana.ToHiragana(candidate);
+                var hiraganaCandidate = WanaKana.ToHiragana(candidate, new DefaultOptions() { ConvertLongVowelMark = false });
                 if (hiraganaCandidate != candidate && _lookups.TryGetValue(hiraganaCandidate, out wordIds) && wordIds.Count > 0)
                 {
-                    lock (CompoundCacheLock)
+                    var validWordId = await FindValidCompoundWordId(wordIds);
+                    if (validWordId.HasValue)
                     {
-                        CompoundExpressionCache[candidate] = (true, wordIds[0]);
+                        lock (CompoundCacheLock)
+                        {
+                            CompoundExpressionCache[candidate] = (true, validWordId.Value);
+                        }
+                        return (startIndex, candidate, validWordId.Value);
                     }
-
-                    return (startIndex, candidate, wordIds[0]);
                 }
 
                 // If we failed, then it's not a valid expression
@@ -1272,6 +1288,27 @@ namespace Jiten.Parser
                 }
             }
 
+            return null;
+        }
+
+        private static async Task<int?> FindValidCompoundWordId(List<int> wordIds)
+        {
+            try
+            {
+                var wordCache = await JmDictCache.GetWordsAsync(wordIds);
+                foreach (var wordId in wordIds)
+                {
+                    if (!wordCache.TryGetValue(wordId, out var word)) continue;
+
+                    var posList = word.PartsOfSpeech.ToPartOfSpeech();
+                    if (posList.Any(pos => ValidCompoundPos.Contains(pos)))
+                        return wordId;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Warning] Error validating compound POS: {ex.Message}");
+            }
             return null;
         }
     }
