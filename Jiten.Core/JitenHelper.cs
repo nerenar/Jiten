@@ -189,7 +189,7 @@ public static class JitenHelper
         }
     }
 
-    private static async Task BulkInsertDeckWords(IDbContextFactory<JitenDbContext> contextFactory, ICollection<DeckWord> deckWords, int deckId)
+    public static async Task BulkInsertDeckWords(IDbContextFactory<JitenDbContext> contextFactory, ICollection<DeckWord> deckWords, int deckId)
     {
         var timer = Stopwatch.StartNew();
         Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk inserting {deckWords.Count} deck words for DeckId {deckId}...");

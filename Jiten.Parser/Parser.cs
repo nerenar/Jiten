@@ -42,6 +42,16 @@ namespace Jiten.Parser
             PartOfSpeech.Auxiliary
         };
 
+        // Excluded (WordId, ReadingIndex) pairs to filter from final parsing results
+        private static readonly HashSet<(int WordId, byte ReadingIndex)> ExcludedMisparses = new()
+        {
+        (1291070,1),
+        (1587980,1),
+        (1443970,5),
+        (2029660,0),
+        (1177490,5),
+        };
+
         private static async Task InitDictionaries()
         {
             var configuration = new ConfigurationBuilder()
@@ -174,7 +184,7 @@ namespace Jiten.Parser
                 }
             }
 
-            return allProcessedWords.Where(w => w != null).Select(w => w!).ToList();
+            return ExcludeFinalMisparses(allProcessedWords.Where(w => w != null).Select(w => w!));
         }
 
         /// <summary>
@@ -346,6 +356,8 @@ namespace Jiten.Parser
                              })
                              .ToArray();
 
+            processedWords = ExcludeFinalMisparses(processedWords).ToArray();
+
             List<ExampleSentence>? exampleSentences = null;
 
             if (mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
@@ -436,7 +448,9 @@ namespace Jiten.Parser
                 allProcessedWords.AddRange(batchResults);
             }
 
-            return allProcessedWords;
+            return allProcessedWords
+                .Where(w => w == null || !ExcludedMisparses.Contains((w.WordId, w.ReadingIndex)))
+                .ToList();
         }
 
         // Limit how many concurrent operations we perform to prevent overwhelming the system
@@ -1036,7 +1050,7 @@ namespace Jiten.Parser
                 matchedWords.Add(new DeckWord() { WordId = bestMatch.WordId, ReadingIndex = (byte)readingIndex, OriginalText = word });
             }
 
-            return matchedWords;
+            return ExcludeFinalMisparses(matchedWords);
         }
 
         private static async Task<List<List<DeckWord>>> RescueFailedWords(
@@ -1313,6 +1327,14 @@ namespace Jiten.Parser
             }
         }
 
+        private static List<DeckWord> ExcludeFinalMisparses(IEnumerable<DeckWord> words)
+        {
+            if (ExcludedMisparses.Count == 0)
+                return words.ToList();
+
+            return words.Where(w => !ExcludedMisparses.Contains((w.WordId, w.ReadingIndex))).ToList();
+        }
+
         private static async Task<(int startIndex, string dictionaryForm, int wordId)?> TryMatchCompounds(
             List<WordInfo> wordInfos,
             int wordIndex)
@@ -1333,6 +1355,11 @@ namespace Jiten.Parser
             for (int windowSize = Math.Min(5, wordIndex + 1); windowSize >= 2; windowSize--)
             {
                 int startIndex = wordIndex - windowSize + 1;
+
+                // Skip if first token is a particle
+                var firstWord = wordInfos[startIndex];
+                if (firstWord.PartOfSpeech == PartOfSpeech.Particle)
+                    continue;
 
                 var prefix = string.Concat(wordInfos.Skip(startIndex).Take(windowSize - 1).Select(w => w.Text));
                 var candidate = prefix + dictForm;

@@ -332,6 +332,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<ISrsService, SrsService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
+builder.Services.AddScoped<WordReplacementService>();
 
 builder.Services.AddRateLimiter(options =>
 {

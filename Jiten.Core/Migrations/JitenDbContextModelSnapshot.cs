@@ -287,11 +287,11 @@ namespace Jiten.Core.Migrations
 
             modelBuilder.Entity("Jiten.Core.Data.DeckWord", b =>
                 {
-                    b.Property<int>("DeckWordId")
+                    b.Property<long>("DeckWordId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("bigint");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DeckWordId"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DeckWordId"));
 
                     b.Property<int>("DeckId")
                         .HasColumnType("integer");

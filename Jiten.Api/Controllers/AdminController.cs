@@ -4,6 +4,7 @@ using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Jobs;
+using Jiten.Api.Services;
 using Jiten.Cli;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -928,5 +929,119 @@ public partial class AdminController(
 
         logger.LogWarning("Admin flushed Redis cache");
         return Results.Ok();
+    }
+
+    [HttpPost("replace-word-reading")]
+    public async Task<IActionResult> ReplaceWordReading(
+        [FromBody] ReplaceWordReadingRequest request,
+        [FromServices] WordReplacementService wordReplacementService)
+    {
+        if (request.OldWordId == request.NewWordId && request.OldReadingIndex == request.NewReadingIndex)
+        {
+            return BadRequest(new { Message = "Old and new word/reading are identical" });
+        }
+
+        try
+        {
+            var result = await wordReplacementService.ReplaceAsync(
+                request.OldWordId, request.OldReadingIndex,
+                request.NewWordId, request.NewReadingIndex,
+                request.DryRun);
+
+            if (request.DryRun)
+            {
+                logger.LogInformation(
+                    "Admin dry-run word replacement: {OldWordId}:{OldReadingIndex} -> {NewWordId}:{NewReadingIndex}",
+                    request.OldWordId, request.OldReadingIndex, request.NewWordId, request.NewReadingIndex);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Admin executed word replacement: {OldWordId}:{OldReadingIndex} -> {NewWordId}:{NewReadingIndex}",
+                    request.OldWordId, request.OldReadingIndex, request.NewWordId, request.NewReadingIndex);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Word replacement failed");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { Message = "Word replacement failed", Details = ex.Message });
+        }
+    }
+
+    [HttpPost("split-word")]
+    public async Task<IActionResult> SplitWord(
+        [FromBody] SplitWordRequest request,
+        [FromServices] WordReplacementService wordReplacementService)
+    {
+        if (request.NewWords.Count < 2)
+        {
+            return BadRequest(new { Message = "Split requires at least 2 new words" });
+        }
+
+        try
+        {
+            var result = await wordReplacementService.SplitAsync(
+                request.OldWordId, request.OldReadingIndex,
+                request.NewWords,
+                request.DryRun);
+
+            if (request.DryRun)
+            {
+                logger.LogInformation(
+                    "Admin dry-run word split: {OldWordId}:{OldReadingIndex} -> {NewWordCount} words",
+                    request.OldWordId, request.OldReadingIndex, request.NewWords.Count);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Admin executed word split: {OldWordId}:{OldReadingIndex} -> {NewWordCount} words",
+                    request.OldWordId, request.OldReadingIndex, request.NewWords.Count);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Word split failed");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { Message = "Word split failed", Details = ex.Message });
+        }
+    }
+
+    [HttpPost("remove-word")]
+    public async Task<IActionResult> RemoveWord(
+        [FromBody] RemoveWordRequest request,
+        [FromServices] WordReplacementService wordReplacementService)
+    {
+        try
+        {
+            var result = await wordReplacementService.RemoveAsync(
+                request.WordId, request.ReadingIndex,
+                request.DryRun);
+
+            if (request.DryRun)
+            {
+                logger.LogInformation(
+                    "Admin dry-run word removal: {WordId}:{ReadingIndex}",
+                    request.WordId, request.ReadingIndex);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Admin executed word removal: {WordId}:{ReadingIndex}",
+                    request.WordId, request.ReadingIndex);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Word removal failed");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { Message = "Word removal failed", Details = ex.Message });
+        }
     }
 }

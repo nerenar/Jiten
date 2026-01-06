@@ -286,11 +286,12 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "笑(.)崩", $"笑$1{_stopToken}崩");
         text = Regex.Replace(text, "揚(.)だ", $"揚$1{_stopToken}だ");
         text = Regex.Replace(text, "考(.)直", $"考$1{_stopToken}直");
+        text = Regex.Replace(text, "漏(.)出", $"漏$1{_stopToken}出");
+        text = Regex.Replace(text, "はやめ", $"は$1{_stopToken}やめ");
+        text = Regex.Replace(text, "もやる", $"も{_stopToken}やる");
+        text = Regex.Replace(text, "べや", $"べ{_stopToken}や");
+        text = Regex.Replace(text, "はいい", $"は{_stopToken}いい");
         
-        // Crashes sudachi for some reason
-        text = Regex.Replace(text, "手取額", $"手取り額");
-        
-
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
     }
@@ -439,7 +440,10 @@ public class MorphologicalAnalyser
                 w1.PartOfSpeech = PartOfSpeech.Noun;
 
             if (w1.Text is "十五")
-                w1.PartOfSpeech = PartOfSpeech.Numeral;
+                w1.PartOfSpeech = PartOfSpeech.Numeral;  
+            
+            if (w1.Text is "オレ")
+                w1.PartOfSpeech = PartOfSpeech.Pronoun;
 
             newList.Add(w1);
             i++;

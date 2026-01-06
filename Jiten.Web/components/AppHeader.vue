@@ -147,14 +147,14 @@
 
         <!-- Desktop nav -->
         <nav class="hidden md:flex items-center space-x-4">
-          <nuxt-link to="/" class="!text-white">Home</nuxt-link>
-          <nuxt-link to="/decks/media" class="!text-white">Media</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="!text-white">Settings</nuxt-link>
-          <nuxt-link to="/other" class="!text-white">Tools</nuxt-link>
-          <nuxt-link to="/faq" class="!text-white">FAQ</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions" to="/Dashboard" class="!text-white">Dashboard</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated" to="/" class="!text-white" @click="auth.logout()"> Logout </nuxt-link>
-          <nuxt-link v-else to="/login" class="!text-white">Login</nuxt-link>
+          <nuxt-link to="/" :class="route.path === '/' ? 'font-semibold !text-purple-200' : '!text-white'">Home</nuxt-link>
+          <nuxt-link to="/decks/media" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
+          <nuxt-link v-if="auth.isAuthenticated" to="/settings" :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'">Settings</nuxt-link>
+          <nuxt-link to="/other" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
+          <nuxt-link to="/faq" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'">FAQ</nuxt-link>
+          <nuxt-link v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions" to="/Dashboard" :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'">Dashboard</nuxt-link>
+          <a v-if="auth.isAuthenticated" href="#" class="!text-white cursor-pointer" @click.prevent="auth.logout()">Logout</a>
+          <nuxt-link v-else to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'">Login</nuxt-link>
           <Button
             type="button"
             label="Settings"
@@ -186,26 +186,27 @@
       <div v-if="mobileMenuOpen" class="md:hidden mx-auto max-w-6xl px-4 pb-4">
         <div class="bg-indigo-800 rounded-lg shadow-lg divide-y divide-indigo-700">
           <div class="flex flex-col py-2">
-            <nuxt-link to="/" class="py-2 px-3 !text-white" @click="mobileMenuOpen = false">Home</nuxt-link>
-            <nuxt-link to="/decks/media" class="py-2 px-3 !text-white" @click="mobileMenuOpen = false">Media</nuxt-link>
-            <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="py-2 px-3 !text-white" @click="mobileMenuOpen = false">Settings</nuxt-link>
-            <nuxt-link to="/other" class="py-2 px-3 !text-white" @click="mobileMenuOpen = false">Other</nuxt-link>
-            <nuxt-link to="/faq" class="py-2 px-3 !text-white" @click="mobileMenuOpen = false">FAQ</nuxt-link>
+            <nuxt-link to="/" class="py-2 px-3" :class="route.path === '/' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Home</nuxt-link>
+            <nuxt-link to="/decks/media" class="py-2 px-3" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Media</nuxt-link>
+            <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="py-2 px-3" :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Settings</nuxt-link>
+            <nuxt-link to="/other" class="py-2 px-3" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Tools</nuxt-link>
+            <nuxt-link to="/faq" class="py-2 px-3" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">FAQ</nuxt-link>
             <nuxt-link
               v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
               to="/Dashboard"
-              class="py-2 px-3 !text-white"
+              class="py-2 px-3"
+              :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Dashboard</nuxt-link
             >
-            <nuxt-link
+            <a
               v-if="auth.isAuthenticated"
-              to="/"
-              class="py-2 px-3 !text-white"
-              @click="auth.logout(); mobileMenuOpen = false"
-              >Logout</nuxt-link
+              href="#"
+              class="py-2 px-3 !text-white cursor-pointer"
+              @click.prevent="auth.logout(); mobileMenuOpen = false"
+              >Logout</a
             >
-            <nuxt-link v-else to="/login" class="py-2 px-3 !text-white" @click="mobileMenuOpen = false">Login</nuxt-link>
+            <nuxt-link v-else to="/login" class="py-2 px-3" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Login</nuxt-link>
           </div>
           <div class="flex items-center gap-3 py-3 px-3">
             <Button
