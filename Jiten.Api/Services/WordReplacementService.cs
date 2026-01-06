@@ -1,10 +1,9 @@
 using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
-using Jiten.Api.Jobs;
 using Jiten.Core;
-using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace Jiten.Api.Services;
 
@@ -12,8 +11,164 @@ public class WordReplacementService(
     IDbContextFactory<JitenDbContext> contextFactory,
     IDbContextFactory<UserDbContext> userContextFactory,
     IBackgroundJobClient backgroundJobs,
+    IConnectionMultiplexer redis,
     ILogger<WordReplacementService> logger)
 {
+    private readonly IDatabase _redis = redis.GetDatabase();
+
+    private async Task QueueParentDeckRecalcIfNeeded(int parentDeckId)
+    {
+        var key = $"jiten:parent-deck-recalc-pending:{parentDeckId}";
+        var wasSet = await _redis.StringSetAsync(key, "1", TimeSpan.FromMinutes(120), When.NotExists);
+
+        if (wasSet)
+        {
+            backgroundJobs.Enqueue<WordReplacementService>(s => s.RecalculateParentDeck(parentDeckId));
+            logger.LogDebug("Queued recalculation for parent deck {DeckId}", parentDeckId);
+        }
+        else
+        {
+            logger.LogDebug("Skipping recalc queue for deck {DeckId} - job already pending", parentDeckId);
+        }
+    }
+
+    private void QueueIncrementalParentUpdate(
+        int parentDeckId,
+        int oldWordId, byte oldReadingIndex,
+        int newWordId, byte newReadingIndex,
+        int occurrenceDelta)
+    {
+        backgroundJobs.Enqueue<WordReplacementService>(s =>
+            s.IncrementalParentUpdate(parentDeckId, oldWordId, oldReadingIndex, newWordId, newReadingIndex, occurrenceDelta));
+
+        logger.LogDebug("Queued incremental parent update for deck {DeckId}: {OldWord}:{OldReading} -> {NewWord}:{NewReading}, delta {Delta}",
+            parentDeckId, oldWordId, oldReadingIndex, newWordId, newReadingIndex, occurrenceDelta);
+    }
+
+    private void QueueIncrementalParentRemove(
+        int parentDeckId,
+        int wordId, byte readingIndex,
+        int occurrenceDelta)
+    {
+        backgroundJobs.Enqueue<WordReplacementService>(s =>
+            s.IncrementalParentRemove(parentDeckId, wordId, readingIndex, occurrenceDelta));
+
+        logger.LogDebug("Queued incremental parent remove for deck {DeckId}: word {WordId}:{ReadingIndex}, delta {Delta}",
+            parentDeckId, wordId, readingIndex, occurrenceDelta);
+    }
+
+    private void QueueIncrementalParentAdd(
+        int parentDeckId,
+        int wordId, byte readingIndex,
+        int occurrenceDelta)
+    {
+        backgroundJobs.Enqueue<WordReplacementService>(s =>
+            s.IncrementalParentAdd(parentDeckId, wordId, readingIndex, occurrenceDelta));
+
+        logger.LogDebug("Queued incremental parent add for deck {DeckId}: word {WordId}:{ReadingIndex}, delta {Delta}",
+            parentDeckId, wordId, readingIndex, occurrenceDelta);
+    }
+
+    public async Task IncrementalParentUpdate(
+        int parentDeckId,
+        int oldWordId, byte oldReadingIndex,
+        int newWordId, byte newReadingIndex,
+        int occurrenceDelta)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        // Decrement old word occurrences
+        await context.Database.ExecuteSqlRawAsync(@"
+            UPDATE jiten.""DeckWords""
+            SET ""Occurrences"" = ""Occurrences"" - {0}
+            WHERE ""DeckId"" = {1} AND ""WordId"" = {2} AND ""ReadingIndex"" = {3}",
+            occurrenceDelta, parentDeckId, oldWordId, oldReadingIndex);
+
+        // Delete if occurrences dropped to zero or below
+        await context.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM jiten.""DeckWords""
+            WHERE ""DeckId"" = {0} AND ""WordId"" = {1} AND ""ReadingIndex"" = {2}
+              AND ""Occurrences"" <= 0",
+            parentDeckId, oldWordId, oldReadingIndex);
+
+        // Upsert new word
+        await context.Database.ExecuteSqlRawAsync(@"
+            INSERT INTO jiten.""DeckWords"" (""DeckId"", ""WordId"", ""ReadingIndex"", ""Occurrences"")
+            VALUES ({0}, {1}, {2}, {3})
+            ON CONFLICT (""DeckId"", ""WordId"", ""ReadingIndex"")
+            DO UPDATE SET ""Occurrences"" = jiten.""DeckWords"".""Occurrences"" + EXCLUDED.""Occurrences""",
+            parentDeckId, newWordId, newReadingIndex, occurrenceDelta);
+
+        await UpdateParentDeckStats(context, parentDeckId);
+
+        logger.LogDebug("Incremental parent update completed: deck {DeckId}, {OldWord}:{OldReading} -> {NewWord}:{NewReading}, delta {Delta}",
+            parentDeckId, oldWordId, oldReadingIndex, newWordId, newReadingIndex, occurrenceDelta);
+    }
+
+    public async Task IncrementalParentRemove(
+        int parentDeckId,
+        int wordId, byte readingIndex,
+        int occurrenceDelta)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        // Decrement word occurrences
+        await context.Database.ExecuteSqlRawAsync(@"
+            UPDATE jiten.""DeckWords""
+            SET ""Occurrences"" = ""Occurrences"" - {0}
+            WHERE ""DeckId"" = {1} AND ""WordId"" = {2} AND ""ReadingIndex"" = {3}",
+            occurrenceDelta, parentDeckId, wordId, readingIndex);
+
+        // Delete if occurrences dropped to zero or below
+        await context.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM jiten.""DeckWords""
+            WHERE ""DeckId"" = {0} AND ""WordId"" = {1} AND ""ReadingIndex"" = {2}
+              AND ""Occurrences"" <= 0",
+            parentDeckId, wordId, readingIndex);
+
+        await UpdateParentDeckStats(context, parentDeckId);
+
+        logger.LogDebug("Incremental parent remove completed: deck {DeckId}, word {WordId}:{ReadingIndex}, delta {Delta}",
+            parentDeckId, wordId, readingIndex, occurrenceDelta);
+    }
+
+    public async Task IncrementalParentAdd(
+        int parentDeckId,
+        int wordId, byte readingIndex,
+        int occurrenceDelta)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        // Upsert word
+        await context.Database.ExecuteSqlRawAsync(@"
+            INSERT INTO jiten.""DeckWords"" (""DeckId"", ""WordId"", ""ReadingIndex"", ""Occurrences"")
+            VALUES ({0}, {1}, {2}, {3})
+            ON CONFLICT (""DeckId"", ""WordId"", ""ReadingIndex"")
+            DO UPDATE SET ""Occurrences"" = jiten.""DeckWords"".""Occurrences"" + EXCLUDED.""Occurrences""",
+            parentDeckId, wordId, readingIndex, occurrenceDelta);
+
+        await UpdateParentDeckStats(context, parentDeckId);
+
+        logger.LogDebug("Incremental parent add completed: deck {DeckId}, word {WordId}:{ReadingIndex}, delta {Delta}",
+            parentDeckId, wordId, readingIndex, occurrenceDelta);
+    }
+
+    private async Task UpdateParentDeckStats(JitenDbContext context, int parentDeckId)
+    {
+        await context.Database.ExecuteSqlRawAsync(@"
+            UPDATE jiten.""Decks"" d
+            SET ""UniqueWordCount"" = (
+                SELECT COUNT(DISTINCT (""WordId"", ""ReadingIndex""))
+                FROM jiten.""DeckWords"" WHERE ""DeckId"" = d.""DeckId""
+            ),
+            ""UniqueWordUsedOnceCount"" = (
+                SELECT COUNT(*)
+                FROM jiten.""DeckWords"" WHERE ""DeckId"" = d.""DeckId"" AND ""Occurrences"" = 1
+            )
+            WHERE d.""DeckId"" = {0}",
+            parentDeckId);
+    }
+
     public async Task<WordReplacementResult> ReplaceAsync(
         int oldWordId, byte oldReadingIndex,
         int newWordId, byte newReadingIndex,
@@ -42,6 +197,17 @@ public class WordReplacementService(
                 .ToListAsync();
 
             result.AffectedDeckCount = affectedDeckIds.Count;
+
+            // Capture parent deck deltas BEFORE modifying children
+            var parentDeltas = await context.DeckWords
+                .Where(dw => dw.WordId == oldWordId && dw.ReadingIndex == oldReadingIndex)
+                .Join(context.Decks.Where(d => d.ParentDeckId != null),
+                      dw => dw.DeckId,
+                      d => d.DeckId,
+                      (dw, d) => new { d.ParentDeckId, dw.Occurrences })
+                .GroupBy(x => x.ParentDeckId)
+                .Select(g => new { ParentDeckId = g.Key!.Value, TotalOccurrences = g.Sum(x => x.Occurrences) })
+                .ToListAsync();
 
             // Step 1: DeckWords - Merge occurrences where both old and new exist
             result.DeckWordsMerged = await context.Database.ExecuteSqlRawAsync(@"
@@ -128,19 +294,17 @@ public class WordReplacementService(
             await transaction.CommitAsync();
             await userTransaction.CommitAsync();
 
-            // Step 8: Queue parent deck recalculation (outside transaction)
-            var parentDeckIds = await context.Decks
-                .Where(d => affectedDeckIds.Contains(d.DeckId) && d.ParentDeckId != null)
-                .Select(d => d.ParentDeckId!.Value)
-                .Distinct()
-                .ToListAsync();
-
-            foreach (var parentId in parentDeckIds)
+            // Step 8: Queue incremental parent updates (outside transaction)
+            foreach (var delta in parentDeltas)
             {
-                backgroundJobs.Enqueue<WordReplacementService>(s => s.RecalculateParentDeck(parentId));
+                QueueIncrementalParentUpdate(
+                    delta.ParentDeckId,
+                    oldWordId, oldReadingIndex,
+                    newWordId, newReadingIndex,
+                    delta.TotalOccurrences);
             }
 
-            result.ParentDecksQueued = parentDeckIds.Count;
+            result.ParentDecksQueued = parentDeltas.Count;
 
             logger.LogInformation(
                 "Word replacement completed: {OldWordId}:{OldReadingIndex} -> {NewWordId}:{NewReadingIndex}. " +
@@ -233,42 +397,50 @@ public class WordReplacementService(
 
     public async Task RecalculateParentDeck(int parentDeckId)
     {
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        var parentDeck = await context.Decks
-            .Include(d => d.Children)
-            .ThenInclude(c => c.DeckWords)
-            .FirstOrDefaultAsync(d => d.DeckId == parentDeckId);
-
-        if (parentDeck == null)
+        try
         {
-            logger.LogWarning("Parent deck {DeckId} not found for recalculation", parentDeckId);
-            return;
-        }
+            await using var context = await contextFactory.CreateDbContextAsync();
 
-        if (parentDeck.Children.Count == 0)
+            var parentDeck = await context.Decks
+                                          .Include(d => d.Children)
+                                          .ThenInclude(c => c.DeckWords).Include(deck => deck.DeckWords)
+                                          .FirstOrDefaultAsync(d => d.DeckId == parentDeckId);
+
+            if (parentDeck == null)
+            {
+                logger.LogWarning("Parent deck {DeckId} not found for recalculation", parentDeckId);
+                return;
+            }
+
+            if (parentDeck.Children.Count == 0)
+            {
+                logger.LogWarning("Deck {DeckId} has no children to aggregate", parentDeckId);
+                return;
+            }
+
+            // Delete existing parent DeckWords
+            await context.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {0}",
+                parentDeckId);
+
+            // Recalculate using the existing method
+            await parentDeck.AddChildDeckWords(context);
+
+            // Bulk insert new DeckWords
+            await JitenHelper.BulkInsertDeckWords(contextFactory, parentDeck.DeckWords, parentDeckId);
+
+            // Update deck statistics
+            parentDeck.LastUpdate = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+
+            logger.LogInformation("Parent deck {DeckId} recalculated with {WordCount} unique words",
+                parentDeckId, parentDeck.UniqueWordCount);
+        }
+        finally
         {
-            logger.LogWarning("Deck {DeckId} has no children to aggregate", parentDeckId);
-            return;
+            // Always clear the pending flag so deck can be recalculated again
+            await _redis.KeyDeleteAsync($"jiten:parent-deck-recalc-pending:{parentDeckId}");
         }
-
-        // Delete existing parent DeckWords
-        await context.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {0}",
-            parentDeckId);
-
-        // Recalculate using the existing method
-        await parentDeck.AddChildDeckWords(context);
-
-        // Bulk insert new DeckWords
-        await JitenHelper.BulkInsertDeckWords(contextFactory, parentDeck.DeckWords, parentDeckId);
-
-        // Update deck statistics
-        parentDeck.LastUpdate = DateTime.UtcNow;
-        await context.SaveChangesAsync();
-
-        logger.LogInformation("Parent deck {DeckId} recalculated with {WordCount} unique words",
-            parentDeckId, parentDeck.UniqueWordCount);
     }
 
     public async Task<SplitWordResult> SplitAsync(
@@ -300,6 +472,17 @@ public class WordReplacementService(
                 .ToListAsync();
 
             result.AffectedDeckCount = affectedDeckIds.Count;
+
+            // Capture parent deck deltas BEFORE modifying children
+            var parentDeltas = await context.DeckWords
+                .Where(dw => dw.WordId == oldWordId && dw.ReadingIndex == oldReadingIndex)
+                .Join(context.Decks.Where(d => d.ParentDeckId != null),
+                      dw => dw.DeckId,
+                      d => d.DeckId,
+                      (dw, d) => new { d.ParentDeckId, dw.Occurrences })
+                .GroupBy(x => x.ParentDeckId)
+                .Select(g => new { ParentDeckId = g.Key!.Value, TotalOccurrences = g.Sum(x => x.Occurrences) })
+                .ToListAsync();
 
             // Get old DeckWords with their occurrences (we need these for insertion)
             var oldDeckWords = await context.DeckWords
@@ -438,19 +621,20 @@ public class WordReplacementService(
 
             await transaction.CommitAsync();
 
-            // Queue parent deck recalculation (outside transaction)
-            var parentDeckIds = await context.Decks
-                .Where(d => affectedDeckIds.Contains(d.DeckId) && d.ParentDeckId != null)
-                .Select(d => d.ParentDeckId!.Value)
-                .Distinct()
-                .ToListAsync();
-
-            foreach (var parentId in parentDeckIds)
+            // Queue incremental parent updates (outside transaction)
+            foreach (var delta in parentDeltas)
             {
-                backgroundJobs.Enqueue<WordReplacementService>(s => s.RecalculateParentDeck(parentId));
+                // Remove old word from parent
+                QueueIncrementalParentRemove(delta.ParentDeckId, oldWordId, oldReadingIndex, delta.TotalOccurrences);
+
+                // Add each new word to parent
+                foreach (var newWord in newWords)
+                {
+                    QueueIncrementalParentAdd(delta.ParentDeckId, newWord.WordId, newWord.ReadingIndex, delta.TotalOccurrences);
+                }
             }
 
-            result.ParentDecksQueued = parentDeckIds.Count;
+            result.ParentDecksQueued = parentDeltas.Count;
 
             logger.LogInformation(
                 "Word split completed: {OldWordId}:{OldReadingIndex} -> {NewWordCount} words. " +
@@ -554,6 +738,17 @@ public class WordReplacementService(
 
             result.AffectedDeckCount = affectedDeckIds.Count;
 
+            // Capture parent deck deltas BEFORE modifying children
+            var parentDeltas = await context.DeckWords
+                .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
+                .Join(context.Decks.Where(d => d.ParentDeckId != null),
+                      dw => dw.DeckId,
+                      d => d.DeckId,
+                      (dw, d) => new { d.ParentDeckId, dw.Occurrences })
+                .GroupBy(x => x.ParentDeckId)
+                .Select(g => new { ParentDeckId = g.Key!.Value, TotalOccurrences = g.Sum(x => x.Occurrences) })
+                .ToListAsync();
+
             // Delete DeckWords
             result.DeckWordsDeleted = await context.Database.ExecuteSqlRawAsync(@"
                 DELETE FROM jiten.""DeckWords""
@@ -585,19 +780,13 @@ public class WordReplacementService(
 
             await transaction.CommitAsync();
 
-            // Queue parent deck recalculation (outside transaction)
-            var parentDeckIds = await context.Decks
-                .Where(d => affectedDeckIds.Contains(d.DeckId) && d.ParentDeckId != null)
-                .Select(d => d.ParentDeckId!.Value)
-                .Distinct()
-                .ToListAsync();
-
-            foreach (var parentId in parentDeckIds)
+            // Queue incremental parent updates (outside transaction)
+            foreach (var delta in parentDeltas)
             {
-                backgroundJobs.Enqueue<WordReplacementService>(s => s.RecalculateParentDeck(parentId));
+                QueueIncrementalParentRemove(delta.ParentDeckId, wordId, readingIndex, delta.TotalOccurrences);
             }
 
-            result.ParentDecksQueued = parentDeckIds.Count;
+            result.ParentDecksQueued = parentDeltas.Count;
 
             logger.LogInformation(
                 "Word removal completed: {WordId}:{ReadingIndex}. " +

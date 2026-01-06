@@ -25,6 +25,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Jiten.Api.Middleware;
+using StackExchange.Redis;
 using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -332,6 +333,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<ISrsService, SrsService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(sp.GetRequiredService<IConfiguration>().GetConnectionString("Redis")!));
 builder.Services.AddScoped<WordReplacementService>();
 
 builder.Services.AddRateLimiter(options =>
@@ -488,6 +491,15 @@ builder.Services.AddHangfireServer((options) =>
     options.ServerName = "StatsServer";
     options.Queues = ["stats"];
     options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "ParseServer";
+    options.Queues = ["parse", "reparse"];
+    options.WorkerCount = Environment.ProcessorCount / 4;
+    options.ShutdownTimeout = TimeSpan.FromMinutes(30);
+    options.StopTimeout = TimeSpan.FromMinutes(30);
 });
 
 builder.Services.AddHangfireServer((options) =>

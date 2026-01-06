@@ -10,6 +10,7 @@ namespace Jiten.Api.Jobs;
 
 public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IDbContextFactory<UserDbContext> userContextFactory, IBackgroundJobClient backgroundJobs)
 {
+    [Queue("parse")]
     public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
     {
         Deck deck = new();

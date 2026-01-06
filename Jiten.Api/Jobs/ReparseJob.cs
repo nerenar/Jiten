@@ -1,3 +1,4 @@
+using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,7 @@ namespace Jiten.Api.Jobs;
 
 public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory)
 {
+    [Queue("reparse")]
     public async Task Reparse(int deckId)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
