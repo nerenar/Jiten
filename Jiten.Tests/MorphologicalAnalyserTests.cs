@@ -508,6 +508,15 @@ public class MorphologicalAnalyserTests
     [InlineData("わかりかねさせられない", new[] { "わかりかねさせられない" })]
     [InlineData("読み切れなかった", new[] { "読み切れなかった" })]
     [InlineData("話し合っている", new[] { "話し合っている" })]
+    // ん negative contraction tests
+    [InlineData("知らんだ", new[] { "知らん", "だ" })]
+    [InlineData("わからんよ", new[] { "わからん", "よ" })]
+    [InlineData("言わんでくれ", new[] { "言わん", "で", "くれ" })]
+    // Past tense んだ tests (む/ぬ/ぶ/ぐ verbs)
+    [InlineData("睨んだが", new[] { "睨んだ", "が" })]
+    [InlineData("読んだけど", new[] { "読んだ", "けど" })]
+    [InlineData("飲んだから", new[] { "飲んだ", "から" })]
+    [InlineData("遊んだし", new[] { "遊んだ", "し" })]
     public async Task SegmentationTest(string text, string[] expectedResult)
     {
         (await Parse(text)).Select(r => r.Text).Should().Equal(expectedResult);

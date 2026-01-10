@@ -9,7 +9,7 @@
 
 <template>
   <div class="container mx-auto px-4 py-10">
-    <Card class="max-w-3xl mx-auto shadow-lg">
+    <Card class="mx-auto shadow-lg">
       <template #title> Contribute to Jiten </template>
       <template #subtitle> Help us grow our library of Japanese content </template>
       <template #content>
@@ -51,6 +51,25 @@
         <Divider />
 
         You can also contribute in other ways like reporting issues with some decks and making suggestions for new features.
+      </template>
+    </Card>
+
+    <Card class="shadow-lg mb-8 !border-1 !border-purple-500 mt-4">
+      <template #content>
+        <div class="flex flex-col md:flex-row items-center gap-6">
+          <div class="flex-1 text-center md:text-left">
+            <h2 class="text-2xl font-bold mb-2">Support Jiten</h2>
+            <p class="text-gray-600 dark:text-gray-300">
+              Jiten is free and open source. If you find it useful, consider supporting the project to help cover server costs and fund the continued development of new features.
+            </p>
+          </div>
+          <NuxtLink to="/donate" class="no-underline">
+            <Button severity="primary" size="large">
+              <Icon name="material-symbols-light:favorite" class="mr-2" size="1.25em" />
+              Support Us
+            </Button>
+          </NuxtLink>
+        </div>
       </template>
     </Card>
 

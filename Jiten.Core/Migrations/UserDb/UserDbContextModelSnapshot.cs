@@ -252,6 +252,53 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("FsrsReviewLogs", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.User.UserAccomplishment", b =>
+                {
+                    b.Property<int>("AccomplishmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("AccomplishmentId"));
+
+                    b.Property<int>("CompletedDeckCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("LastComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MediaType")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("TotalCharacterCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TotalWordCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("UniqueKanjiCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UniqueWordCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UniqueWordUsedOnceCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("AccomplishmentId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserAccomplishment_UserId");
+
+                    b.HasIndex("UserId", "MediaType")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserAccomplishment_UserId_MediaType");
+
+                    b.ToTable("UserAccomplishments", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.User.UserCoverage", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -309,6 +356,23 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("UserDeckPreferences", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.User.UserKanjiGrid", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("KanjiScoresJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("LastComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserKanjiGrids", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.User.UserKnownWord", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -345,6 +409,21 @@ namespace Jiten.Core.Migrations.UserDb
                     b.HasKey("UserId");
 
                     b.ToTable("UserMetadatas", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserProfile", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPublic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserProfiles", "user");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -501,9 +580,20 @@ namespace Jiten.Core.Migrations.UserDb
 
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsReviewLog", b =>
                 {
-                    b.HasOne("Jiten.Core.Data.FSRS.FsrsCard", null)
-                        .WithMany()
+                    b.HasOne("Jiten.Core.Data.FSRS.FsrsCard", "Card")
+                        .WithMany("ReviewLogs")
                         .HasForeignKey("CardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Card");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserAccomplishment", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -517,11 +607,29 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.User.UserKanjiGrid", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.User.UserKanjiGrid", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.User.UserMetadata", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
                         .WithOne()
                         .HasForeignKey("Jiten.Core.Data.User.UserMetadata", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserProfile", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.User.UserProfile", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -575,6 +683,11 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCard", b =>
+                {
+                    b.Navigation("ReviewLogs");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,3 +1,4 @@
+using Jiten.Core.Data;
 using Jiten.Core.Data.Authentication;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.User;
@@ -28,6 +29,10 @@ public class UserDbContext : IdentityDbContext<User>
 
     public DbSet<FsrsCard> FsrsCards { get; set; }
     public DbSet<FsrsReviewLog> FsrsReviewLogs { get; set; }
+
+    public DbSet<UserAccomplishment> UserAccomplishments { get; set; }
+    public DbSet<UserProfile> UserProfiles { get; set; }
+    public DbSet<UserKanjiGrid> UserKanjiGrids { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -185,6 +190,47 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(r => new { r.CardId, r.ReviewDateTime }).IsUnique();
         });
 
+        modelBuilder.Entity<UserAccomplishment>(entity =>
+        {
+            entity.HasKey(ua => ua.AccomplishmentId);
+            entity.Property(ua => ua.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(ua => ua.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(ua => ua.UserId).HasDatabaseName("IX_UserAccomplishment_UserId");
+            entity.HasIndex(ua => new { ua.UserId, ua.MediaType })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserAccomplishment_UserId_MediaType");
+        });
+
+        modelBuilder.Entity<UserProfile>(entity =>
+        {
+            entity.HasKey(up => up.UserId);
+            entity.Property(up => up.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(up => up.IsPublic).HasDefaultValue(false);
+
+            entity.HasOne<User>()
+                  .WithOne()
+                  .HasForeignKey<UserProfile>(up => up.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserKanjiGrid>(entity =>
+        {
+            entity.HasKey(ukg => ukg.UserId);
+            entity.Property(ukg => ukg.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(ukg => ukg.KanjiScoresJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(ukg => ukg.LastComputedAt).IsRequired();
+            entity.Ignore(ukg => ukg.KanjiScores);
+
+            entity.HasOne<User>()
+                  .WithOne()
+                  .HasForeignKey<UserKanjiGrid>(ukg => ukg.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
 
         base.OnModelCreating(modelBuilder);
     }

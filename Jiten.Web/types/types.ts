@@ -356,3 +356,71 @@ export interface CurveDatum {
   rank: number;
   coverage: number;
 }
+
+export interface UserProfile {
+  userId: string;
+  username: string;
+  isPublic: boolean;
+}
+
+export interface UserAccomplishment {
+  accomplishmentId: number;
+  userId: string;
+  mediaType: MediaType | null;
+  completedDeckCount: number;
+  totalCharacterCount: number;
+  totalWordCount: number;
+  uniqueWordCount: number;
+  uniqueWordUsedOnceCount: number;
+  uniqueKanjiCount: number;
+  lastComputedAt: string;
+}
+
+export interface AccomplishmentVocabularyDto {
+  words: Word[];
+}
+
+export interface Kanji {
+  character: string;
+  onReadings: string[];
+  kunReadings: string[];
+  meanings: string[];
+  strokeCount: number;
+  jlptLevel: number | null;
+  grade: number | null;
+  frequencyRank: number | null;
+  topWords?: WordSummary[];
+}
+
+export interface KanjiList {
+  character: string;
+  meanings: string[];
+  strokeCount: number;
+  jlptLevel: number | null;
+  frequencyRank: number | null;
+}
+
+export interface WordSummary {
+  wordId: number;
+  readingIndex: number;
+  reading: string;
+  readingFurigana: string;
+  mainDefinition: string | null;
+  frequencyRank: number | null;
+}
+
+export interface KanjiGridItem {
+  character: string;
+  frequencyRank: number | null;
+  jlptLevel: number | null;
+  score: number;
+  wordCount: number;
+}
+
+export interface KanjiGridResponse {
+  kanji: KanjiGridItem[];
+  maxScoreThreshold: number;
+  totalKanjiCount: number;
+  seenKanjiCount: number;
+  lastComputedAt: string | null;
+}

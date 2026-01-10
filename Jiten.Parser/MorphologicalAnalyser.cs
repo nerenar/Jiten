@@ -53,14 +53,24 @@ public class MorphologicalAnalyser
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
 
     private static readonly HashSet<string> MisparsesRemove =
-        ["そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ", "イッ", "ほっ",
-        "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー", "違"];
+    [
+        "そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ", "イッ", "ほっ",
+        "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー", "違"
+    ];
 
     // Token to separate some words in sudachi
     private static readonly string _stopToken = "|";
 
     // Delimiter for batch processing multiple texts in a single Sudachi call
     private static readonly string _batchDelimiter = "|||";
+
+    // Auxiliary/copula patterns that can follow ん (to be split: んだ → ん + だ)
+    private static readonly HashSet<string> NCompoundSuffixes =
+        ["だ", "です", "じゃ", "なら", "ても", "でも", "だろ", "だろう", "だって", "だけど", "だけ", "だが", "だし", "だから"];
+
+    // Particle patterns that can follow だ when preceded by ん (to be split: だが → だ + が)
+    private static readonly HashSet<string> DaCompoundSuffixes =
+        ["が", "けど", "けれど", "けれども", "から", "し", "って", "よ", "ね", "な", "ぞ", "ぜ", "わ", "さ"];
 
     /// <summary>
     /// Parses the given text into a list of SentenceInfo objects by performing morphological analysis.
@@ -161,6 +171,7 @@ public class MorphologicalAnalyser
                     currentBatch.Add(wi);
                 }
             }
+
             batches.Add(currentBatch); // Last batch
         }
 
@@ -175,7 +186,8 @@ public class MorphologicalAnalyser
                 results.Add([new SentenceInfo("") { Words = wordInfos.Select(w => (w, (byte)0, (byte)0)).ToList() }]);
                 continue;
             }
-            
+
+            wordInfos = RepairNTokenisation(wordInfos);
             wordInfos = ProcessSpecialCases(wordInfos);
             wordInfos = CombineInflections(wordInfos);
             wordInfos = CombineAmounts(wordInfos);
@@ -226,7 +238,7 @@ public class MorphologicalAnalyser
                 word.DictionaryForm = "です";
                 word.PartOfSpeech = PartOfSpeech.Auxiliary;
             }
-            
+
             if (MisparsesRemove.Contains(word.Text) ||
                 word.PartOfSpeech == PartOfSpeech.Noun && (
                     (word.Text.Length == 1 && WanaKana.IsKana(word.Text)) ||
@@ -242,6 +254,171 @@ public class MorphologicalAnalyser
         return wordInfos;
     }
 
+    #region RepairNTokenisation Helpers
+
+    private static string NormalizeToHiragana(string text) =>
+        KanaNormalizer.Normalize(WanaKana.ToHiragana(text));
+
+    private static bool IsNdaVerbForm(HashSet<DeconjugationForm> forms) =>
+        forms.Any(f => f.Tags.Count > 0 &&
+            ((f.Tags.Any(t => t == "v5m") && f.Text.EndsWith("む")) ||
+             (f.Tags.Any(t => t == "v5n") && f.Text.EndsWith("ぬ")) ||
+             (f.Tags.Any(t => t == "v5b") && f.Text.EndsWith("ぶ")) ||
+             (f.Tags.Any(t => t == "v5g") && f.Text.EndsWith("ぐ"))));
+
+    private static bool IsAnyVerbForm(HashSet<DeconjugationForm> forms) =>
+        forms.Any(f => f.Tags.Count > 0 && f.Tags.Any(t => t.StartsWith("v")));
+
+    private static WordInfo CreateNToken() => new()
+    {
+        Text = "ん", DictionaryForm = "ん", NormalizedForm = "ん", Reading = "ん",
+        PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.None
+    };
+
+    private static WordInfo CreateDaToken() => new()
+    {
+        Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", Reading = "だ",
+        PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.None
+    };
+
+    private static string BuildCandidateText(List<WordInfo> words, int lookback, string suffix)
+    {
+        var sb = new StringBuilder();
+        for (int j = words.Count - lookback; j < words.Count; j++)
+            sb.Append(words[j].Text);
+        sb.Append(suffix);
+        return sb.ToString();
+    }
+
+    private static void RemoveLastN(List<WordInfo> list, int n)
+    {
+        for (int j = 0; j < n; j++)
+            list.RemoveAt(list.Count - 1);
+    }
+
+    private static bool TryCombineWithLookback(
+        List<WordInfo> result,
+        string suffix,
+        Deconjugator deconj,
+        Func<HashSet<DeconjugationForm>, bool> validator,
+        out WordInfo? combined)
+    {
+        combined = null;
+        for (int lookback = 1; lookback <= Math.Min(3, result.Count); lookback++)
+        {
+            var candidateText = BuildCandidateText(result, lookback, suffix);
+            var forms = deconj.Deconjugate(NormalizeToHiragana(candidateText));
+
+            if (validator(forms))
+            {
+                var baseWord = result[^lookback];
+                RemoveLastN(result, lookback);
+                combined = new WordInfo(baseWord) { Text = candidateText, PartOfSpeech = PartOfSpeech.Verb };
+                return true;
+            }
+        }
+        return false;
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Repairs incorrect tokenisation of ん-forms by Sudachi.
+    /// Phase 1: Split compound tokens (んだ → ん + だ, だが → だ + が when preceded by ん)
+    /// Phase 2: Recombine verb stems with ん using deconjugator validation
+    /// </summary>
+    private List<WordInfo> RepairNTokenisation(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2) return wordInfos;
+
+        // Phase 1: Split compound tokens that Sudachi incorrectly grouped
+        var split = new List<WordInfo>(wordInfos.Count + 4);
+        foreach (var word in wordInfos)
+        {
+            // Split tokens starting with ん (e.g., んだ → ん + だ)
+            if (word.Text.Length > 1 && word.Text[0] == 'ん')
+            {
+                var remainder = word.Text[1..];
+                if (NCompoundSuffixes.Contains(remainder) || NCompoundSuffixes.Any(s => remainder.StartsWith(s)))
+                {
+                    split.Add(CreateNToken());
+                    split.Add(new WordInfo(word) { Text = remainder });
+                    continue;
+                }
+            }
+
+            // Split tokens starting with だ when preceded by ん (e.g., だが → だ + が)
+            if (word.Text.Length > 1 && word.Text[0] == 'だ' &&
+                split.Count > 0 && (split[^1].Text == "ん" || split[^1].Text.EndsWith("ん")))
+            {
+                var remainder = word.Text[1..];
+                if (DaCompoundSuffixes.Contains(remainder))
+                {
+                    split.Add(CreateDaToken());
+                    split.Add(new WordInfo(word) { Text = remainder, DictionaryForm = remainder });
+                    continue;
+                }
+            }
+
+            split.Add(word);
+        }
+
+        // Phase 2: Recombine verb stems with ん using deconjugator validation
+        var result = new List<WordInfo>(split.Count);
+        var deconj = Deconjugator.Instance;
+
+        for (int i = 0; i < split.Count; i++)
+        {
+            var current = split[i];
+
+            // Case: Token already ends with ん (e.g., 飲ん) and next is だ/で - combine as past/te-form
+            if (current.Text.EndsWith("ん") && current.Text.Length > 1 && current.Text != "ん" &&
+                i + 1 < split.Count && split[i + 1].Text is "だ" or "で")
+            {
+                var candidateText = current.Text + split[i + 1].Text;
+                if (IsNdaVerbForm(deconj.Deconjugate(NormalizeToHiragana(candidateText))))
+                {
+                    result.Add(new WordInfo(current) { Text = candidateText, PartOfSpeech = PartOfSpeech.Verb });
+                    i++;
+                    continue;
+                }
+            }
+
+            // Case: Standalone ん - try to combine with preceding verb stem
+            if (current.Text == "ん" && result.Count > 0)
+            {
+                bool combined = false;
+
+                // Try んだ/んで pattern (past/te-form) - but not if ん is negative auxiliary (DictionaryForm = ぬ)
+                if (i + 1 < split.Count && split[i + 1].Text is "だ" or "で" && current.DictionaryForm != "ぬ")
+                {
+                    var suffix = "ん" + split[i + 1].Text;
+                    if (TryCombineWithLookback(result, suffix, deconj, IsNdaVerbForm, out var combinedWord))
+                    {
+                        result.Add(combinedWord!);
+                        combined = true;
+                        i++;
+                    }
+                }
+
+                // If んだ/んで didn't match, try negative ん contraction
+                if (!combined && TryCombineWithLookback(result, "ん", deconj, IsAnyVerbForm, out var negativeWord))
+                {
+                    result.Add(negativeWord!);
+                    combined = true;
+                }
+
+                if (!combined)
+                    result.Add(current);
+                continue;
+            }
+
+            result.Add(current);
+        }
+
+        return result;
+    }
+
     private void PreprocessText(ref string text, bool preserveStopToken)
     {
         text = text.Replace("<", " ");
@@ -250,7 +427,7 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text,
                              "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500()。！？「」）|]",
                              "");
-        
+
         if (!preserveStopToken)
             text = text.Replace("|", "");
 
@@ -267,7 +444,7 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "。", " 。\n");
         text = Regex.Replace(text, "！", " ！\n");
         text = Regex.Replace(text, "？", " ？\n");
-        
+
         // Split up words that are parsed together in sudachi when they don't exist in jmdict
         text = Regex.Replace(text, "囁き合", $"囁き{_stopToken}合");
         text = Regex.Replace(text, "見降", $"見{_stopToken}降");
@@ -287,11 +464,12 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "揚(.)だ", $"揚$1{_stopToken}だ");
         text = Regex.Replace(text, "考(.)直", $"考$1{_stopToken}直");
         text = Regex.Replace(text, "漏(.)出", $"漏$1{_stopToken}出");
+        text = Regex.Replace(text, "返(.)忘", $"返$1{_stopToken}忘");
         text = Regex.Replace(text, "はやめ", $"は$1{_stopToken}やめ");
         text = Regex.Replace(text, "もやる", $"も{_stopToken}やる");
         text = Regex.Replace(text, "べや", $"べ{_stopToken}や");
         text = Regex.Replace(text, "はいい", $"は{_stopToken}いい");
-        
+
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
     }
@@ -429,7 +607,7 @@ public class MorphologicalAnalyser
                 i++;
                 continue;
             }
-            
+
             // Always process な as the particle and not the vegetable
             // Always process に as the particle and not the baggage
             if (w1.Text is "な" or "に")
@@ -440,8 +618,8 @@ public class MorphologicalAnalyser
                 w1.PartOfSpeech = PartOfSpeech.Noun;
 
             if (w1.Text is "十五")
-                w1.PartOfSpeech = PartOfSpeech.Numeral;  
-            
+                w1.PartOfSpeech = PartOfSpeech.Numeral;
+
             if (w1.Text is "オレ")
                 w1.PartOfSpeech = PartOfSpeech.Pronoun;
 
@@ -482,9 +660,11 @@ public class MorphologicalAnalyser
             var currentWord = new WordInfo(wordInfos[i]);
 
             // Check if potential base for inflection
+            // Exclude AuxiliaryVerbStem words (みたい, そう, etc.) as they are grammatical suffixes, not standalone inflectable words
             bool isBase = (InflectableBasePOS.Contains(currentWord.PartOfSpeech) ||
                            currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru))
-                          && currentWord.NormalizedForm != "物";
+                          && currentWord.NormalizedForm != "物"
+                          && !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
 
             if (!isBase)
             {
@@ -503,6 +683,9 @@ public class MorphologicalAnalyser
 
                 // Safety filter: stop at particles
                 if (nextWord.Text is "は" or "な" or "よ" or "し" or "を" or "が" or "ください")
+                    break;
+
+                if (currentWord.Text.EndsWith("ん") && nextWord.Text is "だ" or "です")
                     break;
 
                 // Check if valid inflection part
@@ -548,7 +731,8 @@ public class MorphologicalAnalyser
                          !currentWord.Text.EndsWith("たく") &&
                          !currentWord.Text.EndsWith("なく") &&
                          (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike) ||
-                          (nextWord.PartOfSpeech == PartOfSpeech.Verb && nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))))
+                          (nextWord.PartOfSpeech == PartOfSpeech.Verb &&
+                           nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))))
                 {
                     var suffixDict = KanaNormalizer.Normalize(WanaKana.ToHiragana(nextWord.DictionaryForm));
                     var match = forms.FirstOrDefault(f => f.Text.EndsWith(suffixDict) && f.Text.Length > suffixDict.Length);
@@ -920,7 +1104,7 @@ public class MorphologicalAnalyser
                 && currentWord.Text != "だろ"
                 && currentWord.Text != "ハズ"
                 && (currentWord.Text != "だ" || currentWord.Text == "だ" && previousWord.Text[^1] == 'ん')
-                )
+               )
             {
                 previousWord.Text += currentWord.Text;
                 combined = true;
@@ -984,7 +1168,7 @@ public class MorphologicalAnalyser
                     || wordInfos[i].DictionaryForm == "さ"
                     || wordInfos[i].DictionaryForm == "がる"
                     || (wordInfos[i].DictionaryForm == "ら" &&
-                        wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun && wordInfos[i-1].Text != "貴様")))
+                        wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun && wordInfos[i - 1].Text != "貴様")))
             {
                 currentWord.Text += nextWord.Text;
             }

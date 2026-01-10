@@ -518,7 +518,7 @@
       </template>
       <template #subtitle>
         <p class="text-gray-600 dark:text-gray-300">
-          You have currently saved <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ totalWordsAmount }}</span> words under
+          You're currently tracking <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ totalWordsAmount }}</span> words under
           <b>{{ totalFormsAmount }}</b> forms. Of them,
         </p>
         <ul class="text-gray-600 dark:text-gray-300 space-y-1 ml-3">

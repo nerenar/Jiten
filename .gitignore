@@ -292,3 +292,5 @@ __pycache__/
 .env
 
 .claude/
+nul
+user_dic.xml

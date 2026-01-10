@@ -111,6 +111,12 @@ importers:
       '@css-inline/css-inline-wasm':
         specifier: ^0.14.3
         version: 0.14.3
+      '@iconify-json/logos':
+        specifier: ^1.2.10
+        version: 1.2.10
+      '@iconify-json/material-symbols-light':
+        specifier: ^1.2.50
+        version: 1.2.51
       '@primevue/nuxt-module':
         specifier: ^4.5.0
         version: 4.5.0(@babel/parser@7.28.5)(magicast@0.5.1)(vue@3.5.25(typescript@5.9.3))
@@ -699,6 +705,12 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@iconify-json/logos@1.2.10':
+    resolution: {integrity: sha512-qxaXKJ6fu8jzTMPQdHtNxlfx6tBQ0jXRbHZIYy5Ilh8Lx9US9FsAdzZWUR8MXV8PnWTKGDFO4ZZee9VwerCyMA==}
+
+  '@iconify-json/material-symbols-light@1.2.51':
+    resolution: {integrity: sha512-S0LR5LITSeybVfVK1Hnbjcv7/JdqVKu2ZFhpLiU2KYBkU6TbsFy3jQnKjxPNZxffxNTnxpf11hWFsvkYZGyS7Q==}
 
   '@iconify/collections@1.0.624':
     resolution: {integrity: sha512-xNhIO7CH4S85O7yp0zW+Sw5btqKXdBxPEKSk2ClCsmDTqA5OtS8eCIseQM4Jp7IS3d1mbO9KQV4Tx4nredaGxg==}
@@ -5769,6 +5781,14 @@ snapshots:
   '@humanwhocodes/module-importer@1.0.1': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@iconify-json/logos@1.2.10':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify-json/material-symbols-light@1.2.51':
+    dependencies:
+      '@iconify/types': 2.0.0
 
   '@iconify/collections@1.0.624':
     dependencies:

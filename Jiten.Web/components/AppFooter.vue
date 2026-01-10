@@ -20,6 +20,16 @@
         <NuxtLink to="/media-updates" class="!text-white" no-rel>New media updates</NuxtLink>
       </div>
     </div>
+    <p class="text-xs text-center text-gray-300 mt-3 max-w-4xl mx-auto">
+      This site uses dictionary data from
+      <a href="https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project" target="_blank" class="underline hover:text-white">JMdict</a>,
+      <a href="https://www.edrdg.org/wiki/index.php/JMnedict" target="_blank" class="underline hover:text-white">JMnedict</a>, and
+      <a href="https://www.edrdg.org/wiki/KANJIDIC_Project.html" target="_blank" class="underline hover:text-white">KANJIDIC</a>,
+      which are the property of the
+      <a href="https://www.edrdg.org/" target="_blank" class="underline hover:text-white">Electronic Dictionary Research and Development Group</a>,
+      and are used in conformance with the Group's
+      <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" class="underline hover:text-white">licence</a>.
+    </p>
   </footer>
 </template>
 
