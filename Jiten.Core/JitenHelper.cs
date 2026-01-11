@@ -62,9 +62,28 @@ public static class JitenHelper
                 }
 
                 Console.WriteLine($"[{DateTime.UtcNow:O}] Deck {deck.OriginalTitle} exists, updating metadata...");
-                await UpdateDeck(contextFactory, context, existingDeck, deck);
+
+                // Phase 1: Update metadata and delete old data (within transaction)
+                var (deckWords, exampleSentences) = UpdateDeckMetadata(context, existingDeck, deck);
+                await DeleteDeckData(context, existingDeck.DeckId);
+
+                // Collect child deck data for bulk inserts
+                var childBulkData = await CollectChildDeckUpdates(contextFactory, context, existingDeck, deck.Children);
+
                 await context.SaveChangesAsync();
-                // Console.WriteLine($"[{DateTime.UtcNow:O}] Update completed.");
+                await transaction.CommitAsync();
+
+                // Phase 2: Bulk insert new data (after transaction commit to avoid lock conflicts)
+                // Console.WriteLine($"[{DateTime.UtcNow:O}] Transaction committed, starting bulk inserts...");
+                await BulkInsertDeckData(contextFactory, existingDeck.DeckId, deckWords, exampleSentences);
+
+                // Bulk insert child deck data
+                var childBulkTasks = childBulkData.Select(c =>
+                    BulkInsertDeckData(contextFactory, c.deckId, c.deckWords, c.exampleSentences));
+                await Task.WhenAll(childBulkTasks);
+
+                Console.WriteLine($"[{DateTime.UtcNow:O}] Update completed.");
+                return;
             }
             else
             {
@@ -353,10 +372,8 @@ public static class JitenHelper
         Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk insert (example sentences+words) took {timer.ElapsedMilliseconds} ms for DeckId {deckId} with {exampleSentences.Count} sentences.");
     }
 
-    private static async Task UpdateDeck(IDbContextFactory<JitenDbContext> contextFactory, JitenDbContext context, Deck existingDeck, Deck deck)
+    private static (List<DeckWord> deckWords, List<ExampleSentence> exampleSentences) UpdateDeckMetadata(JitenDbContext context, Deck existingDeck, Deck deck)
     {
-        var deckId = existingDeck.DeckId;
-
         existingDeck.LastUpdate = DateTime.UtcNow;
         existingDeck.MediaType = deck.MediaType;
         existingDeck.OriginalTitle = deck.OriginalTitle;
@@ -373,17 +390,120 @@ public static class JitenHelper
         existingDeck.DialoguePercentage = deck.DialoguePercentage;
         existingDeck.RawText = deck.RawText;
 
+        return (deck.DeckWords?.ToList() ?? [], deck.ExampleSentences?.ToList() ?? []);
+    }
+
+    private static async Task DeleteDeckData(JitenDbContext context, int deckId)
+    {
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {{0}}", deckId);
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""ExampleSentences"" WHERE ""DeckId"" = {{0}}", deckId);
+    }
 
-        await BulkInsertDeckWords(contextFactory, deck.DeckWords, deckId);
+    private static async Task BulkInsertDeckData(IDbContextFactory<JitenDbContext> contextFactory, int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences)
+    {
+        var tasks = new List<Task>();
 
-        if (deck.ExampleSentences != null && deck.ExampleSentences.Any())
+        if (deckWords.Count > 0)
+            tasks.Add(BulkInsertDeckWords(contextFactory, deckWords, deckId));
+
+        if (exampleSentences.Count > 0)
+            tasks.Add(BulkInsertExampleSentences(contextFactory, exampleSentences, deckId));
+
+        await Task.WhenAll(tasks);
+    }
+
+    private static async Task<List<(int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences)>> CollectChildDeckUpdates(
+        IDbContextFactory<JitenDbContext> contextFactory, JitenDbContext context, Deck existingDeck, ICollection<Deck> children)
+    {
+        var bulkData = new List<(int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences)>();
+
+        if (children == null || children.Count == 0)
+            return bulkData;
+
+        var existingChildren = await context.Decks
+                                            .Where(d => d.ParentDeckId == existingDeck.DeckId)
+                                            .ToListAsync();
+
+        var existingChildrenDict = existingChildren.ToDictionary(c => c.OriginalTitle);
+
+        foreach (var child in children)
         {
-            await BulkInsertExampleSentences(contextFactory, deck.ExampleSentences, deckId);
+            var key = child.OriginalTitle;
+
+            if (existingChildrenDict.TryGetValue(key, out var existingChild))
+            {
+                try
+                {
+                    await context.Entry(existingChild)
+                                 .Reference(nameof(existingChild.RawText))
+                                 .LoadAsync();
+                }
+                catch (Exception loadEx)
+                {
+                    Console.WriteLine($"Error explicitly loading data for child deck {key}: {loadEx.Message}");
+                    continue;
+                }
+
+                var (childWords, childSentences) = UpdateDeckMetadata(context, existingChild, child);
+                await DeleteDeckData(context, existingChild.DeckId);
+                bulkData.Add((existingChild.DeckId, childWords, childSentences));
+            }
+            else
+            {
+                Console.WriteLine("Inserting new child deck " + key);
+
+                var newChildDeck = new Deck
+                {
+                    ParentDeckId = existingDeck.DeckId,
+                    ParentDeck = existingDeck,
+                    CreationDate = DateTime.UtcNow,
+                    LastUpdate = DateTimeOffset.UtcNow,
+                    MediaType = existingDeck.MediaType,
+                    OriginalTitle = child.OriginalTitle,
+                    RomajiTitle = child.RomajiTitle,
+                    EnglishTitle = child.EnglishTitle,
+                    DeckOrder = child.DeckOrder,
+                    CharacterCount = child.CharacterCount,
+                    UniqueWordCount = child.UniqueWordCount,
+                    UniqueKanjiCount = child.UniqueKanjiCount,
+                    SentenceCount = child.SentenceCount,
+                    WordCount = child.WordCount,
+                    Difficulty = child.Difficulty,
+                    DialoguePercentage = child.DialoguePercentage,
+                    RawText = child.RawText
+                };
+
+                context.Decks.Add(newChildDeck);
+                await context.SaveChangesAsync();
+
+                bulkData.Add((newChildDeck.DeckId, child.DeckWords?.ToList() ?? [], child.ExampleSentences?.ToList() ?? []));
+            }
         }
 
-        await UpdateChildDecks(contextFactory, context, existingDeck, deck.Children);
+        // Bulk delete removed children
+        var childrenToDelete = existingChildren
+                               .Where(ec => children.All(c => c.OriginalTitle != ec.OriginalTitle))
+                               .Select(c => c.DeckId)
+                               .ToList();
+
+        if (childrenToDelete.Any())
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                $@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" IN ({string.Join(",", childrenToDelete.Select((_, i) => $"{{{i}}}"))})",
+                childrenToDelete.Cast<object>().ToArray());
+
+            await context.Database.ExecuteSqlRawAsync(
+                $@"DELETE FROM jiten.""ExampleSentences"" WHERE ""DeckId"" IN ({string.Join(",", childrenToDelete.Select((_, i) => $"{{{i}}}"))})",
+                childrenToDelete.Cast<object>().ToArray());
+
+            await context.Database.ExecuteSqlRawAsync(
+                $@"DELETE FROM jiten.""Decks"" WHERE ""DeckId"" IN ({string.Join(",", childrenToDelete.Select((_, i) => $"{{{i}}}"))})",
+                childrenToDelete.Cast<object>().ToArray());
+
+            Console.WriteLine($"Deleted {childrenToDelete.Count} child decks.");
+        }
+
+        return bulkData;
     }
 
     private static async Task InsertChildDecks(IDbContextFactory<JitenDbContext> contextFactory, ICollection<Deck> children, int parentDeckId)
@@ -475,81 +595,6 @@ public static class JitenHelper
 
         await Task.WhenAll(bulkTasks);
         Console.WriteLine($"[{DateTime.UtcNow:O}] All child bulk inserts completed.");
-    }
-
-    private static async Task UpdateChildDecks(IDbContextFactory<JitenDbContext> contextFactory, JitenDbContext context, Deck existingDeck, ICollection<Deck> children)
-    {
-        var existingChildren = await context.Decks
-                                            .Where(d => d.ParentDeckId == existingDeck.DeckId)
-                                            .ToListAsync();
-
-        var existingChildrenDict = existingChildren.ToDictionary(c => c.OriginalTitle);
-
-        foreach (var child in children)
-        {
-            var key = child.OriginalTitle;
-
-            if (existingChildrenDict.TryGetValue(key, out var existingChild))
-            {
-                // Console.WriteLine("Updating child deck " + key);
-
-                try
-                {
-                    await context.Entry(existingChild)
-                                 .Reference(nameof(existingChild.RawText))
-                                 .LoadAsync();
-                }
-                catch (Exception loadEx)
-                {
-                    Console.WriteLine($"Error explicitly loading data for child deck {key}: {loadEx.Message}");
-                    continue;
-                }
-
-                await UpdateDeck(contextFactory, context, existingChild, child);
-            }
-            else
-            {
-                Console.WriteLine("Inserting new child deck " + key);
-
-                var newChildDeck = new Deck
-                                   {
-                                       ParentDeckId = existingDeck.DeckId, ParentDeck = existingDeck, CreationDate = DateTime.UtcNow,
-                                       LastUpdate = DateTimeOffset.UtcNow, MediaType = existingDeck.MediaType,
-                                       OriginalTitle = child.OriginalTitle, RomajiTitle = child.RomajiTitle,
-                                       EnglishTitle = child.EnglishTitle, DeckOrder = child.DeckOrder,
-                                       CharacterCount = child.CharacterCount, UniqueWordCount = child.UniqueWordCount,
-                                       UniqueKanjiCount = child.UniqueKanjiCount, SentenceCount = child.SentenceCount,
-                                       WordCount = child.WordCount, Difficulty = child.Difficulty,
-                                       DialoguePercentage = child.DialoguePercentage, RawText = child.RawText
-                                   };
-
-                context.Decks.Add(newChildDeck);
-                await context.SaveChangesAsync(); // Save to get the ID
-
-                await BulkInsertDeckWords(contextFactory, child.DeckWords, newChildDeck.DeckId);
-            }
-        }
-
-        // Bulk delete removed children
-        var childrenToDelete = existingChildren
-                               .Where(ec => children.All(c => c.OriginalTitle != ec.OriginalTitle))
-                               .Select(c => c.DeckId)
-                               .ToList();
-
-        if (childrenToDelete.Any())
-        {
-            // Delete DeckWords first (foreign key constraint)
-            await context.Database.ExecuteSqlRawAsync(
-                                                      $@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" IN ({string.Join(",", childrenToDelete.Select((_, i) => $"{{{i}}}"))})",
-                                                      childrenToDelete.Cast<object>().ToArray());
-
-            // Delete the decks
-            await context.Database.ExecuteSqlRawAsync(
-                                                      $@"DELETE FROM jiten.""Decks"" WHERE ""DeckId"" IN ({string.Join(",", childrenToDelete.Select((_, i) => $"{{{i}}}"))})",
-                                                      childrenToDelete.Cast<object>().ToArray());
-
-            Console.WriteLine($"Deleted {childrenToDelete.Count} child decks.");
-        }
     }
 
     /// <summary>
