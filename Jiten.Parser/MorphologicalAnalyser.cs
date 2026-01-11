@@ -306,6 +306,19 @@ public class MorphologicalAnalyser
         combined = null;
         for (int lookback = 1; lookback <= Math.Min(3, result.Count); lookback++)
         {
+            bool hasBlankSpace = false;
+            for (int j = result.Count - lookback; j < result.Count; j++)
+            {
+                if (result[j].PartOfSpeech != PartOfSpeech.BlankSpace) 
+                    continue;
+                
+                hasBlankSpace = true;
+                break;
+            }
+            
+            // Skip blank spaces since they will deconjugate to a correct form and break the parser
+            if (hasBlankSpace) continue;
+
             var candidateText = BuildCandidateText(result, lookback, suffix);
             var forms = deconj.Deconjugate(NormalizeToHiragana(candidateText));
 
