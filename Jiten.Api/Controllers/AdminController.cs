@@ -33,8 +33,6 @@ public partial class AdminController(
     ILogger<AdminController> logger)
     : ControllerBase
 {
-    private static readonly List<string> _supportedExtensions = [".ass", ".srt", ".ssa"];
-
     [HttpGet("search-media")]
     public async Task<IResult> SearchMedia(string provider, string query, string? author)
     {
@@ -517,30 +515,17 @@ public partial class AdminController(
             await file.CopyToAsync(stream);
             stream.Close();
 
-            string text;
-            if (fileExtension == ".epub")
+            string text = fileExtension switch
             {
-                var extractor = new EbookExtractor();
-                text = await extractor.ExtractTextFromEbook(filePath);
+                ".epub" => await new EbookExtractor().ExtractTextFromEbook(filePath),
+                ".mokuro" => await new MokuroExtractor().Extract(filePath, false),
+                ".ass" or ".srt" or ".ssa" => await new SubtitleExtractor().Extract(filePath),
+                _ => await System.IO.File.ReadAllTextAsync(filePath)
+            };
 
-                if (string.IsNullOrEmpty(text))
-                {
-                    throw new Exception("No text found in the ebook.");
-                }
-            }
-            else if (fileExtension == ".mokuro")
+            if (string.IsNullOrEmpty(text))
             {
-                var extractor = new MokuroExtractor();
-                text = await extractor.Extract(filePath, false);
-
-                if (string.IsNullOrEmpty(text))
-                {
-                    throw new Exception("No text found in the mokuro file.");
-                }
-            }
-            else
-            {
-                text = await System.IO.File.ReadAllTextAsync(filePath);
+                throw new Exception($"No text found in the {fileExtension} file.");
             }
 
             return text;
@@ -852,7 +837,7 @@ public partial class AdminController(
                 {
                     using var archive = ArchiveFactory.Open(filePath);
                     foreach (var e in archive.Entries.Where(currentEntry => !currentEntry.IsDirectory &&
-                                                                            _supportedExtensions
+                                                                            SubtitleExtractor.SupportedExtensions
                                                                                 .Contains(Path.GetExtension(currentEntry.Key))))
                     {
                         var entryPath = Path.Combine(path, Path.GetFileName(e.Key));
@@ -866,42 +851,20 @@ public partial class AdminController(
                 }
             }
 
-            // Preprocess ass files for subtitle parser
-            var assFiles = downloadedFiles.Where(f => Path.GetExtension(f) == ".ass").ToList();
-            foreach (var assFile in assFiles)
-            {
-                var ssaFile = Path.ChangeExtension(assFile, ".ssa");
-                var lines = await System.IO.File.ReadAllLinesAsync(assFile);
-                var filteredLines = lines.Where(line => !line.TrimStart().StartsWith(";") && !line.Contains("cn")).ToList();
-                await System.IO.File.WriteAllLinesAsync(ssaFile, filteredLines);
-                downloadedFiles.Remove(assFile);
-                downloadedFiles.Add(ssaFile);
-            }
-
+            // Extract text from subtitle files
+            var extractor = new SubtitleExtractor();
             var subtitleFiles = downloadedFiles
-                                .Where(f => _supportedExtensions.Contains(Path.GetExtension(f)))
+                                .Where(f => SubtitleExtractor.SupportedExtensions.Contains(Path.GetExtension(f)))
                                 .ToList();
 
-            List<string> extractedFiles = new();
+            List<string> extractedFiles = [];
             foreach (var file in subtitleFiles)
             {
-                var parser = new SubtitlesParser.Classes.Parsers.SubParser();
-                await using var fileStream = System.IO.File.OpenRead(file);
-                var items = parser.ParseStream(fileStream, Encoding.UTF8);
-                List<string> lines = items.SelectMany(it => it.PlaintextLines).ToList();
-                for (int i = lines.Count - 1; i >= 0; i--)
-                {
-                    lines[i] = Regex.Replace(lines[i], @"\((.*?)\)", "");
-                    lines[i] = Regex.Replace(lines[i], @"（(.*?)）", "");
-
-                    if (string.IsNullOrWhiteSpace(lines[i]))
-                    {
-                        lines.RemoveAt(i);
-                    }
-                }
+                var text = await extractor.Extract(file);
+                if (string.IsNullOrEmpty(text)) continue;
 
                 var txtPath = Path.ChangeExtension(file, ".txt");
-                await System.IO.File.WriteAllLinesAsync(txtPath, lines);
+                await System.IO.File.WriteAllTextAsync(txtPath, text);
                 extractedFiles.Add(txtPath);
             }
 
