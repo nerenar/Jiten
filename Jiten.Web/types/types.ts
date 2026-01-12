@@ -75,6 +75,11 @@ export interface DeckWord {
   conjugations: string[];
 }
 
+export interface ParseNormalisedResult {
+  normalisedText: string;
+  words: DeckWord[];
+}
+
 export interface Link {
   linkId: number;
   url: string;

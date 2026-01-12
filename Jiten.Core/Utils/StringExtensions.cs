@@ -53,10 +53,52 @@ public static class StringExtensions
     public static bool IsAsciiOrFullWidthLetter(this string input)
     {
         var c = input[0];
-        
+
         return c is >= 'a' and <= 'z' ||
                c is >= 'A' and <= 'Z' ||
                c is >= 'ａ' and <= 'ｚ' ||
                c is >= 'Ａ' and <= 'Ｚ';
+    }
+
+    public static string ToFullWidthLetters(this string input)
+    {
+        var result = new StringBuilder(input.Length);
+        foreach (var ch in input)
+        {
+            if (ch is >= 'a' and <= 'z' or >= 'A' and <= 'Z')
+                result.Append((char)(ch + 0xFEE0));
+            else
+                result.Append(ch);
+        }
+
+        return result.ToString();
+    }
+
+    public static string ToFullWidthUppercaseLetters(this string input)
+    {
+        var result = new StringBuilder(input.Length);
+        foreach (var ch in input)
+        {
+            if (ch is >= 'A' and <= 'Z')
+                result.Append((char)(ch + 0xFEE0));
+            else
+                result.Append(ch);
+        }
+
+        return result.ToString();
+    }
+
+    public static string ToFullWidthLowercaseLetters(this string input)
+    {
+        var result = new StringBuilder(input.Length);
+        foreach (var ch in input)
+        {
+            if (ch is >= 'a' and <= 'z')
+                result.Append((char)(ch + 0xFEE0));
+            else
+                result.Append(ch);
+        }
+
+        return result.ToString();
     }
 }

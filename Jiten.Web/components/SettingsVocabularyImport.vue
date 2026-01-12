@@ -550,7 +550,7 @@
       </template>
     </Card>
 
-    <AnkiConnectImport class="mb-4" />
+    <AnkiConnectImport class="mb-4" @import-complete="fetchKnownWordsAmount" />
 
     <Card class="mb-4">
       <template #title>

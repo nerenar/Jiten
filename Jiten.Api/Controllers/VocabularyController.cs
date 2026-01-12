@@ -3,6 +3,7 @@ using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -133,7 +134,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     /// <summary>
     /// Parses the provided text and returns a sequence of parsed and unparsed segments as deck words.
     /// </summary>
-    /// <param name="text">Text to parse. Max length 500 characters.</param>
+    /// <param name="text">Text to parse. Max length 2000 characters.</param>
     /// <returns>List of parsed and unparsed segments preserving original order.</returns>
     [HttpGet("parse")]
     [SwaggerOperation(Summary = "Parse text into words", Description = "Parses the provided text and returns parsed words and any gaps as separate items, preserving order.")]
@@ -141,7 +142,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Parse([FromQuery] string text)
     {
-        if (text.Length > 500)
+        if (text.Length > 2000)
             return Results.BadRequest("Text is too long");
 
         var parsedWords = await Parser.Parser.ParseText(contextFactory, text);
@@ -186,6 +187,60 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         return Results.Ok(allWords);
     }
 
+    /// <summary>
+    /// Normalises and parses the provided text. Converts romaji to hiragana,
+    /// halfwidth digits/letters to fullwidth, then parses and returns words.
+    /// </summary>
+    /// <param name="text">Text to normalise and parse. Max length 2000 characters.</param>
+    /// <returns>Normalised text and list of parsed/unparsed segments.</returns>
+    [HttpGet("parse-normalised")]
+    [SwaggerOperation(Summary = "Normalise and parse text into words",
+                      Description = "Normalises input (romaji→hiragana, halfwidth→fullwidth) then parses into words.")]
+    [ProducesResponseType(typeof(ParseNormalisedResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> ParseNormalised([FromQuery] string text)
+    {
+        if (text.Length > 2000)
+            return Results.BadRequest("Text is too long");
+
+        var normalisedText = TextNormalizationHelper.NormaliseForParsing(text);
+        var parsedWords = await Parser.Parser.ParseText(contextFactory, normalisedText);
+
+        var allWords = new List<DeckWordDto>();
+        var wordsWithPositions = new List<(DeckWordDto Word, int Position)>();
+        int currentPosition = 0;
+
+        foreach (var word in parsedWords)
+        {
+            int position = normalisedText.IndexOf(word.OriginalText, currentPosition, StringComparison.Ordinal);
+            if (position >= 0)
+            {
+                wordsWithPositions.Add((new DeckWordDto(word), position));
+                currentPosition = position + word.OriginalText.Length;
+            }
+        }
+
+        currentPosition = 0;
+        foreach (var (word, position) in wordsWithPositions)
+        {
+            if (position > currentPosition)
+            {
+                string gap = normalisedText.Substring(currentPosition, position - currentPosition);
+                allWords.Add(new DeckWordDto(gap));
+            }
+
+            allWords.Add(word);
+            currentPosition = position + word.OriginalText.Length;
+        }
+
+        if (currentPosition < normalisedText.Length)
+        {
+            string gap = normalisedText.Substring(currentPosition);
+            allWords.Add(new DeckWordDto(gap));
+        }
+
+        return Results.Ok(new ParseNormalisedResultDto { NormalisedText = normalisedText, Words = allWords });
+    }
 
     /// <summary>
     /// Gets IDs of words whose media frequency rank falls within the specified inclusive range.

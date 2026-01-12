@@ -1,11 +1,11 @@
 <script setup lang="ts">
   import { useApiFetch } from '~/composables/useApiFetch';
-  import type { DeckWord } from '~/types';
+  import type { DeckWord, ParseNormalisedResult } from '~/types';
   import OmniSearch from '~/components/OmniSearch.vue';
 
   const route = useRoute();
 
-  const url = computed(() => `vocabulary/parse`);
+  const url = computed(() => `vocabulary/parse-normalised`);
 
   const searchContent = ref(route.query.text || '');
 
@@ -20,20 +20,20 @@
     data: response,
     status,
     error,
-  } = await useApiFetch<DeckWord[]>(url.value, { query: { text: searchContent }, watch: [searchContent] });
+  } = await useApiFetch<ParseNormalisedResult>(url.value, { query: { text: searchContent }, watch: [searchContent] });
 
   watch(
     () => route.query.text,
     (newText) => {
       if (newText) {
-        response.value = [];
+        response.value = null;
         searchContent.value = newText;
-        selectedWord.value = response.value?.find((word) => word.wordId != 0);
+        selectedWord.value = response.value?.words?.find((word) => word.wordId != 0);
       }
     }
   );
 
-  const words = computed<DeckWord[]>(() => response.value || []);
+  const words = computed<DeckWord[]>(() => response.value?.words || []);
   const selectedWord = ref<DeckWord | undefined>();
 
   watch(

@@ -189,7 +189,7 @@ const remainingCount = computed(() => {
           type="text"
           :placeholder="placeholder || 'Search words, sentences, or media'"
           class="w-full text-sm sm:text-base"
-          maxlength="500"
+          maxlength="2000"
           :autofocus="autofocus"
           role="combobox"
           aria-autocomplete="list"
