@@ -138,7 +138,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     /// <returns>List of parsed and unparsed segments preserving original order.</returns>
     [HttpGet("parse")]
     [SwaggerOperation(Summary = "Parse text into words", Description = "Parses the provided text and returns parsed words and any gaps as separate items, preserving order.")]
-    [ProducesResponseType(typeof(List<DeckWordDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(List<ParsedWordDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Parse([FromQuery] string text)
     {
@@ -147,10 +147,8 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
         var parsedWords = await Parser.Parser.ParseText(contextFactory, text);
 
-        // We want both parsed words and unparsed ones
-        var allWords = new List<DeckWordDto>();
-
-        var wordsWithPositions = new List<(DeckWordDto Word, int Position)>();
+        var allWords = new List<ParsedWordDto>();
+        var wordsWithPositions = new List<(ParsedWordDto Word, int Position)>();
         int currentPosition = 0;
 
         foreach (var word in parsedWords)
@@ -158,7 +156,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             int position = text.IndexOf(word.OriginalText, currentPosition, StringComparison.Ordinal);
             if (position >= 0)
             {
-                wordsWithPositions.Add((new DeckWordDto(word), position));
+                wordsWithPositions.Add((new ParsedWordDto(word), position));
                 currentPosition = position + word.OriginalText.Length;
             }
         }
@@ -170,18 +168,17 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             if (position > currentPosition)
             {
                 string gap = text.Substring(currentPosition, position - currentPosition);
-                allWords.Add(new DeckWordDto(gap));
+                allWords.Add(new ParsedWordDto(gap));
             }
 
             allWords.Add(word);
-
             currentPosition = position + word.OriginalText.Length;
         }
 
         if (currentPosition < text.Length)
         {
             string gap = text.Substring(currentPosition);
-            allWords.Add(new DeckWordDto(gap));
+            allWords.Add(new ParsedWordDto(gap));
         }
 
         return Results.Ok(allWords);
@@ -206,8 +203,8 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var normalisedText = TextNormalizationHelper.NormaliseForParsing(text);
         var parsedWords = await Parser.Parser.ParseText(contextFactory, normalisedText);
 
-        var allWords = new List<DeckWordDto>();
-        var wordsWithPositions = new List<(DeckWordDto Word, int Position)>();
+        var allWords = new List<ParsedWordDto>();
+        var wordsWithPositions = new List<(ParsedWordDto Word, int Position)>();
         int currentPosition = 0;
 
         foreach (var word in parsedWords)
@@ -215,7 +212,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             int position = normalisedText.IndexOf(word.OriginalText, currentPosition, StringComparison.Ordinal);
             if (position >= 0)
             {
-                wordsWithPositions.Add((new DeckWordDto(word), position));
+                wordsWithPositions.Add((new ParsedWordDto(word), position));
                 currentPosition = position + word.OriginalText.Length;
             }
         }
@@ -226,7 +223,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             if (position > currentPosition)
             {
                 string gap = normalisedText.Substring(currentPosition, position - currentPosition);
-                allWords.Add(new DeckWordDto(gap));
+                allWords.Add(new ParsedWordDto(gap));
             }
 
             allWords.Add(word);
@@ -236,7 +233,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (currentPosition < normalisedText.Length)
         {
             string gap = normalisedText.Substring(currentPosition);
-            allWords.Add(new DeckWordDto(gap));
+            allWords.Add(new ParsedWordDto(gap));
         }
 
         return Results.Ok(new ParseNormalisedResultDto { NormalisedText = normalisedText, Words = allWords });
