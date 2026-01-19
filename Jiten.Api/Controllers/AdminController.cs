@@ -575,6 +575,28 @@ public partial class AdminController(
         return Ok(new { Message = $"Reparsing {count} decks updated before {cutoffDate:g}", Count = count });
     }
 
+    [HttpPost("reparse-all-by-size")]
+    public async Task<IActionResult> ReparseAllBySize()
+    {
+        var decksToReparse = await dbContext.Decks.AsNoTracking()
+            .Where(d => d.ParentDeck == null)
+            .OrderBy(d => d.CharacterCount)
+            .ToListAsync();
+
+        if (!decksToReparse.Any())
+            return NotFound(new { Message = "No decks found" });
+
+        int count = 0;
+        foreach (var deck in decksToReparse)
+        {
+            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
+            count++;
+        }
+
+        logger.LogInformation("Admin queued reparse all by size: Count={Count}", count);
+        return Ok(new { Message = $"Reparsing {count} decks (smallest to largest)", Count = count });
+    }
+
     [HttpPost("recompute-frequencies")]
     public IActionResult RecomputeFrequencies()
     {

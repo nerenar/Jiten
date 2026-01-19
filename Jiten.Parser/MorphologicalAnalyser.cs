@@ -89,8 +89,8 @@ public class MorphologicalAnalyser
 
     private static readonly HashSet<string> MisparsesRemove =
     [
-        "そ", "ー", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ", "イッ", "ほっ",
-        "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー", "違"
+        "そ", "る", "ま", "ふ", "ち", "ほ", "す", "じ", "なさ", "い", "ぴ", "ふあ", "ぷ", "ちゅ", "にっ", "じら", "タ", "け", "イ", "イッ", "ほっ",
+        "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー", "違", "タ"
     ];
 
     // Token to separate some words in sudachi
@@ -175,7 +175,7 @@ public class MorphologicalAnalyser
             : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi.json");
 
         var sudachiStopwatch = diagnostics != null ? Stopwatch.StartNew() : null;
-        var rawOutput = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: morphemesOnly ? 'A' : 'C');
+        var rawOutput = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: morphemesOnly ? 'A' : 'B');
         sudachiStopwatch?.Stop();
 
         if (diagnostics != null)
@@ -297,8 +297,11 @@ public class MorphologicalAnalyser
                 word.PartOfSpeech = PartOfSpeech.Auxiliary;
             }
 
+            // Don't filter if next token is ー (will be handled by RepairLongVowelTokens in Parser)
+            bool nextIsLongVowel = i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "ー";
+
             if (MisparsesRemove.Contains(word.Text) ||
-                word.PartOfSpeech == PartOfSpeech.Noun && (
+                word.PartOfSpeech == PartOfSpeech.Noun && !nextIsLongVowel && (
                     (word.Text.Length == 1 && WanaKana.IsKana(word.Text)) ||
                     word.Text.Length == 2 && WanaKana.IsKana(word.Text[0].ToString()) && word.Text[1] == 'ー' && word.Text != "バー"
                     || word.Text is "エナ" or "えな"
@@ -861,31 +864,11 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, @"(?<=[\u4E00-\u9FAF])([\u3040-\u309F])ー+", "$1");
 
         // Split up words that are parsed together in sudachi when they don't exist in jmdict
-        text = Regex.Replace(text, "囁き合", $"囁き{_stopToken}合");
-        text = Regex.Replace(text, "見降", $"見{_stopToken}降");
-        text = Regex.Replace(text, "斬(.)裂", $"斬$1{_stopToken}裂");
-        text = Regex.Replace(text, "砕(.)割", $"砕$1{_stopToken}割");
         text = Regex.Replace(text, "垣間見", $"垣間{_stopToken}見");
-        text = Regex.Replace(text, "摺(.)寄", $"摺$1{_stopToken}寄");
-        text = Regex.Replace(text, "勃(.)上", $"勃$1{_stopToken}上");
-        text = Regex.Replace(text, "滴(.)流", $"滴$1{_stopToken}流");
-        text = Regex.Replace(text, "蹴(.)倒", $"蹴$1{_stopToken}倒");
-        text = Regex.Replace(text, "善がり狂", $"善がり{_stopToken}狂");
-        text = Regex.Replace(text, "いい知", $"いい{_stopToken}知");
-        text = Regex.Replace(text, "伝(.)流", $"伝$1{_stopToken}流");
-        text = Regex.Replace(text, "歩(.)出", $"歩$1{_stopToken}出");
-        text = Regex.Replace(text, "持(.)得", $"持$1{_stopToken}得");
-        text = Regex.Replace(text, "笑(.)崩", $"笑$1{_stopToken}崩");
-        text = Regex.Replace(text, "揚(.)だ", $"揚$1{_stopToken}だ");
-        text = Regex.Replace(text, "考(.)直", $"考$1{_stopToken}直");
-        text = Regex.Replace(text, "漏(.)出", $"漏$1{_stopToken}出");
-        text = Regex.Replace(text, "返(.)忘", $"返$1{_stopToken}忘");
-        text = Regex.Replace(text, "書(.)合", $"書$1{_stopToken}合");
         text = Regex.Replace(text, "はやめ", $"は$1{_stopToken}やめ");
         text = Regex.Replace(text, "もやる", $"も{_stopToken}やる");
         text = Regex.Replace(text, "べや", $"べ{_stopToken}や");
         text = Regex.Replace(text, "はいい", $"は{_stopToken}いい");
-        text = Regex.Replace(text, "女子高校生", $"女子{_stopToken}高校生");
 
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");

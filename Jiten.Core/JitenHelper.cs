@@ -675,6 +675,12 @@ public static class JitenHelper
         {
             if (wordFrequencies.TryGetValue(agg.WordId, out var freq))
             {
+                if (agg.ReadingIndex >= freq.ReadingsFrequencyRank.Count)
+                {
+                    Console.WriteLine($"[Warning] DeckWord has ReadingIndex {agg.ReadingIndex} but WordId {agg.WordId} only has {freq.ReadingsFrequencyRank.Count} readings.");
+                    continue;
+                }
+                
                 freq.ReadingsFrequencyRank[agg.ReadingIndex] = agg.TotalOccurrences; // Store raw count
                 freq.ReadingsUsedInMediaAmount[agg.ReadingIndex] = agg.EntryCount;
             }

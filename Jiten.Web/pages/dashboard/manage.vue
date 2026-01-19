@@ -64,6 +64,7 @@
   const isLoading = ref({
     reparse: false,
     reparseBeforeDate: false,
+    reparseBySize: false,
     frequencies: false,
     coverages: false,
     accomplishments: false,
@@ -277,6 +278,44 @@
       console.error('Error recomputing kanji frequencies:', error);
     } finally {
       isLoading.value.frequencies = false;
+    }
+  };
+
+  const confirmReparseBySize = () => {
+    confirm.require({
+      message: 'Are you sure you want to reparse ALL decks? This will process smallest decks first. This operation may take a very long time.',
+      header: 'Confirmation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => reparseBySize(),
+      reject: () => {},
+    });
+  };
+
+  const reparseBySize = async () => {
+    try {
+      isLoading.value.reparseBySize = true;
+      const data = await $api<{ count: number }>('/admin/reparse-all-by-size', {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Queued ${data.count} decks for reparsing (smallest to largest)`,
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to queue reparse jobs',
+        life: 5000,
+      });
+      console.error('Error reparsing by size:', error);
+    } finally {
+      isLoading.value.reparseBySize = false;
     }
   };
 
@@ -873,6 +912,24 @@
               :disabled="!selectedCutoffDate || isLoading.reparseBeforeDate"
               :loading="isLoading.reparseBeforeDate"
               @click="confirmReparseBeforeDate"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Reparse All (By Size)</template>
+        <template #content>
+          <p class="mb-4">Reparse all decks, processing smallest decks first and largest decks last.</p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Reparse All (Smallest First)"
+              icon="pi pi-sort-amount-up"
+              class="p-button-warning"
+              :disabled="isLoading.reparseBySize"
+              :loading="isLoading.reparseBySize"
+              @click="confirmReparseBySize"
             />
           </div>
         </template>

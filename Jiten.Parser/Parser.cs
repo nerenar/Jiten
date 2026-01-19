@@ -142,7 +142,9 @@ namespace Jiten.Parser
                                               w.word.PartOfSpeech != PartOfSpeech.SupplementarySymbol);
             }
 
+            CombineNounCompounds(sentences);
             await CombineCompounds(sentences);
+            RepairLongVowelTokens(sentences);
             // Filter out SupplementarySymbol tokens before further processing
             var wordInfos = sentences.SelectMany(s => s.Words)
                                      .Where(w => w.word.PartOfSpeech != PartOfSpeech.SupplementarySymbol)
@@ -298,7 +300,9 @@ namespace Jiten.Parser
                                               w.word.PartOfSpeech != PartOfSpeech.SupplementarySymbol);
             }
 
+            CombineNounCompounds(sentences);
             await CombineCompounds(sentences);
+            RepairLongVowelTokens(sentences);
             // Filter out SupplementarySymbol tokens before further processing
             var wordInfos = sentences.SelectMany(s => s.Words)
                                      .Where(w => w.word.PartOfSpeech != PartOfSpeech.SupplementarySymbol)
@@ -485,6 +489,14 @@ namespace Jiten.Parser
 
             try
             {
+                // Early check for digits before anything else (including cache lookup)
+                var textWithoutBar = wordData.wordInfo.Text.TrimEnd('ー');
+                if (textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit) ||
+                    (textWithoutBar.Length == 1 && textWithoutBar.IsAsciiOrFullWidthLetter()))
+                {
+                    return null;
+                }
+
                 var cacheKey = new DeckWordCacheKey(
                                                     wordData.wordInfo.Text,
                                                     wordData.wordInfo.PartOfSpeech,
@@ -594,7 +606,7 @@ namespace Jiten.Parser
                             wordData.wordInfo.Text = wordData.wordInfo.Text[..^1];
                         }
                         // Let's try to remove any honorifics in front of the word
-                        else if (wordData.wordInfo.Text.StartsWith("お"))
+                        else if (wordData.wordInfo.Text.StartsWith("お") || wordData.wordInfo.Text.StartsWith("御"))
                         {
                             wordData.wordInfo.Text = wordData.wordInfo.Text[1..];
                         }
@@ -677,8 +689,9 @@ namespace Jiten.Parser
         {
             string text = wordData.wordInfo.Text;
 
-            // Exclude full digits or single latin character
-            if (text.All(char.IsDigit) || (text.Length == 1 && text.IsAsciiOrFullWidthLetter()))
+            // Exclude text that is primarily digits (with optional trailing ー) or single latin character
+            var textWithoutBar = text.TrimEnd('ー');
+            if ((textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit)) || (text.Length == 1 && text.IsAsciiOrFullWidthLetter()))
             {
                 return (false, null);
             }
@@ -834,10 +847,18 @@ namespace Jiten.Parser
         private static async Task<(bool success, DeckWord? word)> DeconjugateVerbOrAdjective(
             (WordInfo wordInfo, int occurrences) wordData, Deconjugator deconjugator)
         {
+            // Early check for digits before WanaKana (which can't convert full-width digits)
+            var textWithoutBar = wordData.wordInfo.Text.TrimEnd('ー');
+            if (textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit) ||
+                (textWithoutBar.Length == 1 && textWithoutBar.IsAsciiOrFullWidthLetter()))
+            {
+                return (false, null);
+            }
+
             var normalizedText = KanaNormalizer.Normalize(WanaKana.ToHiragana(wordData.wordInfo.Text));
 
-            // Exclude full digits or single latin character
-            if (normalizedText.All(char.IsDigit) || (normalizedText.Length == 1 && normalizedText.IsAsciiOrFullWidthLetter()))
+            // Exclude single latin character
+            if (normalizedText.Length == 1 && normalizedText.IsAsciiOrFullWidthLetter())
             {
                 return (false, null);
             }
@@ -1032,9 +1053,14 @@ namespace Jiten.Parser
                 {
                     // Try loose match (long vowels)
                     normalizedReadings = readings.Select(r => WanaKana.ToHiragana(r)).ToList();
-                    bestReadingIndex = (byte)normalizedReadings.IndexOf(targetHiragana);
+                    idx = normalizedReadings.IndexOf(targetHiragana);
+                    if (idx != -1) bestReadingIndex = (byte)idx;
                 }
             }
+
+            // No matching reading found - skip this word
+            if (bestReadingIndex == 255)
+                return (false, null);
 
             DeckWord deckWord = new()
                                 {
@@ -1129,8 +1155,12 @@ namespace Jiten.Parser
                 var (wordInfo, occurrences) = failedWords[i];
                 var text = wordInfo.Text;
 
-                // Skip punctuation and digit only
-                if (string.IsNullOrEmpty(text) || text.All(c => !char.IsLetterOrDigit(c)) || text.All(c => char.IsDigit(c)))
+                // Skip punctuation and digit only (including digits with trailing ー)
+                var textWithoutBar = text.TrimEnd('ー');
+                if (string.IsNullOrEmpty(text) ||
+                    text.All(c => !char.IsLetterOrDigit(c)) ||
+                    (textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit) ||
+                     (textWithoutBar.Length == 1 && textWithoutBar.IsAsciiOrFullWidthLetter())))
                     continue;
 
                 // Check cache for already-attempted rescues
@@ -1160,7 +1190,22 @@ namespace Jiten.Parser
                     for (int windowSize = Math.Min(10, text.Length); windowSize >= 1; windowSize--)
                     {
                         var candidate = text[..windowSize];
-                        var hiragana = WanaKana.ToHiragana(candidate, new DefaultOptions { ConvertLongVowelMark = false });
+
+                        // Skip candidates that are pure digits
+                        var candidateWithoutBar = candidate.TrimEnd('ー');
+                        if (candidateWithoutBar.Length > 0 && candidateWithoutBar.All(char.IsDigit)  || (candidateWithoutBar.Length == 1 && candidateWithoutBar.IsAsciiOrFullWidthLetter()))
+                            continue;
+
+                        string hiragana;
+                        try
+                        {
+                            hiragana = WanaKana.ToHiragana(candidate, new DefaultOptions { ConvertLongVowelMark = false });
+                        }
+                        catch (KeyNotFoundException)
+                        {
+                            continue; // Skip this window size if conversion fails (e.g., full-width digits)
+                        }
+
                         var normalized = KanaNormalizer.Normalize(hiragana);
 
                         // Try direct lookup
@@ -1176,11 +1221,23 @@ namespace Jiten.Parser
                                     var wordCache = await JmDictCache.GetWordsAsync(wordIds);
                                     if (wordCache.Count > 0)
                                     {
-                                        var bestMatch = wordCache.Values
-                                                                 .OrderByDescending(w => w.GetPriorityScore(WanaKana.IsKana(candidate)))
-                                                                 .First();
+                                        // For single-char honorific prefixes (ご, お), prefer Prefix over Name
+                                        var candidates = wordCache.Values.AsEnumerable();
+                                        if (candidate is "ご" or "お")
+                                        {
+                                            var prefixMatch =
+                                                candidates.FirstOrDefault(w => w.PartsOfSpeech.ToPartOfSpeech()
+                                                                                .Contains(PartOfSpeech.Prefix));
+                                            if (prefixMatch != null)
+                                                candidates = [prefixMatch];
+                                        }
+
+                                        var bestMatch = candidates
+                                                        .OrderByDescending(w => w.GetPriorityScore(WanaKana.IsKana(candidate)))
+                                                        .First();
                                         var readingIndex = GetBestReadingIndex(bestMatch, candidate);
-                                        if (readingIndex != 255)
+                                        // Skip single-char matches that are primarily numerals
+                                        if (readingIndex != 255 && !(candidate.Length == 1 && bestMatch.PartsOfSpeech.Contains("num")))
                                         {
                                             match = new DeckWord
                                                     {
@@ -1210,11 +1267,23 @@ namespace Jiten.Parser
                                     var wordCache = await JmDictCache.GetWordsAsync(wordIds);
                                     if (wordCache.Count > 0)
                                     {
-                                        var bestMatch = wordCache.Values
-                                                                 .OrderByDescending(w => w.GetPriorityScore(WanaKana.IsKana(candidate)))
-                                                                 .First();
+                                        // For single-char honorific prefixes (ご, お), prefer Prefix over Name
+                                        var deconjCandidates = wordCache.Values.AsEnumerable();
+                                        if (candidate is "ご" or "お")
+                                        {
+                                            var prefixMatch =
+                                                deconjCandidates.FirstOrDefault(w => w.PartsOfSpeech.ToPartOfSpeech()
+                                                                                      .Contains(PartOfSpeech.Prefix));
+                                            if (prefixMatch != null)
+                                                deconjCandidates = [prefixMatch];
+                                        }
+
+                                        var bestMatch = deconjCandidates
+                                                        .OrderByDescending(w => w.GetPriorityScore(WanaKana.IsKana(candidate)))
+                                                        .First();
                                         var readingIndex = GetBestReadingIndex(bestMatch, form.Text);
-                                        if (readingIndex != 255)
+                                        // Skip single-char matches that are primarily numerals
+                                        if (readingIndex != 255 && !(candidate.Length == 1 && bestMatch.PartsOfSpeech.Contains("num")))
                                         {
                                             match = new DeckWord
                                                     {
@@ -1240,6 +1309,13 @@ namespace Jiten.Parser
                     {
                         results.Add(match);
                         text = text[matchLen..];
+
+                        // Skip trailing ー if the match already ends with ー (emphasis marks)
+                        if (match.OriginalText.EndsWith("ー"))
+                        {
+                            while (text.Length > 0 && text[0] == 'ー')
+                                text = text[1..];
+                        }
                     }
                     else
                     {
@@ -1390,6 +1466,214 @@ namespace Jiten.Parser
 
                 sentence.Words = result;
             }
+        }
+
+        /// <summary>
+        /// Repairs tokens that were broken by trailing ー.
+        /// When Sudachi sees e.g. 久しぶりー, it may split incorrectly.
+        /// This method detects standalone ー tokens and tries to combine
+        /// preceding tokens, validating against JMDict.
+        ///
+        /// Priority:
+        /// 1. Try WITH ー (わー, ねー, すげー are valid words)
+        /// 2. Try WITHOUT ー (久しぶりー → 久しぶり)
+        /// 3. Fallback: attach ー to preceding token (preserve stylistic usage)
+        /// </summary>
+        private static void RepairLongVowelTokens(List<SentenceInfo> sentences)
+        {
+            foreach (var sentence in sentences)
+            {
+                for (int i = sentence.Words.Count - 1; i >= 0; i--)
+                {
+                    var word = sentence.Words[i].word;
+
+                    // Find standalone ー tokens
+                    if (word.Text != "ー" || word.PartOfSpeech != PartOfSpeech.SupplementarySymbol)
+                        continue;
+
+                    if (i == 0)
+                    {
+                        // ー at start with nothing to combine - just remove it
+                        sentence.Words.RemoveAt(i);
+                        continue;
+                    }
+
+                    bool found = false;
+
+                    // Try combining preceding tokens (longest match first)
+                    for (int combineCount = Math.Min(4, i); combineCount >= 1; combineCount--)
+                    {
+                        var combinedTokens = sentence.Words
+                                                     .Skip(i - combineCount).Take(combineCount)
+                                                     .Select(w => w.word.Text);
+                        var combined = string.Concat(combinedTokens);
+                        // PRIORITY 1: Try WITH ー (preserves わー, ねー, すげー, etc.)
+                        var withBar = combined + "ー";
+                        string? withBarHiragana;
+                        try
+                        {
+                            withBarHiragana = WanaKana.ToHiragana(withBar);
+                        }
+                        catch
+                        {
+                            withBarHiragana = null;
+                        }
+
+
+                        if (withBarHiragana != null && _lookups.TryGetValue(withBarHiragana, out var idsWithBar) && idsWithBar.Count > 0)
+                        {
+                            // Found valid word WITH ー - merge and keep ー
+                            var firstToken = sentence.Words[i - combineCount];
+                            firstToken.word.Text = withBar;
+                            sentence.Words.RemoveRange(i - combineCount + 1, combineCount);
+                            i = i - combineCount; // Adjust index after removal
+                            found = true;
+                            break;
+                        }
+
+                        // PRIORITY 2: Try WITHOUT ー (handles 久しぶりー → 久しぶり)
+                        string? withoutBarHiragana;
+                        try
+                        {
+                            withoutBarHiragana = WanaKana.ToHiragana(combined);
+                        }
+                        catch
+                        {
+                            withoutBarHiragana = null;
+                        }
+
+                        if (withoutBarHiragana != null && _lookups.TryGetValue(withoutBarHiragana, out var idsWithout) &&
+                            idsWithout.Count > 0)
+                        {
+                            // Found valid word WITHOUT ー - merge and strip ー
+                            var firstToken = sentence.Words[i - combineCount];
+                            firstToken.word.Text = combined;
+                            sentence.Words.RemoveRange(i - combineCount + 1, combineCount);
+                            i = i - combineCount; // Adjust index after removal
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    // PRIORITY 3: Fallback
+                    if (!found)
+                    {
+                        var prevToken = sentence.Words[i - 1].word;
+                        // If preceding token already ends with ー, this is just emphasis - discard it
+                        // Otherwise attach ー to preserve stylistic usage
+                        if (!prevToken.Text.EndsWith("ー"))
+                        {
+                            prevToken.Text += "ー";
+                        }
+
+                        sentence.Words.RemoveAt(i);
+                        // No need to adjust i since only 1 item removed at current position
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Combines adjacent noun tokens that form valid JMDict entries.
+        /// Uses greedy longest-match: tries 4-token, then 3-token, then 2-token combinations.
+        /// </summary>
+        private static void CombineNounCompounds(List<SentenceInfo> sentences)
+        {
+            foreach (var sentence in sentences)
+            {
+                if (sentence.Words.Count < 2)
+                    continue;
+
+                var result = new List<(WordInfo word, byte position, byte length)>(sentence.Words.Count);
+                int i = 0;
+
+                while (i < sentence.Words.Count)
+                {
+                    var (word, position, length) = sentence.Words[i];
+
+                    if (!IsNounForCompounding(word.PartOfSpeech))
+                    {
+                        result.Add(sentence.Words[i]);
+                        i++;
+                        continue;
+                    }
+
+                    // Try longest match first (4 tokens, then 3, then 2)
+                    int bestMatch = 1;
+                    for (int windowSize = Math.Min(4, sentence.Words.Count - i); windowSize >= 2; windowSize--)
+                    {
+                        // Check if all tokens in window are nouns
+                        bool allNouns = true;
+                        for (int j = 0; j < windowSize; j++)
+                        {
+                            if (!IsNounForCompounding(sentence.Words[i + j].word.PartOfSpeech))
+                            {
+                                allNouns = false;
+                                break;
+                            }
+                        }
+
+                        if (!allNouns)
+                            continue;
+
+                        // Combine the text
+                        var combinedText = string.Concat(
+                                                         sentence.Words.Skip(i).Take(windowSize).Select(w => w.word.Text));
+
+                        // Check if it exists in JMDict lookups
+                        if (_lookups.TryGetValue(combinedText, out var wordIds) && wordIds.Count > 0)
+                        {
+                            bestMatch = windowSize;
+                            break;
+                        }
+
+                        // Also try hiragana version
+                        var hiraganaText = WanaKana.ToHiragana(combinedText,
+                                                               new DefaultOptions { ConvertLongVowelMark = false });
+                        if (hiraganaText != combinedText &&
+                            _lookups.TryGetValue(hiraganaText, out wordIds) && wordIds.Count > 0)
+                        {
+                            bestMatch = windowSize;
+                            break;
+                        }
+                    }
+
+                    if (bestMatch > 1)
+                    {
+                        // Merge tokens
+                        var combinedText = string.Concat(
+                                                         sentence.Words.Skip(i).Take(bestMatch).Select(w => w.word.Text));
+                        byte combinedLength = 0;
+                        for (int j = 0; j < bestMatch; j++)
+                        {
+                            combinedLength += sentence.Words[i + j].length;
+                        }
+
+                        var combinedWord = new WordInfo
+                                           {
+                                               Text = combinedText, DictionaryForm = combinedText,
+                                               PartOfSpeech = sentence.Words[i].word.PartOfSpeech, NormalizedForm = combinedText,
+                                               Reading = WanaKana.ToHiragana(combinedText)
+                                           };
+
+                        result.Add((combinedWord, position, combinedLength));
+                        i += bestMatch;
+                    }
+                    else
+                    {
+                        result.Add(sentence.Words[i]);
+                        i++;
+                    }
+                }
+
+                sentence.Words = result;
+            }
+        }
+
+        private static bool IsNounForCompounding(PartOfSpeech pos)
+        {
+            return pos is PartOfSpeech.Noun or PartOfSpeech.Name or PartOfSpeech.CommonNoun
+                or PartOfSpeech.NaAdjective or PartOfSpeech.Prefix;
         }
 
         private static void CleanCompoundCache()

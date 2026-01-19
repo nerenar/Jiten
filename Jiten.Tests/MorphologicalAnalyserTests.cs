@@ -517,6 +517,24 @@ public class MorphologicalAnalyserTests
     [InlineData("ちょっと休憩ーなんて言って", new[] { "ちょっと","休憩","なんて","言って" })]
     [InlineData("絶対に戻らなきゃいけない", new[] { "絶対", "に", "戻らなきゃ", "いけない"})]
     [InlineData("とてもいい品が買えました", new[] { "とても","いい","品","が","買えました"})]
+    // JMDict compound noun tests (Mode B refactor)
+    // Single JMDict entries - should remain as one token
+    [InlineData("人種差別", new[] { "人種差別" })]
+    [InlineData("総合病院", new[] { "総合病院" })]
+    [InlineData("ソビエト連邦", new[] { "ソビエト連邦" })]
+    [InlineData("胚性幹細胞", new[] { "胚性幹細胞" })]
+    [InlineData("国際連合", new[] { "国際連合" })]
+    [InlineData("高等学校", new[] { "高等学校" })]
+    [InlineData("原子力発電所", new[] { "原子力発電所" })]
+    [InlineData("環境問題", new[] { "環境問題" })]
+    // Long compound chains - should split into JMDict-valid components
+    [InlineData("人種差別撤廃宣言", new[] { "人種差別", "撤廃", "宣言" })]
+    [InlineData("ソビエト連邦人民代議員大会", new[] { "ソビエト連邦", "人民", "代議員", "大会" })]
+    [InlineData("西横浜国際総合病院", new[] { "西横浜", "国際", "総合病院" })]
+    // Proper nouns with particles - should not over-combine across particles
+    [InlineData("人道の港", new[] { "人道", "の", "港" })]
+    // JMnedict celebrity names - keep as single token (in JMnedict)
+    [InlineData("加藤紀子", new[] { "加藤紀子" })]
     public async Task SegmentationTest(string text, string[] expectedResult)
     {
         (await Parse(text)).Should().Equal(expectedResult);
