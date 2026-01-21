@@ -18,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 using WanaKanaShaapu;
 
 // ReSharper disable MethodSupportsCancellation
@@ -174,6 +175,15 @@ public class Program
 
         [Option(longName: "run-parser-tests", Required = false, HelpText = "Run all parser tests with diagnostics and fix suggestions.")]
         public bool RunParserTests { get; set; }
+
+        [Option(longName: "search-word", Required = false, HelpText = "Search for a word in JMDict by reading or WordId.")]
+        public string? SearchWord { get; set; }
+
+        [Option(longName: "search-lookup", Required = false, HelpText = "Search the lookups table for a text and show all matching WordIds.")]
+        public string? SearchLookup { get; set; }
+
+        [Option(longName: "flush-redis", Required = false, HelpText = "Flush the Redis cache (clears all cached parser results).")]
+        public bool FlushRedis { get; set; }
     }
 
     static async Task Main(string[] args)
@@ -298,6 +308,21 @@ public class Program
                         if (o.RunParserTests)
                         {
                             await RunParserTests(o);
+                        }
+
+                        if (!string.IsNullOrEmpty(o.SearchWord))
+                        {
+                            await SearchWord(o.SearchWord);
+                        }
+
+                        if (!string.IsNullOrEmpty(o.SearchLookup))
+                        {
+                            await SearchLookup(o.SearchLookup);
+                        }
+
+                        if (o.FlushRedis)
+                        {
+                            await FlushRedisCache(configuration);
                         }
 
                         if (!string.IsNullOrEmpty(o.UserDicMassAdd))
@@ -1398,6 +1423,147 @@ public class Program
             var json = JsonSerializer.Serialize(result, jsonOptions);
             await File.WriteAllTextAsync(options.ParseTestOutput, json);
             Console.WriteLine($"Full diagnostics written to {options.ParseTestOutput}");
+        }
+    }
+
+    private static async Task SearchWord(string query)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+
+        // Check if query is a numeric WordId
+        if (int.TryParse(query, out int wordId))
+        {
+            var word = await context.JMDictWords
+                .Include(w => w.Definitions)
+                .FirstOrDefaultAsync(w => w.WordId == wordId);
+
+            if (word == null)
+            {
+                Console.WriteLine($"No word found with WordId: {wordId}");
+                return;
+            }
+
+            PrintWord(word, jsonOptions);
+            return;
+        }
+
+        // Search by reading
+        var words = await context.JMDictWords
+            .Include(w => w.Definitions)
+            .Where(w => w.Readings.Contains(query))
+            .Take(20)
+            .ToListAsync();
+
+        if (words.Count == 0)
+        {
+            Console.WriteLine($"No words found with reading: {query}");
+            return;
+        }
+
+        Console.WriteLine($"Found {words.Count} word(s) matching '{query}':");
+        Console.WriteLine();
+
+        foreach (var word in words)
+        {
+            PrintWord(word, jsonOptions);
+            Console.WriteLine("---");
+        }
+    }
+
+    private static void PrintWord(JmDictWord word, JsonSerializerOptions jsonOptions)
+    {
+        Console.WriteLine($"WordId: {word.WordId}");
+        Console.WriteLine($"Readings: [{string.Join(", ", word.Readings)}]");
+        Console.WriteLine($"ReadingTypes: [{string.Join(", ", word.ReadingTypes)}]");
+        Console.WriteLine($"PartsOfSpeech: [{string.Join(", ", word.PartsOfSpeech)}]");
+        Console.WriteLine($"PitchAccents: [{string.Join(", ", word.PitchAccents ?? [])}]");
+        Console.WriteLine($"Priorities: [{string.Join(", ", word.Priorities ?? [])}]");
+        Console.WriteLine($"Origin: {word.Origin}");
+
+        if (word.Definitions?.Count > 0)
+        {
+            Console.WriteLine("Definitions:");
+            foreach (var def in word.Definitions.Take(3))
+            {
+                var posStr = def.PartsOfSpeech.Count > 0 ? string.Join(", ", def.PartsOfSpeech) : "";
+                var meanings = def.EnglishMeanings.Count > 0 ? string.Join("; ", def.EnglishMeanings) : "(no English)";
+                Console.WriteLine($"  [{posStr}] {meanings}");
+            }
+        }
+    }
+
+    private static async Task SearchLookup(string query)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+
+        // Convert to hiragana for lookup
+        var hiraganaQuery = WanaKana.ToHiragana(query);
+
+        var lookups = await context.Lookups
+            .Where(l => l.LookupKey == query || l.LookupKey == hiraganaQuery)
+            .ToListAsync();
+
+        if (lookups.Count == 0)
+        {
+            Console.WriteLine($"No lookups found for: {query}");
+            if (hiraganaQuery != query)
+                Console.WriteLine($"Also tried hiragana: {hiraganaQuery}");
+            return;
+        }
+
+        Console.WriteLine($"Found {lookups.Count} lookup(s) for '{query}':");
+        Console.WriteLine();
+
+        var wordIds = lookups.Select(l => l.WordId).Distinct().ToList();
+        Console.WriteLine($"WordIds: [{string.Join(", ", wordIds)}]");
+        Console.WriteLine();
+
+        // Fetch and display each word
+        var words = await context.JMDictWords
+            .Include(w => w.Definitions)
+            .Where(w => wordIds.Contains(w.WordId))
+            .ToListAsync();
+
+        foreach (var word in words)
+        {
+            PrintWord(word, jsonOptions);
+            Console.WriteLine("---");
+        }
+    }
+
+    private static async Task FlushRedisCache(IConfigurationRoot configuration)
+    {
+        var redisConnectionString = configuration.GetConnectionString("Redis");
+        if (string.IsNullOrEmpty(redisConnectionString))
+        {
+            Console.WriteLine("Redis connection string not found in configuration.");
+            return;
+        }
+
+        try
+        {
+            var connection = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
+            var redisDb = connection.GetDatabase();
+            redisDb.Execute("FLUSHALL");
+            await connection.CloseAsync();
+
+            Console.WriteLine("Redis cache flushed successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to flush Redis cache: {ex.Message}");
         }
     }
 }

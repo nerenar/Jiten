@@ -26,25 +26,22 @@ public class MorphologicalAnalyser
     // These add grammatical meaning (aspect, direction, etc.) rather than forming true compound verbs
     private static readonly HashSet<string> AuxiliaryVerbs =
     [
-        "続ける",   // continue doing
-        "始める",   // start doing
-        "終わる",   // finish doing
-        "終える",   // finish doing (transitive)
-        "出す",     // start (suddenly)
-        "かける",   // be about to / half-way
+        "続ける", // continue doing
+        "始める", // start doing
+        "終わる", // finish doing
+        "終える", // finish doing (transitive)
+        "出す", // start (suddenly)
+        "かける", // be about to / half-way
+        "いたす", // humble/polite form of する
     ];
 
     // Mapping from auxiliary verb dictionary form to its stem for splitting compound tokens
     // Used to split Sudachi tokens like し終わっ (dict: し終わる) → し + 終わっ
     private static readonly Dictionary<string, string> AuxiliaryVerbStems = new()
-    {
-        { "続ける", "続け" },
-        { "始める", "始め" },
-        { "終わる", "終わ" },
-        { "終える", "終え" },
-        { "出す", "出" },
-        { "かける", "かけ" },
-    };
+                                                                            {
+                                                                                { "続ける", "続け" }, { "始める", "始め" }, { "終わる", "終わ" },
+                                                                                { "終える", "終え" }, { "出す", "出" }, { "かける", "かけ" },
+                                                                            };
 
     private static HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
@@ -81,6 +78,7 @@ public class MorphologicalAnalyser
         ("何も", "かも", PartOfSpeech.Expression),
         ("に", "とって", PartOfSpeech.Expression),
         ("何と", "も", PartOfSpeech.Adverb),
+        ("なくて", "も", PartOfSpeech.Expression),
     ];
 
     private static readonly List<string> HonorificsSuffixes = ["さん", "ちゃん", "くん"];
@@ -117,7 +115,8 @@ public class MorphologicalAnalyser
     /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved in the processed text. Used in the ReaderController</param>
     /// <param name="diagnostics">Optional diagnostics container for verbose debug output.</param>
     /// <returns>A list of SentenceInfo objects representing the parsed output.</returns>
-    public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false, bool preserveStopToken = false, ParserDiagnostics? diagnostics = null)
+    public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false, bool preserveStopToken = false,
+                                                ParserDiagnostics? diagnostics = null)
     {
         var results = await ParseBatch([text], morphemesOnly, preserveStopToken, diagnostics);
         return results.Count > 0 ? results[0] : [];
@@ -132,7 +131,8 @@ public class MorphologicalAnalyser
     /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved.</param>
     /// <param name="diagnostics">Optional diagnostics container for verbose debug output.</param>
     /// <returns>List of SentenceInfo lists, one per input text.</returns>
-    public async Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false, ParserDiagnostics? diagnostics = null)
+    public async Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
+                                                           ParserDiagnostics? diagnostics = null)
     {
         if (texts.Count == 0) return [];
 
@@ -148,7 +148,7 @@ public class MorphologicalAnalyser
                             .AddEnvironmentVariables()
                             .Build();
         var dic = configuration.GetValue<string>("DictionaryPath");
-        
+
         // Preprocess each text separately (preserves transformations per-text)
         var processedTexts = new List<string>(texts.Count);
         var originalTexts = new List<string>(texts.Count);
@@ -181,11 +181,10 @@ public class MorphologicalAnalyser
         if (diagnostics != null)
         {
             diagnostics.Sudachi = new SudachiDiagnostics
-            {
-                ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds,
-                RawOutput = rawOutput,
-                Tokens = ParseSudachiOutputToDiagnosticTokens(rawOutput)
-            };
+                                  {
+                                      ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds, RawOutput = rawOutput,
+                                      Tokens = ParseSudachiOutputToDiagnosticTokens(rawOutput)
+                                  };
         }
 
         var output = rawOutput.Split("\n");
@@ -377,24 +376,18 @@ public class MorphologicalAnalyser
 
             // Create the main verb token
             var mainVerb = new WordInfo
-            {
-                Text = mainVerbSurface,
-                DictionaryForm = mainVerbDict,
-                NormalizedForm = mainVerbDict,
-                PartOfSpeech = PartOfSpeech.Verb,
-                Reading = WanaKana.ToHiragana(mainVerbSurface)
-            };
+                           {
+                               Text = mainVerbSurface, DictionaryForm = mainVerbDict, NormalizedForm = mainVerbDict,
+                               PartOfSpeech = PartOfSpeech.Verb, Reading = WanaKana.ToHiragana(mainVerbSurface)
+                           };
 
             // Create the auxiliary verb token
             var auxVerb = new WordInfo
-            {
-                Text = auxVerbSurface,
-                DictionaryForm = matchedAux,
-                NormalizedForm = matchedAux,
-                PartOfSpeech = PartOfSpeech.Verb,
-                PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant,
-                Reading = WanaKana.ToHiragana(auxVerbSurface)
-            };
+                          {
+                              Text = auxVerbSurface, DictionaryForm = matchedAux, NormalizedForm = matchedAux,
+                              PartOfSpeech = PartOfSpeech.Verb, PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant,
+                              Reading = WanaKana.ToHiragana(auxVerbSurface)
+                          };
 
             result.Add(mainVerb);
             result.Add(auxVerb);
@@ -462,6 +455,7 @@ public class MorphologicalAnalyser
                     count++;
                     if (count == offset) return result[j];
                 }
+
                 return null;
             }
 
@@ -474,6 +468,7 @@ public class MorphologicalAnalyser
                     count++;
                     if (count == offset) return j;
                 }
+
                 return -1;
             }
 
@@ -530,6 +525,7 @@ public class MorphologicalAnalyser
                                 result.RemoveAt(prevIdx);
                             }
                         }
+
                         result.Add(new WordInfo(verbBefore) { Text = combinedText, PartOfSpeech = PartOfSpeech.Verb });
                         result.Add(CreateNToken());
                         result.Add(new WordInfo { Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か" });
@@ -546,7 +542,7 @@ public class MorphologicalAnalyser
                     {
                         var verbBefore = GetPrevToken(3);
                         if (verbBefore != null && (verbBefore.Text.EndsWith("て") || verbBefore.Text.EndsWith("で") ||
-                            verbBefore.PartOfSpeech == PartOfSpeech.Expression))
+                                                   verbBefore.PartOfSpeech == PartOfSpeech.Expression))
                         {
                             // Combine: verb + し + も + た → verbしもた
                             var combinedText = verbBefore.Text + "しもた";
@@ -558,7 +554,10 @@ public class MorphologicalAnalyser
                             foreach (var idx in indices) result.RemoveAt(idx);
                             result.Add(new WordInfo(verbBefore) { Text = combinedText, PartOfSpeech = PartOfSpeech.Verb });
                             result.Add(CreateNToken());
-                            result.Add(new WordInfo { Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か" });
+                            result.Add(new WordInfo
+                                       {
+                                           Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か"
+                                       });
                             continue;
                         }
                     }
@@ -573,6 +572,7 @@ public class MorphologicalAnalyser
                 {
                     result[prevIdx] = new WordInfo(prev) { Text = prev.Text + "た", PartOfSpeech = PartOfSpeech.Verb };
                 }
+
                 result.Add(CreateNToken());
                 result.Add(new WordInfo { Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か" });
             }
@@ -592,10 +592,10 @@ public class MorphologicalAnalyser
 
     private static bool IsNdaVerbForm(HashSet<DeconjugationForm> forms) =>
         forms.Any(f => f.Tags.Count > 0 &&
-            ((f.Tags.Any(t => t == "v5m") && f.Text.EndsWith("む")) ||
-             (f.Tags.Any(t => t == "v5n") && f.Text.EndsWith("ぬ")) ||
-             (f.Tags.Any(t => t == "v5b") && f.Text.EndsWith("ぶ")) ||
-             (f.Tags.Any(t => t == "v5g") && f.Text.EndsWith("ぐ"))));
+                       ((f.Tags.Any(t => t == "v5m") && f.Text.EndsWith("む")) ||
+                        (f.Tags.Any(t => t == "v5n") && f.Text.EndsWith("ぬ")) ||
+                        (f.Tags.Any(t => t == "v5b") && f.Text.EndsWith("ぶ")) ||
+                        (f.Tags.Any(t => t == "v5g") && f.Text.EndsWith("ぐ"))));
 
     private static bool IsAnyVerbForm(HashSet<DeconjugationForm> forms) =>
         forms.Any(f => f.Tags.Count > 0 && f.Tags.Any(t => t.StartsWith("v")));
@@ -604,16 +604,16 @@ public class MorphologicalAnalyser
         forms.Any(f => f.Tags.Count > 0 && f.Tags.Any(t => t.StartsWith("v")) && !f.Text.EndsWith("ます"));
 
     private static WordInfo CreateNToken() => new()
-    {
-        Text = "ん", DictionaryForm = "ん", NormalizedForm = "ん", Reading = "ん",
-        PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.None
-    };
+                                              {
+                                                  Text = "ん", DictionaryForm = "ん", NormalizedForm = "ん", Reading = "ん",
+                                                  PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.None
+                                              };
 
     private static WordInfo CreateDaToken() => new()
-    {
-        Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", Reading = "だ",
-        PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.None
-    };
+                                               {
+                                                   Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", Reading = "だ",
+                                                   PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.None
+                                               };
 
     private static string BuildCandidateText(List<WordInfo> words, int lookback, string suffix)
     {
@@ -688,6 +688,7 @@ public class MorphologicalAnalyser
                 return true;
             }
         }
+
         return false;
     }
 
@@ -740,12 +741,10 @@ public class MorphologicalAnalyser
             if (word is { Text: "そうだ", PartOfSpeech: PartOfSpeech.Adverb })
             {
                 split.Add(new WordInfo(word)
-                {
-                    Text = "そう",
-                    DictionaryForm = "そう",
-                    PartOfSpeech = PartOfSpeech.Auxiliary,
-                    PartOfSpeechSection1 = PartOfSpeechSection.AuxiliaryVerbStem
-                });
+                          {
+                              Text = "そう", DictionaryForm = "そう", PartOfSpeech = PartOfSpeech.Auxiliary,
+                              PartOfSpeechSection1 = PartOfSpeechSection.AuxiliaryVerbStem
+                          });
                 split.Add(CreateDaToken());
                 continue;
             }
@@ -763,8 +762,10 @@ public class MorphologicalAnalyser
 
             // Case: Token already ends with ん (e.g., 飲ん) and next is だ/で - combine as past/te-form
             // Skip na-adjectives (e.g., たくさん + で should NOT combine - で is the copula, not verb conjugation)
+            // Skip suffixes (e.g., さん + だ should NOT combine - さん is honorific, だ is copula)
             if (current.Text.EndsWith("ん") && current.Text.Length > 1 && current.Text != "ん" &&
                 !IsNaAdjectiveToken(current) &&
+                current.PartOfSpeech != PartOfSpeech.Suffix &&
                 i + 1 < split.Count && split[i + 1].Text is "だ" or "で")
             {
                 var candidateText = current.Text + split[i + 1].Text;
@@ -815,6 +816,7 @@ public class MorphologicalAnalyser
                             negativeWord.DictionaryForm = verbStem.DictionaryForm;
                         }
                     }
+
                     result.Add(negativeWord);
                     combined = true;
                 }
@@ -847,6 +849,8 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "」", " 」\n");
         text = Regex.Replace(text, "〈", " \n〈 ");
         text = Regex.Replace(text, "〉", " 〉\n");
+        text = Regex.Replace(text, "\n（", " （");
+        text = Regex.Replace(text, "）", " ）\n");
         text = Regex.Replace(text, "《", " \n《 ");
         text = Regex.Replace(text, "》", " 》\n");
         text = Regex.Replace(text, "“", " \n“ ");
@@ -919,6 +923,7 @@ public class MorphologicalAnalyser
                     {
                         var newWord = new WordInfo(w1);
                         newWord.Text = w1.Text + w2.Text + w3.Text;
+                        newWord.DictionaryForm = newWord.Text;
 
                         if (sc.Item4 != null)
                         {
@@ -941,16 +946,33 @@ public class MorphologicalAnalyser
                 if (w1.Text == "な" && w2.Text == "ん" && w3.Text == "だ")
                 {
                     bool prevIsAuxVerbStem = i > 0 &&
-                        wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
+                                             wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
                     bool prevIsNaAdjective = i > 0 &&
-                        wordInfos[i - 1].PartOfSpeech == PartOfSpeech.NaAdjective;
+                                             wordInfos[i - 1].PartOfSpeech == PartOfSpeech.NaAdjective;
                     if (!prevIsAuxVerbStem && !prevIsNaAdjective)
                     {
-                        var newWord = new WordInfo(w1);
-                        newWord.Text = "なんだ";
-                        newWord.PartOfSpeech = PartOfSpeech.Expression;
+                        var newWord = new WordInfo(w1) { Text = "なんだ", DictionaryForm = "なんだ", PartOfSpeech = PartOfSpeech.Auxiliary };
                         newList.Add(newWord);
                         i += 3;
+                        continue;
+                    }
+                }
+
+                // Special case: な + ん (explanatory) when NOT followed by だ
+                // e.g., そうなんじゃない → そう + なん + じゃない
+                // Only when ん is 準体助詞 (explanatory particle)
+                if (w1.Text == "な" && w2.Text == "ん" && w3.Text != "だ" &&
+                    w2.HasPartOfSpeechSection(PartOfSpeechSection.Juntaijoushi))
+                {
+                    bool prevIsAuxVerbStem = i > 0 &&
+                                             wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
+                    bool prevIsNaAdjective = i > 0 &&
+                                             wordInfos[i - 1].PartOfSpeech == PartOfSpeech.NaAdjective;
+                    if (!prevIsAuxVerbStem && !prevIsNaAdjective)
+                    {
+                        var newWord = new WordInfo(w1) { Text = "なん", DictionaryForm = "なん", PartOfSpeech = PartOfSpeech.Auxiliary };
+                        newList.Add(newWord);
+                        i += 2;
                         continue;
                     }
                 }
@@ -972,8 +994,7 @@ public class MorphologicalAnalyser
                 {
                     var w3 = wordInfos[i + 2];
                     newList.Add(w1); // Keep ん separate
-                    var daSuffix = new WordInfo(w2) { Text = w2.Text + w3.Text };
-                    daSuffix.PartOfSpeech = PartOfSpeech.Conjunction;
+                    var daSuffix = new WordInfo(w2) { Text = w2.Text + w3.Text, PartOfSpeech = PartOfSpeech.Conjunction };
                     newList.Add(daSuffix);
                     i += 3;
                     continue;
@@ -984,8 +1005,8 @@ public class MorphologicalAnalyser
                 {
                     if (w1.Text == sc.Item1 && w2.Text == sc.Item2)
                     {
-                        var newWord = new WordInfo(w1);
-                        newWord.Text = w1.Text + w2.Text;
+                        var newWord = new WordInfo(w1) { Text = w1.Text + w2.Text };
+                        newWord.DictionaryForm = newWord.Text;
 
                         if (sc.Item3 != null)
                         {
@@ -1038,15 +1059,46 @@ public class MorphologicalAnalyser
             // Handle な based on context
             if (w1 is { Text: "な", DictionaryForm: "だ" })
             {
-                // If previous token is na-adjective followed by explanatory ん, combine them
-                // e.g., 好き + な + んだ → 好きな + んだ
-                if (newList.Count > 0 && IsNaAdjectiveToken(newList[^1]) &&
-                    i + 1 < wordInfos.Count && wordInfos[i + 1].Text.StartsWith("ん"))
+                bool followedByN = i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "ん";
+
+                // If followed by explanatory ん pattern (な + ん + だ), combine into なんだ
+                // e.g., 好き + な + ん + だ → 好き + なんだ
+                // Also includes quotative particle と: 好き + な + ん + だ + と → 好き + なんだと
+                if (newList.Count > 0 && IsNaAdjectiveToken(newList[^1]) && followedByN)
+                {
+                    // Build "なんだ" or similar by combining な + ん + following auxiliaries
+                    string combined = "な" + wordInfos[i + 1].Text;
+                    int j = i + 2;
+                    while (j < wordInfos.Count && wordInfos[j].PartOfSpeech == PartOfSpeech.Auxiliary)
+                    {
+                        combined += wordInfos[j].Text;
+                        j++;
+                    }
+
+                    // Also include quotative particle と if it immediately follows
+                    if (j < wordInfos.Count && wordInfos[j].Text == "と" && wordInfos[j].PartOfSpeech == PartOfSpeech.Particle)
+                    {
+                        combined += wordInfos[j].Text;
+                        j++;
+                    }
+
+                    w1.Text = combined;
+                    w1.DictionaryForm = combined;
+                    w1.PartOfSpeech = PartOfSpeech.Auxiliary;
+                    newList.Add(w1);
+                    i = j;
+                    continue;
+                }
+
+                // If previous token is na-adjective and NOT followed by ん, combine with na-adjective
+                // e.g., 大切 + な → 大切な, 静か + な + 部屋 → 静かな + 部屋
+                if (newList.Count > 0 && IsNaAdjectiveToken(newList[^1]) && !followedByN)
                 {
                     newList[^1].Text += w1.Text;
                     i++;
                     continue;
                 }
+
                 // Otherwise, treat as particle (not the vegetable 菜)
                 w1.PartOfSpeech = PartOfSpeech.Particle;
             }
@@ -1123,7 +1175,24 @@ public class MorphologicalAnalyser
                 var nextWord = wordInfos[i + 1];
 
                 // Safety filter: stop at particles and auxiliary expressions
-                if (nextWord.Text is "は" or "な" or "よ" or "し" or "を" or "が" or "ください")
+                // Exception: allow negative stem な when followed by dependent verbs like すぎる
+                // e.g., わからなすぎる = わかる + negative stem + すぎる
+                bool isNegativeStemBeforeDependant = false;
+                if (nextWord.Text == "な" &&
+                    nextWord.PartOfSpeech == PartOfSpeech.Auxiliary &&
+                    nextWord.DictionaryForm == "ない" &&
+                    i + 2 < wordInfos.Count)
+                {
+                    var afterNa = wordInfos[i + 2];
+                    isNegativeStemBeforeDependant =
+                        (afterNa.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) ||
+                         afterNa.HasPartOfSpeechSection(PartOfSpeechSection.Dependant)) &&
+                        afterNa.DictionaryForm is "すぎる" or "過ぎる";
+                }
+
+                if (nextWord.Text is "は" or "よ" or "し" or "を" or "が" or "ください")
+                    break;
+                if (nextWord.Text == "な" && !isNegativeStemBeforeDependant)
                     break;
 
                 // Don't merge いけ/いけない after ちゃ/じゃ/きゃ/にゃ (obligation/prohibition patterns)
@@ -1175,18 +1244,18 @@ public class MorphologicalAnalyser
                             currentWord.DictionaryForm = currentDictForm + "する";
                             currentPOS = PartOfSpeech.Verb;
                         }
+
                         currentWord.PartOfSpeech = currentPOS;
                         currentDictForm = currentWord.DictionaryForm;
 
                         // Modify the original token to be just だ or か for subsequent processing
                         string remainder = nextWord.Text == "そうだ" ? "だ" : "か";
                         wordInfos[i + 1] = new WordInfo
-                        {
-                            Text = remainder,
-                            DictionaryForm = remainder,
-                            PartOfSpeech = remainder == "だ" ? PartOfSpeech.Auxiliary : PartOfSpeech.Particle,
-                            Reading = remainder
-                        };
+                                           {
+                                               Text = remainder, DictionaryForm = remainder,
+                                               PartOfSpeech = remainder == "だ" ? PartOfSpeech.Auxiliary : PartOfSpeech.Particle,
+                                               Reading = remainder
+                                           };
                         // Don't increment i - let the remainder be processed as a new token in the main loop
                         break;
                     }
@@ -1222,12 +1291,15 @@ public class MorphologicalAnalyser
                 // 2. Current word doesn't end in te-form or auxiliary patterns (these are grammatical constructions, not compounds)
                 //    - て/で: te-form (探して+みる is NOT a compound)
                 //    - たく/なく: adverbial form of auxiliaries (転げ回りたく+なる is NOT a compound)
+                //    - たり/だり: tari-form is uninflectable (見たり+して should NOT combine)
                 // 3. Next word is not an auxiliary verb (補助動詞) like 続ける, 始める - these add aspect/meaning and should stay separate
                 else if (currentPOS == PartOfSpeech.Verb &&
                          !currentWord.Text.EndsWith("て") &&
                          !currentWord.Text.EndsWith("で") &&
                          !currentWord.Text.EndsWith("たく") &&
                          !currentWord.Text.EndsWith("なく") &&
+                         !currentWord.Text.EndsWith("たり") &&
+                         !currentWord.Text.EndsWith("だり") &&
                          !AuxiliaryVerbs.Contains(nextWord.DictionaryForm) &&
                          (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike) ||
                           (nextWord.PartOfSpeech == PartOfSpeech.Verb &&
@@ -1621,6 +1693,7 @@ public class MorphologicalAnalyser
                 && currentWord.Text != "やしない"
                 && currentWord.Text != "し"
                 && currentWord.Text != "なのだ"
+                && !currentWord.Text.StartsWith("なん")
                 && currentWord.Text != "だろ"
                 && currentWord.Text != "ハズ"
                 && (currentWord.Text != "だ" || currentWord.Text == "だ" && previousWord.Text[^1] == 'ん')
@@ -1957,14 +2030,11 @@ public class MorphologicalAnalyser
 
             var posDetail = parts[1].Split(',');
             tokens.Add(new SudachiToken
-            {
-                Surface = parts[0],
-                PartOfSpeech = posDetail.Length > 0 ? posDetail[0] : "",
-                PosDetail = posDetail.Skip(1).ToArray(),
-                NormalizedForm = parts.Length > 2 ? parts[2] : "",
-                DictionaryForm = parts.Length > 3 ? parts[3] : "",
-                Reading = parts.Length > 5 ? parts[5] : ""
-            });
+                       {
+                           Surface = parts[0], PartOfSpeech = posDetail.Length > 0 ? posDetail[0] : "",
+                           PosDetail = posDetail.Skip(1).ToArray(), NormalizedForm = parts.Length > 2 ? parts[2] : "",
+                           DictionaryForm = parts.Length > 3 ? parts[3] : "", Reading = parts.Length > 5 ? parts[5] : ""
+                       });
         }
 
         return tokens;
@@ -1985,13 +2055,11 @@ public class MorphologicalAnalyser
         sw.Stop();
 
         var stage = new TokenProcessingStage
-        {
-            StageName = stageName,
-            ElapsedMs = sw.Elapsed.TotalMilliseconds,
-            InputTokenCount = inputSnapshot.Count,
-            OutputTokenCount = result.Count,
-            Modifications = DetectModifications(inputSnapshot, result.Select(w => w.Text).ToList())
-        };
+                    {
+                        StageName = stageName, ElapsedMs = sw.Elapsed.TotalMilliseconds, InputTokenCount = inputSnapshot.Count,
+                        OutputTokenCount = result.Count,
+                        Modifications = DetectModifications(inputSnapshot, result.Select(w => w.Text).ToList())
+                    };
         diagnostics.TokenStages.Add(stage);
 
         return result;
@@ -2027,12 +2095,10 @@ public class MorphologicalAnalyser
                 if (merged.ToString() == outputTokens[j])
                 {
                     modifications.Add(new TokenModification
-                    {
-                        Type = "merge",
-                        InputTokens = inputTokens.Skip(mergeStart).Take(i - mergeStart).ToArray(),
-                        OutputToken = outputTokens[j],
-                        Reason = $"Merged {i - mergeStart} tokens"
-                    });
+                                      {
+                                          Type = "merge", InputTokens = inputTokens.Skip(mergeStart).Take(i - mergeStart).ToArray(),
+                                          OutputToken = outputTokens[j], Reason = $"Merged {i - mergeStart} tokens"
+                                      });
                     j++;
                     break;
                 }
@@ -2050,12 +2116,9 @@ public class MorphologicalAnalyser
         while (i < inputTokens.Count)
         {
             modifications.Add(new TokenModification
-            {
-                Type = "remove",
-                InputTokens = [inputTokens[i]],
-                OutputToken = null,
-                Reason = "Token removed"
-            });
+                              {
+                                  Type = "remove", InputTokens = [inputTokens[i]], OutputToken = null, Reason = "Token removed"
+                              });
             i++;
         }
 

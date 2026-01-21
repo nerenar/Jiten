@@ -329,6 +329,31 @@ The JSON output contains:
   - After editing, regenerate `user_dic.dic` using Sudachi tools `sudachi ubuild "Y:\CODE\Jiten\Shared\resources\user_dic.xml" -s "S:\Jiten\sudachi.rs\resources\system_full.dic" -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"`
   - **Search intelligently** - file contains many entries, search for specific words
 
+**Database search commands (for diagnostics):**
+```bash
+# Search for a word by WordId (numeric)
+dotnet run --project Jiten.Cli -- --search-word 2084700
+
+# Search for a word by reading
+dotnet run --project Jiten.Cli -- --search-word "そうする"
+
+# Search the lookups table to find all WordIds for a text
+dotnet run --project Jiten.Cli -- --search-lookup "そうする"
+```
+
+These commands are useful for:
+- Verifying which WordId matches a particular reading
+- Finding all JMDict entries that could match a given text
+- Debugging why a specific word is being matched incorrectly
+
+**Cache management:**
+```bash
+# Flush the Redis cache (clears all cached parser results)
+dotnet run --project Jiten.Cli -- --flush-redis
+```
+
+**IMPORTANT:** After making changes to the parser (e.g., fixing word matching, adding special cases, modifying deconjugation rules), you MUST flush the Redis cache before testing. The parser caches DeckWord results by (Text, POS, DictionaryForm) tuples, so stale cache entries will mask your fixes.
+
 **Autonomous fix workflow:**
 
 1. Run `--run-parser-tests` to identify failures
@@ -339,8 +364,10 @@ The JSON output contains:
    - Missing combination → Add to `SpecialCases2/3`
    - Wrong merge → Modify relevant `Combine*` method
    - Deconjugation issue → Check/add rules in `deconjugator.json`
-5. Re-run the failing test to verify the fix
-6. Run full test suite to check for regressions
+   - Word matching issue → Check `FindValidCompoundWordId`, `GetBestReadingIndex`, or lookup logic
+5. **Flush the Redis cache** with `--flush-redis` before testing
+6. Re-run the failing test to verify the fix
+7. Run full test suite to check for regressions
 
 ## Important Architectural Notes
 
