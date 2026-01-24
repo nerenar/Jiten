@@ -110,7 +110,7 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                           "Returns a paginated list of words containing the specified kanji, ordered by reading-specific frequency.")]
     [ProducesResponseType(typeof(PaginatedResponse<List<WordSummaryDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ResponseCache(Duration = 3600)]
+    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["page"])]
     public async Task<IResult> GetKanjiWords(
         [FromRoute] string character,
         [FromQuery] int page = 1)
