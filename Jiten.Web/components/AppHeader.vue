@@ -47,7 +47,6 @@
   ]);
 
   const difficultyValueDisplayStyleOptions = ref([
-    { label: '1 to 6', value: 0 },
     { label: '0 to 5', value: 1 },
     { label: 'Percentage', value: 2 },
   ]);

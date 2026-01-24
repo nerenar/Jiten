@@ -397,10 +397,33 @@
                   <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{ getLinkTypeText(link.linkType) }}</a>
                 </div>
                 <div v-if="!hideControl" class="mt-4">
-                  <div class="flex flex-col md:flex-row gap-2">
-                    <Button as="router-link" :to="`/decks/media/${deck.deckId}/detail`" label="Details" class="text-center" icon="pi pi-eye" />
-                    <Button as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" label="Vocabulary" class="text-center" icon="pi pi-book" />
-                    <Button label="Download deck" class="text-center" @click="showDownloadDialog = true" icon="pi pi-download" />
+                  <div class="flex flex-col md:flex-row gap-2" :class="{ 'justify-center': isCompact }">
+                    <Tooltip content="Details">
+                      <Button
+                        as="router-link"
+                        :to="`/decks/media/${deck.deckId}/detail`"
+                        :label="isCompact ? undefined : 'Details'"
+                        class="text-center"
+                        icon="pi pi-eye"
+                      />
+                    </Tooltip>
+                    <Tooltip content="Vocabulary">
+                      <Button
+                        as="router-link"
+                        :to="`/decks/media/${deck.deckId}/vocabulary`"
+                        :label="isCompact ? undefined : 'Vocabulary'"
+                        class="text-center"
+                        icon="pi pi-book"
+                      />
+                    </Tooltip>
+                    <Tooltip content="Download deck">
+                      <Button
+                        :label="isCompact ? undefined : 'Download deck'"
+                        class="text-center"
+                        icon="pi pi-download"
+                        @click="showDownloadDialog = true"
+                      />
+                    </Tooltip>
                     <Button
                       v-if="!isCompact && displayAdminFunctions"
                       as="router-link"
@@ -411,10 +434,10 @@
                     />
                     <Button
                       v-if="!isCompact && authStore.isAuthenticated"
-                      @click="showIssueDialog = true"
-                      label=" Report an issue"
+                      label="Report an issue"
                       icon="pi pi-exclamation-triangle"
                       class="text-center"
+                      @click="showIssueDialog = true"
                     />
                   </div>
                 </div>

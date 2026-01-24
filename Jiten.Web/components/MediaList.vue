@@ -92,7 +92,7 @@
     'addedDate',
   ];
 
-  const statusFilter = ref('none');
+  const statusFilter = ref(route.query.status ? (Array.isArray(route.query.status) ? route.query.status[0] : route.query.status) : 'none');
 
   const authStore = useAuthStore();
   const isConnected = computed(() => authStore.isAuthenticated);
@@ -442,6 +442,16 @@
       query: {
         ...route.query,
         sortBy: newValue,
+      },
+    });
+  });
+
+  watch(statusFilter, (newValue) => {
+    router.replace({
+      query: {
+        ...route.query,
+        status: newValue === 'none' ? undefined : newValue,
+        offset: 0,
       },
     });
   });

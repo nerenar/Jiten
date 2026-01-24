@@ -15,6 +15,7 @@ public class JitenDbContext : DbContext
     public DbSet<DeckRawText> DeckRawTexts { get; set; }
     public DbSet<DeckTitle> DeckTitles { get; set; }
     public DbSet<DeckStats> DeckStats { get; set; }
+    public DbSet<DeckDifficulty> DeckDifficulties { get; set; }
 
     public DbSet<JmDictWord> JMDictWords { get; set; }
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
@@ -163,6 +164,39 @@ public class JitenDbContext : DbContext
             entity.Ignore(ds => ds.RSquared);
             entity.Ignore(ds => ds.RMSE);
             entity.Ignore(ds => ds.TotalUniqueWords);
+        });
+
+        modelBuilder.Entity<DeckDifficulty>(entity =>
+        {
+            entity.ToTable("DeckDifficulty", "jiten");
+            entity.HasKey(dd => dd.DeckId);
+
+            entity.Property(dd => dd.Difficulty)
+                  .HasPrecision(4, 2)
+                  .IsRequired();
+
+            entity.Property(dd => dd.Peak)
+                  .HasPrecision(4, 2)
+                  .IsRequired();
+
+            entity.Property(dd => dd.DecilesJson)
+                  .HasColumnType("jsonb")
+                  .IsRequired();
+
+            entity.Property(dd => dd.ProgressionJson)
+                  .HasColumnType("jsonb")
+                  .IsRequired();
+
+            entity.Property(dd => dd.LastUpdated)
+                  .IsRequired();
+
+            entity.HasOne(dd => dd.Deck)
+                  .WithOne(d => d.DeckDifficulty)
+                  .HasForeignKey<DeckDifficulty>(dd => dd.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Ignore(dd => dd.Deciles);
+            entity.Ignore(dd => dd.Progression);
         });
 
         modelBuilder.Entity<Link>(entity =>

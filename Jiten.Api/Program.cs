@@ -37,6 +37,9 @@ builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnCh
 builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
 
+// Suppress verbose HTTP client logging
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.NumberHandling =
@@ -490,7 +493,7 @@ builder.Services.AddHangfireServer((options) =>
 {
     options.ServerName = "StatsServer";
     options.Queues = ["stats"];
-    options.WorkerCount = 1;
+    options.WorkerCount = 5;
 });
 
 builder.Services.AddHangfireServer((options) =>

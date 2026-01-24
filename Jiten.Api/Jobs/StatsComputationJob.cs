@@ -62,7 +62,7 @@ public class StatsComputationJob(IDbContextFactory<JitenDbContext> contextFactor
             // Capture sample points at milestones
             if (currentCoverage >= nextMilestone)
             {
-                samples.Add(new double[] { currentRank, currentCoverage });
+                samples.Add([currentRank, currentCoverage]);
 
                 // Advance to next milestone (handle cases where one word jumps multiple %)
                 while (nextMilestone <= currentCoverage)

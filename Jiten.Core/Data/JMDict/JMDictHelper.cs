@@ -513,6 +513,10 @@ public static class JmDictHelper
         wordInfos.First(w => w.WordId == 1169250).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 1598460).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 1144510).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1282970).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1982860).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1609715).Priorities?.Add("jiten");
+        wordInfos.First(w => w.WordId == 1550190).Priorities?.Add("jiten");
         wordInfos.First(w => w.WordId == 2029110).Definitions.Add(new JmDictDefinition()
                                                                   {
                                                                       PartsOfSpeech = ["prt"], EnglishMeanings = ["indicates na-adjective"]

@@ -430,3 +430,19 @@ export interface KanjiGridResponse {
   seenKanjiCount: number;
   lastComputedAt: string | null;
 }
+
+export interface ProgressionSegmentDto {
+  segment: number;
+  difficulty: number;
+  peak: number;
+  childStartOrder?: number;
+  childEndOrder?: number;
+}
+
+export interface DeckDifficultyDto {
+  difficulty: number;
+  peak: number;
+  deciles: Record<string, number>;
+  progression: ProgressionSegmentDto[];
+  lastUpdated: Date;
+}

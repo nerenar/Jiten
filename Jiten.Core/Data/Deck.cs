@@ -171,6 +171,11 @@ public class Deck
     public DeckStats? DeckStats { get; set; }
 
     /// <summary>
+    /// Detailed difficulty metrics
+    /// </summary>
+    public DeckDifficulty? DeckDifficulty { get; set; }
+
+    /// <summary>
     /// List of titles and aliases
     /// </summary>
     public ICollection<DeckTitle> Titles { get; set; } = new List<DeckTitle>();

@@ -2125,4 +2125,38 @@ public class MediaDeckController(
                                               Coverage = p.coverage < 99.0 ? Math.Round(p.coverage, 0) : Math.Round(p.coverage, 2)
                                           }).ToList());
     }
+
+    /// <summary>
+    /// Returns detailed difficulty metrics for a deck (deciles, progression).
+    /// </summary>
+    [HttpGet("{id}/difficulty")]
+    [ResponseCache(Duration = 3600)]
+    [SwaggerOperation(Summary = "Get detailed difficulty metrics")]
+    [ProducesResponseType(typeof(DeckDifficultyDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeckDifficultyDto>> GetDeckDifficulty(int id)
+    {
+        var difficulty = await context.DeckDifficulties
+            .AsNoTracking()
+            .FirstOrDefaultAsync(dd => dd.DeckId == id);
+
+        if (difficulty == null)
+            return NotFound();
+
+        return new DeckDifficultyDto
+        {
+            Difficulty = difficulty.Difficulty,
+            Peak = difficulty.Peak,
+            Deciles = difficulty.Deciles,
+            Progression = difficulty.Progression.Select(p => new ProgressionSegmentDto
+            {
+                Segment = p.Segment,
+                Difficulty = p.Difficulty,
+                Peak = p.Peak,
+                ChildStartOrder = p.ChildStartOrder,
+                ChildEndOrder = p.ChildEndOrder
+            }).ToList(),
+            LastUpdated = difficulty.LastUpdated
+        };
+    }
 }

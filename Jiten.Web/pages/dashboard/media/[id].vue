@@ -93,6 +93,7 @@
     relationshipType: DeckRelationshipType | null;
   }>({ targetDeckId: null, targetTitle: '', relationshipType: null });
   const fetchingDeckTitle = ref(false);
+  const showRecomputeDifficultyDialog = ref(false);
 
   const relationshipTypeOptions = [
     { label: 'Sequel', value: DeckRelationshipType.Sequel },
@@ -525,6 +526,29 @@
       });
       console.error('Error fetching metadata:', error);
     } finally {
+    }
+  }
+
+  async function recomputeDifficulty() {
+    try {
+      const data = await $api<{ count: number }>(`/admin/recompute-difficulty/${mediaId}`, {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Queued difficulty computation for ${data.count} deck(s)`,
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to queue difficulty recomputation',
+        life: 5000,
+      });
+      console.error('Error recomputing difficulty:', error);
     }
   }
 
@@ -1011,6 +1035,16 @@
           </template>
         </Card>
 
+        <!-- Recompute Difficulty Confirmation Dialog -->
+        <Dialog v-model:visible="showRecomputeDifficultyDialog" header="Confirm Recompute Difficulty" :modal="true" class="w-full md:w-96">
+          <p>Are you sure you want to recompute the difficulty for this deck?</p>
+          <p class="text-sm text-gray-500 mt-2">This will queue a background job to recalculate difficulty scores using the RunPod API.</p>
+          <template #footer>
+            <Button label="Cancel" severity="secondary" text @click="showRecomputeDifficultyDialog = false" />
+            <Button label="Recompute" @click="recomputeDifficulty(); showRecomputeDifficultyDialog = false" />
+          </template>
+        </Dialog>
+
         <!-- Add Relationship Dialog -->
         <Dialog v-model:visible="showAddRelationshipDialog" header="Add Relationship" :modal="true" class="w-full md:w-1/2">
           <div class="p-fluid">
@@ -1215,6 +1249,11 @@
           <Button label="Update" class="p-button-lg p-button-success" @click="fetchMetadata()">
             <Icon name="material-symbols-light:refresh" size="1.5em" />
             Fetch missing metadata
+          </Button>
+
+          <Button label="Update" class="p-button-lg p-button-success" @click="showRecomputeDifficultyDialog = true">
+            <Icon name="material-symbols-light:calculate" size="1.5em" />
+            Recompute Difficulty
           </Button>
         </div>
       </div>

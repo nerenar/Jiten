@@ -505,6 +505,44 @@
     }
   };
 
+  const confirmReaggregateParentDifficulties = () => {
+    confirm.require({
+      message: 'Are you sure you want to reaggregate parent difficulties from their children? This does not recompute children via the external API.',
+      header: 'Confirmation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => reaggregateParentDifficulties(),
+      reject: () => {},
+    });
+  };
+
+  const reaggregateParentDifficulties = async () => {
+    try {
+      isLoading.value.difficulties = true;
+      const data = await $api<{ count: number }>('/admin/reaggregate-parent-difficulties', {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Queued difficulty reaggregation for ${data.count} parent decks`,
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to queue difficulty reaggregation',
+        life: 5000,
+      });
+      console.error('Error reaggregating difficulties:', error);
+    } finally {
+      isLoading.value.difficulties = false;
+    }
+  };
+
   const canPreviewWordReplacement = computed(() => {
     return (
       wordReplacement.value.oldWordId !== null &&
@@ -1043,6 +1081,24 @@
 
           <div class="flex justify-center">
             <Button label="Recompute ALL decks advanced stats" icon="pi pi-table" class="p-button-warning" @click="recomputeAllDeckStats" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Reaggregate Parent Difficulties</template>
+        <template #content>
+          <p class="mb-4">Reaggregate difficulty scores for parent decks from their children. Does not call the external API.</p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Reaggregate Parent Difficulties"
+              icon="pi pi-calculator"
+              class="p-button-warning"
+              :disabled="isLoading.difficulties"
+              :loading="isLoading.difficulties"
+              @click="confirmReaggregateParentDifficulties"
+            />
           </div>
         </template>
       </Card>

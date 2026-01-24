@@ -109,8 +109,12 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IDbConte
         // Queue coverage computation jobs for all users with at least 10 known words
         await QueueCoverageJobsForDeck(deck);
 
-        // Queue coverage statistics computation
-        backgroundJobs.Enqueue<StatsComputationJob>(job => job.ComputeDeckCoverageStats(deck.DeckId));
+        // Queue coverage statistics computation for main deck and all children
+        QueueStatsComputationForDeckTree(deck);
+
+        // Queue difficulty computation (job handles children internally)
+        backgroundJobs.Enqueue<DifficultyComputationJob>(
+            job => job.ComputeDeckDifficulty(deck.DeckId));
     }
 
     /// <summary>
@@ -231,6 +235,16 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IDbConte
         foreach (var userId in userIds)
         {
                 backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserDeckCoverage(userId, deck.DeckId));
+        }
+    }
+
+    private void QueueStatsComputationForDeckTree(Deck deck)
+    {
+        backgroundJobs.Enqueue<StatsComputationJob>(job => job.ComputeDeckCoverageStats(deck.DeckId));
+
+        foreach (var child in deck.Children)
+        {
+            QueueStatsComputationForDeckTree(child);
         }
     }
 }

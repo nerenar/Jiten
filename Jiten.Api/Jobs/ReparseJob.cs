@@ -34,7 +34,6 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory)
             deck.SentenceCount = newDeck.SentenceCount;
             deck.DeckWords = newDeck.DeckWords;
             deck.ExampleSentences = newDeck.ExampleSentences;
-            deck.Difficulty = newDeck.Difficulty;
             deck.DialoguePercentage = newDeck.DialoguePercentage;
 
             if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
@@ -73,7 +72,6 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory)
                 original.SentenceCount = parsed.SentenceCount;
                 original.DeckWords = parsed.DeckWords;
                 original.ExampleSentences = parsed.ExampleSentences;
-                original.Difficulty = parsed.Difficulty;
                 original.DialoguePercentage = parsed.DialoguePercentage;
 
                 if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)

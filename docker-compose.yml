@@ -62,6 +62,9 @@ services:
       - OpenTelemetry__EnableOtlpExporter=${LOG_OTLP:-true}
       - OpenTelemetry__Otlp__Endpoint=${LOG_OTLP_ENDPOINT:-}
       - OpenTelemetry__Otlp__Headers=${LOG_OTLP_HEADER:-authorization=TOKEN}
+      - RunPod__ApiKey=${RUNPOD_API_KEY:-}
+      - RunPod__NovelsEndpointId=${RUNPOD_NOVELS_ENDPOINT_ID:-}
+      - RunPod__ShowsEndpointId=${RUNPOD_SHOWS_ENDPOINT_ID:-}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads

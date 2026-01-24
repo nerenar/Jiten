@@ -143,6 +143,35 @@ namespace Jiten.Core.Migrations
                     b.ToTable("Decks", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckDifficulty", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DecilesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("Difficulty")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Peak")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)");
+
+                    b.Property<string>("ProgressionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("DeckId");
+
+                    b.ToTable("DeckDifficulty", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckGenre", b =>
                 {
                     b.Property<int>("DeckId")
@@ -700,6 +729,17 @@ namespace Jiten.Core.Migrations
                     b.Navigation("ParentDeck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckDifficulty", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithOne("DeckDifficulty")
+                        .HasForeignKey("Jiten.Core.Data.DeckDifficulty", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckGenre", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
@@ -896,6 +936,8 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
                 {
                     b.Navigation("Children");
+
+                    b.Navigation("DeckDifficulty");
 
                     b.Navigation("DeckGenres");
 

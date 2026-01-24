@@ -41,5 +41,10 @@
   "IgdbClientId": "YourClientId",
   "IgdbClientSecret": "YourClientSecret",
   "DiscordWebhook": "https://ptb.discord.com/api/webhooks/your/webhookurl",
-  "StoreRawText": false
+  "StoreRawText": false,
+  "RunPod": {
+    "ApiKey": "your-api-key",
+    "NovelsEndpointId": "endpoint-id-for-novels",
+    "ShowsEndpointId": "endpoint-id-for-shows"
+  }
 }

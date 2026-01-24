@@ -663,7 +663,6 @@ public partial class AdminController(
     public async Task<IActionResult> RecomputeAllDeckStats()
     {
         var deckIds = await dbContext.Decks
-                                   .Where(d => d.ParentDeckId == null)
                                    .Select(d => d.DeckId)
                                    .ToListAsync();
 
@@ -673,6 +672,48 @@ public partial class AdminController(
         }
         logger.LogInformation("Admin queued recompute for all deck stats");
         return Ok(new { Message = $"Recomputing all deck stats has been queued" });
+    }
+
+    /// <summary>
+    /// Recompute difficulty for a single deck (and its children if applicable)
+    /// </summary>
+    [HttpPost("recompute-difficulty/{deckId}")]
+    public async Task<IActionResult> RecomputeDeckDifficulty(int deckId)
+    {
+        var deck = await dbContext.Decks
+            .Include(d => d.Children)
+            .FirstOrDefaultAsync(d => d.DeckId == deckId);
+
+        if (deck == null)
+            return NotFound(new { Message = $"Deck {deckId} not found" });
+
+        backgroundJobs.Enqueue<DifficultyComputationJob>(
+            job => job.ComputeDeckDifficulty(deckId));
+
+        logger.LogInformation("Admin queued difficulty recomputation for deck {DeckId}", deckId);
+        return Ok(new { Message = $"Queued difficulty computation for deck {deckId}" });
+    }
+
+    /// <summary>
+    /// Reaggregate parent difficulties from their children
+    /// </summary>
+    [HttpPost("reaggregate-parent-difficulties")]
+    public async Task<IActionResult> ReaggregateParentDifficulties()
+    {
+        // Get all parent decks (decks with children)
+        var parentDecks = await dbContext.Decks
+            .Where(d => d.ParentDeckId == null && d.Children.Any())
+            .Select(d => d.DeckId)
+            .ToListAsync();
+
+        foreach (var id in parentDecks)
+        {
+            backgroundJobs.Enqueue<DifficultyComputationJob>(
+                job => job.ReaggregateParentDifficulty(id));
+        }
+
+        logger.LogInformation("Admin queued difficulty reaggregation for {Count} parent decks", parentDecks.Count);
+        return Ok(new { Message = $"Queued difficulty reaggregation for {parentDecks.Count} parent decks", Count = parentDecks.Count });
     }
 
     [HttpGet("issues")]
