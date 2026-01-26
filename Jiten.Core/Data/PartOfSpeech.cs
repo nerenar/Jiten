@@ -94,42 +94,11 @@ public enum PartOfSpeechSection
 
 public static class PartOfSpeechExtension
 {
-    public static PartOfSpeech ToPartOfSpeech(this string pos)
-    {
-        return pos switch
-        {
-            "名詞" or "n" => PartOfSpeech.Noun,
-            "動詞" => PartOfSpeech.Verb,
-            _ when pos.StartsWith('v') => PartOfSpeech.Verb,
-            "形容詞" or "adj-i" or "adj-ix" => PartOfSpeech.IAdjective,
-            "形状詞" or "adj-na" => PartOfSpeech.NaAdjective,
-            "副詞" or "adv" => PartOfSpeech.Adverb,
-            "助詞" or "prt" => PartOfSpeech.Particle,
-            "接続詞" or "conj" => PartOfSpeech.Conjunction,
-            "助動詞" or "aux" or "aux-v" or "aux-adj" => PartOfSpeech.Auxiliary,
-            "感動詞" or "int" => PartOfSpeech.Interjection,
-            "記号" => PartOfSpeech.Symbol,
-            "接頭詞" or "接頭辞" or "pref" => PartOfSpeech.Prefix,
-            "フィラー" => PartOfSpeech.Filler,
-            "名" or "company" or "given" or "place" or "person" or "product" or "ship" or "surname" or "unclass" or "name-fem" or "name-masc" or "station"
-                or "group" or "char" or "creat" or "dei" or "doc" or "ev" or "fem" or "fict" or "leg" or "masc" or "myth" or "obj"
-                or "organization" or "oth" or "relig" or "serv" or "ship" or "surname" or "work" or "unc" => PartOfSpeech.Name,
-            "代名詞" or "pn" => PartOfSpeech.Pronoun,
-            "接尾辞" or "suf" => PartOfSpeech.Suffix,
-            "普通名詞" => PartOfSpeech.CommonNoun,
-            "補助記号" => PartOfSpeech.SupplementarySymbol,
-            "空白" => PartOfSpeech.BlankSpace,
-            "表現" or "exp" => PartOfSpeech.Expression,
-            "形動" or "adj-no" or "adj-t" or "adj-f" => PartOfSpeech.NominalAdjective,
-            "連体詞" or "adj-pn" => PartOfSpeech.PrenounAdjectival,
-            "数詞" or "num" => PartOfSpeech.Numeral,
-            "助数詞" or "ctr" => PartOfSpeech.Counter,
-            "副詞的と" or "adv-to" => PartOfSpeech.AdverbTo,
-            "名詞接尾辞" or "n-suf" => PartOfSpeech.NounSuffix,
-            // _ => throw new ArgumentException($"Invalid part of speech : {pos}")
-            _ => PartOfSpeech.Unknown
-        };
-    }
+    /// <summary>
+    /// Converts a POS string (Sudachi or JMDict) to PartOfSpeech enum.
+    /// Delegates to PosMapper.FromAny() for unified conversion logic.
+    /// </summary>
+    public static PartOfSpeech ToPartOfSpeech(this string pos) => PosMapper.FromAny(pos);
 
     public static List<PartOfSpeech> ToPartOfSpeech(this List<string> pos)
     {

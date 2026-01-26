@@ -134,8 +134,9 @@ public static class ExampleSentenceExtractor
                         var foundWord = wordList[matchIndex];
                         exampleSentence.Words.Add(new ExampleSentenceWord
                                                   {
-                                                      WordId = foundWord.WordId, ReadingIndex = foundWord.ReadingIndex, Position = position,
-                                                      Length = length
+                                                      WordId = foundWord.WordId, ReadingIndex = foundWord.ReadingIndex,
+                                                      Position = (byte)Math.Min(position, 255),
+                                                      Length = (byte)Math.Min(length, 255)
                                                   });
 
                         foundAnyWord = true;

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Jiten.Core;
 using Jiten.Core.Data;
 
@@ -16,9 +15,9 @@ public class WordInfo
     public string Reading { get; set; } = string.Empty;
     public bool IsInvalid { get; set; }
     public int? PreMatchedWordId { get; set; }
-    
+
     public WordInfo(){}
-    
+
     public WordInfo(WordInfo other)
     {
         Text = other.Text;
@@ -32,33 +31,66 @@ public class WordInfo
         IsInvalid = other.IsInvalid;
         PreMatchedWordId = other.PreMatchedWordId;
     }
-    
+
     public WordInfo(string sudachiLine)
     {
-        var parts = Regex.Split(sudachiLine, @"\t");
+        // Parse tab-separated Sudachi output without Regex.Split
+        // Format: Text\tPOS\tNormalizedForm\tDictionaryForm\t?\tReading
+        var span = sudachiLine.AsSpan();
 
-        if (parts.Length < 6)
+        // Find first 6 tab positions
+        Span<int> tabPositions = stackalloc int[6];
+        int tabCount = 0;
+        for (int i = 0; i < span.Length && tabCount < 6; i++)
+        {
+            if (span[i] == '\t')
+            {
+                tabPositions[tabCount++] = i;
+            }
+        }
+
+        if (tabCount < 5)
         {
             IsInvalid = true;
             return;
         }
 
-        var pos = parts[1].Split(",");
-        
-        if (pos.Length < 4)
+        // Extract Text (before first tab)
+        Text = span[..tabPositions[0]].ToString();
+
+        // Extract and parse POS (between first and second tab)
+        var posSpan = span[(tabPositions[0] + 1)..tabPositions[1]];
+
+        // Find first 4 commas in POS
+        Span<int> commaPositions = stackalloc int[4];
+        int commaCount = 0;
+        for (int i = 0; i < posSpan.Length && commaCount < 4; i++)
+        {
+            if (posSpan[i] == ',')
+            {
+                commaPositions[commaCount++] = i;
+            }
+        }
+
+        if (commaCount < 3)
         {
             IsInvalid = true;
             return;
         }
 
-        Text = parts[0];
-        PartOfSpeech = pos[0].ToPartOfSpeech();
-        PartOfSpeechSection1 = pos[1].ToPartOfSpeechSection();
-        PartOfSpeechSection2 = pos[2].ToPartOfSpeechSection();
-        PartOfSpeechSection3 = pos[3].ToPartOfSpeechSection();
-        NormalizedForm = parts[2];
-        DictionaryForm = parts[3];
-        Reading = parts[5];
+        PartOfSpeech = posSpan[..commaPositions[0]].ToString().ToPartOfSpeech();
+        PartOfSpeechSection1 = posSpan[(commaPositions[0] + 1)..commaPositions[1]].ToString().ToPartOfSpeechSection();
+        PartOfSpeechSection2 = posSpan[(commaPositions[1] + 1)..commaPositions[2]].ToString().ToPartOfSpeechSection();
+        PartOfSpeechSection3 = (commaCount >= 4
+            ? posSpan[(commaPositions[2] + 1)..commaPositions[3]]
+            : posSpan[(commaPositions[2] + 1)..]).ToString().ToPartOfSpeechSection();
+
+        // Extract remaining fields
+        NormalizedForm = span[(tabPositions[1] + 1)..tabPositions[2]].ToString();
+        DictionaryForm = span[(tabPositions[2] + 1)..tabPositions[3]].ToString();
+        Reading = tabCount >= 6
+            ? span[(tabPositions[4] + 1)..tabPositions[5]].ToString()
+            : span[(tabPositions[4] + 1)..].ToString();
     }
     
     public bool HasPartOfSpeechSection(PartOfSpeechSection section)

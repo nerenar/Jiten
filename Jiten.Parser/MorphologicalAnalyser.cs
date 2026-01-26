@@ -176,27 +176,38 @@ public class MorphologicalAnalyser
             : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "sudachi.json");
 
         var sudachiStopwatch = diagnostics != null ? Stopwatch.StartNew() : null;
-        var rawOutput = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: morphemesOnly ? 'A' : 'B');
-        sudachiStopwatch?.Stop();
+        var mode = morphemesOnly ? 'A' : 'B';
 
-        if (diagnostics != null)
+        List<WordInfo> allWordInfos;
+
+        // Use streaming when available and not in diagnostics mode
+        if (diagnostics == null && SudachiInterop.StreamingAvailable)
         {
-            diagnostics.Sudachi = new SudachiDiagnostics
-                                  {
-                                      ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds, RawOutput = rawOutput,
-                                      Tokens = ParseSudachiOutputToDiagnosticTokens(rawOutput)
-                                  };
+            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode);
         }
-
-        var output = rawOutput.Split("\n");
-
-        // Parse all WordInfo objects
-        var allWordInfos = new List<WordInfo>();
-        foreach (var line in output)
+        else
         {
-            if (line == "EOS") continue;
-            var wi = new WordInfo(line);
-            if (!wi.IsInvalid) allWordInfos.Add(wi);
+            // Fall back to string-based ProcessText (needed for diagnostics raw output)
+            var rawOutput = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: mode);
+            sudachiStopwatch?.Stop();
+
+            if (diagnostics != null)
+            {
+                diagnostics.Sudachi = new SudachiDiagnostics
+                                      {
+                                          ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds, RawOutput = rawOutput,
+                                          Tokens = ParseSudachiOutputToDiagnosticTokens(rawOutput)
+                                      };
+            }
+
+            var output = rawOutput.Split("\n");
+            allWordInfos = new List<WordInfo>();
+            foreach (var line in output)
+            {
+                if (line == "EOS") continue;
+                var wi = new WordInfo(line);
+                if (!wi.IsInvalid) allWordInfos.Add(wi);
+            }
         }
 
         // Split by delimiter tokens (if batch)
@@ -239,7 +250,7 @@ public class MorphologicalAnalyser
 
             if (morphemesOnly)
             {
-                results.Add([new SentenceInfo("") { Words = wordInfos.Select(w => (w, (byte)0, (byte)0)).ToList() }]);
+                results.Add([new SentenceInfo("") { Words = wordInfos.Select(w => (w, 0, 0)).ToList() }]);
                 continue;
             }
 
@@ -693,6 +704,15 @@ public class MorphologicalAnalyser
         return sb.ToString();
     }
 
+    private static string BuildCandidateReading(List<WordInfo> words, int lookback, string suffixReading)
+    {
+        var sb = new StringBuilder();
+        for (int j = words.Count - lookback; j < words.Count; j++)
+            sb.Append(words[j].Reading);
+        sb.Append(suffixReading);
+        return sb.ToString();
+    }
+
     private static void RemoveLastN(List<WordInfo> list, int n)
     {
         for (int j = 0; j < n; j++)
@@ -702,6 +722,7 @@ public class MorphologicalAnalyser
     private static bool TryCombineWithLookback(
         List<WordInfo> result,
         string suffix,
+        string suffixReading,
         Deconjugator deconj,
         Func<HashSet<DeconjugationForm>, bool> validator,
         out WordInfo? combined)
@@ -752,8 +773,13 @@ public class MorphologicalAnalyser
             if (validator(forms))
             {
                 var baseWord = result[^lookback];
+                var candidateReading = BuildCandidateReading(result, lookback, suffixReading);
                 RemoveLastN(result, lookback);
-                combined = new WordInfo(baseWord) { Text = candidateText, PartOfSpeech = PartOfSpeech.Verb };
+                combined = new WordInfo(baseWord)
+                {
+                    Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
+                    NormalizedForm = candidateText, Reading = WanaKana.ToHiragana(candidateReading)
+                };
                 return true;
             }
         }
@@ -788,7 +814,11 @@ public class MorphologicalAnalyser
                 if (NCompoundSuffixes.Contains(remainder) || NCompoundSuffixes.Any(s => remainder.StartsWith(s)))
                 {
                     split.Add(CreateNToken());
-                    split.Add(new WordInfo(word) { Text = remainder });
+                    split.Add(new WordInfo(word)
+                    {
+                        Text = remainder, DictionaryForm = remainder,
+                        NormalizedForm = remainder, Reading = remainder
+                    });
                     continue;
                 }
             }
@@ -801,7 +831,11 @@ public class MorphologicalAnalyser
                 if (DaCompoundSuffixes.Contains(remainder))
                 {
                     split.Add(CreateDaToken());
-                    split.Add(new WordInfo(word) { Text = remainder, DictionaryForm = remainder });
+                    split.Add(new WordInfo(word)
+                    {
+                        Text = remainder, DictionaryForm = remainder,
+                        NormalizedForm = remainder, Reading = remainder
+                    });
                     continue;
                 }
             }
@@ -811,8 +845,8 @@ public class MorphologicalAnalyser
             {
                 split.Add(new WordInfo(word)
                           {
-                              Text = "そう", DictionaryForm = "そう", PartOfSpeech = PartOfSpeech.Auxiliary,
-                              PartOfSpeechSection1 = PartOfSpeechSection.AuxiliaryVerbStem
+                              Text = "そう", DictionaryForm = "そう", NormalizedForm = "そう", Reading = "そう",
+                              PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.AuxiliaryVerbStem
                           });
                 split.Add(CreateDaToken());
                 continue;
@@ -840,7 +874,12 @@ public class MorphologicalAnalyser
                 var candidateText = current.Text + split[i + 1].Text;
                 if (IsNdaVerbForm(deconj.Deconjugate(NormalizeToHiragana(candidateText))))
                 {
-                    result.Add(new WordInfo(current) { Text = candidateText, PartOfSpeech = PartOfSpeech.Verb });
+                    var candidateReading = WanaKana.ToHiragana(current.Reading + split[i + 1].Reading);
+                    result.Add(new WordInfo(current)
+                    {
+                        Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
+                        NormalizedForm = candidateText, Reading = candidateReading
+                    });
                     i++;
                     continue;
                 }
@@ -857,7 +896,8 @@ public class MorphologicalAnalyser
                     current.DictionaryForm is not "ぬ" and not "の" and not "ん")
                 {
                     var suffix = "ん" + split[i + 1].Text;
-                    if (TryCombineWithLookback(result, suffix, deconj, IsNdaVerbForm, out var combinedWord))
+                    var suffixReading = "ん" + split[i + 1].Reading;
+                    if (TryCombineWithLookback(result, suffix, suffixReading, deconj, IsNdaVerbForm, out var combinedWord))
                     {
                         result.Add(combinedWord!);
                         combined = true;
@@ -868,7 +908,7 @@ public class MorphologicalAnalyser
                 // If んだ/んで didn't match, try negative ん contraction (ませ+ん→ません)
                 // Only for actual negative auxiliary (DictionaryForm = "ぬ"), not explanatory ん
                 if (!combined && current.DictionaryForm == "ぬ" &&
-                    TryCombineWithLookback(result, "ん", deconj, IsAnyVerbForm, out var negativeWord))
+                    TryCombineWithLookback(result, "ん", "ん", deconj, IsAnyVerbForm, out var negativeWord))
                 {
                     // After combining ませ+ん→ません, try to combine preceding verb stem with ません
                     // e.g., [し, ませ] + ん → [しません]
@@ -883,6 +923,8 @@ public class MorphologicalAnalyser
                             result.RemoveAt(result.Count - 1);
                             negativeWord.Text = candidateText;
                             negativeWord.DictionaryForm = verbStem.DictionaryForm;
+                            negativeWord.NormalizedForm = candidateText;
+                            negativeWord.Reading = WanaKana.ToHiragana(verbStem.Reading + negativeWord.Reading);
                         }
                     }
 
@@ -1202,20 +1244,6 @@ public class MorphologicalAnalyser
         return newList;
     }
 
-    private static readonly HashSet<PartOfSpeech> InflectableBasePOS =
-    [
-        PartOfSpeech.Verb,
-        PartOfSpeech.IAdjective,
-        PartOfSpeech.NaAdjective
-    ];
-
-    private static readonly HashSet<PartOfSpeech> InflectionPartPOS =
-    [
-        PartOfSpeech.Auxiliary,
-        PartOfSpeech.Suffix,
-        PartOfSpeech.Particle
-    ];
-
     /// <summary>
     /// Combines inflected verb/adjective forms by verifying with the Deconjugator.
     /// Uses a forward-rolling strategy to handle suffixes that change the dictionary base (e.g. わかる + かね → わかりかねる).
@@ -1227,13 +1255,25 @@ public class MorphologicalAnalyser
         var deconjugator = Deconjugator.Instance;
         var result = new List<WordInfo>(wordInfos.Count);
 
+        // Local memoization cache for deconjugation results within this pass
+        var deconjCache = new Dictionary<string, HashSet<DeconjugationForm>>(StringComparer.Ordinal);
+        HashSet<DeconjugationForm> CachedDeconjugate(string hiragana)
+        {
+            if (!deconjCache.TryGetValue(hiragana, out var forms))
+            {
+                forms = deconjugator.Deconjugate(hiragana);
+                deconjCache[hiragana] = forms;
+            }
+            return forms;
+        }
+
         for (int i = 0; i < wordInfos.Count; i++)
         {
             var currentWord = new WordInfo(wordInfos[i]);
 
             // Check if potential base for inflection
             // Exclude AuxiliaryVerbStem words (みたい, そう, etc.) as they are grammatical suffixes, not standalone inflectable words
-            bool isBase = (InflectableBasePOS.Contains(currentWord.PartOfSpeech) ||
+            bool isBase = (PosMapper.IsInflectableBase(currentWord.PartOfSpeech) ||
                            currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru))
                           && currentWord.NormalizedForm != "物"
                           && !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
@@ -1300,7 +1340,7 @@ public class MorphologicalAnalyser
                     break;
 
                 // Check if valid inflection part
-                bool isValidPart = InflectionPartPOS.Contains(nextWord.PartOfSpeech) ||
+                bool isValidPart = PosMapper.IsInflectionPart(nextWord.PartOfSpeech) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) ||
@@ -1312,7 +1352,7 @@ public class MorphologicalAnalyser
                 {
                     string stealCandidate = currentWord.Text + "そう";
                     string stealHiragana = KanaNormalizer.Normalize(WanaKana.ToHiragana(stealCandidate));
-                    var stealForms = deconjugator.Deconjugate(stealHiragana);
+                    var stealForms = CachedDeconjugate(stealHiragana);
 
                     string stealTarget = currentPOS == PartOfSpeech.Noun
                         ? KanaNormalizer.Normalize(WanaKana.ToHiragana(currentDictForm)) + "する"
@@ -1348,7 +1388,7 @@ public class MorphologicalAnalyser
 
                 string candidateText = currentWord.Text + nextWord.Text;
                 string candidateHiragana = KanaNormalizer.Normalize(WanaKana.ToHiragana(candidateText));
-                var forms = deconjugator.Deconjugate(candidateHiragana);
+                var forms = CachedDeconjugate(candidateHiragana);
 
                 bool merged = false;
                 string? newDictForm = null;
@@ -2004,108 +2044,99 @@ public class MorphologicalAnalyser
 
     private List<SentenceInfo> SplitIntoSentences(string text, List<WordInfo> wordInfos)
     {
-        var sentences = new List<SentenceInfo>();
+        // Normalise text - remove line breaks for consistent sentence boundaries
+        text = text.Replace("\r", "").Replace("\n", "");
 
+        // Phase 1: Build sentences AND track their start positions in the normalised text
+        // This allows O(1) sentence lookup by position instead of repeated IndexOf calls
+        var sentenceData = new List<(SentenceInfo info, int startPos)>();
         var sb = new StringBuilder();
         bool seenEnder = false;
-
-        // Need a flat text for the sentence to corresponds if they're cut between 2 lines
-        text = text.Replace("\r", "").Replace("\n", "");
+        int sentenceStartPos = 0;
 
         for (int i = 0; i < text.Length; i++)
         {
             char current = text[i];
             sb.Append(current);
 
-            // Detect if sentence ender was seen
             if (_sentenceEnders.Contains(current))
             {
                 seenEnder = true;
                 continue;
             }
 
-            // Handle possible multiple enders in a row
             if (seenEnder)
             {
                 if (_sentenceEnders.Contains(current))
                     continue;
 
-                // Flush the sentence and append the character to the next one instead
-                var lastCharacter = sb[^1];
-                sentences.Add(new SentenceInfo(sb.ToString(0, sb.Length - 1)));
+                // Flush sentence (without the last character which belongs to next)
+                var sentenceText = sb.ToString(0, sb.Length - 1);
+                sentenceData.Add((new SentenceInfo(sentenceText), sentenceStartPos));
+
+                // Next sentence starts at current character position
+                sentenceStartPos = i;
                 sb.Clear();
-                sb.Append(lastCharacter);
+                sb.Append(current);
                 seenEnder = false;
             }
         }
 
-        // Handle leftover buffer
         if (sb.Length > 0)
         {
-            sentences.Add(new SentenceInfo(sb.ToString()));
+            sentenceData.Add((new SentenceInfo(sb.ToString()), sentenceStartPos));
         }
 
-        int currentSentenceIndex = 0;
-        int currentCharIndex = 0;
+        if (sentenceData.Count == 0)
+            return [];
+
+        // Phase 2: Assign words using linear position tracking
+        // Instead of O(n*m) repeated IndexOf per sentence, we do O(n+m):
+        // - One IndexOf per word in the global text (O(n) total across all words)
+        // - O(1) sentence lookup per word using position boundaries
+        int globalPos = 0;
+        int sentenceIdx = 0;
+
         foreach (var word in wordInfos)
         {
             if (string.IsNullOrEmpty(word.Text) || word.PartOfSpeech == PartOfSpeech.BlankSpace)
                 continue;
 
-            bool wordAssigned = false;
-            while (currentSentenceIndex < sentences.Count && !wordAssigned)
+            // Find word in the global text starting from current position
+            int wordPos = text.IndexOf(word.Text, globalPos, StringComparison.Ordinal);
+            if (wordPos < 0)
+                continue;
+
+            // Advance to the correct sentence based on word position
+            while (sentenceIdx < sentenceData.Count - 1)
             {
-                var sentence = sentences[currentSentenceIndex];
-                int wordIndex = sentence.Text.IndexOf(word.Text, currentCharIndex, StringComparison.Ordinal);
-
-                if (wordIndex >= 0)
-                {
-                    currentCharIndex = wordIndex + word.Text.Length;
-                    sentences[currentSentenceIndex].Words.Add((word, (byte)wordIndex, (byte)word.Text.Length));
-                    wordAssigned = true;
-                }
-                else
-                {
-                    // Word not found, check if it spans across to the next sentence
-                    if (currentSentenceIndex + 1 < sentences.Count)
-                    {
-                        var remainingTextInCurrentSentence = currentCharIndex < sentence.Text.Length
-                            ? sentence.Text[currentCharIndex..]
-                            : string.Empty;
-                        var nextSentence = sentences[currentSentenceIndex + 1];
-
-                        for (int i = 1; i < word.Text.Length; i++)
-                        {
-                            string part1 = word.Text[..i];
-                            string part2 = word.Text[i..];
-                            if (!remainingTextInCurrentSentence.EndsWith(part1) || !nextSentence.Text.StartsWith(part2)) continue;
-
-                            // Word spans sentences, merge them
-                            sentence.Text += nextSentence.Text;
-                            sentences.RemoveAt(currentSentenceIndex + 1);
-
-                            // Retry finding the word in the merged sentence
-                            wordIndex = sentence.Text.IndexOf(word.Text, currentCharIndex, StringComparison.Ordinal);
-                            if (wordIndex >= 0)
-                            {
-                                currentCharIndex = wordIndex + word.Text.Length;
-                                sentence.Words.Add((word, (byte)wordIndex, (byte)word.Text.Length));
-                                wordAssigned = true;
-                            }
-
-                            break;
-                        }
-                    }
-
-                    if (wordAssigned) continue;
-
-                    currentSentenceIndex++;
-                    currentCharIndex = 0;
-                }
+                int nextSentenceStart = sentenceData[sentenceIdx + 1].startPos;
+                if (wordPos < nextSentenceStart)
+                    break;
+                sentenceIdx++;
             }
+
+            var (sentence, sentenceStart) = sentenceData[sentenceIdx];
+            int sentenceEnd = sentenceStart + sentence.Text.Length;
+            int wordEnd = wordPos + word.Text.Length;
+
+            // Handle words that span sentence boundaries - merge sentences
+            while (wordEnd > sentenceEnd && sentenceIdx + 1 < sentenceData.Count)
+            {
+                var nextSentence = sentenceData[sentenceIdx + 1].info;
+                sentence.Text += nextSentence.Text;
+                sentenceData.RemoveAt(sentenceIdx + 1);
+                sentenceEnd = sentenceStart + sentence.Text.Length;
+            }
+
+            // Calculate position within the sentence and add word
+            int posInSentence = wordPos - sentenceStart;
+            sentence.Words.Add((word, posInSentence, word.Text.Length));
+
+            globalPos = wordEnd;
         }
 
-        return sentences;
+        return sentenceData.Select(s => s.info).ToList();
     }
 
     #region Diagnostics Helpers

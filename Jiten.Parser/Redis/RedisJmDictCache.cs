@@ -17,12 +17,11 @@ public class RedisJmDictCache : IJmDictCache
 
     // Semaphore to limit concurrent database access
     private static readonly SemaphoreSlim DbSemaphore = new SemaphoreSlim(10, 10);
-    private static readonly Random Jitter = new Random();
+    // Use Random.Shared for thread-safe jitter (Random is not thread-safe)
 
     public RedisJmDictCache(IConfiguration configuration, IDbContextFactory<JitenDbContext> contextFactory)
     {
-        var connection = ConnectionMultiplexer.Connect(configuration.GetConnectionString("Redis")!);
-        _redisDb = connection.GetDatabase();
+        _redisDb = RedisConnectionManager.GetDatabase(configuration);
         _contextFactory = contextFactory;
     }
 
@@ -244,13 +243,13 @@ public class RedisJmDictCache : IJmDictCache
                         catch (Npgsql.PostgresException pgEx) when (pgEx.SqlState == "53300" && retry < maxRetries - 1)
                         {
                             // Connection limit reached, wait with exponential backoff before retrying
-                            var backoffMs = (int)Math.Pow(2, retry) * 100 + Jitter.Next(50);
+                            var backoffMs = (int)Math.Pow(2, retry) * 100 + Random.Shared.Next(50);
                             await Task.Delay(backoffMs);
                         }
                         catch when (retry < maxRetries - 1)
                         {
                             // For other transient errors, also retry with backoff
-                            var backoffMs = (int)Math.Pow(2, retry) * 200 + Jitter.Next(100);
+                            var backoffMs = (int)Math.Pow(2, retry) * 200 + Random.Shared.Next(100);
                             await Task.Delay(backoffMs);
                         }
                     }

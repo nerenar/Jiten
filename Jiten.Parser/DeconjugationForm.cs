@@ -32,10 +32,14 @@ public class DeconjugationForm
             hash.Add(p, StringComparer.Ordinal);
         }
 
+        // Use XOR for SeenText since HashSet iteration order is non-deterministic
+        // but Equals uses SetEquals (order-independent). XOR is commutative.
+        int seenTextHash = 0;
         foreach (var st in SeenText)
         {
-            hash.Add(st, StringComparer.Ordinal);
+            seenTextHash ^= StringComparer.Ordinal.GetHashCode(st);
         }
+        hash.Add(seenTextHash);
 
         _hashCode = hash.ToHashCode();
     }

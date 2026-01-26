@@ -159,4 +159,10 @@ public class CliOptions
 
     [Option(longName: "import-deck-difficulty", Required = false, HelpText = "Import precomputed deck difficulty from a directory of JSON files named [DeckId].json.")]
     public string? ImportDeckDifficulty { get; set; }
+
+    [Option(longName: "benchmark", Required = false, HelpText = "Run benchmark on txt files in a directory.")]
+    public string? Benchmark { get; set; }
+
+    [Option(longName: "benchmark-warmup", Required = false, Default = true, HelpText = "Run a warmup parse before benchmarking (default: true).")]
+    public bool BenchmarkWarmup { get; set; }
 }

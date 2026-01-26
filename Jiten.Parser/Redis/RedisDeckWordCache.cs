@@ -12,8 +12,7 @@ public class RedisDeckWordCache : IDeckWordCache
 
     public RedisDeckWordCache(IConfiguration configuration)
     {
-        var connection = ConnectionMultiplexer.Connect(configuration.GetConnectionString("Redis")!);
-        _redisDb = connection.GetDatabase();
+        _redisDb = RedisConnectionManager.GetDatabase(configuration);
     }
 
     private string BuildRedisKey(DeckWordCacheKey key)

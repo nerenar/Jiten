@@ -40,6 +40,7 @@ public class Program
         var wordSetCommands = new WordSetCommands(context);
         var mlCommands = new MlCommands(context);
         var metadataCommands = new MetadataCommands();
+        var benchmarkCommands = new BenchmarkCommands(context);
 
         // Import commands
         if (options.Import)
@@ -215,6 +216,12 @@ public class Program
         if (!string.IsNullOrEmpty(options.ImportDeckDifficulty))
         {
             await mlCommands.ImportDeckDifficulty(options.ImportDeckDifficulty);
+        }
+
+        // Benchmark commands
+        if (!string.IsNullOrEmpty(options.Benchmark))
+        {
+            await benchmarkCommands.RunBenchmark(options);
         }
     }
 }
