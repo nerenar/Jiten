@@ -94,6 +94,7 @@
   }>({ targetDeckId: null, targetTitle: '', relationshipType: null });
   const fetchingDeckTitle = ref(false);
   const showRecomputeDifficultyDialog = ref(false);
+  const showReaggregateDifficultyDialog = ref(false);
 
   const relationshipTypeOptions = [
     { label: 'Sequel', value: DeckRelationshipType.Sequel },
@@ -549,6 +550,29 @@
         life: 5000,
       });
       console.error('Error recomputing difficulty:', error);
+    }
+  }
+
+  async function reaggregateParentDifficulty() {
+    try {
+      await $api(`/admin/reaggregate-parent-difficulty/${mediaId}`, {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Queued difficulty reaggregation from children',
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to queue difficulty reaggregation',
+        life: 5000,
+      });
+      console.error('Error reaggregating difficulty:', error);
     }
   }
 
@@ -1045,6 +1069,16 @@
           </template>
         </Dialog>
 
+        <!-- Reaggregate Parent Difficulty Confirmation Dialog -->
+        <Dialog v-model:visible="showReaggregateDifficultyDialog" header="Confirm Reaggregate Difficulty" :modal="true" class="w-full md:w-96">
+          <p>Are you sure you want to reaggregate the difficulty for this deck from its children?</p>
+          <p class="text-sm text-gray-500 mt-2">This will recalculate the parent difficulty using the existing children's difficulty values without calling the external API.</p>
+          <template #footer>
+            <Button label="Cancel" severity="secondary" text @click="showReaggregateDifficultyDialog = false" />
+            <Button label="Reaggregate" @click="reaggregateParentDifficulty(); showReaggregateDifficultyDialog = false" />
+          </template>
+        </Dialog>
+
         <!-- Add Relationship Dialog -->
         <Dialog v-model:visible="showAddRelationshipDialog" header="Add Relationship" :modal="true" class="w-full md:w-1/2">
           <div class="p-fluid">
@@ -1254,6 +1288,11 @@
           <Button label="Update" class="p-button-lg p-button-success" @click="showRecomputeDifficultyDialog = true">
             <Icon name="material-symbols-light:calculate" size="1.5em" />
             Recompute Difficulty
+          </Button>
+
+          <Button label="Reaggregate" class="p-button-lg p-button-success" @click="showReaggregateDifficultyDialog = true">
+            <Icon name="material-symbols-light:family-history" size="1.5em" />
+            Reaggregate from Children
           </Button>
         </div>
       </div>

@@ -716,6 +716,29 @@ public partial class AdminController(
         return Ok(new { Message = $"Queued difficulty reaggregation for {parentDecks.Count} parent decks", Count = parentDecks.Count });
     }
 
+    /// <summary>
+    /// Reaggregate a single parent deck's difficulty from its children
+    /// </summary>
+    [HttpPost("reaggregate-parent-difficulty/{deckId}")]
+    public async Task<IActionResult> ReaggregateParentDifficulty(int deckId)
+    {
+        var deck = await dbContext.Decks
+            .Include(d => d.Children)
+            .FirstOrDefaultAsync(d => d.DeckId == deckId);
+
+        if (deck == null)
+            return NotFound(new { Message = "Deck not found" });
+
+        if (!deck.Children.Any())
+            return BadRequest(new { Message = "Deck has no children to aggregate from" });
+
+        backgroundJobs.Enqueue<DifficultyComputationJob>(
+            job => job.ReaggregateParentDifficulty(deckId));
+
+        logger.LogInformation("Admin queued difficulty reaggregation for deck {DeckId}", deckId);
+        return Ok(new { Message = "Queued difficulty reaggregation", DeckId = deckId });
+    }
+
     [HttpGet("issues")]
     public async Task<IActionResult> GetIssues()
     {
