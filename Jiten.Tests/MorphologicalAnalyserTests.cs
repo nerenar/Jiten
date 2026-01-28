@@ -538,6 +538,36 @@ public class MorphologicalAnalyserTests
     [InlineData("外出ない", new[] { "外", "出ない" })]
     [InlineData("家出なかった", new[] { "家", "出なかった" })]
     [InlineData("普通は驚いたり恐がったり無視したりするものなのに", new[] { "普通", "は", "驚いたり", "恐がったり", "無視したり", "する", "もの", "なのに" })]
+    // Vowel elongation tests - verb + う elongation
+    // Pattern 1: Token ending in るう misparsed as adjective ウ音便 (e.g., かるう → 軽い)
+    [InlineData("ぶつかるう", new[] { "ぶつかる", "う" })]  // ぶつ + かるう → ぶつかる + う
+    [InlineData("とまるう", new[] { "とまる", "う" })]      // と + まるう → とまる + う
+    // Pattern 2: Standalone るう token misparsed as name
+    [InlineData("わかるう", new[] { "わかる", "う" })]      // わか + るう → わかる + う
+    [InlineData("やるう", new[] { "やる", "う" })]          // や + るう → やる + う
+    [InlineData("あたるう", new[] { "あたる", "う" })]      // あた + るう → あたる + う
+    [InlineData("はしるう", new[] { "はしる", "う" })]      // はし + るう → はしる + う
+    // Vowel elongation tests - verb past tense + あ elongation
+    // Pattern 3: Token + たあ misparsed as particle と
+    [InlineData("おきたあ", new[] { "おきた", "あ" })]      // おき + たあ → おきた + あ (past of 起きる)
+    [InlineData("でたあ", new[] { "でた", "あ" })]          // で + たあ → でた + あ (past of 出る)
+    [InlineData("ねたあ", new[] { "ねた", "あ" })]          // ね + たあ → ねた + あ (past of 寝る)
+    // Pattern 4: Token ending in た + ああ where token is misparsed as non-verb
+    [InlineData("いきたああ", new[] { "いきた", "ああ" })]  // いきた (nominal adj) + ああ → いきた (verb past) + ああ
+    // Vowel elongation tests - verb + ー (long vowel mark)
+    // Pattern 5: Verb + separate ー token (handled by RepairLongVowelTokens in Parser)
+    [InlineData("ぶつかるー", new[] { "ぶつかる" })]        // ぶつ + か + る + ー → ぶつかる (ー stripped)
+    [InlineData("わかるー", new[] { "わかる" })]            // わか + る + ー → わかる (ー stripped)
+    // Emphatic っ tests - sokuon at clause boundaries causing misparses
+    // っ is filtered as SupplementarySymbol, so it won't appear in output
+    [InlineData("止まらないっ", new[] { "止まらない" })]    // Sudachi misparsed as 止まら + な + いっ (行く)
+    [InlineData("これでどうですかっ", new[] { "これ", "で", "どう", "ですか" })]  // Sudachi misparsed で + すかっ
+    [InlineData("だめっ", new[] { "だめ" })]                // Simple case - っ should be separated
+    [InlineData("行くっ", new[] { "行く" })]                // Verb + emphatic っ
+    [InlineData("止まらないっ！", new[] { "止まらない" })]  // With punctuation
+    [InlineData("だめっ、それは違う", new[] { "だめ", "それ", "は", "違う" })]  // Mid-sentence emphatic っ
+    [InlineData("しょうがないな", new[] { "しょうがない", "な" })]
+    [InlineData("この手紙を書いた", new[] { "この", "手紙", "を", "書いた" })]
     public async Task SegmentationTest(string text, string[] expectedResult)
     {
         (await Parse(text)).Should().Equal(expectedResult);

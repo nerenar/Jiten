@@ -33,6 +33,8 @@ public class MorphologicalAnalyser
         "出す", // start (suddenly)
         "かける", // be about to / half-way
         "いたす", // humble/polite form of する
+        "いただく", // humble auxiliary (お〜いただく, 〜ていただく)
+        "頂く", // kanji form of いただく
     ];
 
     // Mapping from auxiliary verb dictionary form to its stem for splitting compound tokens
@@ -257,6 +259,7 @@ public class MorphologicalAnalyser
             wordInfos = TrackStage(diagnostics, "SplitCompoundAuxiliaryVerbs", wordInfos, SplitCompoundAuxiliaryVerbs);
             wordInfos = TrackStage(diagnostics, "SplitTatteParticle", wordInfos, SplitTatteParticle);
             wordInfos = TrackStage(diagnostics, "RepairNTokenisation", wordInfos, RepairNTokenisation);
+            wordInfos = TrackStage(diagnostics, "RepairVowelElongation", wordInfos, RepairVowelElongation);
             wordInfos = TrackStage(diagnostics, "ProcessSpecialCases", wordInfos, ProcessSpecialCases);
             wordInfos = TrackStage(diagnostics, "CombineInflections", wordInfos, CombineInflections);
             wordInfos = TrackStage(diagnostics, "CombineAmounts", wordInfos, CombineAmounts);
@@ -308,6 +311,12 @@ public class MorphologicalAnalyser
                           wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral)))
                 word.PartOfSpeech = PartOfSpeech.Counter;
 
+            // 家 followed by a case particle should be the noun いえ, not the suffix け
+            if (word is { Text: "家", PartOfSpeech: PartOfSpeech.Suffix } &&
+                i + 1 < wordInfos.Count &&
+                wordInfos[i + 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "から" or "を" or "が" or "に" or "で" or "へ" or "の" or "は" or "も" })
+                word.PartOfSpeech = PartOfSpeech.Noun;
+
             if (word.Text is "だー" or "だあ")
             {
                 word.Text = "だ";
@@ -318,7 +327,11 @@ public class MorphologicalAnalyser
             // Don't filter if next token is ー (will be handled by RepairLongVowelTokens in Parser)
             bool nextIsLongVowel = i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "ー";
 
-            if (MisparsesRemove.Contains(word.Text) ||
+            // For MisparsesRemove: don't filter single-kana tokens followed by ー (e.g., る + ー could be verb ending)
+            bool shouldFilterMisparse = MisparsesRemove.Contains(word.Text) &&
+                                        !(nextIsLongVowel && word.Text.Length == 1 && WanaKana.IsKana(word.Text));
+
+            if (shouldFilterMisparse ||
                 word.PartOfSpeech == PartOfSpeech.Noun && !nextIsLongVowel && (
                     (word.Text.Length == 1 && WanaKana.IsKana(word.Text)) ||
                     word.Text.Length == 2 && WanaKana.IsKana(word.Text[0].ToString()) && word.Text[1] == 'ー' && word.Text != "バー"
@@ -665,6 +678,116 @@ public class MorphologicalAnalyser
         return result;
     }
 
+    /// <summary>
+    /// Repairs misparses where Sudachi incorrectly splits verb + vowel elongation patterns.
+    /// For example: "ぶつかるう" is misparsed as "ぶつ" (adverb) + "かるう" (adjective 軽い ウ音便)
+    /// but should be "ぶつかる" (verb) + "う" (elongation).
+    ///
+    /// Handles three main patterns:
+    /// 1. Token ending in "るう" (including standalone "るう") → check if prev + current (minus う) is a valid ru-verb
+    /// 2. Token + "たあ" → check if token + "た" deconjugates to a valid verb past tense
+    /// 3. Token (ending in た/だ) + "ああ" → if prev deconjugates as verb past tense, upgrade its part of speech to verb
+    /// </summary>
+    private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2) return wordInfos;
+
+        var deconjugator = Deconjugator.Instance;
+        var result = new List<WordInfo>(wordInfos.Count);
+
+        static WordInfo MakeInterjection(string text) =>
+            new()
+            {
+                Text = text, DictionaryForm = text, NormalizedForm = text, Reading = text, PartOfSpeech = PartOfSpeech.Interjection
+            };
+
+        static bool IsVerbPast(HashSet<DeconjugationForm> forms) =>
+            forms.Any(f => f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && f.Process.Any(p => p == "past"));
+
+        static bool IsRuVerb(HashSet<DeconjugationForm> forms, string expectedDictionaryHiragana) =>
+            forms.Any(f => f.Text == expectedDictionaryHiragana && f.Tags.Any(t => t is "v1" or "v5r"));
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var current = wordInfos[i];
+
+            if (result.Count == 0)
+            {
+                result.Add(current);
+                continue;
+            }
+
+            var prev = result[^1];
+
+            // Pattern 1: Token ending in "るう" that might be a misparsed verb + elongation
+            // e.g., "かるう" could be part of "ぶつかる" + "う"
+            if (current.Text.EndsWith("るう", StringComparison.Ordinal) && current.Text.Length >= 2)
+            {
+                var verbCandidate = prev.Text + current.Text[..^1]; // prev + current minus trailing う
+                var verbHiragana = NormalizeToHiragana(verbCandidate);
+
+                // Check if this forms a valid る-verb by testing negative form deconjugation.
+                // Godan-ru verbs use らない (ぶつかる → ぶつからない), ichidan verbs use ない (食べる → 食べない).
+                // Validate by requiring the deconjugator to recover the exact candidate (hiragana) as v1 or v5r.
+                var isValidRuVerb = verbHiragana.EndsWith("る", StringComparison.Ordinal) &&
+                                    (IsRuVerb(deconjugator.Deconjugate(verbHiragana[..^1] + "ない"), verbHiragana) ||
+                                     IsRuVerb(deconjugator.Deconjugate(verbHiragana[..^1] + "らない"), verbHiragana));
+
+                if (isValidRuVerb)
+                {
+                    // Replace the previous token with the combined verb
+                    result[^1] = new WordInfo(prev)
+                                 {
+                                     Text = verbCandidate, DictionaryForm = verbCandidate, NormalizedForm = verbCandidate,
+                                     Reading = WanaKana.ToHiragana(prev.Reading + current.Text[..^1]), PartOfSpeech = PartOfSpeech.Verb
+                                 };
+                    // Add the elongation う as a separate token
+                    result.Add(MakeInterjection("う"));
+                    continue;
+                }
+            }
+
+            // Pattern 3: Token + "たあ" (often misparsed as particle と)
+            // e.g., "おき" + "たあ" should be "おきた" + "あ" (past of 起きる)
+            if (current.Text == "たあ")
+            {
+                var pastCandidate = prev.Text + "た";
+                var pastHiragana = NormalizeToHiragana(pastCandidate);
+
+                // Check if this forms a valid verb past tense
+                var isValidVerbPast = IsVerbPast(deconjugator.Deconjugate(pastHiragana));
+
+                if (isValidVerbPast)
+                {
+                    result[^1] = new WordInfo(prev) { Text = pastCandidate, Reading = WanaKana.ToHiragana(prev.Reading + "た"), PartOfSpeech = PartOfSpeech.Verb };
+                    result.Add(MakeInterjection("あ"));
+                    continue;
+                }
+            }
+
+            // Pattern 4: Token ending in "た" + "ああ" (interjection)
+            // e.g., "いきた" + "ああ" where いきた is misparsed as nominal adjective
+            if (current.Text == "ああ")
+            {
+                var prevHiragana = NormalizeToHiragana(prev.Text);
+
+                // Check if prev token ending in た is a valid verb past tense
+                if (prevHiragana.EndsWith("た", StringComparison.Ordinal) || prevHiragana.EndsWith("だ", StringComparison.Ordinal))
+                {
+                    if (IsVerbPast(deconjugator.Deconjugate(prevHiragana)) && prev.PartOfSpeech != PartOfSpeech.Verb)
+                    {
+                        result[^1] = new WordInfo(prev) { PartOfSpeech = PartOfSpeech.Verb };
+                        // Keep ああ but as interjection (it already is, so just add it)
+                    }
+                }
+            }
+
+            result.Add(current);
+        }
+
+        return result;
+    }
+
     #region RepairNTokenisation Helpers
 
     private static string NormalizeToHiragana(string text) =>
@@ -985,15 +1108,25 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "べや", $"べ{_stopToken}や");
         text = Regex.Replace(text, "はいい", $"は{_stopToken}いい");
         text = Regex.Replace(text, "元国王", $"元{_stopToken}国王");
-        text = Regex.Replace(text, "なんだろう", $"なん{_stopToken}だろう");
         
-
+        text = Regex.Replace(text, "なんだろう", $"なん{_stopToken}だろう");
+        text = Regex.Replace(text, "一人静かに", $"一人{_stopToken}静かに");
+        
         // Fix Sudachi misparsing いやあんま as いやあん + ま instead of いや + あんま
         text = Regex.Replace(text, "いやあんま", $"いや{_stopToken}あんま");
+
+        // Fix Sudachi misparsing この手紙 as この手 (konote - this kind) + 紙 (suffix)
+        // Should be この + 手紙 (tegami - letter)
+        text = Regex.Replace(text, "この手紙", $"この{_stopToken}手紙");
 
         // Fix Sudachi misparsing 外出/家出 + ない forms as compound noun + adjective
         // Should be 外/家 + 出ない (verb negative) in colloquial speech
         text = Regex.Replace(text, "(外|家)出(ない|なかった|なく)", $"$1{_stopToken}出$2");
+
+        // Fix emphatic っ/ッ at clause boundaries causing Sudachi to misparse
+        // e.g., 止まらないっ！ → Sudachi sees ないっ as な + いっ (行く te-form)
+        // Insert stop token before っ/ッ when followed by punctuation, whitespace, or end of string
+        text = Regex.Replace(text, @"([っッ])(?=[！!？?。、,\s]|$)", $"{_stopToken}$1");
 
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
