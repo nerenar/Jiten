@@ -324,6 +324,9 @@
           Go to Anki > Tools > Add-ons > AnkiConnect > Config and add the following line to webCorsOriginList, "https://jiten.moe" so it looks like the
           following screenshot:
         </p>
+        <p>
+          If you use Brave, please disable Brave Shields for this website. You can do so by clicking on the shield icon at the right of the URL bar.
+        </p>
         <img src="/assets/img/ankiconnect.jpg" alt="Anki Connect Config" class="w-full" />
       </div>
       <div v-if="currentStep == 0">
