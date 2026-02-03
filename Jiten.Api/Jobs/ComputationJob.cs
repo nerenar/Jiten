@@ -17,8 +17,9 @@ public class ComputationJob(
 {
     private static readonly object CoverageComputeLock = new();
     private static readonly HashSet<string> CoverageComputingUserIds = new();
-    private const int CoverageChunkSize = 1024;
-    private const string CoverageWorkMem = "256MB";
+    private const int COVERAGE_CHUNK_SIZE = 1024;
+    private const string COVERAGE_WORK_MEM = "256MB";
+    private static readonly TimeSpan CoverageRetryDelay = TimeSpan.FromSeconds(60);
 
     [Queue("coverage")]
     public async Task DailyUserCoverage()
@@ -47,6 +48,7 @@ public class ComputationJob(
         {
             if (!CoverageComputingUserIds.Add(userId))
             {
+                backgroundJobs.Schedule<ComputationJob>(job => job.ComputeUserCoverage(userId), CoverageRetryDelay);
                 return;
             }
         }
@@ -71,7 +73,7 @@ public class ComputationJob(
             }
 
             await using var transaction = await userContext.Database.BeginTransactionAsync();
-            await userContext.Database.ExecuteSqlRawAsync($"SET LOCAL work_mem = '{CoverageWorkMem}';");
+            await userContext.Database.ExecuteSqlRawAsync($"SET LOCAL work_mem = '{COVERAGE_WORK_MEM}';");
             await userContext.UserCoverageChunks.Where(uc => uc.UserId == userId).ExecuteDeleteAsync();
             await RecomputeUserCoverageChunks(userContext, userId, computedAt);
             await transaction.CommitAsync();
@@ -106,11 +108,23 @@ public class ComputationJob(
             .Select(s => s.UserId)
             .Distinct();
 
-        var userIds = await fsrsEligible.Union(wordSetEligible).ToListAsync();
+        var userIds = await fsrsEligible.Union(wordSetEligible).Distinct().ToListAsync();
 
+        // Users without any coverage rows need a full compute first; otherwise deck slot updates would make most decks appear as 0.
+        var userIdsWithCoverage = await ctx.UserCoverageChunks
+            .AsNoTracking()
+            .Where(c => userIds.Contains(c.UserId))
+            .Select(c => c.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        var withCoverage = userIdsWithCoverage.ToHashSet();
         foreach (var userId in userIds)
         {
-            await ComputeUserDeckCoverage(userId, deckId);
+            if (!withCoverage.Contains(userId))
+                backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+            else
+                backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserDeckCoverage(userId, deckId));
         }
     }
 
@@ -122,6 +136,7 @@ public class ComputationJob(
         {
             if (!CoverageComputingUserIds.Add(userId))
             {
+                backgroundJobs.Schedule<ComputationJob>(job => job.ComputeUserDeckCoverage(userId, deckId), CoverageRetryDelay);
                 return;
             }
         }
@@ -197,7 +212,7 @@ public class ComputationJob(
             deck_ids AS (
                 SELECT generate_series(
                     0,
-                    ((SELECT max_deck_id FROM deck_bounds) / {{CoverageChunkSize}} + 1) * {{CoverageChunkSize}} - 1
+                    ((SELECT max_deck_id FROM deck_bounds) / {{COVERAGE_CHUNK_SIZE}} + 1) * {{COVERAGE_CHUNK_SIZE}} - 1
                 )::int AS deck_id
             ),
             fsrs_mature AS (
@@ -284,25 +299,25 @@ public class ComputationJob(
                 LEFT JOIN deck_cov dc ON dc.deck_id = di.deck_id
             ),
             flat AS (
-                SELECT (deck_id / {{CoverageChunkSize}})::int AS chunk_index,
+                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
                        deck_id,
                        {{(short)UserCoverageMetric.MatureCoverage}}::smallint AS metric,
                        m_cov AS val
                 FROM deck_values
                 UNION ALL
-                SELECT (deck_id / {{CoverageChunkSize}})::int AS chunk_index,
+                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
                        deck_id,
                        {{(short)UserCoverageMetric.MatureUniqueCoverage}}::smallint AS metric,
                        m_ucov AS val
                 FROM deck_values
                 UNION ALL
-                SELECT (deck_id / {{CoverageChunkSize}})::int AS chunk_index,
+                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
                        deck_id,
                        {{(short)UserCoverageMetric.YoungCoverage}}::smallint AS metric,
                        y_cov AS val
                 FROM deck_values
                 UNION ALL
-                SELECT (deck_id / {{CoverageChunkSize}})::int AS chunk_index,
+                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
                        deck_id,
                        {{(short)UserCoverageMetric.YoungUniqueCoverage}}::smallint AS metric,
                        y_ucov AS val
@@ -416,18 +431,18 @@ public class ComputationJob(
         DateTime computedAt)
     {
         var userGuid = Guid.Parse(userId);
-        var chunkIndex = deckId / CoverageChunkSize;
-        var slot = (deckId % CoverageChunkSize) + 1; // 1-based for PostgreSQL array subscripts
+        var chunkIndex = deckId / COVERAGE_CHUNK_SIZE;
+        var slot = (deckId % COVERAGE_CHUNK_SIZE) + 1; // 1-based for PostgreSQL array subscripts
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
 
         var ensureSql = $$"""
             INSERT INTO "user"."UserCoverageChunks" ("UserId", "Metric", "ChunkIndex", "Values", "ComputedAt")
             VALUES
-                ({0}::uuid, {{(short)UserCoverageMetric.MatureCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{CoverageChunkSize}}]), {2}::timestamptz),
-                ({0}::uuid, {{(short)UserCoverageMetric.MatureUniqueCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{CoverageChunkSize}}]), {2}::timestamptz),
-                ({0}::uuid, {{(short)UserCoverageMetric.YoungCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{CoverageChunkSize}}]), {2}::timestamptz),
-                ({0}::uuid, {{(short)UserCoverageMetric.YoungUniqueCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{CoverageChunkSize}}]), {2}::timestamptz)
+                ({0}::uuid, {{(short)UserCoverageMetric.MatureCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{COVERAGE_CHUNK_SIZE}}]), {2}::timestamptz),
+                ({0}::uuid, {{(short)UserCoverageMetric.MatureUniqueCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{COVERAGE_CHUNK_SIZE}}]), {2}::timestamptz),
+                ({0}::uuid, {{(short)UserCoverageMetric.YoungCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{COVERAGE_CHUNK_SIZE}}]), {2}::timestamptz),
+                ({0}::uuid, {{(short)UserCoverageMetric.YoungUniqueCoverage}}::smallint, {1}::int, array_fill(0::smallint, ARRAY[{{COVERAGE_CHUNK_SIZE}}]), {2}::timestamptz)
             ON CONFLICT ("UserId", "Metric", "ChunkIndex") DO NOTHING;
             """;
 

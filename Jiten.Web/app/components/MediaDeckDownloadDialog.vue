@@ -2,7 +2,6 @@
   import { type Deck, DeckDownloadType, DeckFormat, DeckOrder } from '~/types';
   import { SelectButton, Select, Slider, InputNumber, Checkbox, Dialog, Button, ProgressSpinner } from 'primevue';
   import { debounce } from 'perfect-debounce';
-  import { useApiFetch } from '~/composables/useApiFetch';
   import { useAuthStore } from '~/stores/authStore';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
@@ -123,6 +122,14 @@
   // Stats
   const currentSliderMax = ref(props.deck.uniqueWordCount);
   const debouncedCurrentCardAmount = ref(0);
+  const accurateCardAmount = ref<number | null>(null);
+  const isFrequencyCountLoading = ref(false);
+  const isOccurrenceCountLoading = ref(false);
+  const isAccurateCountLoading = ref(false);
+  const minCountSpinnerMs = 200;
+  let frequencyCountLoadingStartedAt = 0;
+  let occurrenceCountLoadingStartedAt = 0;
+  let accurateCountLoadingStartedAt = 0;
 
   // Occurrence Count mode
   const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
@@ -138,7 +145,14 @@
     return Math.floor(props.deck.uniqueWordCount * (targetPercentage.value / 100));
   });
 
-  const currentCardAmount = computed(() => {
+  const requiresAccurateCardAmount = computed(() => {
+    if (downloadMode.value === 'target') return true;
+    if (excludeKana.value) return true;
+    if (authStore.isAuthenticated && (excludeMatureMasteredBlacklisted.value || excludeAllTrackedWords.value)) return true;
+    return false;
+  });
+
+  const fallbackCardAmount = computed(() => {
     if (downloadMode.value === 'target') return targetPercentageCardCount.value;
     if (downloadMode.value === 'occurrence') return occurrenceCount.value;
 
@@ -152,10 +166,21 @@
     return 0;
   });
 
+  const currentCardAmount = computed(() => {
+    if (requiresAccurateCardAmount.value) return accurateCardAmount.value ?? fallbackCardAmount.value;
+    return fallbackCardAmount.value;
+  });
+
+  const isCountLoading = computed(() => isFrequencyCountLoading.value || isOccurrenceCountLoading.value || isAccurateCountLoading.value);
+
   // --- Lifecycle & Watches ---
   onMounted(() => {
     if (!frequencyRange.value) {
       frequencyRange.value = [0, Math.min(props.deck.uniqueWordCount, 5000)];
+    }
+
+    if (localVisible.value && requiresAccurateCardAmount.value) {
+      fetchAccurateCardAmount();
     }
   });
 
@@ -202,6 +227,15 @@
   );
 
   watch(
+    () => format.value,
+    (newFormat) => {
+      if (newFormat === DeckFormat.Learn) {
+        excludeMatureMasteredBlacklisted.value = true;
+      }
+    }
+  );
+
+  watch(
     minTargetPercentage,
     (minVal) => {
       if (targetPercentage.value < minVal) {
@@ -213,24 +247,72 @@
 
   let frequencyRequestId = 0;
   const updateDebounced = debounce(async () => {
+    if (!localVisible.value && !props.visible) return;
+    if (requiresAccurateCardAmount.value) return;
+    if (!frequencyRange.value) return;
     const reqId = ++frequencyRequestId;
-    const { data: response } = await useApiFetch<number>(`media-deck/${props.deck.deckId}/vocabulary-count-frequency`, {
-      query: { minFrequency: frequencyRange.value![0], maxFrequency: frequencyRange.value![1] },
-    });
-    if (reqId === frequencyRequestId)
-      debouncedCurrentCardAmount.value = response.value ?? 0;
+    frequencyCountLoadingStartedAt = Date.now();
+    isFrequencyCountLoading.value = true;
+
+    try {
+      const response = await $api<number>(`media-deck/${props.deck.deckId}/vocabulary-count-frequency`, {
+        query: { minFrequency: frequencyRange.value[0], maxFrequency: frequencyRange.value[1] },
+      });
+      if (reqId === frequencyRequestId && typeof response === 'number') {
+        debouncedCurrentCardAmount.value = response;
+      }
+    } catch (err) {
+      console.error('Failed to fetch frequency count:', err);
+    } finally {
+      if (reqId === frequencyRequestId) {
+        const elapsed = Date.now() - frequencyCountLoadingStartedAt;
+        const remaining = minCountSpinnerMs - elapsed;
+        if (remaining > 0) {
+          setTimeout(() => {
+            if (reqId === frequencyRequestId) isFrequencyCountLoading.value = false;
+          }, remaining);
+        } else {
+          isFrequencyCountLoading.value = false;
+        }
+      }
+    }
   }, 500);
 
   let occurrenceRequestId = 0;
   async function fetchOccurrenceCount() {
+    if (!localVisible.value && !props.visible) return;
+    if (requiresAccurateCardAmount.value) return;
     const reqId = ++occurrenceRequestId;
     const query: Record<string, number> = {};
-    if (occurrenceFilterType.value === 'gte') query.minOccurrences = occurrenceThreshold.value;
-    else query.maxOccurrences = occurrenceThreshold.value;
 
-    const { data: response } = await useApiFetch<number>(`media-deck/${props.deck.deckId}/vocabulary-count-occurrences`, { query });
-    if (reqId === occurrenceRequestId)
-      occurrenceCount.value = response.value ?? 0;
+    const threshold = Number(occurrenceThreshold.value);
+    if (!Number.isFinite(threshold) || threshold < 1) return;
+
+    if (occurrenceFilterType.value === 'gte') query.minOccurrences = threshold;
+    else query.maxOccurrences = threshold;
+
+    occurrenceCountLoadingStartedAt = Date.now();
+    isOccurrenceCountLoading.value = true;
+    try {
+      const response = await $api<number>(`media-deck/${props.deck.deckId}/vocabulary-count-occurrences`, { query });
+      if (reqId === occurrenceRequestId && typeof response === 'number') {
+        occurrenceCount.value = response;
+      }
+    } catch (err) {
+      console.error('Failed to fetch occurrence count:', err);
+    } finally {
+      if (reqId === occurrenceRequestId) {
+        const elapsed = Date.now() - occurrenceCountLoadingStartedAt;
+        const remaining = minCountSpinnerMs - elapsed;
+        if (remaining > 0) {
+          setTimeout(() => {
+            if (reqId === occurrenceRequestId) isOccurrenceCountLoading.value = false;
+          }, remaining);
+        } else {
+          isOccurrenceCountLoading.value = false;
+        }
+      }
+    }
   }
   const fetchOccurrenceCountDebounced = debounce(fetchOccurrenceCount, 500);
 
@@ -241,6 +323,39 @@
   watch(() => props.visible, (visible) => {
     if (visible && downloadMode.value === 'occurrence') fetchOccurrenceCount();
   });
+
+  watch(
+    [
+      () => localVisible.value,
+      requiresAccurateCardAmount,
+      downloadMode,
+      downloadType,
+      deckOrder,
+      () => frequencyRange.value?.[0],
+      () => frequencyRange.value?.[1],
+      occurrenceFilterType,
+      occurrenceThreshold,
+      targetPercentage,
+      excludeKana,
+      excludeMatureMasteredBlacklisted,
+      excludeAllTrackedWords,
+    ],
+    () => {
+      if (!localVisible.value) {
+        accurateCardAmount.value = null;
+        isAccurateCountLoading.value = false;
+        return;
+      }
+
+      if (!requiresAccurateCardAmount.value) {
+        accurateCardAmount.value = null;
+        isAccurateCountLoading.value = false;
+        return;
+      }
+
+      fetchAccurateCardAmountDebounced();
+    }
+  );
 
   // --- Helpers ---
   function buildFilterPayload() {
@@ -277,6 +392,63 @@
 
     return payload;
   }
+
+  function buildCountPayload() {
+    const payload = buildFilterPayload();
+    return {
+      format: format.value === DeckFormat.Learn ? DeckFormat.Anki : format.value,
+      downloadType: payload.downloadType,
+      order: payload.order,
+      minFrequency: payload.minFrequency ?? 0,
+      maxFrequency: payload.maxFrequency ?? 0,
+      excludeKana: payload.excludeKana,
+      excludeMatureMasteredBlacklisted: payload.excludeMatureMasteredBlacklisted,
+      excludeAllTrackedWords: payload.excludeAllTrackedWords,
+      excludeExampleSentences: excludeExampleSentences.value,
+      targetPercentage: payload.targetPercentage,
+      minOccurrences: payload.minOccurrences,
+      maxOccurrences: payload.maxOccurrences,
+    };
+  }
+
+  let accurateCountRequestId = 0;
+  const fetchAccurateCardAmount = async (force = false) => {
+    if (!force) {
+      if (!localVisible.value) return;
+      if (!requiresAccurateCardAmount.value) return;
+    }
+
+    const reqId = ++accurateCountRequestId;
+    accurateCountLoadingStartedAt = Date.now();
+    isAccurateCountLoading.value = true;
+    try {
+      const url = `media-deck/${props.deck.deckId}/vocabulary-count`;
+      const response = await $api<number>(url, {
+        method: 'POST',
+        body: buildCountPayload(),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (reqId === accurateCountRequestId) {
+        accurateCardAmount.value = response ?? 0;
+      }
+    } catch (err) {
+      console.error('Failed to fetch accurate card count:', err);
+    } finally {
+      if (reqId === accurateCountRequestId) {
+        const elapsed = Date.now() - accurateCountLoadingStartedAt;
+        const remaining = minCountSpinnerMs - elapsed;
+        if (remaining > 0) {
+          setTimeout(() => {
+            if (reqId === accurateCountRequestId) isAccurateCountLoading.value = false;
+          }, remaining);
+        } else {
+          isAccurateCountLoading.value = false;
+        }
+      }
+    }
+  };
+  const fetchAccurateCardAmountDebounced = debounce(fetchAccurateCardAmount, 500);
 
   // --- Actions ---
   const downloadFile = async () => {
@@ -323,10 +495,15 @@
     }
   };
 
-  const applyLearn = () => {
+  const applyLearn = async () => {
     const stateLabel = learnState.value === 'mastered' ? 'mastered' : 'blacklisted';
+    if (requiresAccurateCardAmount.value) {
+      await fetchAccurateCardAmount(true);
+    }
+
+    const count = currentCardAmount.value;
     confirm.require({
-      message: `This will mark approximately ${currentCardAmount.value} words as ${stateLabel}. Continue?`,
+      message: `This will mark approximately ${count} words as ${stateLabel}. Continue?`,
       header: 'Confirm Vocabulary Update',
       icon: learnState.value === 'blacklisted' ? 'pi pi-exclamation-triangle' : 'pi pi-check-circle',
       acceptClass: learnState.value === 'blacklisted' ? 'p-button-danger' : 'p-button-primary',
@@ -368,9 +545,9 @@
     });
   };
 
-  const onAction = () => {
+  const onAction = async () => {
     if (isLearn.value) {
-      applyLearn();
+      await applyLearn();
     } else {
       downloadFile();
     }
@@ -572,7 +749,10 @@
               >
                 <Checkbox v-model="excludeMatureMasteredBlacklisted" binary class="mt-1" @click.stop />
                 <div>
-                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Exclude Mature, Mastered & Blacklisted Vocabulary</div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    Exclude Mature, Mastered & Blacklisted Vocabulary
+                    <span v-if="isLearn" class="text-gray-500 dark:text-gray-400 font-normal">(overwrite their state)</span>
+                  </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">Removes words that are mature (21+ day review interval), mastered, or blacklisted.</div>
                 </div>
               </div>
@@ -602,8 +782,11 @@
       <!-- FOOTER -->
       <div class="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
         <div class="text-sm text-gray-600 dark:text-gray-300">
-          <span>
-            Result: approx <span class="font-bold text-gray-900 dark:text-gray-100">{{ currentCardAmount }}</span> {{ isLearn ? 'words' : 'cards' }}
+          <span class="inline-flex items-center gap-2">
+            <span>Result: approx</span>
+            <span class="font-bold text-gray-900 dark:text-gray-100">{{ currentCardAmount }}</span>
+            <i v-if="isCountLoading" class="pi pi-spin pi-spinner text-gray-400 dark:text-gray-500 text-xs" />
+            <span>{{ isLearn ? 'words' : 'cards' }}</span>
           </span>
         </div>
         <Button
