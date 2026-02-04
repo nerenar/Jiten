@@ -190,7 +190,7 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           <p
             v-if="wordSet.description"
             class="text-sm mb-4"
-            v-html="autoLinkUrls(wordSet.description)"
+            v-html="sanitiseHtml(autoLinkUrls(wordSet.description))"
           />
           <div class="flex gap-2 flex-wrap">
             <template v-if="!isSubscribed(wordSet.setId)">

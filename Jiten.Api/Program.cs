@@ -565,6 +565,15 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
                             KnownProxies = { IPAddress.Parse("10.0.4.2") }, RequireHeaderSymmetry = false, ForwardLimit = 1
                         });
 
+// Security headers middleware
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    await next();
+});
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Hangfire;
@@ -126,6 +127,10 @@ public partial class AdminController(
                 if (Request.Form.TryGetValue("coverImage", out var coverImageUrlValue) && !string.IsNullOrEmpty(coverImageUrlValue))
                 {
                     var imageUrl = coverImageUrlValue.ToString();
+
+                    if (!IsValidExternalUrl(imageUrl))
+                        return BadRequest("Invalid image URL. IP addresses and internal URLs are not allowed.");
+
                     try
                     {
                         var response = await httpClient.GetAsync(imageUrl);
@@ -1119,5 +1124,45 @@ public partial class AdminController(
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { Message = "Word removal failed", Details = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Validates that a URL is safe for external requests (SSRF protection).
+    /// Blocks IP addresses (decimal, hex, octal), localhost, and internal networks.
+    /// </summary>
+    private static bool IsValidExternalUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return false;
+
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            return false;
+
+        var host = uri.Host;
+
+        // Block localhost variants
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.Equals("127.0.0.1") ||
+            host.Equals("[::1]") ||
+            host.Equals("0.0.0.0"))
+            return false;
+
+        // Try to parse as IP address (catches decimal, hex, octal formats)
+        if (IPAddress.TryParse(host, out var ip))
+        {
+            // Block all IP addresses - only allow domain names
+            return false;
+        }
+
+        // Block hosts that look like IPs (e.g., "2130706433" decimal format)
+        if (long.TryParse(host, out _))
+            return false;
+
+        // Block hex IP format (0x7f000001)
+        if (host.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+            long.TryParse(host[2..], System.Globalization.NumberStyles.HexNumber, null, out _))
+            return false;
+
+        return true;
     }
 }

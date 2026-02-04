@@ -196,7 +196,7 @@ onMounted(() => {
               </div>
             </template>
             <template #content>
-              <p v-if="set.description" v-html="autoLinkUrls(set.description)" />
+              <p v-if="set.description" v-html="sanitiseHtml(autoLinkUrls(set.description))" />
               <p v-else class="text-muted-color italic">No description available.</p>
             </template>
             <template #footer>

@@ -590,8 +590,7 @@
 
           <!-- Description Box (Fixed Min-Height to prevent shift) -->
           <div class="mt-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-3 text-sm text-gray-600 dark:text-gray-300 min-h-[4.5rem] flex items-center">
-            <!-- Using v-html to allow links (e.g. Lapis) -->
-            <p v-html="currentFormatDetails.longDesc" class="leading-relaxed"></p>
+            <p v-html="sanitiseHtml(currentFormatDetails.longDesc)" class="leading-relaxed"></p>
           </div>
         </section>
 

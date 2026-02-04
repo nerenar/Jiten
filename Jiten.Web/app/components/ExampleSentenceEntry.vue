@@ -20,14 +20,15 @@
   const formattedText = computed(() => {
     const { text, wordPosition, wordLength } = props.exampleSentence;
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
-      return text;
+      return sanitiseHtml(text);
     }
 
     const before = text.substring(0, wordPosition).trim();
     const bold = text.substring(wordPosition, wordPosition + wordLength);
     const after = text.substring(wordPosition + wordLength).trim();
 
-    return before + '<span class="text-primary-500 dark:text-primary-500 font-bold">' + bold + '</span>' + after;
+    const html = before + '<span class="text-primary-500 dark:text-primary-500 font-bold">' + bold + '</span>' + after;
+    return sanitiseHtml(html);
   });
 
   const handleReveal = () => {

@@ -332,7 +332,7 @@ function getAvailableActions(card: FsrsCardWithWordDto) {
               <NuxtLink
                 :to="`/vocabulary/${data.wordId}/${data.readingIndex}`"
                 class="text-primary-600 hover:underline font-medium dark:text-primary-400"
-                v-html="data.wordText"
+                v-html="sanitiseHtml(data.wordText)"
               />
             </template>
           </Column>

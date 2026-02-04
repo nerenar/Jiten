@@ -103,7 +103,7 @@
 <template>
   <div class="flex flex-col gap-2">
     <Panel v-for="(faqItem, index) in faqData" :key="index" :header="faqItem.question">
-      <div v-html="faqItem.answer"></div>
+      <div v-html="sanitiseHtml(faqItem.answer)"></div>
     </Panel>
   </div>
 </template>

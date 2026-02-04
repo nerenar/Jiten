@@ -68,7 +68,8 @@
 
   // Format content with basic HTML support
   const formattedContent = computed(() => {
-    return props.content.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>').replace(/\n/g, '<br>');
+    const html = props.content.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>').replace(/\n/g, '<br>');
+    return sanitiseHtml(html);
   });
 
   // Floating UI setup

@@ -67,7 +67,7 @@
       return `<a href="/kanji/${k.character}" class="kanji-cell" style="background:${bg};color:${fg}" data-tooltip="${k.character}: Score ${k.score.toFixed(1)}, ${k.wordCount} words" lang="ja">${k.character}</a>`;
     }).join('');
 
-    gridRef.value.innerHTML = html;
+    gridRef.value.innerHTML = sanitiseHtml(html);
   };
 
   const formatDate = (dateString: string | null): string => {
