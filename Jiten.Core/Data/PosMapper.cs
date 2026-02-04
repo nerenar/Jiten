@@ -52,7 +52,8 @@ public static class PosMapper
         PartOfSpeech.Name,
         PartOfSpeech.CommonNoun,
         PartOfSpeech.NaAdjective,
-        PartOfSpeech.Prefix
+        PartOfSpeech.Prefix,
+        PartOfSpeech.Suffix
     };
 
     #endregion
@@ -260,6 +261,12 @@ public static class PosMapper
         if (sudachiPos == PartOfSpeech.NaAdjective && convertedPosList.Contains(PartOfSpeech.PrenounAdjectival))
             return true;
 
+        // Sudachi 連体詞 (PrenounAdjectival) maps to JMDict adj-f/adj-no/adj-t (NominalAdjective)
+        // and adj-na (NaAdjective). E.g. 同じ is tagged adj-f + adj-na in JMDict.
+        if (sudachiPos == PartOfSpeech.PrenounAdjectival &&
+            (convertedPosList.Contains(PartOfSpeech.NominalAdjective) || convertedPosList.Contains(PartOfSpeech.NaAdjective)))
+            return true;
+
         return false;
     }
 
@@ -291,35 +298,6 @@ public static class PosMapper
             or PartOfSpeechSection.Region
             or PartOfSpeechSection.Country
             or PartOfSpeechSection.Name;
-    }
-
-    /// <summary>
-    /// Overload that also considers Sudachi POS sections.
-    /// This is important for matching JMnedict "name" entries against Sudachi proper-noun tokens,
-    /// which are emitted as POS=名詞 (Noun) with a name-like POS section.
-    /// </summary>
-    public static bool IsJmDictCompatibleWithSudachi(
-        IEnumerable<string> jmDictPosTags,
-        PartOfSpeech sudachiPos,
-        PartOfSpeechSection section1,
-        PartOfSpeechSection section2,
-        PartOfSpeechSection section3,
-        bool allowInterjectionFallback = false)
-    {
-        var convertedPosList = jmDictPosTags.Select(FromJmDict).ToList();
-
-        if (convertedPosList.Contains(sudachiPos))
-            return true;
-
-        if (allowInterjectionFallback && convertedPosList.Contains(PartOfSpeech.Interjection))
-            return true;
-
-        // Sudachi 形状詞 (NaAdjective) includes words that JMDict tags as adj-pn (PrenounAdjectival)
-        // Examples: この, その, あの, どの, こんな, そんな, あんな, どんな
-        if (sudachiPos == PartOfSpeech.NaAdjective && convertedPosList.Contains(PartOfSpeech.PrenounAdjectival))
-            return true;
-
-        return false;
     }
 
     /// <summary>
