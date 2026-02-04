@@ -92,11 +92,11 @@ services:
         limits:
           memory: 2G
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001').then(r => {if(!r.ok) throw r; process.exit(0)}).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
     environment:
       - NUXT_PUBLIC_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
       - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
