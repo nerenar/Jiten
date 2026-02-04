@@ -73,10 +73,8 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                                                    .Select((r, i) => new ReadingDto
                                                                      {
                                                                          Text = r, ReadingIndex = (byte)i, ReadingType = word.ReadingTypes[i],
-                                                                         FrequencyRank =
-                                                                             frequency?.ReadingsFrequencyRank[i] ?? 0,
-                                                                         FrequencyPercentage =
-                                                                             frequency?.ReadingsFrequencyPercentage[i].ZeroIfNaN() ?? 0,
+                                                                         FrequencyRank = frequency?.ReadingsFrequencyRank[i] ?? 0,
+                                                                         FrequencyPercentage = frequency?.ReadingsFrequencyPercentage[i].ZeroIfNaN() ?? 0,
                                                                          UsedInMediaAmount = frequency?.ReadingsUsedInMediaAmount[i] ?? 0
                                                                      })
                                                    .ToList();

@@ -444,7 +444,7 @@ public static class JmDictHelper
 
         int[] jitenPriorityIds =
         [
-            1332650, 2848543, 1160790, 1203260, 1397260, 1499720, 1315130, 1315130,
+            1332650, 2848543, 1160790, 1203260, 1397260, 1499720, 1315130, 1550190,
             1191730, 2844190, 2207630, 1442490, 1423310, 1502390, 1343100, 1610040,
             2059630, 1495580, 1288850, 1392580, 1511350, 1648450, 1534790, 2105530,
             1223615, 1421850, 1020650, 1310640, 1495770, 1375610, 1605840, 1334590,
@@ -452,10 +452,9 @@ public static class JmDictHelper
             1163940, 1625330, 1416220, 1356690, 2020520, 2084840, 1578630, 2603500,
             1522150, 1591970, 1920245, 1177490, 1582430, 1310670, 1577120, 1352570,
             1604800, 1581310, 2720360, 1318950, 2541230, 1288500, 1121740, 1074630,
-            1111330, 1116190, 5060001, 2815290, 1157170, 2855934, 1245290, 1075810,
+            1111330, 1116190, 2815290, 1157170, 2855934, 1245290, 1075810, 1314600,
             1020910, 1430230, 1349380, 1347580, 1311110, 1154770, 1282790, 1478060,
-            2068450, 1169250, 1598460, 1144510, 1282970, 1982860, 1609715, 1550190,
-            1314600
+            2068450, 1169250, 1598460, 1144510, 1282970, 1982860, 1609715
         ];
 
         foreach (var id in jitenPriorityIds)
@@ -475,18 +474,6 @@ public static class JmDictHelper
             indicatesNaAdj.Definitions.Add(new JmDictDefinition { PartsOfSpeech = ["prt"], EnglishMeanings = ["indicates na-adjective"] });
         else
             Console.WriteLine("Warning: custom definition WordId 2029110 not found in import set.");
-
-        if (wordInfosById.TryGetValue(5141615, out var stationStreet))
-        {
-            if (!stationStreet.PartsOfSpeech.Contains("n"))
-                stationStreet.PartsOfSpeech.Add("n");
-
-            stationStreet.Definitions.Add(new JmDictDefinition { PartsOfSpeech = ["n"], EnglishMeanings = ["street in front of station"] });
-        }
-        else
-        {
-            Console.WriteLine("Warning: custom definition WordId 5141615 not found in import set.");
-        }
 
         if (wordInfosById.TryGetValue(1524610, out var asNoun))
         {
@@ -685,6 +672,31 @@ public static class JmDictHelper
             nameWord.Priorities.Add("name");
         }
 
+        var nameWordsById = nameWords.ToDictionary(w => w.WordId);
+
+        if (nameWordsById.TryGetValue(5060001, out var customPriority))
+        {
+            customPriority.Priorities ??= new List<string>();
+            if (!customPriority.Priorities.Contains("jiten"))
+                customPriority.Priorities.Add("jiten");
+        }
+        else
+        {
+            Console.WriteLine("Warning: custom priority WordId 5060001 not found in JMNedict import set.");
+        }
+
+        if (nameWordsById.TryGetValue(5141615, out var stationStreet))
+        {
+            if (!stationStreet.PartsOfSpeech.Contains("n"))
+                stationStreet.PartsOfSpeech.Add("n");
+
+            stationStreet.Definitions.Add(new JmDictDefinition { PartsOfSpeech = ["n"], EnglishMeanings = ["street in front of station"] });
+        }
+        else
+        {
+            Console.WriteLine("Warning: custom definition WordId 5141615 not found in JMNedict import set.");
+        }
+
         // Validate entries before database insertion
         int beforeValidation = nameWords.Count;
         nameWords = nameWords.Where(w =>
@@ -729,7 +741,7 @@ public static class JmDictHelper
     public static async Task<bool> SyncMissingJMNedict(IDbContextFactory<JitenDbContext> contextFactory, string dtdPath, string jmneDictPath)
     {
         Console.WriteLine("Starting JMNedict sync...");
-        
+
         Regex reg = new Regex(@"<!ENTITY (.*) ""(.*)"">");
 
         var dtdLines = await File.ReadAllLinesAsync(dtdPath);
@@ -1787,7 +1799,7 @@ public static class JmDictHelper
         customWordInfos.Add(new JmDictWord
                             {
                                 WordId = 8000002, Readings = ["逢魔", "おうま"], ReadingsFurigana = ["逢[おう]魔[ま]", "おうま"],
-                                ReadingTypes = [JmDictReadingType.Reading, JmDictReadingType.KanaReading], 
+                                ReadingTypes = [JmDictReadingType.Reading, JmDictReadingType.KanaReading],
                                 PitchAccents = [0],
                                 Definitions =
                                 [
