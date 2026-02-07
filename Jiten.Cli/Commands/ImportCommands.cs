@@ -66,6 +66,22 @@ public class ImportCommands(CliContext context)
         Console.WriteLine("JMNedict sync complete.");
     }
 
+    public async Task SyncJmDict(CliOptions options)
+    {
+        if (string.IsNullOrEmpty(options.XmlPath) || string.IsNullOrEmpty(options.DictionaryPath) ||
+            string.IsNullOrEmpty(options.FuriganaPath))
+        {
+            Console.WriteLine("For JMDict sync, you need to specify --xml path/to/jmdict_dtd.xml, --dic path/to/jmdict and --furi path/to/JmdictFurigana.json.");
+            return;
+        }
+
+        Console.WriteLine("Syncing JMDict entries with database...");
+        var reportPath = options.DryRun ? (options.Output ?? "jmdict-sync-changes.txt") : null;
+        await JmDictHelper.SyncJmDict(context.ContextFactory, options.XmlPath, options.DictionaryPath, options.FuriganaPath,
+            options.DryRun, reportPath);
+        Console.WriteLine("JMDict sync complete.");
+    }
+
     public async Task CompareJMDict(CliOptions options)
     {
         if (options.XmlPath == "" || options.DictionaryPath == "" || options.Extra == null)

@@ -13,4 +13,12 @@ public class JmDictDefinition
     public List<string> HungarianMeanings { get; init; } = new();
     public List<string> RussianMeanings { get; init; } = new();
     public List<string> SlovenianMeanings { get; init; } = new();
+
+    public int SenseIndex { get; set; }
+    public List<string> Pos { get; set; } = [];
+    public List<string> Misc { get; set; } = [];
+    public List<string> Field { get; set; } = [];
+    public List<string> Dial { get; set; } = [];
+    public List<short>? RestrictedToReadingIndices { get; set; }
+    public bool IsActiveInLatestSource { get; set; } = true;
 }

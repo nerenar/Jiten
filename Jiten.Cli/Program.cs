@@ -72,6 +72,11 @@ public class Program
             await importCommands.SyncJMNedict(options);
         }
 
+        if (options.SyncJmDict)
+        {
+            await importCommands.SyncJmDict(options);
+        }
+
         if (options.CompareJMDict)
         {
             await importCommands.CompareJMDict(options);

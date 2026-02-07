@@ -138,6 +138,7 @@ public class RedisJmDictCache : IJmDictCache
             // Fetch the word from database
             var word = await dbContext.JMDictWords
                                       .AsNoTracking()
+                                      .Include(w => w.Forms.OrderBy(f => f.ReadingIndex))
                                       .FirstOrDefaultAsync(w => w.WordId == wordId);
 
             // Cache the result if found
@@ -150,7 +151,8 @@ public class RedisJmDictCache : IJmDictCache
             return word;
         }
 
-        return JsonSerializer.Deserialize<JmDictWord>(json!, _jsonOptions);
+        var deserialized = JsonSerializer.Deserialize<JmDictWord>(json!, _jsonOptions);
+        return deserialized;
     }
     
     
@@ -219,6 +221,7 @@ public class RedisJmDictCache : IJmDictCache
                             
                             var dbWords = await dbContext.JMDictWords
                                 .AsNoTracking()
+                                .Include(w => w.Forms.OrderBy(f => f.ReadingIndex))
                                 .Where(w => batchIds.Contains(w.WordId))
                                 .ToListAsync();
     

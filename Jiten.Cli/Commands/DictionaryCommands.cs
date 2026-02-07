@@ -32,7 +32,7 @@ public class DictionaryCommands(CliContext context)
         var lookups = context1.Lookups.AsNoTracking().ToList();
         var words = context1.JMDictWords.AsNoTracking().ToList();
 
-        var allReadings = words.SelectMany(w => w.Readings).Distinct().ToList();
+        var allReadings = context1.WordForms.AsNoTracking().Select(wf => wf.Text).Distinct().ToList();
         var wordsToAdd = allReadings.Where(r => !excludeSet.Contains(r));
 
         var lookupDict = lookups
@@ -56,8 +56,12 @@ public class DictionaryCommands(CliContext context)
             if (!wordDict.TryGetValue(lookup.WordId, out var word))
                 continue;
 
-            var indexKana = word.ReadingTypes.IndexOf(JmDictReadingType.KanaReading);
-            var kanas = indexKana >= 0 && indexKana < word.Readings.Count ? word.Readings[indexKana] : reading;
+            var wordForms = await context1.WordForms.AsNoTracking()
+                .Where(wf => wf.WordId == word.WordId)
+                .OrderBy(wf => wf.ReadingIndex)
+                .ToListAsync();
+            var kanaForm = wordForms.FirstOrDefault(wf => wf.FormType == JmDictFormType.KanaForm);
+            var kanas = kanaForm?.Text ?? reading;
 
             var pos = word.PartsOfSpeech.Select(p => p.ToPartOfSpeech()).ToList();
 
@@ -139,8 +143,9 @@ public class DictionaryCommands(CliContext context)
     public async Task PruneSudachiCsvFiles(string folderPath)
     {
         await using var context1 = await context.ContextFactory.CreateDbContextAsync();
-        var allReadings = context1.JMDictWords
-                                 .SelectMany(w => w.Readings)
+        var allReadings = context1.WordForms
+                                 .AsNoTracking()
+                                 .Select(wf => wf.Text)
                                  .ToHashSet();
 
         Console.WriteLine($"Loaded {allReadings.Count} readings.");

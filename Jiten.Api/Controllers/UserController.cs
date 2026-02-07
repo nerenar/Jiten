@@ -236,10 +236,13 @@ public class UserController(
 
         var jmdictWordIds = jmdictWords.Select(w => w.WordId).ToList();
 
-        var frequencies = await jitenContext.JmDictWordFrequencies
-                                            .AsNoTracking()
-                                            .Where(f => jmdictWordIds.Contains(f.WordId))
-                                            .ToDictionaryAsync(f => f.WordId);
+        var formFrequencies = await jitenContext.WordFormFrequencies
+                                                .AsNoTracking()
+                                                .Where(wff => jmdictWordIds.Contains(wff.WordId))
+                                                .ToListAsync();
+        var formFreqsByWord = formFrequencies
+            .GroupBy(wff => wff.WordId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(wff => wff.ReadingIndex).ToList());
 
         var alreadyKnown = await userContext.FsrsCards
                                             .AsNoTracking()
@@ -251,7 +254,8 @@ public class UserController(
 
         foreach (var word in jmdictWords)
         {
-            var readingIndicesToImport = GetReadingIndicesToImport(word, frequencies, request.FrequencyThreshold);
+            var wordFormFreqs = formFreqsByWord.GetValueOrDefault(word.WordId);
+            var readingIndicesToImport = GetReadingIndicesToImport(wordFormFreqs, request.FrequencyThreshold);
 
             foreach (var i in readingIndicesToImport)
             {
@@ -279,26 +283,21 @@ public class UserController(
     }
 
     private static List<int> GetReadingIndicesToImport(
-        JmDictWord word,
-        Dictionary<int, JmDictWordFrequency> frequencies,
+        List<JmDictWordFormFrequency>? formFreqs,
         int? threshold)
     {
-        if (word.Readings.Count <= 1)
+        if (formFreqs == null || formFreqs.Count <= 1)
             return [0];
 
-        if (!frequencies.TryGetValue(word.WordId, out var freq) || freq.ReadingsFrequencyRank.Count == 0)
-            return [0];
-
-        var ranks = freq.ReadingsFrequencyRank;
         var bestRank = int.MaxValue;
         var bestIndex = 0;
 
-        for (var i = 0; i < ranks.Count && i < word.Readings.Count; i++)
+        foreach (var ff in formFreqs)
         {
-            if (ranks[i] > 0 && ranks[i] < bestRank)
+            if (ff.FrequencyRank > 0 && ff.FrequencyRank < bestRank)
             {
-                bestRank = ranks[i];
-                bestIndex = i;
+                bestRank = ff.FrequencyRank;
+                bestIndex = ff.ReadingIndex;
             }
         }
 
@@ -310,13 +309,13 @@ public class UserController(
         if (threshold == null)
             return result;
 
-        for (var i = 0; i < ranks.Count && i < word.Readings.Count; i++)
+        foreach (var ff in formFreqs)
         {
-            if (i == bestIndex)
+            if (ff.ReadingIndex == bestIndex)
                 continue;
 
-            if (ranks[i] > 0 && ranks[i] <= bestRank + threshold.Value)
-                result.Add(i);
+            if (ff.FrequencyRank > 0 && ff.FrequencyRank <= bestRank + threshold.Value)
+                result.Add(ff.ReadingIndex);
         }
 
         return result;
@@ -679,15 +678,11 @@ public class UserController(
         if (minFrequency < 0 || maxFrequency < minFrequency || maxFrequency > 10000)
             return Results.BadRequest("Invalid frequency range");
 
-        // Use raw SQL with PostgreSQL unnest to efficiently filter per-reading frequency ranks
-        var targetReadings = await jitenContext.Database
-            .SqlQuery<ReadingFrequencyResult>($"""
-                SELECT f."WordId", (idx - 1)::smallint AS "ReadingIndex", rank AS "FrequencyRank"
-                FROM jmdict."WordFrequencies" f,
-                     unnest(f."ReadingsFrequencyRank") WITH ORDINALITY AS t(rank, idx)
-                WHERE rank >= {minFrequency} AND rank <= {maxFrequency} AND rank > 0
-                ORDER BY rank
-                """)
+        var targetReadings = await jitenContext.WordFormFrequencies
+            .AsNoTracking()
+            .Where(wff => wff.FrequencyRank >= minFrequency && wff.FrequencyRank <= maxFrequency && wff.FrequencyRank > 0)
+            .OrderBy(wff => wff.FrequencyRank)
+            .Select(wff => new ReadingFrequencyResult(wff.WordId, wff.ReadingIndex, wff.FrequencyRank))
             .ToListAsync();
 
         if (targetReadings.Count == 0)
@@ -1047,8 +1042,9 @@ public class UserController(
         var jmdictWords = await jitenContext.JMDictWords
                                             .AsNoTracking()
                                             .Where(w => wordIds.Contains(w.WordId))
-                                            .Select(w => new { w.WordId, w.Readings })
+                                            .Select(w => new { w.WordId })
                                             .ToDictionaryAsync(w => w.WordId);
+        var exportForms = await WordFormHelper.LoadWordForms(jitenContext, wordIds);
 
         var txt = new StringBuilder();
 
@@ -1075,9 +1071,10 @@ public class UserController(
             foreach (var card in sectionCards)
             {
                 if (!jmdictWords.TryGetValue(card.WordId, out var word)) continue;
-                if (card.ReadingIndex >= word.Readings.Count) continue;
+                var form = exportForms.GetValueOrDefault((card.WordId, (short)card.ReadingIndex));
+                if (form == null) continue;
 
-                var reading = word.Readings[card.ReadingIndex];
+                var reading = form.Text;
 
                 if (!exportKanaOnly && WanaKana.IsKana(reading)) continue;
 
@@ -1103,35 +1100,21 @@ public class UserController(
 
         var wordIds = cards.Select(c => c.WordId).Distinct().ToList();
 
-        var words = await jitenContext.JMDictWords
-                                      .AsNoTracking()
-                                      .Where(w => wordIds.Contains(w.WordId))
-                                      .Select(w => new { w.WordId, w.Readings, w.ReadingTypes })
-                                      .ToListAsync();
-
-        var wordLookup = words.ToDictionary(w => w.WordId);
-
-        var frequencies = await jitenContext.JmDictWordFrequencies
-                                            .AsNoTracking()
-                                            .Where(f => wordIds.Contains(f.WordId))
-                                            .ToDictionaryAsync(f => f.WordId);
+        var cardForms = await WordFormHelper.LoadWordForms(jitenContext, wordIds);
+        var cardFormFreqs = await WordFormHelper.LoadWordFormFrequencies(jitenContext, wordIds);
 
         var result = cards.Select(c =>
         {
-            var word = wordLookup.GetValueOrDefault(c.WordId);
-            var hasValidReading = word != null && c.ReadingIndex < word.Readings.Count;
-            var freq = frequencies.GetValueOrDefault(c.WordId);
-            var frequencyRank = freq != null && c.ReadingIndex < freq.ReadingsFrequencyRank.Count
-                ? freq.ReadingsFrequencyRank[c.ReadingIndex]
-                : 0;
+            var form = cardForms.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
+            var formFreq = cardFormFreqs.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
 
             return new FsrsCardWithWordDto
                    {
                        CardId = c.CardId, WordId = c.WordId, ReadingIndex = c.ReadingIndex, State = c.State, Step = c.Step,
                        Stability = EnsureValidNumber(c.Stability), Difficulty = EnsureValidNumber(c.Difficulty), Due = c.Due,
-                       LastReview = c.LastReview, WordText = hasValidReading ? word!.Readings[c.ReadingIndex] : "",
-                       ReadingType = hasValidReading ? word!.ReadingTypes[c.ReadingIndex] : JmDictReadingType.Reading,
-                       FrequencyRank = frequencyRank
+                       LastReview = c.LastReview, WordText = form?.Text ?? "",
+                       ReadingType = form != null ? (JmDictReadingType)(int)form.FormType : JmDictReadingType.Reading,
+                       FrequencyRank = formFreq?.FrequencyRank ?? 0
                    };
         }).ToList();
 
@@ -1167,10 +1150,11 @@ public class UserController(
 
         var distinctWordIds = exportDto.Cards.Select(c => c.WordId).Distinct().ToList();
 
-        var wordValidationMap = await jitenContext.JMDictWords
+        var wordValidationMap = await jitenContext.WordForms
                                                   .AsNoTracking()
-                                                  .Where(w => distinctWordIds.Contains(w.WordId))
-                                                  .Select(w => new { w.WordId, ReadingCount = w.Readings.Count })
+                                                  .Where(wf => distinctWordIds.Contains(wf.WordId))
+                                                  .GroupBy(wf => wf.WordId)
+                                                  .Select(g => new { WordId = g.Key, ReadingCount = g.Count() })
                                                   .ToDictionaryAsync(w => w.WordId);
 
         var validCards = new List<FsrsCardExportDto>(exportDto.Cards.Count);
@@ -1384,7 +1368,7 @@ public class UserController(
     [AllowAnonymous]
     public async Task<ActionResult<PaginatedResponse<AccomplishmentVocabularyDto>>> GetAccomplishmentVocabulary(
         string targetUserId,
-        [FromQuery] Jiten.Core.Data.MediaType? mediaType = null,
+        [FromQuery] MediaType? mediaType = null,
         [FromQuery] int offset = 0,
         [FromQuery] int pageSize = 100,
         [FromQuery] string sortBy = "occurrences",
@@ -1463,8 +1447,8 @@ public class UserController(
         {
             // For alphabetical sorting, we need to join with JMDict to get reading text
             var sortedQuery = from aw in aggregatedWordsQuery
-                              join jw in jitenContext.JMDictWords on aw.WordId equals jw.WordId
-                              select new { aw, ReadingText = jw.Readings[aw.ReadingIndex] };
+                              join wf in jitenContext.WordForms on new { aw.WordId, ReadingIndex = (short)aw.ReadingIndex } equals new { wf.WordId, wf.ReadingIndex }
+                              select new { aw, ReadingText = wf.Text };
 
             var orderedQuery = descending
                 ? sortedQuery.OrderByDescending(x => x.ReadingText)
@@ -1500,12 +1484,8 @@ public class UserController(
 
         var jmdictLookup = jmdictWords.ToDictionary(w => w.WordId);
 
-        // Fetch frequencies
-        var frequencies = await jitenContext.JmDictWordFrequencies
-                                            .AsNoTracking()
-                                            .Where(f => wordIds.Contains(f.WordId))
-                                            .ToListAsync();
-        var freqLookup = frequencies.ToDictionary(f => f.WordId);
+        var accForms = await WordFormHelper.LoadWordForms(jitenContext, wordIds);
+        var accFormFreqs = await WordFormHelper.LoadWordFormFrequencies(jitenContext, wordIds);
 
         // Build WordDtos - preserve the order from pagedWords
         var wordDtos = new List<WordDto>();
@@ -1514,28 +1494,21 @@ public class UserController(
             if (!jmdictLookup.TryGetValue(pw.WordId, out var jmWord))
                 continue;
 
-            if (pw.ReadingIndex >= jmWord.ReadingsFurigana.Count)
+            var mainForm = accForms.GetValueOrDefault((pw.WordId, (short)pw.ReadingIndex));
+            if (mainForm == null)
                 continue;
 
-            var reading = jmWord.ReadingsFurigana[pw.ReadingIndex];
-            freqLookup.TryGetValue(pw.WordId, out var freq);
+            var allFormsForWord = accForms.Where(f => f.Key.Item1 == pw.WordId)
+                                          .OrderBy(f => f.Key.Item2)
+                                          .Select(f => f.Value)
+                                          .ToList();
 
-            var alternativeReadings = jmWord.ReadingsFurigana
-                                            .Select((r, i) => new ReadingDto
-                                                              {
-                                                                  Text = r, ReadingIndex = (byte)i, ReadingType = jmWord.ReadingTypes[i],
-                                                                  FrequencyRank = freq?.ReadingsFrequencyRank[i] ?? 0,
-                                                                  FrequencyPercentage = freq?.ReadingsFrequencyPercentage[i] ?? 0
-                                                              })
+            var alternativeReadings = allFormsForWord
+                                            .Where(f => f.ReadingIndex != pw.ReadingIndex)
+                                            .Select(f => WordFormHelper.ToPlainFormDto(f, accFormFreqs.GetValueOrDefault((f.WordId, f.ReadingIndex))))
                                             .ToList();
-            alternativeReadings.RemoveAt(pw.ReadingIndex);
 
-            var mainReading = new ReadingDto
-                              {
-                                  Text = reading, ReadingIndex = pw.ReadingIndex, ReadingType = jmWord.ReadingTypes[pw.ReadingIndex],
-                                  FrequencyRank = freq?.ReadingsFrequencyRank[pw.ReadingIndex] ?? 0,
-                                  FrequencyPercentage = freq?.ReadingsFrequencyPercentage[pw.ReadingIndex] ?? 0
-                              };
+            var mainReading = WordFormHelper.ToFormDto(mainForm, accFormFreqs.GetValueOrDefault((pw.WordId, (short)pw.ReadingIndex)));
 
             wordDtos.Add(new WordDto
                          {
@@ -1850,21 +1823,16 @@ public class UserController(
         if (sortBy.Equals("globalFreq", StringComparison.OrdinalIgnoreCase))
         {
             var freqWordIds = allAggregatedWords.Select(aw => aw.WordId).Distinct().ToList();
-            var sortFrequencies = await jitenContext.JmDictWordFrequencies
-                                                    .AsNoTracking()
-                                                    .Where(f => freqWordIds.Contains(f.WordId))
-                                                    .ToDictionaryAsync(f => f.WordId);
+            var sortFormFreqs = await WordFormHelper.LoadWordFormFrequencies(jitenContext, freqWordIds);
 
             sortedWords = descending
                 ? allAggregatedWords.OrderByDescending(aw =>
-                                                           sortFrequencies.TryGetValue(aw.WordId, out var f) &&
-                                                           aw.ReadingIndex < f.ReadingsFrequencyRank.Count
-                                                               ? f.ReadingsFrequencyRank[aw.ReadingIndex]
+                                                           sortFormFreqs.TryGetValue((aw.WordId, (short)aw.ReadingIndex), out var wff)
+                                                               ? wff.FrequencyRank
                                                                : 0)
                 : allAggregatedWords.OrderBy(aw =>
-                                                 sortFrequencies.TryGetValue(aw.WordId, out var f) &&
-                                                 aw.ReadingIndex < f.ReadingsFrequencyRank.Count
-                                                     ? f.ReadingsFrequencyRank[aw.ReadingIndex]
+                                                 sortFormFreqs.TryGetValue((aw.WordId, (short)aw.ReadingIndex), out var wff)
+                                                     ? wff.FrequencyRank
                                                      : int.MaxValue);
         }
         else
@@ -1888,11 +1856,8 @@ public class UserController(
 
         var jmdictLookup = jmdictWords.ToDictionary(w => w.WordId);
 
-        var frequencies = await jitenContext.JmDictWordFrequencies
-                                            .AsNoTracking()
-                                            .Where(f => wordIds.Contains(f.WordId))
-                                            .ToListAsync();
-        var freqLookup = frequencies.ToDictionary(f => f.WordId);
+        var accForms2 = await WordFormHelper.LoadWordForms(jitenContext, wordIds);
+        var accFormFreqs2 = await WordFormHelper.LoadWordFormFrequencies(jitenContext, wordIds);
 
         var wordDtos = new List<WordDto>();
         foreach (var pw in pagedWords)
@@ -1900,28 +1865,21 @@ public class UserController(
             if (!jmdictLookup.TryGetValue(pw.WordId, out var jmWord))
                 continue;
 
-            if (pw.ReadingIndex >= jmWord.ReadingsFurigana.Count)
+            var mainForm = accForms2.GetValueOrDefault((pw.WordId, (short)pw.ReadingIndex));
+            if (mainForm == null)
                 continue;
 
-            var reading = jmWord.ReadingsFurigana[pw.ReadingIndex];
-            freqLookup.TryGetValue(pw.WordId, out var freq);
+            var allFormsForWord = accForms2.Where(f => f.Key.Item1 == pw.WordId)
+                                           .OrderBy(f => f.Key.Item2)
+                                           .Select(f => f.Value)
+                                           .ToList();
 
-            var alternativeReadings = jmWord.ReadingsFurigana
-                                            .Select((r, i) => new ReadingDto
-                                                              {
-                                                                  Text = r, ReadingIndex = (byte)i, ReadingType = jmWord.ReadingTypes[i],
-                                                                  FrequencyRank = freq?.ReadingsFrequencyRank[i] ?? 0,
-                                                                  FrequencyPercentage = freq?.ReadingsFrequencyPercentage[i] ?? 0
-                                                              })
+            var alternativeReadings = allFormsForWord
+                                            .Where(f => f.ReadingIndex != pw.ReadingIndex)
+                                            .Select(f => WordFormHelper.ToPlainFormDto(f, accFormFreqs2.GetValueOrDefault((f.WordId, f.ReadingIndex))))
                                             .ToList();
-            alternativeReadings.RemoveAt(pw.ReadingIndex);
 
-            var mainReading = new ReadingDto
-                              {
-                                  Text = reading, ReadingIndex = pw.ReadingIndex, ReadingType = jmWord.ReadingTypes[pw.ReadingIndex],
-                                  FrequencyRank = freq?.ReadingsFrequencyRank[pw.ReadingIndex] ?? 0,
-                                  FrequencyPercentage = freq?.ReadingsFrequencyPercentage[pw.ReadingIndex] ?? 0
-                              };
+            var mainReading = WordFormHelper.ToPlainFormDto(mainForm, accFormFreqs2.GetValueOrDefault((pw.WordId, (short)pw.ReadingIndex)));
 
             wordDtos.Add(new WordDto
                          {

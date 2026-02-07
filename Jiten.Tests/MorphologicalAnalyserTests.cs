@@ -600,6 +600,7 @@ public class MorphologicalAnalyserTests
         yield return ["ぶっち切れてる", new[] { "ぶち切れてる" }];  // ぶっち切れる → ぶち切れる (to become enraged)
         // 少女の手 misparse fix - Sudachi was parsing as 少 (prefix) + 女の手 (expression)
         yield return ["少女の手によって", new[] { "少女", "の", "手", "によって" }];
+        yield return ["各党幹部による応援演説", new[] { "各", "党幹部", "による", "応援演説" }];
         // 手を抜く compound expression - Sudachi classifies 手 as suffix, but should match exp entry
         yield return ["手を抜いているんですか", new[] { "手を抜いている", "んです", "か" }];
         yield return ["水魔法", new[] { "水", "魔法" }];
@@ -608,6 +609,10 @@ public class MorphologicalAnalyserTests
         yield return ["姉さんの所にちゃんと届けておいたから", new[] { "姉さん", "の", "所", "に", "ちゃんと", "届けておいた", "から" }];
         yield return ["いっぱいおいたしてるもの", new[] { "いっぱい", "おいたしてる", "もの" }];
         yield return ["全てをやる", new[] { "全て", "を", "やる" }];
+        // おい (interjection) + まだ (adverb) - user_dic low-cost entries prevent お+いまだ misparse
+        yield return ["おいまだかよ", new[] { "おい", "まだ", "か", "よ" }];
+        // てやれ (imperative of auxiliary やる) - Sudachi tags やれ as interjection, should combine with て-form
+        yield return ["なら逃がしてやれ監禁する理由などないのだから", new[] { "なら", "逃がしてやれ", "監禁する", "理由", "など", "ない", "の", "だから" }];
         yield return ["続きがある", new[] { "続き", "が", "ある" }];
         // Long vowel mark (ー) repair tests
         // Broken cases: hiragana + ー that Sudachi over-segments must be repaired; ー stripped when word doesn't contain it
@@ -632,6 +637,15 @@ public class MorphologicalAnalyserTests
         yield return ["この辺りで物々交換しておかないとな", new[] { "この","辺り","で","物々交換","しておかない","と","な" }];
         yield return ["その案件について", new[] { "その","案件","について" }];
         yield return ["喜んだだろうね", new[] { "喜んだ","だろう","ね" }];
+        // Comma (、) should not affect segmentation of preceding compound expressions
+        yield return ["そこまで、それは違う", new[] { "そこまで","それ","は","違う" }];
+        // ホント + katakana noun: Sudachi merges adjacent katakana, PreprocessText splits them
+        yield return ["ホントバカだな", new[] { "ホント","バカ","だ","な" }];
+        yield return ["ホントダメだな", new[] { "ホント","ダメ","だ","な" }];
+        // Conjugated compound expressions via CombineCompounds
+        yield return ["らちが明かん", new[] { "らちが明かん" }];
+        yield return ["ことなきを得た", new[] { "ことなきを得た" }];
+        yield return ["恩着せがましくて", new[] { "恩着せがましく", "て" }];
     }
 
     [Theory]

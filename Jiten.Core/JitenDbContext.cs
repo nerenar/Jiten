@@ -21,6 +21,8 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
     public DbSet<JmDictDefinition> Definitions { get; set; }
     public DbSet<JmDictLookup> Lookups { get; set; }
+    public DbSet<JmDictWordForm> WordForms { get; set; }
+    public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
     
@@ -221,16 +223,10 @@ public class JitenDbContext : DbContext
             entity.HasMany(e => e.Lookups)
                   .WithOne()
                   .HasForeignKey(l => l.WordId);
-
-            entity.Property(e => e.Readings)
-                  .HasColumnType("text[]");
-
-            entity.Property(e => e.ReadingTypes)
-                  .HasColumnType("int[]");
-
-            entity.Property(e => e.ObsoleteReadings)
-                  .HasColumnType("text[]")
-                  .IsRequired(false);
+            entity.HasMany(e => e.Forms)
+                  .WithOne()
+                  .HasForeignKey(f => f.WordId)
+                  .OnDelete(DeleteBehavior.Cascade);
 
             entity.Property(e => e.PartsOfSpeech)
                   .HasColumnType("text[]");
@@ -268,6 +264,29 @@ public class JitenDbContext : DbContext
                   .HasColumnType("text[]");
             entity.Property(e => e.SlovenianMeanings)
                   .HasColumnType("text[]");
+
+            entity.Property(e => e.SenseIndex)
+                  .HasDefaultValue(0);
+            entity.Property(e => e.Pos)
+                  .HasColumnType("text[]")
+                  .HasDefaultValueSql("'{}'");
+            entity.Property(e => e.Misc)
+                  .HasColumnType("text[]")
+                  .HasDefaultValueSql("'{}'");
+            entity.Property(e => e.Field)
+                  .HasColumnType("text[]")
+                  .HasDefaultValueSql("'{}'");
+            entity.Property(e => e.Dial)
+                  .HasColumnType("text[]")
+                  .HasDefaultValueSql("'{}'");
+            entity.Property(e => e.RestrictedToReadingIndices)
+                  .HasColumnType("smallint[]")
+                  .IsRequired(false);
+            entity.Property(e => e.IsActiveInLatestSource)
+                  .HasDefaultValue(true);
+
+            entity.HasIndex(e => new { e.WordId, e.SenseIndex })
+                  .HasDatabaseName("IX_Definitions_WordId_SenseIndex");
         });
 
         modelBuilder.Entity<JmDictLookup>(entity =>
@@ -285,6 +304,48 @@ public class JitenDbContext : DbContext
             entity.HasOne<JmDictWord>()
                   .WithMany()
                   .HasForeignKey(f => f.WordId);
+        });
+
+        modelBuilder.Entity<JmDictWordForm>(entity =>
+        {
+            entity.ToTable("WordForms", "jmdict");
+            entity.HasKey(e => new { e.WordId, e.ReadingIndex });
+
+            entity.Property(e => e.FormType)
+                  .HasColumnType("smallint");
+
+            entity.Property(e => e.Priorities)
+                  .HasColumnType("text[]")
+                  .IsRequired(false);
+
+            entity.Property(e => e.InfoTags)
+                  .HasColumnType("text[]")
+                  .IsRequired(false);
+
+            entity.HasIndex(e => new { e.WordId, e.FormType, e.Text })
+                  .IsUnique()
+                  .HasDatabaseName("IX_WordForms_WordId_FormType_Text");
+
+            entity.HasIndex(e => e.WordId)
+                  .HasDatabaseName("IX_WordForms_WordId");
+        });
+
+        modelBuilder.Entity<JmDictWordFormFrequency>(entity =>
+        {
+            entity.ToTable("WordFormFrequencies", "jmdict");
+            entity.HasKey(e => new { e.WordId, e.ReadingIndex });
+
+            entity.Property(e => e.FrequencyRank)
+                  .HasDefaultValue(0);
+            entity.Property(e => e.FrequencyPercentage)
+                  .HasDefaultValue(0.0);
+            entity.Property(e => e.ObservedFrequency)
+                  .HasDefaultValue(0.0);
+            entity.Property(e => e.UsedInMediaAmount)
+                  .HasDefaultValue(0);
+
+            entity.HasIndex(e => e.FrequencyRank)
+                  .HasDatabaseName("IX_WordFormFrequencies_FrequencyRank");
         });
 
         modelBuilder.Entity<Kanji>(entity =>

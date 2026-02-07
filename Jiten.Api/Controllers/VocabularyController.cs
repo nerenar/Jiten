@@ -3,6 +3,7 @@ using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.JMDict;
 using Jiten.Core.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -40,10 +41,15 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (word == null)
             return Results.NotFound();
 
-        if (readingIndex >= word.Readings.Count)
+        var wordForms = await WordFormHelper.LoadWordFormsForWord(context, wordId);
+        var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
+        if (mainForm == null)
             return Results.NotFound();
 
-        var frequency = await context.JmDictWordFrequencies.AsNoTracking().FirstOrDefaultAsync(f => f.WordId == word.WordId);
+        var formFreqs = await context.WordFormFrequencies
+            .AsNoTracking()
+            .Where(wff => wff.WordId == wordId)
+            .ToDictionaryAsync(wff => wff.ReadingIndex);
 
         var usedInMediaByType = await context.DeckWords.AsNoTracking()
                                              .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
@@ -59,26 +65,16 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                                              .Select(g => new { MediaType = g.Key, Count = g.Count() })
                                              .ToDictionaryAsync(x => (int)x.MediaType, x => x.Count);
 
-        var mainReading = new ReadingDto()
-                          {
-                              Text = word.ReadingsFurigana[readingIndex], ReadingIndex = readingIndex,
-                              ReadingType = word.ReadingTypes[readingIndex],
-                              FrequencyRank = frequency?.ReadingsFrequencyRank[readingIndex] ?? 0,
-                              FrequencyPercentage = frequency?.ReadingsFrequencyPercentage[readingIndex].ZeroIfNaN() ?? 0,
-                              UsedInMediaAmount = frequency?.ReadingsUsedInMediaAmount[readingIndex] ?? 0,
-                              UsedInMediaAmountByType = usedInMediaByType
-                          };
+        var mainFreq = formFreqs.GetValueOrDefault(mainForm.ReadingIndex);
+        var mainReading = WordFormHelper.ToFormDto(mainForm, mainFreq, usedInMediaByType);
 
-        List<ReadingDto> alternativeReadings = word.Readings
-                                                   .Select((r, i) => new ReadingDto
-                                                                     {
-                                                                         Text = r, ReadingIndex = (byte)i, ReadingType = word.ReadingTypes[i],
-                                                                         FrequencyRank = frequency?.ReadingsFrequencyRank[i] ?? 0,
-                                                                         FrequencyPercentage = frequency?.ReadingsFrequencyPercentage[i].ZeroIfNaN() ?? 0,
-                                                                         UsedInMediaAmount = frequency?.ReadingsUsedInMediaAmount[i] ?? 0
-                                                                     })
+        List<WordFormDto> alternativeReadings = wordForms
+                                                   .Select(form =>
+                                                   {
+                                                       var freq = formFreqs.GetValueOrDefault(form.ReadingIndex);
+                                                       return WordFormHelper.ToPlainFormDto(form, freq);
+                                                   })
                                                    .ToList();
-        
 
         return Results.Ok(new WordDto
                           {

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Jiten.Cli.ML;
 using Jiten.Core.Data;
+using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Cli.Commands;
@@ -39,7 +40,7 @@ public class MlCommands(CliContext context)
         // The code below is commented out as it doesn't work correctly
         /*
         await using var context = await _context.ContextFactory.CreateDbContextAsync();
-        var allWords = await context.JMDictWords.Select(w => new { w.WordId, w.Readings, w.ReadingTypes }).ToListAsync();
+        var allWords = await context.JMDictWords.Include(w => w.Forms).Select(w => new { w.WordId, w.Forms }).ToListAsync();
         int error = 0;
         int noMorphemes = 0;
         int multipleMorphemes = 0;
@@ -48,11 +49,11 @@ public class MlCommands(CliContext context)
         foreach (var word in allWords)
         {
             string reading = "";
-            for (int i = 0; i < word.Readings.Count; i++)
+            foreach (var form in word.Forms.OrderBy(f => f.ReadingIndex))
             {
-                if (word.ReadingTypes[i] == JmDictReadingType.Reading)
+                if (form.FormType == JmDictFormType.KanjiForm)
                 {
-                    reading = word.Readings[i];
+                    reading = form.Text;
                     break;
                 }
             }

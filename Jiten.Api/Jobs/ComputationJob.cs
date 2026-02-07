@@ -902,15 +902,15 @@ public class ComputationJob(
         Directory.CreateDirectory(path);
 
         Console.WriteLine("Computing global frequencies...");
-        var frequencies = await JitenHelper.ComputeFrequencies(contextFactory, null);
-        await JitenHelper.SaveFrequenciesToDatabase(contextFactory, frequencies);
+        var (wordFrequencies, formFrequencies) = await JitenHelper.ComputeFrequencies(contextFactory, null);
+        await JitenHelper.SaveFrequenciesToDatabase(contextFactory, wordFrequencies, formFrequencies);
 
         // Save frequencies to CSV
-        await SaveFrequenciesToCsv(frequencies, Path.Join(path, "jiten_freq_global.csv"));
+        await SaveFrequenciesToCsv(wordFrequencies, formFrequencies, Path.Join(path, "jiten_freq_global.csv"));
 
         // Generate Yomitan deck
         string index = YomitanHelper.GetIndexJson(null);
-        var bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, frequencies, null, index);
+        var bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, wordFrequencies, null, index);
         var filePath = Path.Join(path, "jiten_freq_global.zip");
         string indexFilePath = Path.Join(path, "jiten_freq_global.json");
         await File.WriteAllBytesAsync(filePath, bytes);
@@ -919,14 +919,14 @@ public class ComputationJob(
         foreach (var mediaType in Enum.GetValues<MediaType>())
         {
             Console.WriteLine($"Computing {mediaType} frequencies...");
-            frequencies = await JitenHelper.ComputeFrequencies(contextFactory, mediaType);
+            (wordFrequencies, formFrequencies) = await JitenHelper.ComputeFrequencies(contextFactory, mediaType);
 
             // Save frequencies to CSV
-            await SaveFrequenciesToCsv(frequencies, Path.Join(path, $"jiten_freq_{mediaType.ToString()}.csv"));
+            await SaveFrequenciesToCsv(wordFrequencies, formFrequencies, Path.Join(path, $"jiten_freq_{mediaType.ToString()}.csv"));
 
             // Generate Yomitan deck
             index = YomitanHelper.GetIndexJson(mediaType);
-            bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, frequencies, mediaType, index);
+            bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, wordFrequencies, mediaType, index);
             filePath = Path.Join(path, $"jiten_freq_{mediaType.ToString()}.zip");
             indexFilePath = Path.Join(path, $"jiten_freq_{mediaType.ToString()}.json");
             await File.WriteAllBytesAsync(filePath, bytes);
@@ -992,34 +992,38 @@ public class ComputationJob(
         await stream.CopyToAsync(fileStream);
     }
 
-    private async Task SaveFrequenciesToCsv(List<JmDictWordFrequency> frequencies, string filePath)
+    private async Task SaveFrequenciesToCsv(List<JmDictWordFrequency> frequencies,
+        List<JmDictWordFormFrequency> formFrequencies, string filePath)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
-        // Fetch words from the database
-        Dictionary<int, JmDictWord> allWords = await context.JMDictWords.AsNoTracking()
-                                                            .Where(w => frequencies.Select(f => f.WordId).Contains(w.WordId))
-                                                            .ToDictionaryAsync(w => w.WordId);
+        var wordIds = frequencies.Select(f => f.WordId).ToList();
+        var allForms = await context.WordForms.AsNoTracking()
+            .Where(wf => wordIds.Contains(wf.WordId))
+            .ToDictionaryAsync(wf => (wf.WordId, wf.ReadingIndex));
+
+        var formFreqsByWord = formFrequencies
+            .GroupBy(ff => ff.WordId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(ff => ff.FrequencyPercentage).ToList());
 
         List<(string word, int rank)> frequencyList = new();
 
         foreach (var frequency in frequencies)
         {
-            if (!allWords.TryGetValue(frequency.WordId, out var word)) continue;
+            if (!formFreqsByWord.TryGetValue(frequency.WordId, out var wordFormFreqs) || wordFormFreqs.Count == 0)
+                continue;
 
-            var highestPercentage = frequency.ReadingsFrequencyPercentage.Max();
-            var index = frequency.ReadingsFrequencyPercentage.IndexOf(highestPercentage);
-            string readingWord = word.Readings[index];
+            var bestFormFreq = wordFormFreqs[0];
+            string readingWord = allForms.TryGetValue((frequency.WordId, bestFormFreq.ReadingIndex), out var form)
+                ? form.Text : "";
 
             frequencyList.Add((readingWord, frequency.FrequencyRank));
         }
 
-        // Create CSV file
         using var stream = new MemoryStream();
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
         await using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
 
-        // Create anonymous object for CsvWriter
         var frequencyListCsv = frequencyList.Select(f => new { Word = f.word, Rank = f.rank }).ToArray();
 
         await csv.WriteRecordsAsync(frequencyListCsv);

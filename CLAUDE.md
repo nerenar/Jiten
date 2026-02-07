@@ -46,7 +46,7 @@ pnpm lint / pnpm lintfix    # Lint
 
 **Jiten.Api** - ASP.NET Core Web API. JWT + API Key + Google OAuth authentication. Hangfire background jobs (`ParseJob`, `ComputationJob`, `FetchMetadataJob`, `ReparseJob`). Rate limiting with tiered access. OpenTelemetry observability. Swagger at `/swagger`.
 
-**Jiten.Tests** - xUnit + FluentAssertions. Tests: `DeconjugatorTests`, `MorphologicalAnalyserTests`, `FsrsTests`.
+**Jiten.Tests** - xUnit + FluentAssertions. Tests: `DeconjugatorTests`, `MorphologicalAnalyserTests`, `FormSelectionTests` (WordId/ReadingIndex correctness), `FsrsTests`.
 
 **Jiten.Web** - Nuxt 4 frontend (Vue 4, TypeScript, Pinia). PrimeVue 4 components with TailwindCSS 4. API calls via `useApiFetch` composable with JWT auto-refresh. File-based routing with `auth`/`authAdmin` middleware. Stores: `authStore` (JWT + Google OAuth), `jitenStore` (preferences), `displayStyleStore` (UI). Nuxt auto-imports composables, components, and utils.
 
@@ -100,7 +100,7 @@ dotnet run --project Jiten.Cli -- --search-word "そうする"      # By reading
 dotnet run --project Jiten.Cli -- --search-lookup "そうする"    # Lookups table
 ```
 
-**Diagnostic JSON output contains**: `sudachi.tokens` (raw Sudachi analysis), `sudachi.rawOutput`, `tokenStages` (processing stages with modifications), `results` (final parsed tokens).
+**Diagnostic JSON output contains**: `sudachi.tokens` (raw Sudachi analysis), `sudachi.rawOutput`, `tokenStages` (processing stages with modifications), `results` (final parsed tokens), `formScoring` (per-token scoring breakdowns showing all evaluated (word, form) candidates with component scores: WordScore, FormPriorityScore, FormFlagScore, SurfaceMatchScore, ScriptScore).
 
 **Failure types:**
 1. **OverSegmentation** - Tokens split that should be combined → check `sudachi.tokens` and `tokenStages` → fix: add to `SpecialCases2`/`SpecialCases3`

@@ -545,18 +545,18 @@ public class WordReplacementService(
             {
                 // Look up reading lengths for each new word
                 var newWordIds = newWords.Select(w => w.WordId).ToList();
-                var jmDictWords = await context.JMDictWords
-                    .Where(w => newWordIds.Contains(w.WordId))
-                    .ToDictionaryAsync(w => w.WordId);
+                var replForms = await context.WordForms
+                    .AsNoTracking()
+                    .Where(wf => newWordIds.Contains(wf.WordId))
+                    .ToDictionaryAsync(wf => (wf.WordId, wf.ReadingIndex));
 
                 // Calculate lengths for each new word
                 var wordLengths = new List<int>();
                 foreach (var newWord in newWords)
                 {
-                    if (jmDictWords.TryGetValue(newWord.WordId, out var word) &&
-                        word.Readings.Count > newWord.ReadingIndex)
+                    if (replForms.TryGetValue((newWord.WordId, (short)newWord.ReadingIndex), out var form))
                     {
-                        wordLengths.Add(word.Readings[newWord.ReadingIndex].Length);
+                        wordLengths.Add(form.Text.Length);
                     }
                     else
                     {

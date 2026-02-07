@@ -84,8 +84,20 @@ public static class ExampleSentenceExtractor
             wordsByText[word.OriginalText].Add(new DeckWord
                                                {
                                                    WordId = word.WordId, ReadingIndex = word.ReadingIndex,
-                                                   OriginalText = word.OriginalText, PartsOfSpeech = word.PartsOfSpeech
+                                                   OriginalText = word.OriginalText, PartsOfSpeech = word.PartsOfSpeech,
+                                                   SudachiReading = word.SudachiReading
                                                });
+        }
+
+        // Track surface texts that have at least one non-Name DeckWord. When a text has both
+        // Name and non-Name entries (e.g. 深雪 = name + deep snow), the name-like POS fallback
+        // should only match tokens in person name context — otherwise the Name entry steals
+        // example sentences from the Noun entry after it's consumed.
+        var textsWithNonNameEntry = new HashSet<string>();
+        foreach (var word in words)
+        {
+            if (word.PartsOfSpeech.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown)))
+                textsWithNonNameEntry.Add(word.OriginalText);
         }
 
         var exampleSentences = new List<ExampleSentence>();
@@ -137,16 +149,48 @@ public static class ExampleSentenceExtractor
                 {
                     if (!wordsByText.TryGetValue(wordInfo.Text, out var wordList) || wordList.Count <= 0) continue;
 
-                    // Find first word with matching POS
+                    // Find best word with matching POS — prefer direct POS match over name-like fallback.
+                    // When multiple DeckWords share the same text and POS (e.g. 身体 as からだ vs しんたい),
+                    // prefer the one whose SudachiReading matches the token's reading.
                     int matchIndex = -1;
+                    int fallbackIndex = -1;
+                    int posMatchNoReading = -1;
                     for (int j = 0; j < wordList.Count; j++)
                     {
-                        if (IsPosCompatible(wordList[j], wordInfo))
+                        if (wordList[j].PartsOfSpeech.Any(pos => pos == wordInfo.PartOfSpeech))
                         {
-                            matchIndex = j;
-                            break;
+                            if (!string.IsNullOrEmpty(wordInfo.Reading) &&
+                                !string.IsNullOrEmpty(wordList[j].SudachiReading) &&
+                                wordList[j].SudachiReading == wordInfo.Reading)
+                            {
+                                matchIndex = j;
+                                break;
+                            }
+
+                            if (posMatchNoReading == -1)
+                                posMatchNoReading = j;
                         }
+
+                        if (fallbackIndex == -1 && IsPosCompatible(wordList[j], wordInfo))
+                            fallbackIndex = j;
                     }
+
+                    if (matchIndex == -1 && posMatchNoReading >= 0)
+                    {
+                        var fallbackWord = wordList[posMatchNoReading];
+                        bool readingConflict = !string.IsNullOrEmpty(wordInfo.Reading) &&
+                                               (string.IsNullOrEmpty(fallbackWord.SudachiReading) ||
+                                                fallbackWord.SudachiReading != wordInfo.Reading);
+                        if (!readingConflict)
+                            matchIndex = posMatchNoReading;
+                    }
+
+                    // Only use the name-like fallback when either:
+                    // - this surface text has no competing non-Name DeckWord (pure name word), OR
+                    // - the token is in person name context (followed by さん/くん/etc.)
+                    if (matchIndex == -1 &&
+                        (!textsWithNonNameEntry.Contains(wordInfo.Text) || wordInfo.IsPersonNameContext))
+                        matchIndex = fallbackIndex;
 
                     // If we found a match, add it and remove from the list
                     if (matchIndex >= 0)

@@ -603,28 +603,40 @@ public static class JitenHelper
     /// <param name="context">The database context.</param>
     /// <param name="mediaType">The media type to compute frequencies for. If null, calculates global frequencies.</param>
     /// <returns>A list of JmDictWordFrequency objects, sorted by rank.</returns>
-    public static async Task<List<JmDictWordFrequency>> ComputeFrequencies(IDbContextFactory<JitenDbContext> contextFactory,
-                                                                           MediaType? mediaType = null)
+    public static async Task<(List<JmDictWordFrequency> WordFrequencies, List<JmDictWordFormFrequency> FormFrequencies)>
+        ComputeFrequencies(IDbContextFactory<JitenDbContext> contextFactory, MediaType? mediaType = null)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
-        Dictionary<int, JmDictWordFrequency> wordFrequencies = new();
-        var wordReadingCounts = await context.JMDictWords
-                                             .AsNoTracking()
-                                             .Select(w => new { w.WordId, ReadingsCount = w.Readings.Count })
-                                             .ToDictionaryAsync(w => w.WordId, w => w.ReadingsCount);
+        // Initialise word frequencies from WordForms
+        var wordFormKeys = await context.WordForms.AsNoTracking()
+            .Select(wf => new { wf.WordId, wf.ReadingIndex })
+            .ToListAsync();
 
-        foreach (var kvp in wordReadingCounts)
+        var wordIds = wordFormKeys.Select(wf => wf.WordId).Distinct().ToList();
+
+        Dictionary<int, JmDictWordFrequency> wordFrequencies = new();
+        foreach (var wordId in wordIds)
         {
-            wordFrequencies.Add(kvp.Key, new JmDictWordFrequency
-                                         {
-                                             WordId = kvp.Key, FrequencyRank = 0, UsedInMediaAmount = 0,
-                                             ReadingsFrequencyPercentage = [.. new double[kvp.Value]],
-                                             ReadingsObservedFrequency = [.. new double[kvp.Value]],
-                                             ReadingsFrequencyRank = [.. new int[kvp.Value]],
-                                             ReadingsUsedInMediaAmount = [.. new int[kvp.Value]],
-                                         });
+            wordFrequencies.Add(wordId, new JmDictWordFrequency
+            {
+                WordId = wordId, FrequencyRank = 0, UsedInMediaAmount = 0
+            });
         }
+
+        // Initialise per-reading form frequencies
+        var readingFreqs = new Dictionary<(int, short), JmDictWordFormFrequency>();
+        foreach (var fk in wordFormKeys)
+        {
+            readingFreqs[(fk.WordId, fk.ReadingIndex)] = new JmDictWordFormFrequency
+            {
+                WordId = fk.WordId, ReadingIndex = fk.ReadingIndex
+            };
+        }
+
+        var formFreqsByWord = readingFreqs.Values
+            .GroupBy(rf => rf.WordId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(rf => rf.ReadingIndex).ToList());
 
         var primaryDecksQuery = context.Decks.AsNoTracking().Where(d => d.ParentDeck == null);
 
@@ -637,8 +649,7 @@ public static class JitenHelper
 
         if (!primaryDecks.Any())
         {
-            // Return empty or default frequencies if no decks match
-            return wordFrequencies.Values.ToList();
+            return (wordFrequencies.Values.ToList(), readingFreqs.Values.ToList());
         }
 
         var wordAggregates = await context.DeckWords
@@ -656,7 +667,7 @@ public static class JitenHelper
         {
             if (wordFrequencies.TryGetValue(agg.WordId, out var freq))
             {
-                freq.FrequencyRank = agg.TotalOccurrences; // Store raw count
+                freq.FrequencyRank = agg.TotalOccurrences;
                 freq.UsedInMediaAmount = agg.DistinctDeckCount;
             }
         }
@@ -673,16 +684,11 @@ public static class JitenHelper
 
         foreach (var agg in readingAggregates)
         {
-            if (wordFrequencies.TryGetValue(agg.WordId, out var freq))
+            var key = (agg.WordId, (short)agg.ReadingIndex);
+            if (readingFreqs.TryGetValue(key, out var formFreq))
             {
-                if (agg.ReadingIndex >= freq.ReadingsFrequencyRank.Count)
-                {
-                    Console.WriteLine($"[Warning] DeckWord has ReadingIndex {agg.ReadingIndex} but WordId {agg.WordId} only has {freq.ReadingsFrequencyRank.Count} readings.");
-                    continue;
-                }
-                
-                freq.ReadingsFrequencyRank[agg.ReadingIndex] = agg.TotalOccurrences; // Store raw count
-                freq.ReadingsUsedInMediaAmount[agg.ReadingIndex] = agg.EntryCount;
+                formFreq.FrequencyRank = agg.TotalOccurrences;
+                formFreq.UsedInMediaAmount = agg.EntryCount;
             }
         }
 
@@ -693,11 +699,14 @@ public static class JitenHelper
             double score = Math.Log(1 + word.FrequencyRank) * word.UsedInMediaAmount;
             word.FrequencyRank = (int)Math.Round(score * 100);
 
-            for (int j = 0; j < word.ReadingsFrequencyRank.Count; j++)
+            if (formFreqsByWord.TryGetValue(word.WordId, out var wordFormFreqs))
             {
-                word.ReadingsObservedFrequency[j] = word.ReadingsFrequencyRank[j];
-                double readingScore = Math.Log(1 + word.ReadingsFrequencyRank[j]) * word.ReadingsUsedInMediaAmount[j];
-                word.ReadingsFrequencyRank[j] = (int)Math.Round(readingScore * 100);
+                foreach (var formFreq in wordFormFreqs)
+                {
+                    formFreq.ObservedFrequency = formFreq.FrequencyRank;
+                    double readingScore = Math.Log(1 + formFreq.FrequencyRank) * formFreq.UsedInMediaAmount;
+                    formFreq.FrequencyRank = (int)Math.Round(readingScore * 100);
+                }
             }
         }
 
@@ -718,19 +727,18 @@ public static class JitenHelper
             int wordRawFrequencyCount = (int)word.ObservedFrequency;
             int wordScore = word.FrequencyRank;
 
-            for (int j = 0; j < word.ReadingsObservedFrequency.Count; j++)
+            if (formFreqsByWord.TryGetValue(word.WordId, out var wordFormFreqs))
             {
-                double readingRawCount = word.ReadingsObservedFrequency[j];
+                foreach (var formFreq in wordFormFreqs)
+                {
+                    double readingRawCount = formFreq.ObservedFrequency;
 
-                if (totalOccurrences > 0)
-                    word.ReadingsObservedFrequency[j] = readingRawCount / (double)totalOccurrences;
-                else
-                    word.ReadingsObservedFrequency[j] = 0;
+                    formFreq.ObservedFrequency = totalOccurrences > 0
+                        ? readingRawCount / (double)totalOccurrences : 0;
 
-                if (wordRawFrequencyCount > 0)
-                    word.ReadingsFrequencyPercentage[j] = (readingRawCount / (double)wordRawFrequencyCount) * 100.0;
-                else
-                    word.ReadingsFrequencyPercentage[j] = 0;
+                    formFreq.FrequencyPercentage = wordRawFrequencyCount > 0
+                        ? (readingRawCount / (double)wordRawFrequencyCount) * 100.0 : 0;
+                }
             }
 
             if (totalOccurrences > 0)
@@ -752,15 +760,14 @@ public static class JitenHelper
             word.FrequencyRank = currentRank + 1;
         }
 
+        // Per-reading final ranking
         var readingFrequencyCounts = new Dictionary<int, int>();
-        foreach (var wordFreq in sortedWordFrequencies)
+        foreach (var formFreq in readingFreqs.Values)
         {
-            foreach (int readingScore in wordFreq.ReadingsFrequencyRank)
-            {
-                if (readingScore <= 0) continue;
-                readingFrequencyCounts.TryGetValue(readingScore, out int currentCount);
-                readingFrequencyCounts[readingScore] = currentCount + 1;
-            }
+            int readingScore = formFreq.FrequencyRank;
+            if (readingScore <= 0) continue;
+            readingFrequencyCounts.TryGetValue(readingScore, out int currentCount);
+            readingFrequencyCounts[readingScore] = currentCount + 1;
         }
 
         var sortedReadingFrequencies = readingFrequencyCounts.OrderByDescending(kvp => kvp.Key).ToList();
@@ -774,70 +781,109 @@ public static class JitenHelper
 
         int zeroReadingRank = currentRank;
 
-        foreach (var wordFreq in sortedWordFrequencies)
+        foreach (var formFreq in readingFreqs.Values)
         {
-            for (int i = 0; i < wordFreq.ReadingsFrequencyRank.Count; i++)
+            int readingScore = formFreq.FrequencyRank;
+            if (readingScore > 0 && readingFrequencyFinalRanks.TryGetValue(readingScore, out int finalRank))
             {
-                int readingScore = wordFreq.ReadingsFrequencyRank[i];
-                if (readingScore > 0 && readingFrequencyFinalRanks.TryGetValue(readingScore, out int finalRank))
-                {
-                    wordFreq.ReadingsFrequencyRank[i] = finalRank;
-                }
-                else
-                {
-                    wordFreq.ReadingsFrequencyRank[i] = zeroReadingRank;
-                }
+                formFreq.FrequencyRank = finalRank;
+            }
+            else
+            {
+                formFreq.FrequencyRank = zeroReadingRank;
             }
         }
 
-        return sortedWordFrequencies;
+        return (sortedWordFrequencies, readingFreqs.Values.ToList());
     }
 
-    public static async Task SaveFrequenciesToDatabase(IDbContextFactory<JitenDbContext> contextFactory, List<JmDictWordFrequency> frequencies)
+    public static async Task SaveFrequenciesToDatabase(IDbContextFactory<JitenDbContext> contextFactory,
+        List<JmDictWordFrequency> wordFrequencies, List<JmDictWordFormFrequency> formFrequencies)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
         Console.WriteLine("Updating database with frequencies...");
 
-        // Delete previous frequency data if it exists
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE jmdict.\"WordFrequencies\"");
-
-        // Bulk insert using PostgreSQL COPY command
-        const string tempTable = "temp_word_frequencies";
         await using var conn = new NpgsqlConnection(context.Database.GetConnectionString());
         await conn.OpenAsync();
 
+        // WordFrequencies
+        await using (var truncCmd = new NpgsqlCommand(@"TRUNCATE TABLE jmdict.""WordFrequencies""", conn))
+        {
+            await truncCmd.ExecuteNonQueryAsync();
+        }
+
+        const string tempTable = "temp_word_frequencies";
         await using (var cmd = new NpgsqlCommand($@"CREATE TEMP TABLE {tempTable} (LIKE jmdict.""WordFrequencies"" INCLUDING ALL)", conn))
         {
             await cmd.ExecuteNonQueryAsync();
         }
 
         await using (var writer =
-                     await
-                         conn.BeginBinaryImportAsync($@"COPY {tempTable} (""WordId"", ""FrequencyRank"", ""ObservedFrequency"", ""UsedInMediaAmount"", ""ReadingsFrequencyPercentage"", ""ReadingsObservedFrequency"", ""ReadingsFrequencyRank"", ""ReadingsUsedInMediaAmount"") FROM STDIN (FORMAT BINARY)"))
+                     await conn.BeginBinaryImportAsync(
+                         $@"COPY {tempTable} (""WordId"", ""FrequencyRank"", ""ObservedFrequency"", ""UsedInMediaAmount"") FROM STDIN (FORMAT BINARY)"))
         {
-            foreach (var word in frequencies)
+            foreach (var word in wordFrequencies)
             {
                 await writer.StartRowAsync();
                 await writer.WriteAsync(word.WordId);
                 await writer.WriteAsync(word.FrequencyRank);
                 await writer.WriteAsync(word.ObservedFrequency);
                 await writer.WriteAsync(word.UsedInMediaAmount);
-                await writer.WriteAsync(word.ReadingsFrequencyPercentage, NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Double);
-                await writer.WriteAsync(word.ReadingsObservedFrequency, NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Double);
-                await writer.WriteAsync(word.ReadingsFrequencyRank, NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer);
-                await writer.WriteAsync(word.ReadingsUsedInMediaAmount, NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer);
             }
 
             await writer.CompleteAsync();
         }
 
-        await using (var cmd = new NpgsqlCommand($@"
-        INSERT INTO jmdict.""WordFrequencies"" (""WordId"", ""FrequencyRank"", ""ObservedFrequency"", ""UsedInMediaAmount"", ""ReadingsFrequencyPercentage"", ""ReadingsObservedFrequency"", ""ReadingsFrequencyRank"", ""ReadingsUsedInMediaAmount"")
-        SELECT ""WordId"", ""FrequencyRank"", ""ObservedFrequency"", ""UsedInMediaAmount"", ""ReadingsFrequencyPercentage"", ""ReadingsObservedFrequency"", ""ReadingsFrequencyRank"", ""ReadingsUsedInMediaAmount"" FROM {tempTable};
+        await using (var cmd2 = new NpgsqlCommand($@"
+        INSERT INTO jmdict.""WordFrequencies"" (""WordId"", ""FrequencyRank"", ""ObservedFrequency"", ""UsedInMediaAmount"")
+        SELECT ""WordId"", ""FrequencyRank"", ""ObservedFrequency"", ""UsedInMediaAmount"" FROM {tempTable};
         DROP TABLE {tempTable};", conn))
         {
-            await cmd.ExecuteNonQueryAsync();
+            await cmd2.ExecuteNonQueryAsync();
+        }
+
+        // WordFormFrequencies
+        Console.WriteLine("Updating WordFormFrequencies...");
+        await using (var truncCmd = new NpgsqlCommand(@"TRUNCATE TABLE jmdict.""WordFormFrequencies""", conn))
+        {
+            await truncCmd.ExecuteNonQueryAsync();
+        }
+
+        const string wffTempTable = "temp_word_form_frequencies";
+        await using (var createCmd = new NpgsqlCommand($@"CREATE TEMP TABLE {wffTempTable} (LIKE jmdict.""WordFormFrequencies"" INCLUDING ALL)", conn))
+        {
+            await createCmd.ExecuteNonQueryAsync();
+        }
+
+        await using (var wffWriter =
+                     await conn.BeginBinaryImportAsync($@"COPY {wffTempTable} (""WordId"", ""ReadingIndex"", ""FrequencyRank"", ""FrequencyPercentage"", ""ObservedFrequency"", ""UsedInMediaAmount"") FROM STDIN (FORMAT BINARY)"))
+        {
+            foreach (var formFreq in formFrequencies)
+            {
+                await wffWriter.StartRowAsync();
+                await wffWriter.WriteAsync(formFreq.WordId);
+                await wffWriter.WriteAsync(formFreq.ReadingIndex);
+                await wffWriter.WriteAsync(formFreq.FrequencyRank);
+                await wffWriter.WriteAsync(formFreq.FrequencyPercentage);
+                await wffWriter.WriteAsync(formFreq.ObservedFrequency);
+                await wffWriter.WriteAsync(formFreq.UsedInMediaAmount);
+            }
+
+            await wffWriter.CompleteAsync();
+        }
+
+        await using (var insertCmd = new NpgsqlCommand($@"
+        INSERT INTO jmdict.""WordFormFrequencies"" (""WordId"", ""ReadingIndex"", ""FrequencyRank"", ""FrequencyPercentage"", ""ObservedFrequency"", ""UsedInMediaAmount"")
+        SELECT ""WordId"", ""ReadingIndex"", ""FrequencyRank"", ""FrequencyPercentage"", ""ObservedFrequency"", ""UsedInMediaAmount"" FROM {wffTempTable}
+        ON CONFLICT (""WordId"", ""ReadingIndex"") DO UPDATE SET
+            ""FrequencyRank"" = EXCLUDED.""FrequencyRank"",
+            ""FrequencyPercentage"" = EXCLUDED.""FrequencyPercentage"",
+            ""ObservedFrequency"" = EXCLUDED.""ObservedFrequency"",
+            ""UsedInMediaAmount"" = EXCLUDED.""UsedInMediaAmount"";
+        DROP TABLE {wffTempTable};", conn))
+        {
+            await insertCmd.ExecuteNonQueryAsync();
         }
 
         Console.WriteLine("Database update complete.");

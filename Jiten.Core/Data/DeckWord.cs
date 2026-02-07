@@ -51,6 +51,10 @@ public class DeckWord
     [NotMapped]
     public WordOrigin Origin { get; set; }
 
+    [NotMapped]
+    [JsonIgnore]
+    public string SudachiReading { get; set; } = string.Empty;
+
     [JsonIgnore]
     public Deck Deck { get; set; } = new();
     

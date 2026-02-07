@@ -42,29 +42,33 @@ public static class YomitanHelper
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var wordIds = frequencies.Select(f => f.WordId).ToList();
-        var allWords = await context.JMDictWords.AsNoTracking()
-                                    .Where(w => wordIds.Contains(w.WordId))
-                                    .ToDictionaryAsync(w => w.WordId);
+
+        var allForms = await context.WordForms.AsNoTracking()
+                                    .Where(wf => wordIds.Contains(wf.WordId))
+                                    .ToListAsync();
+        var formsByWord = allForms.GroupBy(wf => wf.WordId).ToDictionary(g => g.Key, g => g.OrderBy(wf => wf.ReadingIndex).ToList());
+
+        var allFormFreqs = await context.WordFormFrequencies.AsNoTracking()
+                                        .Where(wff => wordIds.Contains(wff.WordId))
+                                        .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
 
         var yomitanTermList = new List<List<object>>();
         var addedEntries = new HashSet<string>();
 
         foreach (var freq in frequencies)
         {
-            if (!allWords.TryGetValue(freq.WordId, out JmDictWord? word)) continue;
+            if (!formsByWord.TryGetValue(freq.WordId, out var wordForms)) continue;
 
-            // Get valid readings. Includes observed readings AND the main reading (even if not observed).
-            var kanaReadings = GetKanaReadingsWithFrequencies(word, freq);
+            var kanaReadings = GetKanaReadingsWithFrequenciesFromForms(wordForms, allFormFreqs, freq.WordId);
             if (kanaReadings.Count == 0) continue;
 
-            // The list is ordered by index, so the first one is the Main Reading.
             string mainKanaReading = kanaReadings[0].kanaText;
 
             // CASE 1: Create standalone kana entries
             foreach (var (kanaText, kanaRank, kanaIndex) in kanaReadings)
             {
-                // Only generate standalone entry if it was actually observed
-                if (freq.ReadingsUsedInMediaAmount[kanaIndex] <= 0)
+                var kanaFormFreq = allFormFreqs.GetValueOrDefault((freq.WordId, (short)kanaIndex));
+                if (kanaFormFreq == null || kanaFormFreq.UsedInMediaAmount <= 0)
                     continue;
 
                 if (addedEntries.Contains(kanaText))
@@ -78,16 +82,17 @@ public static class YomitanHelper
             }
 
             // CASE 2: Create kanji entries
-            for (int i = 0; i < word.Readings.Count; i++)
+            foreach (var form in wordForms)
             {
-                if (word.ReadingTypes[i] != JmDictReadingType.Reading)
+                if (form.FormType != JmDictFormType.KanjiForm)
                     continue;
 
-                var kanjiTerm = word.Readings[i];
-                var kanjiRank = freq.ReadingsFrequencyRank[i];
+                var kanjiTerm = form.Text;
+                var kanjiFormFreq = allFormFreqs.GetValueOrDefault((freq.WordId, form.ReadingIndex));
+                var kanjiRank = kanjiFormFreq?.FrequencyRank ?? 0;
 
                 // Skip if kanji form was never observed
-                if (freq.ReadingsUsedInMediaAmount[i] <= 0)
+                if (kanjiFormFreq == null || kanjiFormFreq.UsedInMediaAmount <= 0)
                     continue;
 
                 // Also skip if rank is invalid
@@ -96,10 +101,9 @@ public static class YomitanHelper
 
                 foreach (var (kanaText, kanaRank, kanaIndex) in kanaReadings)
                 {
-                    bool isKanaObserved = freq.ReadingsUsedInMediaAmount[kanaIndex] > 0;
+                    var kanaIdxFormFreq = allFormFreqs.GetValueOrDefault((freq.WordId, (short)kanaIndex));
+                    bool isKanaObserved = kanaIdxFormFreq != null && kanaIdxFormFreq.UsedInMediaAmount > 0;
 
-                    // Entry 1: Kanji term with KANA frequency
-                    // Only generate this if the specific kana reading was observed
                     if (isKanaObserved)
                     {
                         string entryKey1 = $"{kanjiTerm}:{kanaText}:kana";
@@ -120,10 +124,6 @@ public static class YomitanHelper
                         }
                     }
 
-                    // Entry 2: Kanji term with KANJI frequency
-                    // This ONLY applies to the MAIN reading
-                    // We generate this even if the main kana reading itself wasn't observed, 
-                    // because the Kanji WAS observed.
                     if (kanaText != mainKanaReading)
                         continue;
 
@@ -191,44 +191,34 @@ public static class YomitanHelper
     /// 1. Any reading that was observed (UsedInMediaAmount > 0)
     /// 2. The FIRST defined kana reading (Main Reading), if the word was observed at all.
     /// </summary>
-    private static List<(string kanaText, int rank, int readingIndex)> GetKanaReadingsWithFrequencies(
-        JmDictWord word,
-        JmDictWordFrequency freq)
+    private static List<(string kanaText, int rank, int readingIndex)> GetKanaReadingsWithFrequenciesFromForms(
+        List<JmDictWordForm> wordForms,
+        Dictionary<(int, short), JmDictWordFormFrequency> formFreqs,
+        int wordId)
     {
         // Check if the word as a whole was observed
-        bool wordWasObserved = freq.ReadingsUsedInMediaAmount.Any(amount => amount > 0);
+        bool wordWasObserved = wordForms.Any(wf =>
+        {
+            var ff = formFreqs.GetValueOrDefault((wordId, wf.ReadingIndex));
+            return ff != null && ff.UsedInMediaAmount > 0;
+        });
         if (!wordWasObserved) return new List<(string, int, int)>();
 
-        // Find the index of the first kana reading (default/main reading)
-        int firstKanaIndex = -1;
-        for (int i = 0; i < word.ReadingTypes.Count; i++)
-        {
-            if (word.ReadingTypes[i] != JmDictReadingType.KanaReading)
-                continue;
-
-            firstKanaIndex = i;
-            break;
-        }
+        var kanaForms = wordForms.Where(wf => wf.FormType == JmDictFormType.KanaForm).ToList();
+        short? firstKanaIndex = kanaForms.FirstOrDefault()?.ReadingIndex;
 
         var kanaReadings = new List<(string kanaText, int rank, int readingIndex)>();
 
-        for (int i = 0; i < word.Readings.Count; i++)
+        foreach (var form in kanaForms)
         {
-            if (word.ReadingTypes[i] != JmDictReadingType.KanaReading) continue;
-
-            // Include if:
-            // 1. It was observed
-            // OR
-            // 2. It is the Main Reading (index == firstKanaIndex)
-            bool isObserved = freq.ReadingsUsedInMediaAmount[i] > 0;
-            bool isMain = (i == firstKanaIndex);
+            var ff = formFreqs.GetValueOrDefault((wordId, form.ReadingIndex));
+            bool isObserved = ff != null && ff.UsedInMediaAmount > 0;
+            bool isMain = form.ReadingIndex == firstKanaIndex;
 
             if (!isObserved && !isMain)
                 continue;
 
-            // Note: Rank might be bad/default if !isObserved, but we need it for the struct.
-            // The generation loop will filter out the ㋕ entry based on isObserved.
-            kanaReadings.Add((word.Readings[i], freq.ReadingsFrequencyRank[i], i));
+            kanaReadings.Add((form.Text, ff?.FrequencyRank ?? 0, form.ReadingIndex));
         }
 
         return kanaReadings;
@@ -261,9 +251,11 @@ public static class YomitanHelper
         var deckWords = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deck.DeckId).ToList();
 
         var wordIds = deckWords.Select(dw => dw.WordId).Distinct().ToList();
-        var allWords = await context.JMDictWords.AsNoTracking()
-                                    .Where(w => wordIds.Contains(w.WordId))
-                                    .ToDictionaryAsync(w => w.WordId);
+
+        var allForms2 = await context.WordForms.AsNoTracking()
+                                     .Where(wf => wordIds.Contains(wf.WordId))
+                                     .ToListAsync();
+        var formsByWord2 = allForms2.GroupBy(wf => wf.WordId).ToDictionary(g => g.Key, g => g.OrderBy(wf => wf.ReadingIndex).ToList());
 
         var yomitanTermList = new List<List<object>>();
         var addedEntries = new HashSet<string>();
@@ -277,10 +269,10 @@ public static class YomitanHelper
 
         foreach (var wordId in wordIds)
         {
-            if (!allWords.TryGetValue(wordId, out JmDictWord? word) ||
+            if (!formsByWord2.TryGetValue(wordId, out var wordForms) ||
                 !deckWordsByWordId.TryGetValue(wordId, out var wordDeckWords)) continue;
 
-            var kanaReadings = GetKanaReadingsWithOccurrences(word, deckWordsByWordIdAndReading, wordId);
+            var kanaReadings = GetKanaReadingsWithOccurrencesFromForms(wordForms, deckWordsByWordIdAndReading, wordId);
             if (kanaReadings.Count == 0) continue;
 
             string mainKanaReading = kanaReadings[0].kanaText;
@@ -288,9 +280,7 @@ public static class YomitanHelper
             // CASE 1: Create standalone kana entries
             foreach (var (kanaText, kanaOccurrences, kanaIndex) in kanaReadings)
             {
-                // Only if observed
                 if (kanaOccurrences <= 0) continue;
-
                 if (addedEntries.Contains(kanaText)) continue;
 
                 yomitanTermList.Add([
@@ -301,15 +291,14 @@ public static class YomitanHelper
             }
 
             // CASE 2: Create kanji entries
-            for (int i = 0; i < word.Readings.Count; i++)
+            foreach (var form in wordForms)
             {
-                if (word.ReadingTypes[i] != JmDictReadingType.Reading) continue;
+                if (form.FormType != JmDictFormType.KanjiForm) continue;
 
-                var kanjiTerm = word.Readings[i];
-                var key = new { WordId = wordId, ReadingIndex = (byte)i };
+                var kanjiTerm = form.Text;
+                var key = new { WordId = wordId, ReadingIndex = (byte)form.ReadingIndex };
                 var hasKanjiOccurrences = deckWordsByWordIdAndReading.TryGetValue(key, out int kanjiOccurrences);
 
-                // Skip if kanji form has no occurrences
                 if (!hasKanjiOccurrences || kanjiOccurrences == 0)
                     continue;
 
@@ -317,7 +306,6 @@ public static class YomitanHelper
                 {
                     bool isKanaObserved = kanaOccurrences > 0;
 
-                    // Entry 1: Kanji term with KANA occurrences
                     if (isKanaObserved)
                     {
                         string entryKey1 = $"{kanjiTerm}:{kanaText}:kana";
@@ -340,7 +328,6 @@ public static class YomitanHelper
                         }
                     }
 
-                    // Entry 2: Kanji term with KANJI occurrences (Main Reading only)
                     if (kanaText != mainKanaReading) continue;
 
                     string entryKey2 = $"{kanjiTerm}:{kanaText}:kanji";
@@ -401,17 +388,15 @@ public static class YomitanHelper
         return memoryStream.ToArray();
     }
 
-    private static List<(string kanaText, int occurrences, int readingIndex)> GetKanaReadingsWithOccurrences<TKey>(
-        JmDictWord word,
+    private static List<(string kanaText, int occurrences, int readingIndex)> GetKanaReadingsWithOccurrencesFromForms<TKey>(
+        List<JmDictWordForm> wordForms,
         IReadOnlyDictionary<TKey, int> deckWordsByWordIdAndReading,
         int wordId) where TKey : notnull
     {
-        // Check if word is observed
         bool wordObserved = false;
-        // Simple check: iterate all reading indices for this word
-        for (int i = 0; i < word.Readings.Count; i++)
+        foreach (var form in wordForms)
         {
-            var key = (TKey)(object)new { WordId = wordId, ReadingIndex = (byte)i };
+            var key = (TKey)(object)new { WordId = wordId, ReadingIndex = (byte)form.ReadingIndex };
             if (deckWordsByWordIdAndReading.TryGetValue(key, out int occ) && occ > 0)
             {
                 wordObserved = true;
@@ -421,34 +406,25 @@ public static class YomitanHelper
 
         if (!wordObserved) return new List<(string, int, int)>();
 
-        int firstKanaIndex = -1;
-        for (int i = 0; i < word.ReadingTypes.Count; i++)
-        {
-            if (word.ReadingTypes[i] == JmDictReadingType.KanaReading)
-            {
-                firstKanaIndex = i;
-                break;
-            }
-        }
+        var kanaForms = wordForms.Where(wf => wf.FormType == JmDictFormType.KanaForm).ToList();
+        short? firstKanaIndex = kanaForms.FirstOrDefault()?.ReadingIndex;
 
         var kanaReadings = new List<(string kanaText, int occurrences, int readingIndex)>();
 
-        for (int i = 0; i < word.Readings.Count; i++)
+        foreach (var form in kanaForms)
         {
-            if (word.ReadingTypes[i] != JmDictReadingType.KanaReading) continue;
-
-            var key = (TKey)(object)new { WordId = wordId, ReadingIndex = (byte)i };
+            var key = (TKey)(object)new { WordId = wordId, ReadingIndex = (byte)form.ReadingIndex };
             int occurrences = 0;
             if (deckWordsByWordIdAndReading.TryGetValue(key, out int val))
                 occurrences = val;
 
             bool isObserved = occurrences > 0;
-            bool isMain = (i == firstKanaIndex);
+            bool isMain = form.ReadingIndex == firstKanaIndex;
 
             if (!isObserved && !isMain)
                 continue;
 
-            kanaReadings.Add((word.Readings[i], occurrences, i));
+            kanaReadings.Add((form.Text, occurrences, form.ReadingIndex));
         }
 
         return kanaReadings;

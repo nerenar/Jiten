@@ -7,6 +7,7 @@ using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.JMDict;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -114,13 +115,13 @@ public class WordSetController(
             totalCount = await baseQuery.CountAsync();
 
             var sorted = sortOrder == SortOrder.Ascending
-                ? baseQuery.OrderBy(m => jitenContext.JmDictWordFrequencies
-                    .Where(f => f.WordId == m.WordId)
-                    .Select(f => f.ReadingsFrequencyRank[m.ReadingIndex])
+                ? baseQuery.OrderBy(m => jitenContext.WordFormFrequencies
+                    .Where(wff => wff.WordId == m.WordId && wff.ReadingIndex == m.ReadingIndex)
+                    .Select(wff => wff.FrequencyRank)
                     .FirstOrDefault()).ThenBy(m => m.Position)
-                : baseQuery.OrderByDescending(m => jitenContext.JmDictWordFrequencies
-                    .Where(f => f.WordId == m.WordId)
-                    .Select(f => f.ReadingsFrequencyRank[m.ReadingIndex])
+                : baseQuery.OrderByDescending(m => jitenContext.WordFormFrequencies
+                    .Where(wff => wff.WordId == m.WordId && wff.ReadingIndex == m.ReadingIndex)
+                    .Select(wff => wff.FrequencyRank)
                     .FirstOrDefault()).ThenBy(m => m.Position);
 
             pagedItems = await sorted.Skip(offset).Take(limit).ToListAsync();
@@ -138,10 +139,8 @@ public class WordSetController(
 
         var pagedWordIds = pagedItems.Select(p => p.WordId).Distinct().ToList();
 
-        var frequencies = await jitenContext.JmDictWordFrequencies
-            .AsNoTracking()
-            .Where(f => pagedWordIds.Contains(f.WordId))
-            .ToDictionaryAsync(f => f.WordId);
+        var wsFormDict = await WordFormHelper.LoadWordForms(jitenContext, pagedWordIds);
+        var wsFormFreqDict = await WordFormHelper.LoadWordFormFrequencies(jitenContext, pagedWordIds);
 
         var words = await jitenContext.JMDictWords
             .AsNoTracking()
@@ -157,18 +156,13 @@ public class WordSetController(
             .Select(p =>
             {
                 var word = words[p.WordId];
-                var freq = frequencies.GetValueOrDefault(p.WordId);
                 var readingIndex = (byte)p.ReadingIndex;
+                var form = wsFormDict.GetValueOrDefault((p.WordId, p.ReadingIndex));
+                var formFreq = wsFormFreqDict.GetValueOrDefault((p.WordId, p.ReadingIndex));
 
-                var mainReading = new ReadingDto
-                {
-                    Text = word.ReadingsFurigana.ElementAtOrDefault(readingIndex) ?? word.Readings.ElementAtOrDefault(readingIndex) ?? "",
-                    ReadingIndex = readingIndex,
-                    ReadingType = word.ReadingTypes.ElementAtOrDefault(readingIndex),
-                    FrequencyRank = freq is not null && readingIndex < freq.ReadingsFrequencyRank.Count ? freq.ReadingsFrequencyRank[readingIndex] : 0,
-                    FrequencyPercentage = freq is not null && readingIndex < freq.ReadingsFrequencyPercentage.Count ? freq.ReadingsFrequencyPercentage[readingIndex] : 0,
-                    UsedInMediaAmount = freq is not null && readingIndex < freq.ReadingsUsedInMediaAmount.Count ? freq.ReadingsUsedInMediaAmount[readingIndex] : 0
-                };
+                var mainReading = form != null
+                    ? WordFormHelper.ToFormDto(form, formFreq)
+                    : new WordFormDto { ReadingIndex = readingIndex };
 
                 return new WordDto
                 {
@@ -353,15 +347,15 @@ public class WordSetController(
         };
 
         string freqJoin = sortBy == "globalFreq"
-            ? @"LEFT JOIN jmdict.""WordFrequencies"" freq ON m.""WordId"" = freq.""WordId"""
+            ? @"LEFT JOIN jmdict.""WordFormFrequencies"" wff ON m.""WordId"" = wff.""WordId"" AND m.""ReadingIndex"" = wff.""ReadingIndex"""
             : "";
 
         string orderByClause = (sortBy, sortOrder) switch
         {
             ("globalFreq", SortOrder.Ascending) =>
-                @"COALESCE(freq.""ReadingsFrequencyRank""[m.""ReadingIndex"" + 1], 2147483647) ASC, m.""Position"" ASC",
+                @"COALESCE(wff.""FrequencyRank"", 2147483647) ASC, m.""Position"" ASC",
             ("globalFreq", _) =>
-                @"COALESCE(freq.""ReadingsFrequencyRank""[m.""ReadingIndex"" + 1], 2147483647) DESC, m.""Position"" ASC",
+                @"COALESCE(wff.""FrequencyRank"", 2147483647) DESC, m.""Position"" ASC",
             (_, SortOrder.Ascending) => @"m.""Position"" ASC",
             _ => @"m.""Position"" DESC"
         };

@@ -62,7 +62,8 @@ public class DiagnosticCommands(CliContext context)
                 w.ReadingIndex,
                 PartsOfSpeech = w.PartsOfSpeech?.Select(p => p.ToString()).ToList(),
                 w.Conjugations
-            }).ToList()
+            }).ToList(),
+            FormScoring = diagnostics.Results
         };
 
         var jsonOptions = new JsonSerializerOptions
@@ -195,6 +196,7 @@ public class DiagnosticCommands(CliContext context)
         {
             var word = await context1.JMDictWords
                 .Include(w => w.Definitions)
+                .Include(w => w.Forms)
                 .FirstOrDefaultAsync(w => w.WordId == wordId);
 
             if (word == null)
@@ -209,7 +211,8 @@ public class DiagnosticCommands(CliContext context)
 
         var words = await context1.JMDictWords
             .Include(w => w.Definitions)
-            .Where(w => w.Readings.Contains(query))
+            .Include(w => w.Forms)
+            .Where(w => w.Forms.Any(f => f.Text == query))
             .Take(20)
             .ToListAsync();
 
@@ -293,8 +296,9 @@ public class DiagnosticCommands(CliContext context)
     private static void PrintWord(JmDictWord word)
     {
         Console.WriteLine($"WordId: {word.WordId}");
-        Console.WriteLine($"Readings: [{string.Join(", ", word.Readings)}]");
-        Console.WriteLine($"ReadingTypes: [{string.Join(", ", word.ReadingTypes)}]");
+        var orderedForms = word.Forms.OrderBy(f => f.ReadingIndex).ToList();
+        Console.WriteLine($"Readings: [{string.Join(", ", orderedForms.Select(f => f.Text))}]");
+        Console.WriteLine($"FormTypes: [{string.Join(", ", orderedForms.Select(f => f.FormType))}]");
         Console.WriteLine($"PartsOfSpeech: [{string.Join(", ", word.PartsOfSpeech)}]");
         Console.WriteLine($"PitchAccents: [{string.Join(", ", word.PitchAccents ?? [])}]");
         Console.WriteLine($"Priorities: [{string.Join(", ", word.Priorities ?? [])}]");

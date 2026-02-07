@@ -73,6 +73,25 @@ public class WordResult
 
     public string? DictionaryForm { get; set; }
     public string? Reading { get; set; }
+    public int? WordId { get; set; }
+    public byte? ReadingIndex { get; set; }
+    public List<FormCandidateDiagnostic> Candidates { get; set; } = [];
+}
+
+public class FormCandidateDiagnostic
+{
+    public int WordId { get; set; }
+    public string FormText { get; set; } = string.Empty;
+    public byte ReadingIndex { get; set; }
+    public bool IsSelected { get; set; }
+    public int TotalScore { get; set; }
+    public int WordScore { get; set; }
+    public int EntryPriorityScore { get; set; }
+    public int FormPriorityScore { get; set; }
+    public int FormFlagScore { get; set; }
+    public int SurfaceMatchScore { get; set; }
+    public int ScriptScore { get; set; }
+    public int ReadingMatchScore { get; set; }
 }
 
 /// <summary>

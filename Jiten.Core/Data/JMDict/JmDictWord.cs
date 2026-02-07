@@ -3,61 +3,59 @@ namespace Jiten.Core.Data.JMDict;
 public class JmDictWord
 {
     public int WordId { get; set; }
-    public List<string> Readings { get; set; } = new();
-    public List<string> ReadingsFurigana { get; set; } = new();
-    public List<JmDictReadingType> ReadingTypes { get; set; } = new();
-    public List<string>? ObsoleteReadings { get; set; } = new();
+
     public List<string> PartsOfSpeech { get; set; } = new();
     public List<JmDictDefinition> Definitions { get; set; } = new();
     public List<JmDictLookup> Lookups { get; set; } = new();
     public List<int>? PitchAccents { get; set; } = new();
     public List<string>? Priorities { get; set; } = [];
     public WordOrigin Origin { get; set; } = WordOrigin.Unknown;
+    public List<JmDictWordForm> Forms { get; set; } = [];
 
     public int GetPriorityScore(bool isKana)
     {
-        if (Priorities == null || !Priorities.Any())
-            return 0;
-
         int score = 0;
 
-        // Special priority for common words that get the wrong reading by default
-        // i.e. 秋, 陽, etc 
-        if (Priorities.Contains("jiten"))
-            score += 100;
-        
-        if (Priorities.Contains("ichi1"))
-            score += 20;
-
-        if (Priorities.Contains("ichi2"))
-            score += 10;
-
-        if (Priorities.Contains("news1"))
-            score += 15;
-
-        if (Priorities.Contains("news2"))
-            score += 10;
-
-        if (Priorities.Contains("gai1"))
-            score += 15;
-
-        if (Priorities.Contains("gai2"))
-            score += 10;
-
-        var nf = Priorities.FirstOrDefault(p => p.StartsWith("nf"));
-        if (nf != null)
+        if (Priorities != null && Priorities.Any())
         {
-            var nfRank = int.Parse(nf[2..]);
-            score += Math.Max(0, 5 - (int)Math.Round(nfRank / 10f));
-        }
+            // Special priority for common words that get the wrong reading by default
+            // i.e. 秋, 陽, etc
+            if (Priorities.Contains("jiten"))
+                score += 100;
 
-        if (score == 0)
-        {
-            if (Priorities.Contains("spec1"))
+            if (Priorities.Contains("ichi1"))
+                score += 20;
+
+            if (Priorities.Contains("ichi2"))
+                score += 10;
+
+            if (Priorities.Contains("news1"))
                 score += 15;
 
-            if (Priorities.Contains("spec2"))
-                score += 5;
+            if (Priorities.Contains("news2"))
+                score += 10;
+
+            if (Priorities.Contains("gai1"))
+                score += 15;
+
+            if (Priorities.Contains("gai2"))
+                score += 10;
+
+            var nf = Priorities.FirstOrDefault(p => p.StartsWith("nf"));
+            if (nf != null)
+            {
+                var nfRank = int.Parse(nf[2..]);
+                score += Math.Max(0, 5 - (int)Math.Round(nfRank / 10f));
+            }
+
+            if (score == 0)
+            {
+                if (Priorities.Contains("spec1"))
+                    score += 15;
+
+                if (Priorities.Contains("spec2"))
+                    score += 5;
+            }
         }
 
         if (PartsOfSpeech.Contains("uk"))

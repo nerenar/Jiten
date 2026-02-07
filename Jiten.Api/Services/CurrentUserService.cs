@@ -208,20 +208,19 @@ public class CurrentUserService(
 
         var wordIds = words.Select(w => w.WordId).Distinct().ToList();
 
-        // Load needed JMDict words
-        var jmdictWords = await jitenDbContext.JMDictWords
-                                              .AsNoTracking()
-                                              .Where(w => wordIds.Contains(w.WordId))
-                                              .Select(w => new { w.WordId, w.ReadingTypes })
-                                              .ToDictionaryAsync(w => w.WordId);
+        var validForms = await jitenDbContext.WordForms
+                                             .AsNoTracking()
+                                             .Where(wf => wordIds.Contains(wf.WordId))
+                                             .Select(wf => new { wf.WordId, wf.ReadingIndex })
+                                             .ToListAsync();
+        var validFormSet = validForms.Select(f => (f.WordId, (byte)f.ReadingIndex)).ToHashSet();
 
         // Determine all (WordId, ReadingIndex) pairs to add, preserving input order
         var pairs = new List<(int WordId, byte ReadingIndex)>();
         var seen = new HashSet<(int, byte)>();
         foreach (var word in words)
         {
-            if (!jmdictWords.TryGetValue(word.WordId, out var jw)) continue;
-            if (word.ReadingIndex >= jw.ReadingTypes.Count) continue;
+            if (!validFormSet.Contains((word.WordId, word.ReadingIndex))) continue;
 
             var key = (word.WordId, word.ReadingIndex);
             if (seen.Add(key))
@@ -277,18 +276,18 @@ public class CurrentUserService(
 
         var wordIds = words.Select(w => w.WordId).Distinct().ToList();
 
-        var jmdictWords = await jitenDbContext.JMDictWords
-                                              .AsNoTracking()
-                                              .Where(w => wordIds.Contains(w.WordId))
-                                              .Select(w => new { w.WordId, w.ReadingTypes })
-                                              .ToDictionaryAsync(w => w.WordId);
+        var blValidForms = await jitenDbContext.WordForms
+                                               .AsNoTracking()
+                                               .Where(wf => wordIds.Contains(wf.WordId))
+                                               .Select(wf => new { wf.WordId, wf.ReadingIndex })
+                                               .ToListAsync();
+        var blValidFormSet = blValidForms.Select(f => (f.WordId, (byte)f.ReadingIndex)).ToHashSet();
 
         var pairs = new List<(int WordId, byte ReadingIndex)>();
         var seen = new HashSet<(int, byte)>();
         foreach (var word in words)
         {
-            if (!jmdictWords.TryGetValue(word.WordId, out var jw)) continue;
-            if (word.ReadingIndex >= jw.ReadingTypes.Count) continue;
+            if (!blValidFormSet.Contains((word.WordId, word.ReadingIndex))) continue;
 
             var key = (word.WordId, word.ReadingIndex);
             if (seen.Add(key))

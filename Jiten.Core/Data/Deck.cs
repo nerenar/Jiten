@@ -250,10 +250,9 @@ public class Deck
         var wordIds = DeckWords.Select(dw => dw.WordId).ToList();
         var uniqueWordIds = wordIds.Distinct().ToList();
 
-        var jmdictWordsDict = context.JMDictWords.AsNoTracking()
-                                    .Where(w => uniqueWordIds.Contains(w.WordId))
-                                    .Include(w => w.Definitions)
-                                    .ToDictionary(w => w.WordId);
+        var wordFormTexts = context.WordForms.AsNoTracking()
+                                   .Where(wf => uniqueWordIds.Contains(wf.WordId))
+                                   .ToDictionary(wf => (wf.WordId, wf.ReadingIndex), wf => wf.Text);
 
         var wordIdOrder = new Dictionary<int, int>(capacity: wordIds.Count);
         for (int i = 0; i < wordIds.Count; i++)
@@ -261,14 +260,12 @@ public class Deck
             wordIdOrder.TryAdd(wordIds[i], i);
         }
 
-        var words = DeckWords.Select(dw => new { dw, jmDictWord = jmdictWordsDict.GetValueOrDefault(dw.WordId) })
-                             .OrderBy(dw => wordIdOrder.GetValueOrDefault(dw.dw.WordId, int.MaxValue))
-                             .ToList();
-        foreach (var word in words)
+        var words = DeckWords.OrderBy(dw => wordIdOrder.GetValueOrDefault(dw.WordId, int.MaxValue)).ToList();
+        foreach (var dw in words)
         {
-            var reading = word.jmDictWord!.Readings[word.dw.ReadingIndex];
+            var reading = wordFormTexts.GetValueOrDefault((dw.WordId, (short)dw.ReadingIndex), "");
 
-            for (int i = 0; i < word.dw.Occurrences; i++)
+            for (int i = 0; i < dw.Occurrences; i++)
             {
                 sb.Append(reading);
             }

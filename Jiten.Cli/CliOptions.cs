@@ -109,6 +109,12 @@ public class CliOptions
     [Option(longName: "sync-jmnedict", Required = false, HelpText = "Sync missing JMNedict entries and update partial entries with missing readings/definitions.")]
     public string SyncJMNedict { get; set; }
 
+    [Option(longName: "sync-jmdict", Required = false, HelpText = "Sync JMDict metadata on WordForms and Definitions from XML source.")]
+    public bool SyncJmDict { get; set; }
+
+    [Option(longName: "dry-run", Required = false, HelpText = "Preview sync changes without applying them. Exports a report to --output or jmdict-sync-changes.txt.")]
+    public bool DryRun { get; set; }
+
     [Option(longName: "import-kanjidic", Required = false, HelpText = "Import KANJIDIC2 kanji dictionary from XML file.")]
     public string ImportKanjidic { get; set; }
 

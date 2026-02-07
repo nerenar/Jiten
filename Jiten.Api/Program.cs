@@ -338,6 +338,7 @@ builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(sp.GetRequiredService<IConfiguration>().GetConnectionString("Redis")!));
 builder.Services.AddScoped<WordReplacementService>();
+builder.Services.AddHostedService<ParserWarmupService>();
 
 builder.Services.AddRateLimiter(options =>
 {

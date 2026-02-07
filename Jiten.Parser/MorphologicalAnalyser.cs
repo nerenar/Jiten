@@ -11,6 +11,8 @@ namespace Jiten.Parser;
 
 public class MorphologicalAnalyser
 {
+    public Func<string, bool>? HasCompoundLookup { get; set; }
+
     private static HashSet<(string, string, string, PartOfSpeech?)> SpecialCases3 =
     [
         ("な", "の", "で", PartOfSpeech.Expression),
@@ -63,7 +65,6 @@ public class MorphologicalAnalyser
     private static HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
         ("じゃ", "ない", PartOfSpeech.Expression),
-        ("に", "しろ", PartOfSpeech.Expression),
         ("だ", "けど", PartOfSpeech.Conjunction),
         ("だ", "が", PartOfSpeech.Conjunction),
         ("で", "さえ", PartOfSpeech.Expression),
@@ -106,10 +107,11 @@ public class MorphologicalAnalyser
         ("で", "も", PartOfSpeech.Conjunction),
         ("多", "き", PartOfSpeech.IAdjective),
         ("ぶっ", "た", PartOfSpeech.Suffix),
+        ("に", "よる", PartOfSpeech.Expression),
+        ("とっく", "に", PartOfSpeech.Adverb),
+        ("おい", "で", PartOfSpeech.Expression),
     ];
-
-    private static readonly List<string> HonorificsSuffixes = ["さん", "ちゃん", "くん"];
-
+    
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
 
     private static readonly HashSet<string> MisparsesRemove =
@@ -298,6 +300,7 @@ public class MorphologicalAnalyser
             wordInfos = TrackStage(diagnostics, "CombineFinal", wordInfos, CombineFinal);
             wordInfos = TrackStage(diagnostics, "RepairTankaToTaNKa", wordInfos, RepairTankaToTaNKa);
             wordInfos = TrackStage(diagnostics, "FilterMisparse", wordInfos, FilterMisparse);
+            wordInfos = TrackStage(diagnostics, "FixReadingAmbiguity", wordInfos, FixReadingAmbiguity);
 
             results.Add(SplitIntoSentences(originalTexts[i], wordInfos));
         }
@@ -343,6 +346,12 @@ public class MorphologicalAnalyser
             if (word is { Text: "山", PartOfSpeech: PartOfSpeech.Suffix })
                 word.PartOfSpeech = PartOfSpeech.Noun;
 
+            if (word is { Text: "だろう" or "だろ", PartOfSpeech: PartOfSpeech.Auxiliary })
+            {
+                word.PartOfSpeech = PartOfSpeech.Expression;
+                word.DictionaryForm = word.Text;
+            }
+
             if (word.Text == "だあ")
             {
                 word.Text = "だ";
@@ -373,6 +382,55 @@ public class MorphologicalAnalyser
                 wordInfos.RemoveAt(i);
                 continue;
             }
+        }
+
+        return wordInfos;
+    }
+
+    /// <summary>
+    /// Fixes Sudachi reading disambiguations for kanji homographs using contextual cues.
+    /// E.g. 表 before へ/に (directional) when not preceded by a noun → おもて not ひょう.
+    /// </summary>
+    private List<WordInfo> FixReadingAmbiguity(List<WordInfo> wordInfos)
+    {
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            // 表 (ヒョウ) → オモテ when followed by directional particle and not preceded by a noun
+            // e.g. 表へ出る (go outside) vs メニュー表 (menu chart)
+            if (word.Text == "表" && word.Reading == "ヒョウ" &&
+                i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "へ" or "に" &&
+                (i == 0 || wordInfos[i - 1].PartOfSpeech != PartOfSpeech.Noun))
+            {
+                word.Reading = "オモテ";
+            }
+
+            // 何 (ナン) → ナニ before を/が/も or at end of sentence
+            if (word is { Text: "何", Reading: "ナン" })
+            {
+                var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
+                if (next == null || next.Text is "を" or "が" or "も")
+                    word.Reading = "ナニ";
+            }
+
+            // 一日/１日 → イチニチ unless preceded by a month (X月一日 = date → keep ツイタチ)
+            if (word.Reading == "ツイタチ" && word.Text is "一日" or "１日" or "1日")
+            {
+                var prev = i > 0 ? wordInfos[i - 1] : null;
+                if (prev == null || !prev.Text.EndsWith('月'))
+                    word.Reading = "イチニチ";
+            }
+
+            // 寒気 (カンキ cold air) → サムケ (chills) when followed by が + する
+            // e.g. 寒気がする/寒気がした (to have chills) vs 寒気が南下する (cold air moves south)
+            if (word is { Text: "寒気", Reading: "カンキ" } &&
+                i + 2 < wordInfos.Count && wordInfos[i + 1].Text == "が" &&
+                wordInfos[i + 2].DictionaryForm == "する")
+            {
+                word.Reading = "サムケ";
+            }
+
         }
 
         return wordInfos;
@@ -1146,6 +1204,7 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "。", " 。\n");
         text = Regex.Replace(text, "！", " ！\n");
         text = Regex.Replace(text, "？", " ？\n");
+        text = text.Replace("、", "\n");
 
         // Normalise multiple long-vowel marks to a single one (preserves elongation but not emphasis degree)
         text = Regex.Replace(text, "ー{2,}", "ー");
@@ -1184,7 +1243,9 @@ public class MorphologicalAnalyser
         // Fix emphatic っ/ッ at clause boundaries causing Sudachi to misparse
         // e.g., 止まらないっ！ → Sudachi sees ないっ as な + いっ (行く te-form)
         // Insert stop token before っ/ッ when followed by punctuation, whitespace, or end of string
-        text = Regex.Replace(text, @"([っッ])(?=[！!？?。、,\s]|$)", $"{_stopToken}$1");
+        // Require hiragana before っ/ッ — emphatic っ follows verb/adj conjugations (always hiragana)
+        // This avoids breaking katakana interjections like フッ, チッ
+        text = Regex.Replace(text, @"(?<=.\p{IsHiragana})([っッ])(?=[！!？?。、,\s]|$)", $"{_stopToken}$1");
 
         // Fix Sudachi misparsing 水魔法 as 水魔 (water demon) + 法 (law)
         // Should be 水 (water) + 魔法 (magic)
@@ -1192,6 +1253,14 @@ public class MorphologicalAnalyser
 
         // Fix Sudachi misparsing 不適応 as 不適 + 応 instead of 不 (prefix) + 適応
         text = Regex.Replace(text, "不適応", $"不{_stopToken}適応");
+
+        // Fix Sudachi merging ホント with following short katakana nouns (e.g., ホントバカ → ホント + バカ)
+        text = Regex.Replace(text, "ホント(バカ|ダメ|マジ|クソ|アホ)", $"ホント{_stopToken}$1");
+
+        // Normalise colloquial ねえ → ない in fixed expressions that Sudachi doesn't recognise
+        // e.g., とんでもねえ → とんでもない, しょうがねえ → しょうがない
+        text = Regex.Replace(text, "とんでもねえ", "とんでもない");
+        text = Regex.Replace(text, "しょうがねえ", "しょうがない");
 
         // Replace line ending ellipsis with a sentence ender to be able to flatten later
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
@@ -1317,6 +1386,22 @@ public class MorphologicalAnalyser
                     newList.Add(daSuffix);
                     i += 3;
                     continue;
+                }
+
+                // に + しろ → にしろ (particle "even if") only when preceded by a verb/adjective/auxiliary
+                // e.g., 行くにしろ → 行く + にしろ (whether one goes...)
+                // Skip when preceded by a noun: 大概にしろ → 大概 + に + しろ (imperative of 大概にする)
+                if (w1.Text == "に" && w2.Text == "しろ")
+                {
+                    bool prevIsNoun = i > 0 && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Noun
+                        or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun;
+                    if (!prevIsNoun)
+                    {
+                        var newWord = new WordInfo(w1) { Text = "にしろ", DictionaryForm = "にしろ", PartOfSpeech = PartOfSpeech.Expression };
+                        newList.Add(newWord);
+                        i += 2;
+                        continue;
+                    }
                 }
 
                 bool found = false;
@@ -1472,11 +1557,11 @@ public class MorphologicalAnalyser
         var deconjCache = new Dictionary<string, HashSet<DeconjugationForm>>(StringComparer.Ordinal);
         HashSet<DeconjugationForm> CachedDeconjugate(string hiragana)
         {
-            if (!deconjCache.TryGetValue(hiragana, out var forms))
-            {
-                forms = deconjugator.Deconjugate(hiragana);
-                deconjCache[hiragana] = forms;
-            }
+            if (deconjCache.TryGetValue(hiragana, out var forms)) 
+                return forms;
+            
+            forms = deconjugator.Deconjugate(hiragana);
+            deconjCache[hiragana] = forms;
             return forms;
         }
 
@@ -1558,6 +1643,11 @@ public class MorphologicalAnalyser
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant);
+
+                // Sudachi tags やれ as interjection, but after て-form it's the imperative of auxiliary やる
+                if (!isValidPart && nextWord.Text == "やれ" && nextWord.PartOfSpeech == PartOfSpeech.Interjection &&
+                    currentWord.Text.EndsWith("て"))
+                    isValidPart = true;
 
                 // Greedy steal: handle そうだ/そうか by taking just そう if it forms valid inflection
                 // e.g., 新しそうだ → 新しそう + だ, 話そうか → 話そう + か
@@ -1644,7 +1734,7 @@ public class MorphologicalAnalyser
                     var suffixDict = KanaNormalizer.Normalize(WanaKana.ToHiragana(nextWord.DictionaryForm));
                     var match = forms.FirstOrDefault(f => f.Text.EndsWith(suffixDict) && f.Text.Length > suffixDict.Length);
 
-                    if (match != null)
+                    if (match != null && (HasCompoundLookup == null || CompoundExistsInLookup(match.Text, CachedDeconjugate)))
                     {
                         merged = true;
                         newDictForm = match.Text;
@@ -1671,6 +1761,20 @@ public class MorphologicalAnalyser
         }
 
         return result;
+    }
+
+    private bool CompoundExistsInLookup(string compoundForm, Func<string, HashSet<DeconjugationForm>> cachedDeconjugate)
+    {
+        if (HasCompoundLookup!(compoundForm))
+            return true;
+
+        foreach (var form in cachedDeconjugate(compoundForm))
+        {
+            if (HasCompoundLookup(form.Text))
+                return true;
+        }
+
+        return false;
     }
 
     private List<WordInfo> CombinePrefixes(List<WordInfo> wordInfos)
@@ -2383,14 +2487,14 @@ public class MorphologicalAnalyser
             if (string.IsNullOrWhiteSpace(line) || line == "EOS") continue;
 
             var parts = line.Split('\t');
-            if (parts.Length < 6) continue;
+            if (parts.Length < 5) continue;
 
             var posDetail = parts[1].Split(',');
             tokens.Add(new SudachiToken
                        {
                            Surface = parts[0], PartOfSpeech = posDetail.Length > 0 ? posDetail[0] : "",
                            PosDetail = posDetail.Skip(1).ToArray(), NormalizedForm = parts.Length > 2 ? parts[2] : "",
-                           DictionaryForm = parts.Length > 3 ? parts[3] : "", Reading = parts.Length > 5 ? parts[5] : ""
+                           DictionaryForm = parts.Length > 3 ? parts[3] : "", Reading = parts.Length > 4 ? parts[4] : ""
                        });
         }
 

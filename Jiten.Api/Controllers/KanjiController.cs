@@ -1,4 +1,5 @@
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -43,10 +44,10 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                         .Where(wk => wk.KanjiCharacter == character)
                                         .Select(wk => new { wk.WordId, wk.ReadingIndex })
                                         .Distinct()
-                                        .Join(context.JmDictWordFrequencies.AsNoTracking(),
-                                              wk => wk.WordId,
-                                              f => f.WordId,
-                                              (wk, f) => new { wk.WordId, wk.ReadingIndex, Rank = (int?)f.ReadingsFrequencyRank[wk.ReadingIndex] })
+                                        .Join(context.WordFormFrequencies.AsNoTracking(),
+                                              wk => new { wk.WordId, ReadingIndex = (short)wk.ReadingIndex },
+                                              wff => new { wff.WordId, wff.ReadingIndex },
+                                              (wk, wff) => new { wk.WordId, wk.ReadingIndex, Rank = (int?)wff.FrequencyRank })
                                         .Where(x => x.Rank > 0)
                                         .OrderBy(x => x.Rank)
                                         .Take(20)
@@ -59,16 +60,19 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                  .Where(w => topWordIds.Contains(w.WordId))
                                  .ToDictionaryAsync(w => w.WordId);
 
+        var forms = await WordFormHelper.LoadWordForms(context, topWordIds);
+
         var topWords = topWordData
                        .Where(x => words.ContainsKey(x.WordId))
                        .Select(x =>
                        {
                            var word = words[x.WordId];
+                           var form = forms.GetValueOrDefault((x.WordId, (short)x.ReadingIndex));
                            var mainDefinition = word.Definitions.FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
                            return new WordSummaryDto
                                   {
-                                      WordId = x.WordId, ReadingIndex = (byte)x.ReadingIndex, Reading = word.Readings[x.ReadingIndex],
-                                      ReadingFurigana = word.ReadingsFurigana[x.ReadingIndex], MainDefinition = mainDefinition,
+                                      WordId = x.WordId, ReadingIndex = (byte)x.ReadingIndex, Reading = form?.Text ?? "",
+                                      ReadingFurigana = form?.RubyText ?? "", MainDefinition = mainDefinition,
                                       FrequencyRank = x.Rank!.Value
                                   };
                        })
@@ -112,10 +116,10 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                   .Where(wk => wk.KanjiCharacter == character)
                                   .Select(wk => new { wk.WordId, wk.ReadingIndex })
                                   .Distinct()
-                                  .Join(context.JmDictWordFrequencies.AsNoTracking(),
-                                        wk => wk.WordId,
-                                        f => f.WordId,
-                                        (wk, f) => new { wk.WordId, wk.ReadingIndex, Rank = (int?)f.ReadingsFrequencyRank[wk.ReadingIndex] })
+                                  .Join(context.WordFormFrequencies.AsNoTracking(),
+                                        wk => new { wk.WordId, ReadingIndex = (short)wk.ReadingIndex },
+                                        wff => new { wff.WordId, wff.ReadingIndex },
+                                        (wk, wff) => new { wk.WordId, wk.ReadingIndex, Rank = (int?)wff.FrequencyRank })
                                   .Where(x => x.Rank > 0);
 
         var totalCount = await rankedQuery.CountAsync();
@@ -133,16 +137,19 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                  .Where(w => pageWordIds.Contains(w.WordId))
                                  .ToDictionaryAsync(w => w.WordId);
 
+        var forms = await WordFormHelper.LoadWordForms(context, pageWordIds);
+
         var items = pageData
                     .Where(x => words.ContainsKey(x.WordId))
                     .Select(x =>
                     {
                         var word = words[x.WordId];
+                        var form = forms.GetValueOrDefault((x.WordId, (short)x.ReadingIndex));
                         var mainDefinition = word.Definitions.FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
                         return new WordSummaryDto
                                {
-                                   WordId = x.WordId, ReadingIndex = (byte)x.ReadingIndex, Reading = word.Readings[x.ReadingIndex],
-                                   ReadingFurigana = word.ReadingsFurigana[x.ReadingIndex], MainDefinition = mainDefinition,
+                                   WordId = x.WordId, ReadingIndex = (byte)x.ReadingIndex, Reading = form?.Text ?? "",
+                                   ReadingFurigana = form?.RubyText ?? "", MainDefinition = mainDefinition,
                                    FrequencyRank = x.Rank!.Value
                                };
                     })

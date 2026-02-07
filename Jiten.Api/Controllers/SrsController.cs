@@ -380,22 +380,22 @@ public class SrsController(
     /// </summary>
     private async Task SyncVocabularyStateToKana(int wordId, byte readingIndex, string state, FsrsCard? sourceCard)
     {
-        // Fetch word reading types
-        var jmdictWord = await context.JMDictWords
+        var wordForms = await context.WordForms
                                       .AsNoTracking()
-                                      .Where(w => w.WordId == wordId)
-                                      .Select(w => new { w.WordId, w.ReadingTypes })
-                                      .FirstOrDefaultAsync();
+                                      .Where(wf => wf.WordId == wordId)
+                                      .OrderBy(wf => wf.ReadingIndex)
+                                      .ToListAsync();
 
-        if (jmdictWord == null) return;
-        if (readingIndex >= jmdictWord.ReadingTypes.Count) return;
+        var currentForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
+        if (currentForm == null) return;
 
-        // Only sync from Reading (kanji) to KanaReading
-        if (jmdictWord.ReadingTypes[readingIndex] != JmDictReadingType.Reading) return;
+        // Only sync from KanjiForm to KanaForm
+        if (currentForm.FormType != JmDictFormType.KanjiForm) return;
 
         // Find kana reading index
-        var kanaIndex = jmdictWord.ReadingTypes.FindIndex(t => t == JmDictReadingType.KanaReading);
-        if (kanaIndex < 0) return; // No kana variant exists
+        var kanaForm = wordForms.FirstOrDefault(wf => wf.FormType == JmDictFormType.KanaForm);
+        if (kanaForm == null) return; // No kana variant exists
+        var kanaIndex = (int)kanaForm.ReadingIndex;
 
         var userId = currentUserService.UserId;
 

@@ -170,8 +170,7 @@ public static class PosMapper
     /// </summary>
     public static PartOfSpeech FromJmDict(string jmDictTag)
     {
-        // Handle verb tags (v1, v5g, vs, vk, etc.)
-        if (jmDictTag.StartsWith('v'))
+        if (jmDictTag.StartsWith('v') && jmDictTag is not "vulg" and not "vet" and not "vidg")
             return PartOfSpeech.Verb;
 
         // JMnedict sometimes uses name-* tags (e.g., name-person/name-place) depending on import/source.
@@ -265,6 +264,16 @@ public static class PosMapper
         // and adj-na (NaAdjective). E.g. 同じ is tagged adj-f + adj-na in JMDict.
         if (sudachiPos == PartOfSpeech.PrenounAdjectival &&
             (convertedPosList.Contains(PartOfSpeech.NominalAdjective) || convertedPosList.Contains(PartOfSpeech.NaAdjective)))
+            return true;
+
+        // Sudachi 感動詞 (Interjection) covers set phrases that JMDict tags as exp (Expression).
+        // E.g. 初めまして, おはようございます, さようなら.
+        if (sudachiPos == PartOfSpeech.Interjection && convertedPosList.Contains(PartOfSpeech.Expression))
+            return true;
+
+        // Sudachi 接尾辞 (Suffix) should match JMDict n-suf (NounSuffix).
+        // E.g. だらけ is n-suf in JMDict but 接尾辞 in Sudachi.
+        if (sudachiPos == PartOfSpeech.Suffix && convertedPosList.Contains(PartOfSpeech.NounSuffix))
             return true;
 
         return false;

@@ -1,6 +1,7 @@
 using System.Text;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Cli.ML;
 
@@ -128,6 +129,12 @@ public static class MLHelper
                                  .Where(f => wordIds.Contains(f.WordId))
                                  .ToDictionary(f => f.WordId);
 
+        var wordIdsList = wordIds.ToList();
+        var formFreqMap = await context.WordFormFrequencies
+                                       .AsNoTracking()
+                                       .Where(wff => wordIdsList.Contains(wff.WordId))
+                                       .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
+
         List<double> freqRanks = new List<double>();
         List<double> obsFreqs = new List<double>();
         List<double> readingFreqRanks = new List<double>();
@@ -163,13 +170,12 @@ public static class MLHelper
             obsFreqs.AddRange(Enumerable.Repeat(freqData.ObservedFrequency, dw.Occurrences));
             if (freqData.ObservedFrequency < MLConfig.LowFreqObserverThreshold) lowFreqObsCount += dw.Occurrences;
 
-            int rIdx = dw.ReadingIndex;
-            if (rIdx < freqData.ReadingsFrequencyRank.Count)
-                readingFreqRanks.AddRange(Enumerable.Repeat((double)freqData.ReadingsFrequencyRank[rIdx], dw.Occurrences));
-            if (rIdx < freqData.ReadingsObservedFrequency.Count)
-                readingObsFreqs.AddRange(Enumerable.Repeat(freqData.ReadingsObservedFrequency[rIdx], dw.Occurrences));
-            if (rIdx < freqData.ReadingsFrequencyPercentage.Count)
-                readingFreqPercentages.AddRange(Enumerable.Repeat(freqData.ReadingsFrequencyPercentage[rIdx], dw.Occurrences));
+            if (formFreqMap.TryGetValue((dw.WordId, (short)dw.ReadingIndex), out var formFreq))
+            {
+                readingFreqRanks.AddRange(Enumerable.Repeat((double)formFreq.FrequencyRank, dw.Occurrences));
+                readingObsFreqs.AddRange(Enumerable.Repeat(formFreq.ObservedFrequency, dw.Occurrences));
+                readingFreqPercentages.AddRange(Enumerable.Repeat(formFreq.FrequencyPercentage, dw.Occurrences));
+            }
         }
 
         if (totalWordOccurrences == 0) return;

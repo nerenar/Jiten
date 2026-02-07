@@ -1,5 +1,6 @@
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -140,10 +141,8 @@ public class ReaderController(
 
         var wordIds = parsedParagraphs.SelectMany(p => p).Select(w => w.WordId).Distinct().ToList();
         var jmdictWords = await context.JMDictWords.Where(w => wordIds.Contains(w.WordId)).Include(w => w.Definitions).ToDictionaryAsync(w => w.WordId);
-        var frequencyData = await context.JmDictWordFrequencies
-                                         .AsNoTracking()
-                                         .Where(f => wordIds.Contains(f.WordId))
-                                         .ToDictionaryAsync(f => f.WordId, f => f);
+        var readerForms = await WordFormHelper.LoadWordForms(context, wordIds);
+        var readerFormFreqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
 
         var knownStates = await currentUserService.GetKnownWordsState(
             parsedParagraphs.SelectMany(p => p.Select(dw => (dw.WordId, dw.ReadingIndex))).Distinct().ToList());
@@ -167,18 +166,17 @@ public class ReaderController(
                                });
                     var jmdictWord = jmdictWords[word.WordId];
                     knownStates.TryGetValue((word.WordId, word.ReadingIndex), out var knownState);
+                    var rdrForm = readerForms.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    var rdrFormFreq = readerFormFreqs.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
                     var readerWord = new ReaderWord()
                                      {
                                          WordId = word.WordId, ReadingIndex = word.ReadingIndex,
-                                         Spelling = jmdictWord.Readings[word.ReadingIndex], Reading =
-                                             jmdictWord.ReadingsFurigana[word.ReadingIndex],
+                                         Spelling = rdrForm?.Text ?? "", Reading = rdrForm?.RubyText ?? "",
                                          PartsOfSpeech = jmdictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(), MeaningsChunks =
                                              jmdictWord.Definitions.Where(d => d.EnglishMeanings.Count > 0)
                                                        .Select(d => d.EnglishMeanings).ToList(),
                                          MeaningsPartOfSpeech = jmdictWord.Definitions.SelectMany(d => d.PartsOfSpeech).ToList() ?? [""],
-                                         FrequencyRank = frequencyData.TryGetValue(word.WordId, out var freq)
-                                             ? freq.ReadingsFrequencyRank[word.ReadingIndex]
-                                             : 0,
+                                         FrequencyRank = rdrFormFreq?.FrequencyRank ?? 0,
                                          KnownState = knownState ?? [KnownState.New],
                                      };
                     allWords.Add(readerWord);

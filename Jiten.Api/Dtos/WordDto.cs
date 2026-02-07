@@ -6,8 +6,8 @@ namespace Jiten.Api.Dtos;
 public class WordDto
 {
     public int WordId { get; set; }
-    public ReadingDto MainReading { get; set; } = new();
-    public List<ReadingDto> AlternativeReadings { get; set; } = new();
+    public WordFormDto MainReading { get; set; } = new();
+    public List<WordFormDto> AlternativeReadings { get; set; } = new();
     public List<string> PartsOfSpeech { get; set; } = new();
     public List<DefinitionDto> Definitions { get; set; } = new();
     public int Occurrences { get; set; }
@@ -15,7 +15,7 @@ public class WordDto
     public List<KnownState> KnownStates { get; set; }
 }
 
-public class ReadingDto
+public class WordFormDto
 {
     public string Text { get; set; } = "";
     public JmDictReadingType ReadingType { get; set; }

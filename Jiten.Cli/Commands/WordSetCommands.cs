@@ -21,29 +21,25 @@ public class WordSetCommands(CliContext context)
         }
 
         var seenWordIds = new HashSet<int>();
-        var matchingWords = new List<(int WordId, List<JmDictReadingType> ReadingTypes)>();
 
         foreach (var p in posValues)
         {
             var words = await jitenContext.JMDictWords
                 .AsNoTracking()
                 .Where(w => w.PartsOfSpeech.Any(ps => ps.Contains(p)))
-                .Select(w => new { w.WordId, w.ReadingTypes })
+                .Select(w => w.WordId)
                 .ToListAsync();
 
             int added = 0;
-            foreach (var w in words)
+            foreach (var wordId in words)
             {
-                if (seenWordIds.Add(w.WordId))
-                {
-                    matchingWords.Add((w.WordId, w.ReadingTypes));
+                if (seenWordIds.Add(wordId))
                     added++;
-                }
             }
             Console.WriteLine($"PoS '{p}': {words.Count} words found, {added} new (deduplicated).");
         }
 
-        Console.WriteLine($"Total: {matchingWords.Count} unique words.");
+        Console.WriteLine($"Total: {seenWordIds.Count} unique words.");
 
         var wordSet = new WordSet
         {
@@ -55,22 +51,32 @@ public class WordSetCommands(CliContext context)
         await jitenContext.WordSets.AddAsync(wordSet);
         await jitenContext.SaveChangesAsync();
 
+        var allForms = await jitenContext.WordForms
+            .AsNoTracking()
+            .Where(wf => seenWordIds.Contains(wf.WordId))
+            .OrderBy(wf => wf.WordId)
+            .ThenBy(wf => wf.ReadingIndex)
+            .ToListAsync();
+
+        var formsByWord = allForms.GroupBy(f => f.WordId).ToDictionary(g => g.Key, g => g.ToList());
+
         var wordReadings = new List<(int WordId, short ReadingIndex)>();
         int kanjiReadingsCount = 0;
         int kanaOnlyReadingsCount = 0;
-        foreach (var (wordId, readingTypes) in matchingWords)
+        foreach (var wordId in seenWordIds)
         {
-            for (int i = 0; i < readingTypes.Count; i++)
+            if (!formsByWord.TryGetValue(wordId, out var forms)) continue;
+            bool hasKanjiForm = forms.Any(f => f.FormType == JmDictFormType.KanjiForm);
+            foreach (var form in forms)
             {
-                if (readingTypes[i] == JmDictReadingType.Reading)
+                if (form.FormType == JmDictFormType.KanjiForm)
                 {
-                    wordReadings.Add((wordId, (short)i));
+                    wordReadings.Add((wordId, form.ReadingIndex));
                     kanjiReadingsCount++;
                 }
-                else if (readingTypes[i] == JmDictReadingType.KanaReading &&
-                         !readingTypes.Contains(JmDictReadingType.Reading))
+                else if (form.FormType == JmDictFormType.KanaForm && !hasKanjiForm)
                 {
-                    wordReadings.Add((wordId, (short)i));
+                    wordReadings.Add((wordId, form.ReadingIndex));
                     kanaOnlyReadingsCount++;
                 }
             }
@@ -171,14 +177,16 @@ public class WordSetCommands(CliContext context)
 
         var wordIds = wordsList.Select(w => w.WordId).Distinct().ToList();
 
-        Dictionary<int, List<JmDictReadingType>>? readingTypes = null;
+        Dictionary<int, List<JmDictWordForm>>? formsByWord = null;
         if (syncKana)
         {
-            readingTypes = await jitenContext.JMDictWords
+            var allForms = await jitenContext.WordForms
                 .AsNoTracking()
-                .Where(w => wordIds.Contains(w.WordId))
-                .Select(w => new { w.WordId, w.ReadingTypes })
-                .ToDictionaryAsync(w => w.WordId, w => w.ReadingTypes);
+                .Where(wf => wordIds.Contains(wf.WordId))
+                .OrderBy(wf => wf.WordId)
+                .ThenBy(wf => wf.ReadingIndex)
+                .ToListAsync();
+            formsByWord = allForms.GroupBy(f => f.WordId).ToDictionary(g => g.Key, g => g.ToList());
         }
 
         var processedKeys = new HashSet<(int WordId, short ReadingIndex)>();
@@ -203,33 +211,34 @@ public class WordSetCommands(CliContext context)
                 });
             }
 
-            if (!syncKana || readingTypes == null) continue;
-            if (!readingTypes.TryGetValue(wordId, out var types))
+            if (!syncKana || formsByWord == null) continue;
+            if (!formsByWord.TryGetValue(wordId, out var wordForms))
             {
                 skippedNoTypes++;
                 continue;
             }
-            if (readingIndex >= types.Count) continue;
-            if (types[readingIndex] != JmDictReadingType.Reading)
+            var currentForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
+            if (currentForm == null) continue;
+            if (currentForm.FormType != JmDictFormType.KanjiForm)
             {
                 skippedNotReading++;
                 continue;
             }
 
-            var kanaIndex = types.FindIndex(t => t == JmDictReadingType.KanaReading);
-            if (kanaIndex < 0)
+            var kanaForm = wordForms.FirstOrDefault(wf => wf.FormType == JmDictFormType.KanaForm);
+            if (kanaForm == null)
             {
                 skippedNoKana++;
                 continue;
             }
 
-            if (processedKeys.Add((wordId, (short)kanaIndex)))
+            if (processedKeys.Add((wordId, kanaForm.ReadingIndex)))
             {
                 members.Add(new WordSetMember
                 {
                     SetId = setId,
                     WordId = wordId,
-                    ReadingIndex = (short)kanaIndex,
+                    ReadingIndex = kanaForm.ReadingIndex,
                     Position = position++
                 });
                 kanaAdded++;

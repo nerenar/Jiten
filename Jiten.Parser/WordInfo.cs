@@ -37,7 +37,7 @@ public class WordInfo
     public WordInfo(string sudachiLine)
     {
         // Parse tab-separated Sudachi output without Regex.Split
-        // Format: Text\tPOS\tNormalizedForm\tDictionaryForm\t?\tReading
+        // Format: Text\tPOS\tNormalizedForm\tDictionaryForm\tKatakanaReading\tPitchIndex\tSplits
         var span = sudachiLine.AsSpan();
 
         // Find first 6 tab positions
@@ -90,9 +90,9 @@ public class WordInfo
         // Extract remaining fields
         NormalizedForm = span[(tabPositions[1] + 1)..tabPositions[2]].ToString();
         DictionaryForm = span[(tabPositions[2] + 1)..tabPositions[3]].ToString();
-        Reading = tabCount >= 6
-            ? span[(tabPositions[4] + 1)..tabPositions[5]].ToString()
-            : span[(tabPositions[4] + 1)..].ToString();
+        Reading = tabCount >= 5
+            ? span[(tabPositions[3] + 1)..tabPositions[4]].ToString()
+            : span[(tabPositions[3] + 1)..].ToString();
     }
     
     public bool HasPartOfSpeechSection(PartOfSpeechSection section)

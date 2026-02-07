@@ -68,19 +68,31 @@ public static class KanjidicHelper
 
         while (processedWords < totalWords)
         {
-            var words = await context.JMDictWords
+            var batchWordIds = await context.JMDictWords
                 .AsNoTracking()
                 .OrderBy(w => w.WordId)
                 .Skip(processedWords)
                 .Take(batchSize)
-                .Select(w => new { w.WordId, w.Readings, w.ReadingTypes })
+                .Select(w => w.WordId)
                 .ToListAsync();
 
-            foreach (var word in words)
+            if (batchWordIds.Count == 0) break;
+
+            var wordForms = await context.WordForms
+                .AsNoTracking()
+                .Where(wf => batchWordIds.Contains(wf.WordId))
+                .OrderBy(wf => wf.WordId)
+                .ThenBy(wf => wf.ReadingIndex)
+                .ToListAsync();
+
+            var words = wordForms.GroupBy(wf => wf.WordId).ToList();
+
+            foreach (var wordGroup in words)
             {
-                for (short readingIndex = 0; readingIndex < word.Readings.Count; readingIndex++)
+                foreach (var form in wordGroup)
                 {
-                    var reading = word.Readings[readingIndex];
+                    short readingIndex = form.ReadingIndex;
+                    var reading = form.Text;
                     short position = 0;
 
                     foreach (var rune in reading.EnumerateRunes())
@@ -92,7 +104,7 @@ public static class KanjidicHelper
                             {
                                 wordKanjiList.Add(new WordKanji
                                 {
-                                    WordId = word.WordId,
+                                    WordId = form.WordId,
                                     ReadingIndex = readingIndex,
                                     KanjiCharacter = kanjiStr,
                                     Position = position
@@ -104,7 +116,7 @@ public static class KanjidicHelper
                 }
             }
 
-            processedWords += words.Count;
+            processedWords += batchWordIds.Count;
             Console.WriteLine($"Processed {processedWords}/{totalWords} words, found {wordKanjiList.Count} word-kanji pairs...");
 
             // Insert in batches to avoid memory issues

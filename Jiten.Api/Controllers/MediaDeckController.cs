@@ -1089,13 +1089,13 @@ public class MediaDeckController(
         query = sortBy switch
         {
             "globalFreq" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => context.JmDictWordFrequencies
-                                            .Where(f => f.WordId == d.WordId)
-                                            .Select(f => f.ReadingsFrequencyRank[d.ReadingIndex])
+                ? query.OrderBy(d => context.WordFormFrequencies
+                                            .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
+                                            .Select(wff => wff.FrequencyRank)
                                             .FirstOrDefault()).ThenBy(d => d.DeckWordId)
-                : query.OrderByDescending(d => context.JmDictWordFrequencies
-                                                      .Where(f => f.WordId == d.WordId)
-                                                      .Select(f => f.ReadingsFrequencyRank[d.ReadingIndex])
+                : query.OrderByDescending(d => context.WordFormFrequencies
+                                                      .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
+                                                      .Select(wff => wff.FrequencyRank)
                                                       .FirstOrDefault()).ThenBy(d => d.DeckWordId),
             "deckFreq" => sortOrder == SortOrder.Ascending
                 ? query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId)
@@ -1129,9 +1129,8 @@ public class MediaDeckController(
                                  .OrderBy(dw => wordIdOrder.GetValueOrDefault(dw.dw.WordId, int.MaxValue))
                                  .ToList();
 
-        var frequencies = context.JmDictWordFrequencies.AsNoTracking()
-                                .Where(f => uniqueWordIds.Contains(f.WordId))
-                                .ToDictionary(f => f.WordId);
+        var forms = await WordFormHelper.LoadWordForms(context, uniqueWordIds);
+        var formFreqs = await WordFormHelper.LoadWordFormFrequencies(context, uniqueWordIds);
 
         DeckVocabularyListDto dto = new() { ParentDeck = parentDeckDto, Deck = deck, Words = new() };
 
@@ -1144,30 +1143,21 @@ public class MediaDeckController(
                 continue;
             }
 
-            var reading = word.jmDictWord.ReadingsFurigana[word.dw.ReadingIndex];
+            var key = (word.dw.WordId, (short)word.dw.ReadingIndex);
+            var mainForm = forms.GetValueOrDefault(key);
+            if (mainForm == null) continue;
 
-            frequencies.TryGetValue(word.dw.WordId, out var frequency);
+            var allFormsForWord = forms.Where(f => f.Key.Item1 == word.dw.WordId)
+                                       .OrderBy(f => f.Key.Item2)
+                                       .Select(f => f.Value)
+                                       .ToList();
 
-            List<ReadingDto> alternativeReadings = word.jmDictWord.ReadingsFurigana
-                                                       .Select((r, i) => new ReadingDto
-                                                                         {
-                                                                             Text = r, ReadingIndex = (byte)i,
-                                                                             ReadingType = word.jmDictWord.ReadingTypes[i],
-                                                                             FrequencyRank = frequency?.ReadingsFrequencyRank[i] ?? 0,
-                                                                             FrequencyPercentage = frequency?.ReadingsFrequencyPercentage[i] ?? 0
-                                                                         })
+            List<WordFormDto> alternativeReadings = allFormsForWord
+                                                       .Where(f => f.ReadingIndex != word.dw.ReadingIndex)
+                                                       .Select(f => WordFormHelper.ToPlainFormDto(f, formFreqs.GetValueOrDefault((f.WordId, f.ReadingIndex))))
                                                        .ToList();
 
-            // Remove current
-            alternativeReadings.RemoveAt(word.dw.ReadingIndex);
-
-            var mainReading = new ReadingDto()
-                              {
-                                  Text = reading, ReadingIndex = word.dw.ReadingIndex,
-                                  ReadingType = word.jmDictWord.ReadingTypes[word.dw.ReadingIndex],
-                                  FrequencyRank = frequency?.ReadingsFrequencyRank[word.dw.ReadingIndex] ?? 0,
-                                  FrequencyPercentage = frequency?.ReadingsFrequencyPercentage[word.dw.ReadingIndex] ?? 0
-                              };
+            var mainReading = WordFormHelper.ToFormDto(mainForm, formFreqs.GetValueOrDefault(key));
 
             var wordDto = new WordDto
                           {
@@ -1390,17 +1380,13 @@ public class MediaDeckController(
         if (request.ExcludeKana)
         {
             var wordIds = deckWordsRaw!.Select(dw => dw.WordId).Distinct().ToList();
-            var readings = await context.JMDictWords
-                .AsNoTracking()
-                .Where(w => wordIds.Contains(w.WordId))
-                .Select(w => new { w.WordId, w.Readings })
-                .ToDictionaryAsync(w => w.WordId);
+            var excludeKanaForms = await WordFormHelper.LoadWordForms(context, wordIds);
 
             deckWordsRaw = deckWordsRaw!.Where(dw =>
             {
-                if (!readings.TryGetValue(dw.WordId, out var r)) return true;
-                if (dw.ReadingIndex >= r.Readings.Count) return true;
-                return !WanaKana.IsKana(r.Readings[dw.ReadingIndex]);
+                var form = excludeKanaForms.GetValueOrDefault((dw.WordId, (short)dw.ReadingIndex));
+                if (form == null) return true;
+                return !WanaKana.IsKana(form.Text);
             }).ToList();
         }
 
@@ -1468,8 +1454,9 @@ public class MediaDeckController(
                                        .Include(w => w.Definitions)
                                        .Where(w => wordIds.Contains(w.WordId))
                                        .ToDictionaryAsync(w => w.WordId);
-        var frequencies = context.JmDictWordFrequencies.Where(f => wordIds.Contains(f.WordId))
-                                 .ToDictionary(f => f.WordId, f => f);
+        var intWordIds = wordIds.Select(wid => (int)wid).ToList();
+        var exportForms = await WordFormHelper.LoadWordForms(context, intWordIds);
+        var exportFormFreqs = await WordFormHelper.LoadWordFormFrequencies(context, intWordIds);
 
 
         var deckIds = new List<int> { id };
@@ -1517,7 +1504,9 @@ public class MediaDeckController(
 
                 foreach (var word in deckWords)
                 {
-                    string expression = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+                    var ankiForm = exportForms.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    if (ankiForm == null) continue;
+                    string expression = ankiForm.Text;
 
                     if (request.ExcludeKana && WanaKana.IsKana(expression))
                         continue;
@@ -1528,11 +1517,11 @@ public class MediaDeckController(
                     string lookaheadPattern = $@"(?=(?:{kanjiPatternPart})*\[.*?\])";
                     string precedingKanjiLookbehind = $@"\p{{IsCJKUnifiedIdeographs}}{lookaheadPattern}";
                     string pattern = $"(?<!\\])(?<!{precedingKanjiLookbehind})({kanjiPatternPart}){lookaheadPattern}";
-                    string expressionFurigana = Regex.Replace(jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex], pattern, " $1");
+                    string expressionFurigana = Regex.Replace(ankiForm.RubyText, pattern, " $1");
                     // Very unoptimized, might have to rework
-                    string expressionReading = string.Join("", jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex]
-                                                                                       .Where(c => WanaKana.IsKana(c.ToString()))
-                                                                                       .Select(c => c.ToString()));
+                    string expressionReading = string.Join("", ankiForm.RubyText
+                                                                      .Where(c => WanaKana.IsKana(c.ToString()))
+                                                                      .Select(c => c.ToString()));
                     string expressionAudio = "";
                     string selectionText = "";
 
@@ -1625,9 +1614,11 @@ public class MediaDeckController(
                     string isSentenceCard = "";
                     string pitchPosition = "";
                     string pitchCategories = "";
+                    var ankiFormFreq = exportFormFreqs.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    int ankiFreqRank = ankiFormFreq?.FrequencyRank ?? 0;
                     string frequency =
-                        $"<ul><li>Jiten: {word.Occurrences} occurrences ; #{frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex]} global rank</li></ul>";
-                    string freqSort = $"{frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex]}";
+                        $"<ul><li>Jiten: {word.Occurrences} occurrences ; #{ankiFreqRank} global rank</li></ul>";
+                    string freqSort = $"{ankiFreqRank}";
                     string occurrences = $"{word.Occurrences}";
                     string miscInfo = $"From {deck.OriginalTitle} - generated by Jiten.moe";
 
@@ -1661,26 +1652,29 @@ public class MediaDeckController(
 
                 foreach (var word in deckWords)
                 {
-                    string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+                    var csvForm = exportForms.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    if (csvForm == null) continue;
+                    string reading = csvForm.Text;
 
                     if (request.ExcludeKana && WanaKana.IsKana(reading))
                         continue;
 
-                    string readingFurigana = jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex];
+                    string readingFurigana = csvForm.RubyText;
                     string pitchPositions = "";
 
                     if (jmdictWords[word.WordId].PitchAccents != null)
                         pitchPositions = string.Join(",", jmdictWords[word.WordId].PitchAccents!.Select(p => p.ToString()));
 
                     // Very unoptimized, might have to rework
-                    string readingKana = string.Join("", jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex]
-                                                                                 .Where(c => WanaKana.IsKana(c.ToString()))
-                                                                                 .Select(c => c.ToString()));
+                    string readingKana = string.Join("", csvForm.RubyText
+                                                                .Where(c => WanaKana.IsKana(c.ToString()))
+                                                                .Select(c => c.ToString()));
                     string definitions = string.Join(",", jmdictWords[word.WordId].Definitions
                                                                                   .SelectMany(d => d.EnglishMeanings)
                                                                                   .Select(m => m.Replace("\"", "\"\"")));
                     var occurrences = word.Occurrences;
-                    var readingFrequency = frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex];
+                    var csvFormFreq = exportFormFreqs.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    var readingFrequency = csvFormFreq?.FrequencyRank ?? 0;
 
                     string exampleSentence = "";
                     if (!request.ExcludeExampleSentences &&
@@ -1708,7 +1702,9 @@ public class MediaDeckController(
                 StringBuilder txtSb = new StringBuilder();
                 foreach (var word in deckWords)
                 {
-                    string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+                    var txtForm = exportForms.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    if (txtForm == null) continue;
+                    string reading = txtForm.Text;
                     if (request.ExcludeKana && WanaKana.IsKana(reading))
                         continue;
 
@@ -1721,7 +1717,9 @@ public class MediaDeckController(
                 StringBuilder txtRepeatedSb = new StringBuilder();
                 foreach (var word in deckWords)
                 {
-                    string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+                    var txtRepForm = exportForms.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    if (txtRepForm == null) continue;
+                    string reading = txtRepForm.Text;
                     if (request.ExcludeKana && WanaKana.IsKana(reading))
                         continue;
 
@@ -1766,10 +1764,11 @@ public class MediaDeckController(
     {
         var query = context.DeckWords.AsNoTracking()
                            .Where(dw => dw.DeckId == id &&
-                                        context.JmDictWordFrequencies
-                                               .Any(f => f.WordId == dw.WordId &&
-                                                         f.ReadingsFrequencyRank[dw.ReadingIndex] >= minFrequency &&
-                                                         f.ReadingsFrequencyRank[dw.ReadingIndex] <= maxFrequency));
+                                        context.WordFormFrequencies
+                                               .Any(wff => wff.WordId == dw.WordId &&
+                                                           wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                                           wff.FrequencyRank >= minFrequency &&
+                                                           wff.FrequencyRank <= maxFrequency));
 
         var count = query.Count();
 
@@ -1831,17 +1830,13 @@ public class MediaDeckController(
         if (request.ExcludeKana)
         {
             var wordIds = deckWordsRaw.Select(dw => dw.WordId).Distinct().ToList();
-            var readings = await context.JMDictWords
-                .AsNoTracking()
-                .Where(w => wordIds.Contains(w.WordId))
-                .Select(w => new { w.WordId, w.Readings })
-                .ToDictionaryAsync(w => w.WordId);
+            var excludeKanaForms = await WordFormHelper.LoadWordForms(context, wordIds);
 
             deckWordsRaw = deckWordsRaw.Where(dw =>
             {
-                if (!readings.TryGetValue(dw.WordId, out var r)) return true;
-                if (dw.ReadingIndex >= r.Readings.Count) return true;
-                return !WanaKana.IsKana(r.Readings[dw.ReadingIndex]);
+                var form = excludeKanaForms.GetValueOrDefault((dw.WordId, (short)dw.ReadingIndex));
+                if (form == null) return true;
+                return !WanaKana.IsKana(form.Text);
             }).ToList();
         }
 
@@ -2162,12 +2157,11 @@ public class MediaDeckController(
                 break;
 
             case DeckDownloadType.TopGlobalFrequency:
-                deckWordsQuery = deckWordsQuery.Where(dw => context.JmDictWordFrequencies
-                                                                   .Any(f => f.WordId == dw.WordId &&
-                                                                             f.ReadingsFrequencyRank[dw.ReadingIndex] >=
-                                                                             minFrequency &&
-                                                                             f.ReadingsFrequencyRank[dw.ReadingIndex] <=
-                                                                             maxFrequency));
+                deckWordsQuery = deckWordsQuery.Where(dw => context.WordFormFrequencies
+                                                                   .Any(wff => wff.WordId == dw.WordId &&
+                                                                               wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                                                               wff.FrequencyRank >= minFrequency &&
+                                                                               wff.FrequencyRank <= maxFrequency));
                 break;
 
             case DeckDownloadType.TopDeckFrequency:
@@ -2237,13 +2231,11 @@ public class MediaDeckController(
                 else if (order == DeckOrder.GlobalFrequency)
                 {
                     var resultWordIds = resultWords.Select(dw => dw.WordId).Distinct().ToList();
-                    var freqMap = await context.JmDictWordFrequencies
-                        .Where(f => resultWordIds.Contains(f.WordId))
-                        .ToDictionaryAsync(f => f.WordId, f => f.ReadingsFrequencyRank);
+                    var freqMap = await WordFormHelper.LoadWordFormFrequencies(context, resultWordIds);
 
                     deckWordsRaw = resultWords.OrderBy(dw =>
-                        freqMap.TryGetValue(dw.WordId, out var ranks) && dw.ReadingIndex < ranks.Count
-                            ? ranks[dw.ReadingIndex]
+                        freqMap.TryGetValue((dw.WordId, (short)dw.ReadingIndex), out var wff)
+                            ? wff.FrequencyRank
                             : int.MaxValue
                     ).ToList();
                 }
@@ -2273,9 +2265,9 @@ public class MediaDeckController(
                     break;
 
                 case DeckOrder.GlobalFrequency:
-                    deckWordsQuery = deckWordsQuery.OrderBy(dw => context.JmDictWordFrequencies
-                                                                         .Where(f => f.WordId == dw.WordId)
-                                                                         .Select(f => f.ReadingsFrequencyRank[dw.ReadingIndex])
+                    deckWordsQuery = deckWordsQuery.OrderBy(dw => context.WordFormFrequencies
+                                                                         .Where(wff => wff.WordId == dw.WordId && wff.ReadingIndex == (short)dw.ReadingIndex)
+                                                                         .Select(wff => wff.FrequencyRank)
                                                                          .FirstOrDefault()
                                                            );
                     break;

@@ -247,8 +247,17 @@
 <!ENTITY vs-s "suru verb - special class">
 <!ENTITY vt "transitive verb">
 <!ENTITY vz "Ichidan verb - zuru verb (alternative form of -jiru verbs)">
+<!-- <ke_inf> (kanji info) entities -->
+<!ENTITY ateji "ateji (phonetic) reading">
+<!ENTITY iK "word containing irregular kanji usage">
+<!ENTITY io "irregular okurigana usage">
+<!ENTITY oK "word containing out-dated kanji or kanji usage">
+<!ENTITY rK "rarely used kanji form">
+<!ENTITY sK "search-only kanji form">
 <!-- <re_inf> (reading info) entities -->
 <!ENTITY gikun "gikun (meaning as reading) or jukujikun (special kanji reading)">
 <!ENTITY ik "word containing irregular kana usage">
 <!ENTITY ok "out-dated or obsolete kana usage">
+<!ENTITY rk "rarely used kana form">
 <!ENTITY sk "search-only kana form">
+<!ENTITY uK "word usually written using kanji alone">

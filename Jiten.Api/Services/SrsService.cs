@@ -15,22 +15,22 @@ public class SrsService(JitenDbContext context, UserDbContext userContext, ILogg
     /// </summary>
     public async Task SyncKanaReading(string userId, int wordId, byte readingIndex, FsrsCard sourceCard, DateTime syncDateTime)
     {
-        // Fetch word reading types
-        var jmdictWord = await context.JMDictWords
+        var wordForms = await context.WordForms
             .AsNoTracking()
-            .Where(w => w.WordId == wordId)
-            .Select(w => new { w.WordId, w.ReadingTypes })
-            .FirstOrDefaultAsync();
+            .Where(wf => wf.WordId == wordId)
+            .OrderBy(wf => wf.ReadingIndex)
+            .ToListAsync();
 
-        if (jmdictWord == null) return;
-        if (readingIndex >= jmdictWord.ReadingTypes.Count) return;
+        var currentForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
+        if (currentForm == null) return;
 
-        // Only sync from Reading (kanji) to KanaReading
-        if (jmdictWord.ReadingTypes[readingIndex] != JmDictReadingType.Reading) return;
+        // Only sync from KanjiForm to KanaForm
+        if (currentForm.FormType != JmDictFormType.KanjiForm) return;
 
         // Find kana reading index
-        var kanaIndex = jmdictWord.ReadingTypes.FindIndex(t => t == JmDictReadingType.KanaReading);
-        if (kanaIndex < 0) return; // No kana variant exists
+        var kanaForm = wordForms.FirstOrDefault(wf => wf.FormType == JmDictFormType.KanaForm);
+        if (kanaForm == null) return; // No kana variant exists
+        var kanaIndex = (int)kanaForm.ReadingIndex;
 
         // Load or create kana card
         var kanaCard = await userContext.FsrsCards
@@ -85,33 +85,32 @@ public class SrsService(JitenDbContext context, UserDbContext userContext, ILogg
         // Step 1: Extract all unique WordIds
         var wordIds = cardsList.Select(c => c.WordId).Distinct().ToList();
 
-        // Step 2: Fetch all JmDictWords with ReadingTypes in a single query
-        var jmdictWords = await context.JMDictWords
+        // Step 2: Fetch all WordForms for batch in a single query
+        var allForms = await context.WordForms
             .AsNoTracking()
-            .Where(w => wordIds.Contains(w.WordId))
-            .Select(w => new { w.WordId, w.ReadingTypes })
+            .Where(wf => wordIds.Contains(wf.WordId))
             .ToListAsync();
 
-        // Step 3: Build lookup: WordId → ReadingTypes[]
-        var readingTypesLookup = jmdictWords.ToDictionary(w => w.WordId, w => w.ReadingTypes);
+        // Step 3: Build lookups
+        var formsByWord = allForms.GroupBy(wf => wf.WordId).ToDictionary(g => g.Key, g => g.ToList());
 
         // Step 4: Filter cards that need sync and build kana card requirements
         var kanaCardsToSync = new List<(int WordId, byte KanaIndex, FsrsCard SourceCard, bool Overwrite)>();
 
         foreach (var (wordId, readingIndex, sourceCard, overwrite) in cardsList)
         {
-            // Check if word exists in JMDict
-            if (!readingTypesLookup.TryGetValue(wordId, out var readingTypes)) continue;
-            if (readingIndex >= readingTypes.Count) continue;
+            if (!formsByWord.TryGetValue(wordId, out var forms)) continue;
+            var currentForm = forms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
+            if (currentForm == null) continue;
 
-            // Only sync from Reading (kanji) to KanaReading
-            if (readingTypes[readingIndex] != JmDictReadingType.Reading) continue;
+            // Only sync from KanjiForm to KanaForm
+            if (currentForm.FormType != JmDictFormType.KanjiForm) continue;
 
             // Find kana reading index
-            var kanaIndex = readingTypes.FindIndex(t => t == JmDictReadingType.KanaReading);
-            if (kanaIndex < 0) continue; // No kana variant exists
+            var kanaForm = forms.FirstOrDefault(wf => wf.FormType == JmDictFormType.KanaForm);
+            if (kanaForm == null) continue; // No kana variant exists
 
-            kanaCardsToSync.Add((wordId, (byte)kanaIndex, sourceCard, overwrite));
+            kanaCardsToSync.Add((wordId, (byte)kanaForm.ReadingIndex, sourceCard, overwrite));
         }
 
         if (kanaCardsToSync.Count == 0) return 0;

@@ -472,6 +472,12 @@ namespace Jiten.Core.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DefinitionId"));
 
+                    b.PrimitiveCollection<List<string>>("Dial")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
+
                     b.PrimitiveCollection<List<string>>("DutchMeanings")
                         .IsRequired()
                         .HasColumnType("text[]");
@@ -479,6 +485,12 @@ namespace Jiten.Core.Migrations
                     b.PrimitiveCollection<List<string>>("EnglishMeanings")
                         .IsRequired()
                         .HasColumnType("text[]");
+
+                    b.PrimitiveCollection<List<string>>("Field")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
 
                     b.PrimitiveCollection<List<string>>("FrenchMeanings")
                         .IsRequired()
@@ -492,13 +504,38 @@ namespace Jiten.Core.Migrations
                         .IsRequired()
                         .HasColumnType("text[]");
 
+                    b.Property<bool>("IsActiveInLatestSource")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.PrimitiveCollection<List<string>>("Misc")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
+
                     b.PrimitiveCollection<List<string>>("PartsOfSpeech")
                         .IsRequired()
                         .HasColumnType("text[]");
 
+                    b.PrimitiveCollection<List<string>>("Pos")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.PrimitiveCollection<List<short>>("RestrictedToReadingIndices")
+                        .HasColumnType("smallint[]");
+
                     b.PrimitiveCollection<List<string>>("RussianMeanings")
                         .IsRequired()
                         .HasColumnType("text[]");
+
+                    b.Property<int>("SenseIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.PrimitiveCollection<List<string>>("SlovenianMeanings")
                         .IsRequired()
@@ -513,7 +550,8 @@ namespace Jiten.Core.Migrations
 
                     b.HasKey("DefinitionId");
 
-                    b.HasIndex("WordId");
+                    b.HasIndex("WordId", "SenseIndex")
+                        .HasDatabaseName("IX_Definitions_WordId_SenseIndex");
 
                     b.ToTable("Definitions", "jmdict");
                 });
@@ -536,9 +574,6 @@ namespace Jiten.Core.Migrations
                     b.Property<int>("WordId")
                         .HasColumnType("integer");
 
-                    b.PrimitiveCollection<List<string>>("ObsoleteReadings")
-                        .HasColumnType("text[]");
-
                     b.Property<int>("Origin")
                         .HasColumnType("int");
 
@@ -552,21 +587,94 @@ namespace Jiten.Core.Migrations
                     b.PrimitiveCollection<List<string>>("Priorities")
                         .HasColumnType("text[]");
 
-                    b.PrimitiveCollection<int[]>("ReadingTypes")
-                        .IsRequired()
-                        .HasColumnType("int[]");
-
-                    b.PrimitiveCollection<List<string>>("Readings")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.PrimitiveCollection<List<string>>("ReadingsFurigana")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
                     b.HasKey("WordId");
 
                     b.ToTable("Words", "jmdict");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordForm", b =>
+                {
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<short>("FormType")
+                        .HasColumnType("smallint");
+
+                    b.PrimitiveCollection<List<string>>("InfoTags")
+                        .HasColumnType("text[]");
+
+                    b.Property<bool>("IsActiveInLatestSource")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsNoKanji")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsObsolete")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSearchOnly")
+                        .HasColumnType("boolean");
+
+                    b.PrimitiveCollection<List<string>>("Priorities")
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("RubyText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("WordId", "ReadingIndex");
+
+                    b.HasIndex("WordId")
+                        .HasDatabaseName("IX_WordForms_WordId");
+
+                    b.HasIndex("WordId", "FormType", "Text")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WordForms_WordId_FormType_Text");
+
+                    b.ToTable("WordForms", "jmdict");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFormFrequency", b =>
+                {
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<double>("FrequencyPercentage")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<int>("FrequencyRank")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<double>("ObservedFrequency")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<int>("UsedInMediaAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("WordId", "ReadingIndex");
+
+                    b.HasIndex("FrequencyRank")
+                        .HasDatabaseName("IX_WordFormFrequencies_FrequencyRank");
+
+                    b.ToTable("WordFormFrequencies", "jmdict");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFrequency", b =>
@@ -579,22 +687,6 @@ namespace Jiten.Core.Migrations
 
                     b.Property<double>("ObservedFrequency")
                         .HasColumnType("double precision");
-
-                    b.PrimitiveCollection<List<double>>("ReadingsFrequencyPercentage")
-                        .IsRequired()
-                        .HasColumnType("double precision[]");
-
-                    b.PrimitiveCollection<List<int>>("ReadingsFrequencyRank")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
-
-                    b.PrimitiveCollection<List<double>>("ReadingsObservedFrequency")
-                        .IsRequired()
-                        .HasColumnType("double precision[]");
-
-                    b.PrimitiveCollection<List<int>>("ReadingsUsedInMediaAmount")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
 
                     b.Property<int>("UsedInMediaAmount")
                         .HasColumnType("integer");
@@ -719,7 +811,7 @@ namespace Jiten.Core.Migrations
                     b.ToTable("Tags", "jiten");
                 });
 
-            modelBuilder.Entity("Jiten.Core.Data.User.WordSet", b =>
+            modelBuilder.Entity("Jiten.Core.Data.WordSet", b =>
                 {
                     b.Property<int>("SetId")
                         .ValueGeneratedOnAdd()
@@ -755,7 +847,7 @@ namespace Jiten.Core.Migrations
                     b.ToTable("WordSets", "jiten");
                 });
 
-            modelBuilder.Entity("Jiten.Core.Data.User.WordSetMember", b =>
+            modelBuilder.Entity("Jiten.Core.Data.WordSetMember", b =>
                 {
                     b.Property<int>("SetId")
                         .HasColumnType("integer");
@@ -952,6 +1044,15 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordForm", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.JMDict.JmDictWord", null)
+                        .WithMany("Forms")
+                        .HasForeignKey("WordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFrequency", b =>
                 {
                     b.HasOne("Jiten.Core.Data.JMDict.JmDictWord", null)
@@ -991,6 +1092,17 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.WordSetMember", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.WordSet", "Set")
+                        .WithMany("Members")
+                        .HasForeignKey("SetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Set");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
                 {
                     b.Navigation("Children");
@@ -1027,6 +1139,8 @@ namespace Jiten.Core.Migrations
                 {
                     b.Navigation("Definitions");
 
+                    b.Navigation("Forms");
+
                     b.Navigation("Lookups");
                 });
 
@@ -1040,18 +1154,7 @@ namespace Jiten.Core.Migrations
                     b.Navigation("DeckTags");
                 });
 
-            modelBuilder.Entity("Jiten.Core.Data.User.WordSetMember", b =>
-                {
-                    b.HasOne("Jiten.Core.Data.User.WordSet", "Set")
-                        .WithMany("Members")
-                        .HasForeignKey("SetId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Set");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.User.WordSet", b =>
+            modelBuilder.Entity("Jiten.Core.Data.WordSet", b =>
                 {
                     b.Navigation("Members");
                 });
