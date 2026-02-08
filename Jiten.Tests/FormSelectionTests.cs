@@ -109,6 +109,25 @@ public class FormSelectionTests
         // よくしています — should resolve to 良くする (2257610, uk), not 浴する (2255500)
         // GetPriorityScore uk bonus disambiguates when compound lookup returns both
         yield return ["私はある２つのことをよくしています", "よくしています", 2257610, (byte)3];
+
+        // あの before non-noun → interjection "um" (1000430), not prenominal "that" (1000420)
+        yield return ["あのすみません", "あの", 1000430, (byte)0];
+        yield return ["あの、もし嫌だったらいいんだけど", "あの", 1000430, (byte)0];
+
+        // あの before noun → prenominal adjective "that" (1000420)
+        yield return ["あの時は大変だった", "あの", 1000420, (byte)1];
+
+        // Sudachi misclassifies あの as 感動詞 — FixReadingAmbiguity overrides to PrenounAdjectival
+        yield return ["ちなみにあのネバネバ粘液はしっとり濃厚化粧水。", "あの", 1000420, (byte)1];
+        yield return ["実はあの〝名無し〟とは少々因縁があってな。", "あの", 1000420, (byte)1];
+        yield return ["柔らかく、冷たいあの見慣れた顔。", "あの", 1000420, (byte)1];
+        yield return ["音無さんのあの『パンツ』発言。", "あの", 1000420, (byte)1];
+
+        // 空 as から (empty, 1245280) — Sudachi gives 形状詞/ウツロ, ProcessSpecialCases overrides to noun/カラ
+        yield return ["妹のベッドも空なのか？", "空", 1245280, (byte)0];
+
+        // 空 as そら (sky, 1245290) — Sudachi gives 名詞/ソラ, ReadingMatchScore disambiguates
+        yield return ["空を見上げた", "空", 1245290, (byte)0];
     }
 
     [Theory]

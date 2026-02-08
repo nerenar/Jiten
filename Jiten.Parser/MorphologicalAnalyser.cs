@@ -431,6 +431,26 @@ public class MorphologicalAnalyser
                 word.Reading = "サムケ";
             }
 
+            // あの: Sudachi sometimes misclassifies as 感動詞 (filler) when it's prenominal,
+            // and as 連体詞 when it's actually a filler interjection.
+            // Strategy: override 感動詞→PrenounAdjectival always (Sudachi filler detection unreliable),
+            // then 連体詞→Interjection only when clearly not modifying a noun.
+            if (word.Text == "あの")
+            {
+                if (word.PartOfSpeech == PartOfSpeech.Interjection)
+                {
+                    word.PartOfSpeech = PartOfSpeech.PrenounAdjectival;
+                }
+                else if (word.PartOfSpeech == PartOfSpeech.PrenounAdjectival)
+                {
+                    var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
+                    bool nextIsNoun = next != null && next.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Pronoun
+                        or PartOfSpeech.NaAdjective or PartOfSpeech.Counter or PartOfSpeech.Numeral;
+                    if (!nextIsNoun)
+                        word.PartOfSpeech = PartOfSpeech.Interjection;
+                }
+            }
+
         }
 
         return wordInfos;
@@ -1299,6 +1319,19 @@ public class MorphologicalAnalyser
                 continue;
             }
 
+            // 空 as 形状詞/ウツロ (utsuro) → noun/カラ (kara, "empty")
+            // Sudachi misclassifies 空 as na-adjective うつろ, but kanji 空 in modern Japanese
+            // almost always reads から (empty) — うつろ is typically written 虚ろ
+            if (w1 is { Text: "空", PartOfSpeech: PartOfSpeech.NaAdjective, Reading: "ウツロ" })
+            {
+                w1.PartOfSpeech = PartOfSpeech.Noun;
+                w1.Reading = "カラ";
+                w1.NormalizedForm = "空";
+                newList.Add(w1);
+                i++;
+                continue;
+            }
+
             if (i < wordInfos.Count - 2)
             {
                 WordInfo w2 = wordInfos[i + 1];
@@ -1708,6 +1741,12 @@ public class MorphologicalAnalyser
                     {
                         newDictForm = currentDictForm + "する";
                         currentPOS = PartOfSpeech.Verb;
+                    }
+                    else if (currentPOS == PartOfSpeech.IAdjective &&
+                             nextWord.PartOfSpeech == PartOfSpeech.Suffix && nextWord.DictionaryForm == "さ")
+                    {
+                        newDictForm = candidateText;
+                        currentPOS = PartOfSpeech.Noun;
                     }
                 }
                 // Scenario B: Suffix transition - creates new compound verb

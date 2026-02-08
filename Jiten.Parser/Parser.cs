@@ -2524,6 +2524,8 @@ namespace Jiten.Parser
                 wordScore += 100;
             if (!isNameContext && word.PartsOfSpeech.ToPartOfSpeech().Contains(PartOfSpeech.Name))
                 wordScore -= 50;
+            if (word.PartsOfSpeech.Contains("arch"))
+                wordScore -= 200;
 
             // 2) EntryPriorityScore — global word frequency from word-level priorities
             int entryPriorityScore = 0;
@@ -2659,7 +2661,7 @@ namespace Jiten.Parser
                                                                                          ConvertLongVowelMark = false
                                                                                      })) == sudachiHira);
                 if (hasMatchingReading)
-                    readingMatchScore += 30;
+                    readingMatchScore += 35;
                 // Stem fallback — for conjugated verbs the reading is a conjugated stem (e.g. ヒラカ)
                 // that won't exactly match the dictionary kana form (ひらく/あく).
                 // Strip the last kana from both and compare stems to disambiguate.
@@ -2680,7 +2682,7 @@ namespace Jiten.Parser
                                                 return hiragana.Length > 1 && hiragana[..^1] == sudachiStem;
                                             });
                     if (hasStemMatch)
-                        readingMatchScore += 30;
+                        readingMatchScore += 35;
                 }
             }
 

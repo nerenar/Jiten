@@ -271,6 +271,14 @@ public static class PosMapper
         if (sudachiPos == PartOfSpeech.Interjection && convertedPosList.Contains(PartOfSpeech.Expression))
             return true;
 
+        // Sudachi 代名詞 (Pronoun) should match JMDict exp/adv/int for colloquial contractions.
+        // E.g. そりゃ (それは), こりゃ (これは) are tagged adv/exp/int in JMDict.
+        if (sudachiPos == PartOfSpeech.Pronoun &&
+            (convertedPosList.Contains(PartOfSpeech.Expression) ||
+             convertedPosList.Contains(PartOfSpeech.Adverb) ||
+             convertedPosList.Contains(PartOfSpeech.Interjection)))
+            return true;
+
         // Sudachi 接尾辞 (Suffix) should match JMDict n-suf (NounSuffix).
         // E.g. だらけ is n-suf in JMDict but 接尾辞 in Sudachi.
         if (sudachiPos == PartOfSpeech.Suffix && convertedPosList.Contains(PartOfSpeech.NounSuffix))
