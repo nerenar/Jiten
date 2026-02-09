@@ -270,7 +270,7 @@ public static class JitenHelper
         Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk insert (deck words) took {timer.ElapsedMilliseconds} ms for DeckId {deckId} with {deduplicatedWords.Count} unique words.");
     }
 
-    private static async Task BulkInsertExampleSentences(IDbContextFactory<JitenDbContext> contextFactory, ICollection<ExampleSentence> exampleSentences, int deckId)
+    public static async Task BulkInsertExampleSentences(IDbContextFactory<JitenDbContext> contextFactory, ICollection<ExampleSentence> exampleSentences, int deckId)
     {
         var timer = Stopwatch.StartNew();
         // Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk inserting {exampleSentences.Count} example sentences for DeckId {deckId}...");
@@ -393,13 +393,13 @@ public static class JitenHelper
         return (deck.DeckWords?.ToList() ?? [], deck.ExampleSentences?.ToList() ?? []);
     }
 
-    private static async Task DeleteDeckData(JitenDbContext context, int deckId)
+    public static async Task DeleteDeckData(JitenDbContext context, int deckId)
     {
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {{0}}", deckId);
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""ExampleSentences"" WHERE ""DeckId"" = {{0}}", deckId);
     }
 
-    private static async Task BulkInsertDeckData(IDbContextFactory<JitenDbContext> contextFactory, int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences)
+    public static async Task BulkInsertDeckData(IDbContextFactory<JitenDbContext> contextFactory, int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences)
     {
         var tasks = new List<Task>();
 

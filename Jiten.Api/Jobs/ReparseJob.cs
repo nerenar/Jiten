@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Jobs;
 
-public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory)
+public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgroundJobClient backgroundJobs)
 {
     [Queue("reparse")]
     public async Task Reparse(int deckId)
@@ -85,5 +85,23 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory)
         deck.LastUpdate = DateTime.UtcNow;
 
         await JitenHelper.InsertDeck(contextFactory, deck, [], true);
+
+        QueueCoverageComputationForDeckTree(deck);
+        QueueStatsComputationForDeckTree(deck);
+        backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.ComputeDeckDifficulty(deck.DeckId, true));
+    }
+
+    private void QueueCoverageComputationForDeckTree(Deck deck)
+    {
+        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeDeckCoverageForAllUsers(deck.DeckId));
+        foreach (var child in deck.Children)
+            QueueCoverageComputationForDeckTree(child);
+    }
+
+    private void QueueStatsComputationForDeckTree(Deck deck)
+    {
+        backgroundJobs.Enqueue<StatsComputationJob>(job => job.ComputeDeckCoverageStats(deck.DeckId));
+        foreach (var child in deck.Children)
+            QueueStatsComputationForDeckTree(child);
     }
 }

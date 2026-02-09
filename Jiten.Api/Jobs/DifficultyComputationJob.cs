@@ -83,7 +83,7 @@ public class DifficultyComputationJob(
 
     [Queue("stats")]
     [AutomaticRetry(Attempts = 3, DelaysInSeconds = [60, 300, 900])]
-    public async Task ComputeDeckDifficulty(int deckId)
+    public async Task ComputeDeckDifficulty(int deckId, bool forceRecompute = false)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
@@ -101,7 +101,7 @@ public class DifficultyComputationJob(
         // If parent with children, compute all children first then aggregate
         if (deck.Children.Count > 0)
         {
-            await ComputeParentWithChildren(context, deck);
+            await ComputeParentWithChildren(context, deck, forceRecompute);
             return;
         }
 
@@ -109,16 +109,27 @@ public class DifficultyComputationJob(
         await ComputeSingleDeckDifficulty(context, deck);
     }
 
-    private async Task ComputeParentWithChildren(JitenDbContext context, Deck parent)
+    private async Task ComputeParentWithChildren(JitenDbContext context, Deck parent, bool forceRecompute = false)
     {
-        var children = parent.Children.OrderBy(c => c.DeckOrder).ToList();
+        var children = await context.Decks
+            .Include(d => d.RawText)
+            .Include(d => d.DeckDifficulty)
+            .Where(d => d.ParentDeckId == parent.DeckId)
+            .OrderBy(d => d.DeckOrder)
+            .ToListAsync();
 
-        logger.LogInformation("Computing difficulty for parent {ParentId} with {Count} children",
-            parent.DeckId, children.Count);
+        logger.LogInformation("Computing difficulty for parent {ParentId} with {Count} children (forceRecompute={Force})",
+            parent.DeckId, children.Count, forceRecompute);
 
         var computedCount = 0;
         foreach (var child in children)
         {
+            if (!forceRecompute && child.DeckDifficulty != null)
+            {
+                logger.LogInformation("Skipping child {DeckId} — difficulty already computed", child.DeckId);
+                continue;
+            }
+
             if (child.RawText == null)
             {
                 logger.LogWarning("Child deck {DeckId} has no raw text, skipping", child.DeckId);

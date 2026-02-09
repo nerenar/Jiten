@@ -106,14 +106,14 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
         }
 
         // Queue coverage computation for all eligible users
-        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeDeckCoverageForAllUsers(deck.DeckId));
+        QueueCoverageComputationForDeckTree(deck);
 
         // Queue coverage statistics computation for main deck and all children
         QueueStatsComputationForDeckTree(deck);
 
         // Queue difficulty computation (job handles children internally)
         backgroundJobs.Enqueue<DifficultyComputationJob>(
-            job => job.ComputeDeckDifficulty(deck.DeckId));
+            job => job.ComputeDeckDifficulty(deck.DeckId, true));
     }
 
     /// <summary>
@@ -220,6 +220,13 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
             ".mokuro" => await new MokuroExtractor().Extract(filePath, false),
             _ => await File.ReadAllTextAsync(filePath)
         };
+    }
+
+    private void QueueCoverageComputationForDeckTree(Deck deck)
+    {
+        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeDeckCoverageForAllUsers(deck.DeckId));
+        foreach (var child in deck.Children)
+            QueueCoverageComputationForDeckTree(child);
     }
 
     private void QueueStatsComputationForDeckTree(Deck deck)

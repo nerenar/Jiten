@@ -408,6 +408,7 @@ public partial class AdminController(
         }
 
         // Update subdecks if provided
+        var newChildDecks = new List<Deck>();
         if (model.Subdecks != null && model.Subdecks.Count != 0)
         {
             var existingSubdeckIds = deck.Children.Select(d => d.DeckId).ToHashSet();
@@ -443,6 +444,7 @@ public partial class AdminController(
                         newDeck.RawText = new DeckRawText(await GetTextFromFile(subdeck.File));
 
                     deck.Children.Add(newDeck);
+                    newChildDecks.Add(newDeck);
                 }
             }
         }
@@ -506,6 +508,14 @@ public partial class AdminController(
         deck.LastUpdate = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync();
+
+        var newChildIdsWithText = newChildDecks
+            .Where(d => d.RawText != null)
+            .Select(d => d.DeckId)
+            .ToList();
+        if (newChildIdsWithText.Count > 0 && !model.Reparse)
+            backgroundJobs.Enqueue<ParseNewSubdecksJob>(
+                job => job.ParseNewSubdecks(deck.DeckId, newChildIdsWithText));
 
         if (model.Reparse)
             backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
@@ -695,7 +705,7 @@ public partial class AdminController(
             return NotFound(new { Message = $"Deck {deckId} not found" });
 
         backgroundJobs.Enqueue<DifficultyComputationJob>(
-            job => job.ComputeDeckDifficulty(deckId));
+            job => job.ComputeDeckDifficulty(deckId, true));
 
         logger.LogInformation("Admin queued difficulty recomputation for deck {DeckId}", deckId);
         return Ok(new { Message = $"Queued difficulty computation for deck {deckId}" });
