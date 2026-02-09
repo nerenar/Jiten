@@ -32,6 +32,7 @@
     </div>
     <AppFooter />
     <Toast />
+    <Toast position="bottom-center" group="bottom" />
     <ConfirmDialog />
   </div>
 </template>

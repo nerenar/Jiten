@@ -56,6 +56,77 @@ public static class TextNormalizationHelper
         return result;
     }
 
+    public static bool ContainsRomaji(string text)
+    {
+        foreach (var c in text)
+        {
+            if (c is >= 'A' and <= 'Z' or >= 'a' and <= 'z')
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Normalises non-standard romaji variants to their standard Hepburn equivalents.
+    /// Uses lookahead to protect existing standard forms (e.g. "shi", "chi", "tsu").
+    /// </summary>
+    public static string NormaliseRomaji(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+
+        var sb = new StringBuilder(text.Length + 4);
+        var lower = text.ToLowerInvariant();
+
+        for (int i = 0; i < lower.Length; i++)
+        {
+            char c = lower[i];
+            char next = i + 1 < lower.Length ? lower[i + 1] : '\0';
+            char next2 = i + 2 < lower.Length ? lower[i + 2] : '\0';
+
+            switch (c)
+            {
+                case 't' when next == 'u' && next2 != 's':
+                    // "tu" → "tsu", but protect "tsu" already present
+                    sb.Append("tsu");
+                    i++;
+                    break;
+                case 't' when next == 'i' && next2 != 'c':
+                    // "ti" → "chi", but protect existing sequences starting with "tic..."
+                    sb.Append("chi");
+                    i++;
+                    break;
+                case 's' when next == 'i' && next2 != 'h':
+                    // "si" → "shi", but protect "shi" already present
+                    sb.Append("shi");
+                    i++;
+                    break;
+                case 'h' when next == 'u' && next2 != 'f':
+                    // "hu" → "fu"
+                    sb.Append("fu");
+                    i++;
+                    break;
+                case 'z' when next == 'i':
+                    sb.Append("ji");
+                    i++;
+                    break;
+                case 'd' when next == 'u':
+                    sb.Append("zu");
+                    i++;
+                    break;
+                case 'd' when next == 'i':
+                    sb.Append("ji");
+                    i++;
+                    break;
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+
+        return sb.ToString();
+    }
+
     private static bool IsKatakana(char c)
     {
         return (c >= '\u30A0' && c <= '\u30FF') ||  // Katakana block

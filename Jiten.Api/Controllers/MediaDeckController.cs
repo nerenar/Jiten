@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
+using Jiten.Core.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -99,6 +100,8 @@ public class MediaDeckController(
         limit = Math.Clamp(limit, 1, 10);
 
         var normalizedFilter = query.Trim();
+        if (TextNormalizationHelper.ContainsRomaji(normalizedFilter))
+            normalizedFilter = TextNormalizationHelper.NormaliseRomaji(normalizedFilter);
         var filterNoSpaces = normalizedFilter.Replace(" ", "");
         var queryLength = normalizedFilter.Length;
 
@@ -165,6 +168,9 @@ public class MediaDeckController(
                                   """;
 
         var results = await context.Database.SqlQuery<DeckIdWithCount>(sql).ToListAsync();
+
+        if (results.Count == 0)
+            results = await LevenshteinSuggestionsFallback(normalizedFilter, filterNoSpaces, limit);
 
         if (results.Count == 0)
             return Ok(new MediaSuggestionsResponse());
@@ -270,12 +276,11 @@ public class MediaDeckController(
         if (!string.IsNullOrEmpty(titleFilter))
         {
             var normalizedFilter = titleFilter.Trim();
+            if (TextNormalizationHelper.ContainsRomaji(normalizedFilter))
+                normalizedFilter = TextNormalizationHelper.NormaliseRomaji(normalizedFilter);
             var filterNoSpaces = normalizedFilter.Replace(" ", "");
             var queryLength = normalizedFilter.Length;
 
-            // CTE-based query that prioritises exact matches, then uses pgroonga for fuzzy
-            // Each CTE uses a single index for efficient pgroonga_score calculation
-            // Length ratio ensures shorter titles matching the query rank higher
             FormattableString sql = $$"""
                                       WITH exact_matches AS (
                                           SELECT DISTINCT dt."DeckId",
@@ -338,6 +343,10 @@ public class MediaDeckController(
                                       """;
 
             orderedDeckIds = await context.Database.SqlQuery<int>(sql).ToListAsync();
+
+            if (orderedDeckIds.Count == 0)
+                orderedDeckIds = await LevenshteinDeckIdsFallback(normalizedFilter, filterNoSpaces);
+
             query = query.Where(d => orderedDeckIds.Contains(d.DeckId));
         }
         else
@@ -2314,5 +2323,60 @@ public class MediaDeckController(
         }
 
         return (deckWordsRaw, null);
+    }
+
+    private static int GetLevenshteinMaxDistance(string query)
+    {
+        return query.Length switch
+        {
+            <= 5 => 1,
+            <= 12 => 2,
+            _ => 3
+        };
+    }
+
+    private async Task<List<DeckIdWithCount>> LevenshteinSuggestionsFallback(string filter, string filterNoSpaces, int limit)
+    {
+        var maxDist = GetLevenshteinMaxDistance(filter);
+
+        FormattableString sql = $$"""
+                                  SELECT DISTINCT ON (dt."DeckId") dt."DeckId", COUNT(*) OVER() AS "TotalCount"
+                                  FROM jiten."DeckTitles" dt
+                                  JOIN jiten."Decks" d ON dt."DeckId" = d."DeckId"
+                                  WHERE d."ParentDeckId" IS NULL
+                                    AND (levenshtein(LEFT(LOWER(dt."Title"), 255), LEFT(LOWER({{filter}}), 255)) <= {{maxDist}}
+                                      OR levenshtein(LEFT(LOWER(dt."TitleNoSpaces"), 255), LEFT(LOWER({{filterNoSpaces}}), 255)) <= {{maxDist}})
+                                  ORDER BY dt."DeckId",
+                                           LEAST(
+                                               levenshtein(LEFT(LOWER(dt."Title"), 255), LEFT(LOWER({{filter}}), 255)),
+                                               levenshtein(LEFT(LOWER(dt."TitleNoSpaces"), 255), LEFT(LOWER({{filterNoSpaces}}), 255))
+                                           ) ASC,
+                                           LENGTH(dt."Title") ASC
+                                  LIMIT {{limit}}
+                                  """;
+
+        return await context.Database.SqlQuery<DeckIdWithCount>(sql).ToListAsync();
+    }
+
+    private async Task<List<int>> LevenshteinDeckIdsFallback(string filter, string filterNoSpaces)
+    {
+        var maxDist = GetLevenshteinMaxDistance(filter);
+
+        FormattableString sql = $$"""
+                                  SELECT DISTINCT ON (dt."DeckId") dt."DeckId"
+                                  FROM jiten."DeckTitles" dt
+                                  JOIN jiten."Decks" d ON dt."DeckId" = d."DeckId"
+                                  WHERE d."ParentDeckId" IS NULL
+                                    AND (levenshtein(LEFT(LOWER(dt."Title"), 255), LEFT(LOWER({{filter}}), 255)) <= {{maxDist}}
+                                      OR levenshtein(LEFT(LOWER(dt."TitleNoSpaces"), 255), LEFT(LOWER({{filterNoSpaces}}), 255)) <= {{maxDist}})
+                                  ORDER BY dt."DeckId",
+                                           LEAST(
+                                               levenshtein(LEFT(LOWER(dt."Title"), 255), LEFT(LOWER({{filter}}), 255)),
+                                               levenshtein(LEFT(LOWER(dt."TitleNoSpaces"), 255), LEFT(LOWER({{filterNoSpaces}}), 255))
+                                           ) ASC,
+                                           LENGTH(dt."Title") ASC
+                                  """;
+
+        return await context.Database.SqlQuery<int>(sql).ToListAsync();
     }
 }

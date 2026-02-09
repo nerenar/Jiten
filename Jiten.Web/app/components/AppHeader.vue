@@ -55,11 +55,14 @@
   };
 
   function cycleTheme() {
-    const order = [ThemeMode.Light, ThemeMode.Dark, ThemeMode.Auto];
+    const systemIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const opposite = systemIsDark ? ThemeMode.Light : ThemeMode.Dark;
+    const same = systemIsDark ? ThemeMode.Dark : ThemeMode.Light;
+    const order = [ThemeMode.Auto, opposite, same];
     const next = order[(order.indexOf(themeMode.value) + 1) % order.length];
     themeMode.value = next;
     applyTheme(next);
-    toast.add({ severity: 'info', summary: `Switched to ${themeLabels[next].toLowerCase()} theme`, life: 1500 });
+    toast.add({ severity: 'info', summary: `Switched to ${themeLabels[next].toLowerCase()} theme`, life: 1500, group: 'bottom' });
   }
 
   const themeIcon = computed(() => {
