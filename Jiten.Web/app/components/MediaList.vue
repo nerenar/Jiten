@@ -492,11 +492,12 @@
   const mediaTypeOptions = [
     { type: null, label: 'All' },
     { type: MediaType.Anime, label: 'Anime' },
+    { type: MediaType.Audio, label: 'Audio' },
     { type: MediaType.Drama, label: 'Dramas' },
     { type: MediaType.Manga, label: 'Manga' },
     { type: MediaType.Movie, label: 'Movies' },
-    { type: MediaType.Novel, label: 'Novels' },
     { type: MediaType.NonFiction, label: 'Non-Fiction' },
+    { type: MediaType.Novel, label: 'Novels' },
     { type: MediaType.VideoGame, label: 'Video Games' },
     { type: MediaType.VisualNovel, label: 'Visual Novels' },
     { type: MediaType.WebNovel, label: 'Web Novels' },

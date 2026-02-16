@@ -25,8 +25,7 @@ public class EbookExtractor
             // Select only the chapters with key partXXXX.html or p-XXX.html or XXXX.html
             // I'm not sure if all epub files have this format, but it works for now
             // I keep having to add new ones, help me
-            Regex regex =
-                new(@"\b.*?\d{1,6}.*?\.x?html\b");
+            Regex regex = new(@"\b.*?\d{1,6}.*?\.x?html\b");
 
             var filteredChapters = book.ReadingOrder
                                        .Where(chapter => regex.IsMatch(chapter.Key) &&

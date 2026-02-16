@@ -8,6 +8,7 @@ export enum MediaType {
   VisualNovel = 7,
   WebNovel = 8,
   Manga = 9,
+  Audio = 10,
 }
 
 export enum LinkType {

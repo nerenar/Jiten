@@ -114,7 +114,8 @@
     .map((value) => ({
       name: getMediaTypeText(value as MediaType),
       id: value as MediaType,
-    }));
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 </script>
 
 <template>

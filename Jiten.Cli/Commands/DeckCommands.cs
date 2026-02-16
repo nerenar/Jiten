@@ -215,7 +215,7 @@ public class DeckCommands(CliContext context)
             deck.OriginalTitle = metadata.OriginalTitle;
             deck.MediaType = deckType;
 
-            if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+            if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
                 deck.SentenceCount = 0;
 
             if (options.Verbose)

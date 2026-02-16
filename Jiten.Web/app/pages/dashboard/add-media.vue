@@ -64,7 +64,8 @@
   const mediaTypes = computed(() => {
     return Object.values(MediaType)
       .filter((value) => typeof value === 'number')
-      .map((value) => value as MediaType);
+      .map((value) => value as MediaType)
+      .sort((a, b) => getMediaTypeText(a).localeCompare(getMediaTypeText(b)));
   });
 
   const subdeckDefaultName = computed(() => {

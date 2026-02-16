@@ -82,6 +82,7 @@
         break;
       case 1: // Anime
       case 2: // Drama
+      case 10: // Audio
         progressionUnit = isParentDeck ? 'episodes' : (mediaType === 1 ? 'anime' : 'drama');
         break;
       case 4: // Novel

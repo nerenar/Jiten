@@ -29,7 +29,7 @@ public class DbFeatureExtractor
 
         var mainStopwatch = Stopwatch.StartNew();
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var decks = await context.Decks.Where(d => (d.ParentDeck != null || (d.ParentDeck == null && d.Children.Count == 0)) && (d.MediaType == MediaType.Anime || d.MediaType == MediaType.Movie || d.MediaType == MediaType.Drama)).Include(d => d.RawText).ToListAsync();
+        var decks = await context.Decks.Where(d => (d.ParentDeck != null || (d.ParentDeck == null && d.Children.Count == 0)) && (d.MediaType == MediaType.Anime || d.MediaType == MediaType.Movie || d.MediaType == MediaType.Drama || d.MediaType == MediaType.Audio)).Include(d => d.RawText).ToListAsync();
         Console.WriteLine($"Loaded {decks.Count} decks from database.");
 
         List<MLInputData> itemsToProcess = new();
@@ -152,7 +152,7 @@ public class DbFeatureExtractor
         features.UniqueKanjiCount = deck.UniqueKanjiCount;
         features.UniqueKanjiOnceCount = deck.UniqueKanjiUsedOnceCount;
 
-        if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+        if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
             deck.SentenceCount = 0;
 
         features.SentenceCount = deck.SentenceCount;

@@ -10,6 +10,7 @@ namespace Jiten.Core.Data
         VideoGame = 6,
         VisualNovel = 7,
         WebNovel = 8,
-        Manga = 9
+        Manga = 9,
+        Audio = 10
     }
 }

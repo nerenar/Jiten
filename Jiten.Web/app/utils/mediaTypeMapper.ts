@@ -20,6 +20,8 @@ export function getMediaTypeText(mediaType: MediaType): string {
       return 'Web Novel';
     case MediaType.Manga:
       return 'Manga';
+    case MediaType.Audio:
+      return 'Audio';
     default:
       return 'Unknown';
   }
@@ -45,6 +47,8 @@ export function getChildrenCountText(mediaType: MediaType): string {
       return 'Routes';
     case MediaType.WebNovel:
       return 'Chapters';
+    case MediaType.Audio:
+      return 'Entries';
     default:
       return 'Unknown';
   }

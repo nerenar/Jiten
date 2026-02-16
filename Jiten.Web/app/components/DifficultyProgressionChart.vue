@@ -31,6 +31,7 @@ const getMediaTypePrefix = (mediaType?: MediaType): string => {
     case MediaType.Anime:
     case MediaType.Drama:
     case MediaType.Movie:
+    case MediaType.Audio:
       return 'Ep';
     case MediaType.Novel:
     case MediaType.NonFiction:
