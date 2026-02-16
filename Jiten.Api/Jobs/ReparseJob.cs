@@ -86,16 +86,8 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
 
         await JitenHelper.InsertDeck(contextFactory, deck, [], true);
 
-        QueueCoverageComputationForDeckTree(deck);
         QueueStatsComputationForDeckTree(deck);
         backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.ComputeDeckDifficulty(deck.DeckId, false));
-    }
-
-    private void QueueCoverageComputationForDeckTree(Deck deck)
-    {
-        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeDeckCoverageForAllUsers(deck.DeckId));
-        foreach (var child in deck.Children)
-            QueueCoverageComputationForDeckTree(child);
     }
 
     private void QueueStatsComputationForDeckTree(Deck deck)

@@ -13,18 +13,18 @@ public class DifficultyComputationJob(
     ILogger<DifficultyComputationJob> logger)
 {
     private record DifficultyResponse(
-        [property: JsonPropertyName("difficulty")] decimal Difficulty,
-        [property: JsonPropertyName("baseline")] decimal Baseline,
-        [property: JsonPropertyName("peak")] decimal Peak,
-        [property: JsonPropertyName("deciles")] Dictionary<string, decimal> Deciles,
-        [property: JsonPropertyName("progression")] List<ProgressionItem> Progression,
+        [property: JsonPropertyName("difficulty")] decimal? Difficulty,
+        [property: JsonPropertyName("baseline")] decimal? Baseline,
+        [property: JsonPropertyName("peak")] decimal? Peak,
+        [property: JsonPropertyName("deciles")] Dictionary<string, decimal>? Deciles,
+        [property: JsonPropertyName("progression")] List<ProgressionItem>? Progression,
         [property: JsonPropertyName("sentences")] int Sentences,
-        [property: JsonPropertyName("level_counts")] Dictionary<string, int> LevelCounts);
+        [property: JsonPropertyName("level_counts")] Dictionary<string, int>? LevelCounts);
 
     private record ProgressionItem(
         [property: JsonPropertyName("segment")] int Segment,
-        [property: JsonPropertyName("difficulty")] decimal Difficulty,
-        [property: JsonPropertyName("peak")] decimal Peak);
+        [property: JsonPropertyName("difficulty")] decimal? Difficulty,
+        [property: JsonPropertyName("peak")] decimal? Peak);
 
     private record RunPodInput(
         [property: JsonPropertyName("text")] string Text,
@@ -108,7 +108,7 @@ public class DifficultyComputationJob(
         // Single deck (no children) - compute via API
         if (!forceRecompute && await context.DeckDifficulties.AnyAsync(d => d.DeckId == deckId))
         {
-            logger.LogInformation("Skipping deck {DeckId} - difficulty already computed", deckId);
+            // logger.LogInformation("Skipping deck {DeckId} - difficulty already computed", deckId);
             return;
         }
 
@@ -177,28 +177,29 @@ public class DifficultyComputationJob(
         var mediaType = GetApiMediaType(deck.MediaType);
         var response = await CallRunPodApi(deck.RawText.RawText, mediaType);
 
-        if (response == null)
+        if (response == null || !response.Difficulty.HasValue)
         {
-            throw new InvalidOperationException($"Failed to get difficulty for deck {deck.DeckId} - API call failed");
+            throw new InvalidOperationException($"Failed to get difficulty for deck {deck.DeckId} - API call failed or returned null difficulty");
         }
 
-        var roundedDeciles = response.Deciles.ToDictionary(
+        var roundedDeciles = (response.Deciles ?? new()).ToDictionary(
             kvp => kvp.Key,
             kvp => Math.Round(kvp.Value, 2));
 
-        var roundedProgression = response.Progression
+        var roundedProgression = (response.Progression ?? [])
+            .Where(p => p.Difficulty.HasValue && p.Peak.HasValue)
             .Select(p => new ProgressionSegment
             {
                 Segment = p.Segment,
-                Difficulty = Math.Round(p.Difficulty, 2),
-                Peak = Math.Round(p.Peak, 2)
+                Difficulty = Math.Round(p.Difficulty!.Value, 2),
+                Peak = Math.Round(p.Peak!.Value, 2)
             }).ToList();
 
         var existingDifficulty = await context.DeckDifficulties.FindAsync(deck.DeckId);
         if (existingDifficulty != null)
         {
-            existingDifficulty.Difficulty = Math.Round(response.Difficulty, 2);
-            existingDifficulty.Peak = Math.Round(response.Peak, 2);
+            existingDifficulty.Difficulty = Math.Round(response.Difficulty.Value, 2);
+            existingDifficulty.Peak = Math.Round(response.Peak ?? response.Difficulty.Value, 2);
             existingDifficulty.Deciles = roundedDeciles;
             existingDifficulty.Progression = roundedProgression;
             existingDifficulty.LastUpdated = DateTimeOffset.UtcNow;
@@ -208,8 +209,8 @@ public class DifficultyComputationJob(
             var newDifficulty = new DeckDifficulty
             {
                 DeckId = deck.DeckId,
-                Difficulty = Math.Round(response.Difficulty, 2),
-                Peak = Math.Round(response.Peak, 2),
+                Difficulty = Math.Round(response.Difficulty.Value, 2),
+                Peak = Math.Round(response.Peak ?? response.Difficulty.Value, 2),
                 LastUpdated = DateTimeOffset.UtcNow
             };
             newDifficulty.Deciles = roundedDeciles;
@@ -217,7 +218,7 @@ public class DifficultyComputationJob(
             await context.DeckDifficulties.AddAsync(newDifficulty);
         }
 
-        deck.Difficulty = (float)Math.Round(response.Difficulty, 2);
+        deck.Difficulty = (float)Math.Round(response.Difficulty.Value, 2);
         await context.SaveChangesAsync();
     }
 
