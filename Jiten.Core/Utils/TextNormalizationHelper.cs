@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using WanaKanaShaapu;
 
 namespace Jiten.Core.Utils;
@@ -52,6 +53,11 @@ public static class TextNormalizationHelper
         result = sb.ToString();
         result = result.ToFullWidthDigits();
         result = result.ToFullWidthLowercaseLetters();
+
+        // Normalise tilde characters to chōon mark when used as vowel elongation after kana
+        // Must match PreprocessText in MorphologicalAnalyser so IndexOf alignment works
+        result = Regex.Replace(result, @"(?<=[\u3040-\u309F\u30A0-\u30FF])[～〜]+", "ー");
+        result = Regex.Replace(result, "ー{2,}", "ー");
 
         return result;
     }

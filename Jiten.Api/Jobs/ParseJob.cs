@@ -13,7 +13,7 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
     public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
     {
         Deck deck = new();
-        string filePath = metadata.FilePath;
+        string filePath = metadata.FilePath!;
 
         await using var context = await contextFactory.CreateDbContextAsync();
 
@@ -67,7 +67,7 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
         if (metadata.ReleaseDate != null)
             deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
 
-        if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+        if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
             deck.SentenceCount = 0;
 
         deck.RomajiTitle = metadata.RomajiTitle;
@@ -159,7 +159,7 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
             deck.MediaType = deckType;
             deck.DifficultyOverride = -1;
 
-            if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+            if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
                 deck.SentenceCount = 0;
 
             metaToDeck[meta] = deck;

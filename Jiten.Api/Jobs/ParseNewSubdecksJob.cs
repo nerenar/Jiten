@@ -62,7 +62,7 @@ public class ParseNewSubdecksJob(
             original.SentenceCount = parsed.SentenceCount;
             original.DialoguePercentage = parsed.DialoguePercentage;
 
-            if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+            if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
                 original.SentenceCount = 0;
 
             await context.SaveChangesAsync();

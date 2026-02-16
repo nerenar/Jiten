@@ -53,6 +53,9 @@ public class FormSelectionTests
         // パパ (papa, 1102140) — standalone kana word, no conflict
         yield return ["パパ", "パパ", 1102140, (byte)0];
 
+        // いらない should resolve to 要る (1546640, uk), not 入る (1465580)
+        yield return ["礼なんていらない", "いらない", 1546640, (byte)1];
+
         // いえない should resolve to 言える (1008860), not 癒える (1538740)
         // Both score identically — tie-broken by lower WordId
         yield return ["いえない", "いえない", 1008860, (byte)2];
@@ -153,6 +156,59 @@ public class FormSelectionTests
         // メンドイ in katakana should select the katakana form (index 2), not the hiragana めんどい (index 1)
         // The katakana form is tagged sk (search-only) but exact surface match preserves it
         yield return ["メンドイ", "メンドイ", 2078360, (byte)2];
+
+        // 因 standalone → いん/cause (1168640), not もと/origin (1260670)
+        // User dic overrides Sudachi reading モト→イン for the common standalone reading
+        yield return ["因の情報", "因", 1168640, (byte)0];
+        yield return ["因と果の間で", "因", 1168640, (byte)0];
+        yield return ["因である", "因", 1168640, (byte)0];
+
+        // Tilde/ー as vowel elongation resolves short katakana adj-i stems
+        // ヤバ～ → ヤバい (やばい, 1012840) — tilde normalised, adj stem resolved
+        yield return ["ヤバ～", "ヤバい", 1012840, (byte)1];
+        // スゴ～ → スゴい (すごい, 1374550) — same pattern
+        yield return ["スゴ～", "スゴい", 1374550, (byte)3];
+
+        // いけなかった → いけない (1000730), not いける (1587190)
+        // Deep deconjugation chain scales down Sudachi's lemma match
+        yield return ["あのいけなかったでしょうか", "いけなかった", 1000730, (byte)1];
+
+        // いかん → 行かん expression (2829697), not 移管 suru-noun (1158230)
+        // Suru-noun identity matches are filtered when DictionaryForm confirms a deconjugated verb base
+        yield return ["いかんいかん、心の声が漏れそうになった。", "いかん", 2829697, (byte)1];
+        yield return ["戦線を伸ばしきるわけにもいかんしこのあたりが限界か", "いかん", 2829697, (byte)1];
+
+        // 二つ → ふたつ/two (1461160), not つ/harbour (2609820)
+        // CombineAmounts merges 二+つ with POS Noun; Noun↔Numeral compatibility ensures JMDict num match
+        yield return ["二つ", "二つ", 1461160, (byte)0];
+
+        // 罪 after expression token → noun つみ (1296680), not suffix ザイ (2836325)
+        // Sudachi merges それが into a single expression token, causing 罪 to be misclassified as suffix;
+        // ReclassifyOrphanedSuffixes fixes this by detecting the non-noun predecessor
+        yield return ["それが罪だと？", "罪", 1296680, (byte)0];
+
+        // やろう as volitional of やる (1012980) → Sudachi POS=動詞, DictForm=やる
+        // Identity match penalty prevents expression やろう (2083340, "seems") from outscoring the verb
+        yield return ["やろうとしていることを知ってしまったら", "やろう", 1012980, (byte)2];
+
+        // やろう as noun 野郎/guy (1537700) → Sudachi POS=名詞, DictForm=やろう (no penalty: dictForm==surface)
+        yield return ["あのやろうが来た", "やろう", 1537700, (byte)1];
+
+        // 長 as suffix (チョウ) should resolve to ちょう "chief/head" (1429740), not なが "long" (2647210)
+        yield return ["騎士団長", "長", 1429740, (byte)0];
+
+        // まる as prefix should resolve to 丸 "whole/complete" (1216250), not archaic verb (2706850)
+        yield return ["まる二日のこと", "まる", 1216250, (byte)2];
+
+        // 若干 should resolve to じゃっかん (1324330), not archaic そこばく (2867570)
+        yield return ["若干", "若干", 1324330, (byte)0];
+
+        // 行けよ imperative should resolve to 行く (1578850), not potential 行ける (1631370)
+        yield return ["さっさと病院行けよ", "行けよ", 1578850, (byte)0];
+
+        // 仏 standalone should resolve to ほとけ/Buddha (1501760), not フツ/France (1501740)
+        yield return ["俺だって仏じゃねぇからなあ！", "仏", 1501760, (byte)0];
+        yield return ["神も仏も無いこの世界で", "仏", 1501760, (byte)0];
     }
 
     [Theory]

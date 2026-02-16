@@ -96,6 +96,7 @@ public class MorphologicalAnalyserTests
         yield return ["思い出すな", new[] { "思い出す", "な" }];
         yield return ["かなって思ったら", new[] { "かな", "って", "思ったら" }];
         yield return ["法律にかなっているさま", new[] { "法律", "に", "かなっている", "さま" }];
+        yield return ["こんなもんでいいかな", new[] { "こんな", "もん", "で", "いい", "かな" }];
         yield return ["ことすら難しい", new[] { "こと", "すら", "難しい" }];
         yield return ["投下しました", new[] { "投下しました" }];
         yield return ["そんなのでいいと思ってるの", new[] { "そんな", "ので", "いい", "と", "思ってる", "の" }];
@@ -649,6 +650,18 @@ public class MorphologicalAnalyserTests
         yield return ["恩着せがましくて", new[] { "恩着せがましく", "て" }];
         // なん + だろ should not be greedily merged into なんだろ after na-adjective
         yield return ["おんなじなんだろ", new[] { "おんなじ", "なん", "だろ" }];
+        // Tilde as vowel elongation — adj-i stems resolved to dictionary form
+        yield return ["ヤバ～", new[] { "ヤバい" }];  // ～ (fullwidth tilde) normalised to ー, then adj-i stem resolved
+        yield return ["スゴ〜", new[] { "スゴい" }];  // 〜 (wave dash) same treatment
+        yield return ["ヤバー", new[] { "ヤバい" }];  // Direct ー also resolved for short katakana adj-i stems
+        // Non-adj tilde — just dropped as emphasis, stem matched normally
+        yield return ["バカ～", new[] { "バカ" }];
+        // て particle + んだ should NOT merge into てんだ (転舵) — ん is contracted いる
+        yield return ["怒られてんだよ", new[] { "怒られて", "んだ", "よ" }];
+        // はやる split: は (topic particle) + やる, not 流行る — preserved when preceded by が
+        yield return ["僕はやることをやるだけだ", new[] { "僕", "は", "やる", "こと", "を", "やる", "だけ", "だ" }];
+        // Copula である (past) + かのように (expression "as if")
+        yield return ["自分の運命であったかのように", new[] { "自分", "の", "運命", "であった", "かのように" }];
     }
 
     [Theory]

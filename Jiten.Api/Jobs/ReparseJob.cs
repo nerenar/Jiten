@@ -24,7 +24,7 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
 
         if (deck.Children.Count == 0)
         {
-            Deck newDeck = await Parser.Parser.ParseTextToDeck(contextFactory, deck.RawText.RawText, true, true, deck.MediaType);
+            Deck newDeck = await Parser.Parser.ParseTextToDeck(contextFactory, deck.RawText!.RawText, true, true, deck.MediaType);
             deck.CharacterCount = newDeck.CharacterCount;
             deck.WordCount = newDeck.WordCount;
             deck.UniqueWordCount = newDeck.UniqueWordCount;
@@ -36,7 +36,7 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
             deck.ExampleSentences = newDeck.ExampleSentences;
             deck.DialoguePercentage = newDeck.DialoguePercentage;
 
-            if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+            if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
                 deck.SentenceCount = 0;
         }
         else
@@ -74,7 +74,7 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
                 original.ExampleSentences = parsed.ExampleSentences;
                 original.DialoguePercentage = parsed.DialoguePercentage;
 
-                if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+                if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
                     original.SentenceCount = 0;
             }
 
@@ -88,7 +88,7 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
 
         QueueCoverageComputationForDeckTree(deck);
         QueueStatsComputationForDeckTree(deck);
-        backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.ComputeDeckDifficulty(deck.DeckId, true));
+        backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.ComputeDeckDifficulty(deck.DeckId, false));
     }
 
     private void QueueCoverageComputationForDeckTree(Deck deck)

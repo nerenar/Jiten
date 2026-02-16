@@ -106,6 +106,12 @@ public class DifficultyComputationJob(
         }
 
         // Single deck (no children) - compute via API
+        if (!forceRecompute && await context.DeckDifficulties.AnyAsync(d => d.DeckId == deckId))
+        {
+            logger.LogInformation("Skipping deck {DeckId} - difficulty already computed", deckId);
+            return;
+        }
+
         await ComputeSingleDeckDifficulty(context, deck);
     }
 

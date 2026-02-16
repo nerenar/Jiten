@@ -24,6 +24,7 @@ public class MorphologicalAnalyser
         ("に", "とっ", "て", PartOfSpeech.Expression),
         ("に", "つい", "て", PartOfSpeech.Expression),
         ("いそう", "に", "ない", PartOfSpeech.Expression),
+        ("か", "の", "ように", PartOfSpeech.Expression),
     ];
 
     // Auxiliary verbs (補助動詞) that attach to te-form or masu-stem but should remain separate for vocabulary learning
@@ -162,10 +163,10 @@ public class MorphologicalAnalyser
     /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved.</param>
     /// <param name="diagnostics">Optional diagnostics container for verbose debug output.</param>
     /// <returns>List of SentenceInfo lists, one per input text.</returns>
-    public async Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
-                                                           ParserDiagnostics? diagnostics = null)
+    public Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
+                                                     ParserDiagnostics? diagnostics = null)
     {
-        if (texts.Count == 0) return [];
+        if (texts.Count == 0) return Task.FromResult<List<List<SentenceInfo>>>([]);
 
         diagnostics?.TokenStages.Clear();
 
@@ -178,7 +179,7 @@ public class MorphologicalAnalyser
                             .AddJsonFile("appsettings.json", optional: true)
                             .AddEnvironmentVariables()
                             .Build();
-        var dic = configuration.GetValue<string>("DictionaryPath");
+        var dic = configuration.GetValue<string>("DictionaryPath")!;
 
         // Preprocess each text separately (preserves transformations per-text)
         var processedTexts = new List<string>(texts.Count);
@@ -295,6 +296,7 @@ public class MorphologicalAnalyser
             wordInfos = TrackStage(diagnostics, "CombineTte", wordInfos, CombineTte);
             wordInfos = TrackStage(diagnostics, "CombineAuxiliaryVerbStem", wordInfos, CombineAuxiliaryVerbStem);
             wordInfos = TrackStage(diagnostics, "CombineSuffix", wordInfos, CombineSuffix);
+            wordInfos = TrackStage(diagnostics, "ReclassifyOrphanedSuffixes", wordInfos, ReclassifyOrphanedSuffixes);
             wordInfos = TrackStage(diagnostics, "CombineConjunctiveParticle", wordInfos, CombineConjunctiveParticle);
             wordInfos = TrackStage(diagnostics, "CombineAuxiliary", wordInfos, CombineAuxiliary);
             wordInfos = TrackStage(diagnostics, "CombineAdverbialParticle", wordInfos, CombineAdverbialParticle);
@@ -308,7 +310,7 @@ public class MorphologicalAnalyser
             results.Add(SplitIntoSentences(originalTexts[i], wordInfos));
         }
 
-        return results;
+        return Task.FromResult(results);
     }
 
     /// <summary>
@@ -402,7 +404,7 @@ public class MorphologicalAnalyser
 
             // 表 (ヒョウ) → オモテ when followed by directional particle and not preceded by a noun
             // e.g. 表へ出る (go outside) vs メニュー表 (menu chart)
-            if (word.Text == "表" && word.Reading == "ヒョウ" &&
+            if (word is { Text: "表", Reading: "ヒョウ" } &&
                 i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "へ" or "に" &&
                 (i == 0 || wordInfos[i - 1].PartOfSpeech != PartOfSpeech.Noun))
             {
@@ -418,7 +420,7 @@ public class MorphologicalAnalyser
             }
 
             // 一日/１日 → イチニチ unless preceded by a month (X月一日 = date → keep ツイタチ)
-            if (word.Reading == "ツイタチ" && word.Text is "一日" or "１日" or "1日")
+            if (word is { Reading: "ツイタチ", Text: "一日" or "１日" or "1日" })
             {
                 var prev = i > 0 ? wordInfos[i - 1] : null;
                 if (prev == null || !prev.Text.EndsWith('月'))
@@ -447,6 +449,11 @@ public class MorphologicalAnalyser
             {
                 word.Reading = "アト";
             }
+
+            // 長 as suffix (チョウ) means "chief/head" — JMDict only has this as n (1429740), not suf.
+            // Reclassify so the parser matches ちょう instead of なが (2647210, pref/suf "long").
+            if (word is { Text: "長", Reading: "チョウ", PartOfSpeech: PartOfSpeech.Suffix })
+                word.PartOfSpeech = PartOfSpeech.Noun;
 
             // あの: Sudachi sometimes misclassifies as 感動詞 (filler) when it's prenominal,
             // and as 連体詞 when it's actually a filler interjection.
@@ -1037,6 +1044,19 @@ public class MorphologicalAnalyser
             // Skip blank spaces since they will deconjugate to a correct form and break the parser
             if (hasBlankSpace) continue;
 
+            // Skip when lookback includes て/で particle — ん after te-form is a contraction of いる (ている → てん), not past tense
+            bool hasTeParticle = false;
+            for (int j = result.Count - lookback; j < result.Count; j++)
+            {
+                if (result[j] is { Text: "て" or "で", PartOfSpeech: PartOfSpeech.Particle })
+                {
+                    hasTeParticle = true;
+                    break;
+                }
+            }
+
+            if (hasTeParticle) continue;
+
             var candidateText = BuildCandidateText(result, lookback, suffix);
             var forms = deconj.Deconjugate(NormalizeToHiragana(candidateText));
 
@@ -1048,7 +1068,10 @@ public class MorphologicalAnalyser
                 combined = new WordInfo(baseWord)
                 {
                     Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
-                    NormalizedForm = candidateText, Reading = WanaKana.ToHiragana(candidateReading)
+                    NormalizedForm = candidateText, Reading = WanaKana.ToHiragana(candidateReading),
+                    PartOfSpeechSection1 = PartOfSpeechSection.None,
+                    PartOfSpeechSection2 = PartOfSpeechSection.None,
+                    PartOfSpeechSection3 = PartOfSpeechSection.None
                 };
                 return true;
             }
@@ -1243,6 +1266,10 @@ public class MorphologicalAnalyser
         text = Regex.Replace(text, "？", " ？\n");
         text = text.Replace("、", "\n");
 
+        // Normalise tilde characters to chōon mark when used as vowel elongation after kana
+        // e.g., ヤバ～ → ヤバー, すご〜 → すごー
+        text = Regex.Replace(text, @"(?<=[\u3040-\u309F\u30A0-\u30FF])[～〜]+", "ー");
+
         // Normalise multiple long-vowel marks to a single one (preserves elongation but not emphasis degree)
         text = Regex.Replace(text, "ー{2,}", "ー");
 
@@ -1251,6 +1278,7 @@ public class MorphologicalAnalyser
         // Split はやめる → は + やめる only when NOT preceded by を (which indicates 速める "to quicken")
         text = Regex.Replace(text, "(?<!を)はやめ", $"は{_stopToken}やめ");
         text = Regex.Replace(text, "もやる", $"も{_stopToken}やる");
+        text = Regex.Replace(text, "(?<!が)はやる", $"は{_stopToken}やる");
         text = Regex.Replace(text, "べや", $"べ{_stopToken}や");
         text = Regex.Replace(text, "はいい", $"は{_stopToken}いい");
         text = Regex.Replace(text, "元国王", $"元{_stopToken}国王");
@@ -1293,6 +1321,12 @@ public class MorphologicalAnalyser
 
         // Fix Sudachi merging ホント with following short katakana nouns (e.g., ホントバカ → ホント + バカ)
         text = Regex.Replace(text, "ホント(バカ|ダメ|マジ|クソ|アホ)", $"ホント{_stopToken}$1");
+
+        // Fix Sudachi parsing バカバカ as a single adverb — should be バカ + バカ (e.g., バカバカ言う)
+        text = Regex.Replace(text, "バカバカ", $"バカ{_stopToken}バカ");
+
+        // Fix Sudachi parsing 事大 as じだい (subserviency) — should be 事 + 大X (大好き, 大声, 大人, etc.)
+        text = Regex.Replace(text, "事大", $"事{_stopToken}大");
 
         // Normalise colloquial ねえ → ない in fixed expressions that Sudachi doesn't recognise
         // e.g., とんでもねえ → とんでもない, しょうがねえ → しょうがない
@@ -1662,7 +1696,7 @@ public class MorphologicalAnalyser
                         afterNa.DictionaryForm is "すぎる" or "過ぎる";
                 }
 
-                if (nextWord.Text is "は" or "よ" or "し" or "を" or "が" or "ください")
+                if (nextWord.Text is "は" or "よ" or "し" or "を" or "が" or "ください" or "かな")
                     break;
                 if (nextWord.Text == "な" && !isNegativeStemBeforeDependant)
                     break;
@@ -1700,7 +1734,7 @@ public class MorphologicalAnalyser
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant);
 
                 // Sudachi tags やれ as interjection, but after て-form it's the imperative of auxiliary やる
-                if (!isValidPart && nextWord.Text == "やれ" && nextWord.PartOfSpeech == PartOfSpeech.Interjection &&
+                if (!isValidPart && nextWord is { Text: "やれ", PartOfSpeech: PartOfSpeech.Interjection } &&
                     currentWord.Text.EndsWith("て"))
                     isValidPart = true;
 
@@ -2187,7 +2221,19 @@ public class MorphologicalAnalyser
 
             if (currentWord.PartOfSpeech != PartOfSpeech.Auxiliary)
             {
-                newList.Add(currentWord);
+                // Copula である: merge copula で (reclassified to Particle but dictForm stays だ) with following ある form
+                if (previousWord.Text == "で" && previousWord.DictionaryForm == "だ" &&
+                    currentWord.DictionaryForm is "ある" or "有る")
+                {
+                    previousWord.Text = "で" + currentWord.Text;
+                    previousWord.PartOfSpeech = currentWord.PartOfSpeech;
+                    previousWord.DictionaryForm = "である";
+                }
+                else
+                {
+                    newList.Add(currentWord);
+                }
+
                 continue;
             }
 
@@ -2313,6 +2359,27 @@ public class MorphologicalAnalyser
 
         newList.Add(currentWord);
         return newList;
+    }
+
+    /// Reclassify suffix tokens as common nouns when preceded by non-noun tokens.
+    /// Sudachi misclassifies standalone nouns as suffixes when they follow expression tokens
+    /// (e.g., "それが罪" → それが[expression] + 罪[suffix/ザイ] instead of 罪[noun/ツミ]).
+    private List<WordInfo> ReclassifyOrphanedSuffixes(List<WordInfo> wordInfos)
+    {
+        for (int i = 1; i < wordInfos.Count; i++)
+        {
+            if (wordInfos[i].PartOfSpeech != PartOfSpeech.Suffix)
+                continue;
+
+            var prev = wordInfos[i - 1].PartOfSpeech;
+            if (prev is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.Prefix)
+                continue;
+
+            wordInfos[i].PartOfSpeech = PartOfSpeech.CommonNoun;
+            wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
+        }
+
+        return wordInfos;
     }
 
     private List<WordInfo> CombineParticles(List<WordInfo> wordInfos)

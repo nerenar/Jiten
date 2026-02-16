@@ -52,6 +52,7 @@ public static class PosMapper
         PartOfSpeech.Name,
         PartOfSpeech.CommonNoun,
         PartOfSpeech.NaAdjective,
+        PartOfSpeech.Numeral,
         PartOfSpeech.Prefix,
         PartOfSpeech.Suffix
     };
@@ -111,7 +112,9 @@ public static class PosMapper
             // Ichidan verb variants
             ["v1-s"] = ["v1-s", "v1"],
 
-            // I-adjective variants
+            // I-adjective variants — include "exp" because many expressions conjugate like
+            // i-adjectives (e.g. かもしれない, しかたがない are JMDict "exp" but deconjugate via adj-i)
+            ["adj-i"] = ["adj-i", "exp"],
             ["adj-ix"] = ["adj-ix", "adj-i"],
 
             // Godan verb with special endings
@@ -191,7 +194,7 @@ public static class PosMapper
             "conj" => PartOfSpeech.Conjunction,
             "aux" or "aux-v" or "aux-adj" => PartOfSpeech.Auxiliary,
             "int" => PartOfSpeech.Interjection,
-            "pref" => PartOfSpeech.Prefix,
+            "pref" or "n-pref" => PartOfSpeech.Prefix,
             "suf" => PartOfSpeech.Suffix,
             "n-suf" => PartOfSpeech.NounSuffix,
             "pn" => PartOfSpeech.Pronoun,
@@ -247,6 +250,10 @@ public static class PosMapper
         PartOfSpeech sudachiPos,
         bool allowInterjectionFallback = false)
     {
+        // CommonNoun (orphaned suffixes reclassified by the analyser) should use Noun compatibility.
+        if (sudachiPos == PartOfSpeech.CommonNoun)
+            sudachiPos = PartOfSpeech.Noun;
+
         var convertedPosList = jmDictPosTags.Select(FromJmDict).ToList();
 
         if (convertedPosList.Contains(sudachiPos))
@@ -277,6 +284,22 @@ public static class PosMapper
             (convertedPosList.Contains(PartOfSpeech.Expression) ||
              convertedPosList.Contains(PartOfSpeech.Adverb) ||
              convertedPosList.Contains(PartOfSpeech.Interjection)))
+            return true;
+
+        // Sudachi 名詞 (Noun) should match JMDict adj-no/adj-t/adj-f (NominalAdjective).
+        // Sudachi classifies many adj-no words as 名詞 (e.g. 若干, 特別, 本当).
+        if (sudachiPos == PartOfSpeech.Noun && convertedPosList.Contains(PartOfSpeech.NominalAdjective))
+            return true;
+
+        // Sudachi 名詞,副詞可能 (Noun) should match JMDict adv (Adverb).
+        // Many words classified as 名詞 by Sudachi with 副詞可能 subcategory only have adv in JMDict.
+        if (sudachiPos == PartOfSpeech.Noun && convertedPosList.Contains(PartOfSpeech.Adverb))
+            return true;
+
+        // Sudachi 名詞 (Noun) should match JMDict num (Numeral).
+        // CombineAmounts merges number+counter tokens (e.g. 二+つ → 二つ) and sets POS to Noun,
+        // but the JMDict entries for these words are tagged num.
+        if (sudachiPos == PartOfSpeech.Noun && convertedPosList.Contains(PartOfSpeech.Numeral))
             return true;
 
         // Sudachi 接尾辞 (Suffix) should match JMDict n-suf (NounSuffix).

@@ -16,6 +16,7 @@ public class WordInfo
     public bool IsInvalid { get; set; }
     public bool IsPersonNameContext { get; set; }
     public int? PreMatchedWordId { get; set; }
+    public bool IsImperative { get; set; }
 
     public WordInfo(){}
 
@@ -32,6 +33,7 @@ public class WordInfo
         IsInvalid = other.IsInvalid;
         IsPersonNameContext = other.IsPersonNameContext;
         PreMatchedWordId = other.PreMatchedWordId;
+        IsImperative = other.IsImperative;
     }
 
     public WordInfo(string sudachiLine)
@@ -63,10 +65,9 @@ public class WordInfo
         // Extract and parse POS (between first and second tab)
         var posSpan = span[(tabPositions[0] + 1)..tabPositions[1]];
 
-        // Find first 4 commas in POS
-        Span<int> commaPositions = stackalloc int[4];
+        Span<int> commaPositions = stackalloc int[5];
         int commaCount = 0;
-        for (int i = 0; i < posSpan.Length && commaCount < 4; i++)
+        for (int i = 0; i < posSpan.Length && commaCount < 5; i++)
         {
             if (posSpan[i] == ',')
             {
@@ -93,8 +94,15 @@ public class WordInfo
         Reading = tabCount >= 5
             ? span[(tabPositions[3] + 1)..tabPositions[4]].ToString()
             : span[(tabPositions[3] + 1)..].ToString();
+
+        // Parse conjugation form (6th POS field) for imperative detection
+        if (commaCount >= 5)
+        {
+            var conjForm = posSpan[(commaPositions[4] + 1)..];
+            IsImperative = conjForm.SequenceEqual("命令形".AsSpan());
+        }
     }
-    
+
     public bool HasPartOfSpeechSection(PartOfSpeechSection section)
     {
         return PartOfSpeechSection1 == section || PartOfSpeechSection2 == section || PartOfSpeechSection3 == section;

@@ -20,12 +20,12 @@ namespace Jiten.Parser
 
         private static readonly bool UseCache = true;
         private static readonly bool UseRescue = true;
-        private static IDeckWordCache DeckWordCache;
-        private static IJmDictCache JmDictCache;
+        private static IDeckWordCache DeckWordCache = null!;
+        private static IJmDictCache JmDictCache = null!;
 
-        private static IDbContextFactory<JitenDbContext> _contextFactory;
-        private static Dictionary<string, List<int>> _lookups;
-        private static HashSet<int> _nameOnlyWordIds;
+        private static IDbContextFactory<JitenDbContext> _contextFactory = null!;
+        private static Dictionary<string, List<int>> _lookups = null!;
+        private static HashSet<int> _nameOnlyWordIds = null!;
 
         // Cache for compound expression lookups with bounded eviction
         private static readonly Dictionary<string, (bool validExpression, int? wordId)> CompoundExpressionCache = new();
@@ -48,7 +48,8 @@ namespace Jiten.Parser
             (1244950, 1), (1243940, 1), (2747970, 1), (2029680, 0), (1193570, 6), (1796500, 2),
             (1811220, 1), (2654270, 0), (2269410, 1), (2439040, 3), (2861095, 0), (2836250, 0),
             (1595910, 4), (2577750, 0), (1365520, 1), (1310720, 1), (1528180,1), (2866457,1),
-            (2394370,4), (1203250,2)
+            (2394370,4), (1203250,2), (1537250,2), (2783750,1), (2654250,0), (2609820,1),
+            (2080360,3), (1333240,2), (2035220,2), (5616612,5)
         ];
 
         private static async Task InitDictionaries()
@@ -305,9 +306,9 @@ namespace Jiten.Parser
                         continue;
 
                     // Find whether splitting enables a valid noun compound with preceding nouns
-                    // Try longest window first: up to 3 preceding noun tokens + baseNoun = 4-token compound.
+                    // Try longest window first: up to 4 preceding noun tokens + baseNoun = 5-token compound.
                     int bestStart = -1;
-                    for (int windowSize = Math.Min(4, i + 1); windowSize >= 2; windowSize--)
+                    for (int windowSize = Math.Min(5, i + 1); windowSize >= 2; windowSize--)
                     {
                         int nounCount = windowSize - 1;
                         int start = i - nounCount;
@@ -1103,7 +1104,7 @@ namespace Jiten.Parser
             List<(DeconjugationForm form, List<int> ids)> candidates = new();
             foreach (var form in deconjugated)
             {
-                if (_lookups.TryGetValue(form.Text, out List<int> lookup))
+                if (_lookups.TryGetValue(form.Text, out List<int>? lookup))
                 {
                     candidates.Add((form, lookup));
                 }
@@ -1206,6 +1207,21 @@ namespace Jiten.Parser
                 }
             }
 
+            // When Sudachi's DictionaryForm identifies a different base form (e.g., いかん → DictForm いく),
+            // remove identity matches for suru-nouns that are only Verb-compatible through vs tags.
+            // This prevents nouns like 移管 from winning via surface match over the actual expression (行かん)
+            // or deconjugated verb (行く) when the surface happens to be homophonic with the suru-noun.
+            if (matches.Count > 1 && normalizedText != baseDictionaryWord && !string.IsNullOrEmpty(baseDictionaryWord))
+            {
+                bool hasDictFormMatch = matches.Any(m => m.form.Text == baseDictionaryWord && m.form.Process.Count > 0);
+                if (hasDictFormMatch)
+                {
+                    matches.RemoveAll(m =>
+                        m.form.Process.Count == 0 &&
+                        IsSuruNounWithoutExpression(m.word.PartsOfSpeech));
+                }
+            }
+
             if (matches.Count == 0)
             {
                 // Last resort: try using Sudachi's DictionaryForm directly if available
@@ -1304,6 +1320,29 @@ namespace Jiten.Parser
                                                  wordData.wordInfo.DictionaryForm, wordData.wordInfo.NormalizedForm, isNameContext: false,
                                                  diagnostics,
                                                  sudachiReading: wordData.wordInfo.Reading);
+
+            // Imperative disambiguation: godan imperative (行けよ→行く "go!") vs potential imperative
+            // (行けよ→行ける "be able to go!"). The base verb is almost always correct in natural Japanese.
+            if (bestPair != null
+                && wordData.wordInfo.IsImperative
+                && !string.IsNullOrEmpty(wordData.wordInfo.NormalizedForm)
+                && wordData.wordInfo.NormalizedForm != wordData.wordInfo.DictionaryForm)
+            {
+                var normalizedHira = WanaKana.ToHiragana(wordData.wordInfo.NormalizedForm,
+                                                          new DefaultOptions { ConvertLongVowelMark = false });
+                var normalizedFormHira = KanaNormalizer.Normalize(normalizedHira);
+
+                var baseVerbCandidate = allFormCandidates
+                    .Where(c => c.Form.Text == wordData.wordInfo.NormalizedForm
+                                || KanaNormalizer.Normalize(
+                                    WanaKana.ToHiragana(c.Form.Text,
+                                                        new DefaultOptions { ConvertLongVowelMark = false })) == normalizedFormHira)
+                    .OrderByDescending(c => c.TotalScore)
+                    .FirstOrDefault();
+
+                if (baseVerbCandidate != null)
+                    bestPair = baseVerbCandidate;
+            }
 
             if (bestPair == null)
                 return (false, null);
@@ -1786,9 +1825,10 @@ namespace Jiten.Parser
                     if (!word.Text.EndsWith("ー") || word.Text == "ー")
                         continue;
 
-                    // Skip purely katakana tokens (コーヒー, パーティー, etc.) — Sudachi handles these well
+                    // Skip long katakana tokens (コーヒー, パーティー, etc.) — Sudachi handles these well.
+                    // Allow short katakana stems through (ヤバー, スゴー) as they may be slang adj-i.
                     var withoutBar = word.Text.Replace("ー", "");
-                    if (withoutBar.Length > 0 && WanaKana.IsKatakana(withoutBar))
+                    if (withoutBar.Length > 2 && WanaKana.IsKatakana(withoutBar))
                         continue;
 
                     // Try merging backwards: longest match first (max 5 preceding tokens + current = 6 tokens)
@@ -1840,14 +1880,24 @@ namespace Jiten.Parser
                         continue;
 
                     var singleSurface = word.Text;
-                    if (TryLongVowelLookup(singleSurface))
+
+                    // If the surface has a direct (non-normalized) lookup, leave it alone.
+                    // Preserves valid colloquial forms like すげー, やべー.
+                    if (TryLongVowelLookup(singleSurface, useKanaNormalizer: false))
                         continue;
 
                     var singleKey = singleSurface.TrimEnd('ー');
+
+                    // For short stems (ヤバー, スゴー), try adj-i resolution before normalized lookups
+                    // to avoid matching name entries like すごう (Sugou) instead of すごい
+                    if (singleKey.Length == 2 && TryResolveAdjStem(word, singleKey))
+                        continue;
+
+                    if (TryLongVowelLookup(singleSurface))
+                        continue;
+
                     if (singleKey.Length > 0 && (TryLongVowelLookup(singleKey) || TryDeconjugatedLongVowelLookup(singleKey)))
-                    {
                         word.Text = singleKey;
-                    }
                 }
             }
         }
@@ -1885,6 +1935,37 @@ namespace Jiten.Parser
 
             var normalized = KanaNormalizer.Normalize(hira);
             return normalized != hira && _lookups.TryGetValue(normalized, out ids) && ids.Count > 0;
+        }
+
+        /// <summary>
+        /// Resolves a short stem as an i-adjective by checking if stem+い exists in lookups.
+        /// Used for slang elongation patterns: ヤバー→ヤバい (やばい), スゴー→スゴい (すごい).
+        /// </summary>
+        private static bool TryResolveAdjStem(WordInfo word, string stem)
+        {
+            string hira;
+            try
+            {
+                hira = KanaNormalizer.Normalize(
+                    WanaKana.ToHiragana(stem, new DefaultOptions { ConvertLongVowelMark = false }));
+            }
+            catch
+            {
+                return false;
+            }
+
+            foreach (var form in Deconjugator.Instance.Deconjugate(hira))
+            {
+                if (form.Tags.Any(t => t == "adj-i") && form.Text == hira + "い" && TryLongVowelLookup(form.Text))
+                {
+                    word.Text = stem + "い";
+                    word.DictionaryForm = stem + "い";
+                    word.PartOfSpeech = PartOfSpeech.IAdjective;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool TryDeconjugatedLongVowelLookup(string candidateKey)
@@ -2114,9 +2195,9 @@ namespace Jiten.Parser
                         continue;
                     }
 
-                    // Try longest match first (4 tokens, then 3, then 2)
+                    // Try longest match first (5 tokens, then 4, then 3, then 2)
                     int bestMatch = 1;
-                    for (int windowSize = Math.Min(4, sentence.Words.Count - i); windowSize >= 2; windowSize--)
+                    for (int windowSize = Math.Min(5, sentence.Words.Count - i); windowSize >= 2; windowSize--)
                     {
                         bool allValid = true;
                         bool hasNameLikeToken = false;
@@ -2523,6 +2604,19 @@ namespace Jiten.Parser
             return candidates;
         }
 
+        private static bool IsSuruNounWithoutExpression(IList<string> posTags)
+        {
+            bool hasNoun = false, hasSuru = false, hasExpression = false;
+            foreach (var tag in posTags)
+            {
+                if (tag is "n" or "n-adv" or "n-t") hasNoun = true;
+                else if (tag is "vs" or "vs-s" or "vs-i" or "vs-c") hasSuru = true;
+                else if (tag is "exp") hasExpression = true;
+            }
+
+            return hasNoun && hasSuru && !hasExpression;
+        }
+
         private static int ScoreFormCandidate(
             FormCandidate candidate,
             string surface,
@@ -2571,6 +2665,11 @@ namespace Jiten.Parser
             {
                 if (wordPri.Contains("spec1")) entryPriorityScore += 15;
                 if (wordPri.Contains("spec2")) entryPriorityScore += 5;
+            }
+            else
+            {
+                if (wordPri.Contains("spec1")) entryPriorityScore += 4;
+                if (wordPri.Contains("spec2")) entryPriorityScore += 2;
             }
 
             // 3) FormPriorityScore — orthography preference (halved; tie-breaker only)
@@ -2639,17 +2738,23 @@ namespace Jiten.Parser
             }
 
             // Lemma match — only when dictionaryForm differs from surface
+            // Scale down for deep deconjugation chains: after auxiliary merging,
+            // Sudachi's dictionaryForm reflects the pre-merge token, not the combined surface
             if (!string.IsNullOrEmpty(dictionaryForm) && dictionaryForm != surface)
             {
+                double lemmaScale = 1.0;
+                if (candidate.DeconjForm?.Process is { Count: > 0 } deconjProcess)
+                    lemmaScale = Math.Max(0.0, 1.0 - (deconjProcess.Count - 1) * 0.35);
+
                 if (dictionaryForm == form.Text)
-                    surfaceMatchScore += 100;
+                    surfaceMatchScore += (int)(100 * lemmaScale);
                 else
                 {
                     var dictHira = KanaNormalizer.Normalize(
                                                             WanaKana.ToHiragana(dictionaryForm,
                                                                                 new DefaultOptions { ConvertLongVowelMark = false }));
                     if (dictHira == formHira)
-                        surfaceMatchScore += 40;
+                        surfaceMatchScore += (int)(40 * lemmaScale);
                 }
             }
 
@@ -2666,6 +2771,16 @@ namespace Jiten.Parser
                     if (normHira == formHira)
                         surfaceMatchScore += 20;
                 }
+            }
+
+            // Penalise identity matches when Sudachi indicates the surface is a conjugated form.
+            // e.g. やろう (surface) with dictionaryForm やる: the expression entry やろう ("seems")
+            // should not outscore the deconjugated verb やる ("to do") via the surface match bonus.
+            if (!string.IsNullOrEmpty(dictionaryForm) && dictionaryForm != surface
+                && surface == form.Text
+                && (candidate.DeconjForm == null || candidate.DeconjForm.Process.Count == 0))
+            {
+                surfaceMatchScore -= 200;
             }
 
             // 6) ScriptScore
