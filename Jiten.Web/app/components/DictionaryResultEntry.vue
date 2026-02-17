@@ -39,7 +39,7 @@
             v-if="entry.primaryKanjiText"
             class="text-sm text-gray-500 dark:text-gray-400 font-noto-sans"
           >{{ entry.text }}</span>
-          <span v-else class="text-lg font-noto-sans font-medium" v-html="convertToRuby(entry.text)" />
+          <span v-else class="text-lg font-noto-sans font-medium" v-html="convertToRuby(entry.rubyText)" />
           <span
             v-for="pos in entry.partsOfSpeech.slice(0, 2)"
             :key="pos"

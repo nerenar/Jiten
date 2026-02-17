@@ -14,6 +14,7 @@ public class DictionaryEntryDto
     public int WordId { get; set; }
     public byte ReadingIndex { get; set; }
     public string Text { get; set; } = "";
+    public string RubyText { get; set; } = "";
     public string? PrimaryKanjiText { get; set; }
     public List<string> PartsOfSpeech { get; set; } = [];
     public List<string> Meanings { get; set; } = [];

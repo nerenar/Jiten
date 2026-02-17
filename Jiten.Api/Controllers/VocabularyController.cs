@@ -594,7 +594,8 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                 {
                     WordId = w.WordId,
                     ReadingIndex = (byte)bestForm.ReadingIndex,
-                    Text = bestForm.RubyText,
+                    Text = bestForm.Text,
+                    RubyText = bestForm.RubyText,
                     PrimaryKanjiText = primaryKanjiText,
                     PartsOfSpeech = w.PartsOfSpeech,
                     Meanings = firstDef?.EnglishMeanings ?? [],

@@ -286,6 +286,11 @@ public static class PosMapper
              convertedPosList.Contains(PartOfSpeech.Interjection)))
             return true;
 
+        // Sudachi 副詞 (Adverb) should match JMDict int (Interjection).
+        // E.g. いや is classified as 副詞 by Sudachi but is an interjection in JMDict (否, "no").
+        if (sudachiPos == PartOfSpeech.Adverb && convertedPosList.Contains(PartOfSpeech.Interjection))
+            return true;
+
         // Sudachi 名詞 (Noun) should match JMDict adj-no/adj-t/adj-f (NominalAdjective).
         // Sudachi classifies many adj-no words as 名詞 (e.g. 若干, 特別, 本当).
         if (sudachiPos == PartOfSpeech.Noun && convertedPosList.Contains(PartOfSpeech.NominalAdjective))
@@ -302,9 +307,10 @@ public static class PosMapper
         if (sudachiPos == PartOfSpeech.Noun && convertedPosList.Contains(PartOfSpeech.Numeral))
             return true;
 
-        // Sudachi 接尾辞 (Suffix) should match JMDict n-suf (NounSuffix).
-        // E.g. だらけ is n-suf in JMDict but 接尾辞 in Sudachi.
-        if (sudachiPos == PartOfSpeech.Suffix && convertedPosList.Contains(PartOfSpeech.NounSuffix))
+        // Sudachi 接尾辞 (Suffix) should match JMDict n-suf (NounSuffix) and suf (Suffix).
+        // E.g. だらけ is n-suf in JMDict but 接尾辞 in Sudachi; 達 (たち) is suf in JMDict.
+        if (sudachiPos == PartOfSpeech.Suffix &&
+            (convertedPosList.Contains(PartOfSpeech.NounSuffix) || convertedPosList.Contains(PartOfSpeech.Suffix)))
             return true;
 
         // Sudachi 動詞/形容詞 (Verb/IAdjective) should match JMDict exp (Expression).

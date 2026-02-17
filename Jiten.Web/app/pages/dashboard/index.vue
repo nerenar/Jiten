@@ -87,6 +87,16 @@
           </div>
         </template>
       </Card>
+
+      <Card class="shadow-md">
+        <template #title>Word Sets</template>
+        <template #content>
+          <p class="mb-4">Create, edit, and manage word sets</p>
+          <div class="flex justify-center">
+            <Button label="Manage Word Sets" class="p-button-primary" @click="navigateTo('/dashboard/word-sets')" />
+          </div>
+        </template>
+      </Card>
     </div>
   </div>
 </template>

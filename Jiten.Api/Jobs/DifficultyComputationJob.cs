@@ -132,7 +132,7 @@ public class DifficultyComputationJob(
         {
             if (!forceRecompute && child.DeckDifficulty != null)
             {
-                logger.LogInformation("Skipping child {DeckId} — difficulty already computed", child.DeckId);
+                // logger.LogInformation("Skipping child {DeckId} — difficulty already computed", child.DeckId);
                 continue;
             }
 

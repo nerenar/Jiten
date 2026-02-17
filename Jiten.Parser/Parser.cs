@@ -49,7 +49,7 @@ namespace Jiten.Parser
             (1811220, 1), (2654270, 0), (2269410, 1), (2439040, 3), (2861095, 0), (2836250, 0),
             (1595910, 4), (2577750, 0), (1365520, 1), (1310720, 1), (1528180,1), (2866457,1),
             (2394370,4), (1203250,2), (1537250,2), (2783750,1), (2654250,0), (2609820,1),
-            (2080360,3), (1333240,2), (2035220,2), (5616612,5)
+            (2080360,3), (1333240,2), (2035220,2), (5616612,5), (2249020,1)
         ];
 
         private static async Task InitDictionaries()
@@ -2497,14 +2497,27 @@ namespace Jiten.Parser
                 var wordCache = await JmDictCache.GetWordsAsync(wordIds);
 
                 // First pass: prefer Expression POS (e.g. そうする "to do so" over 奏する "to play music")
+                // When multiple expressions match (e.g. 異にする vs 事にする), pick the best by priority
+                int? bestExprWordId = null;
+                int bestExprScore = int.MinValue;
                 foreach (var wordId in wordIds)
                 {
                     if (!wordCache.TryGetValue(wordId, out var word)) continue;
 
                     var posList = word.PartsOfSpeech.ToPartOfSpeech();
                     if (posList.Contains(PartOfSpeech.Expression))
-                        return wordId;
+                    {
+                        int score = word.GetPriorityScore(isKana);
+                        if (score > bestExprScore || (score == bestExprScore && (bestExprWordId == null || wordId < bestExprWordId.Value)))
+                        {
+                            bestExprScore = score;
+                            bestExprWordId = wordId;
+                        }
+                    }
                 }
+
+                if (bestExprWordId.HasValue)
+                    return bestExprWordId;
 
                 if (expressionOnly) return null;
 
@@ -2694,13 +2707,17 @@ namespace Jiten.Parser
                 if (priorities.Contains("spec2")) formPriorityScore += 3;
             }
 
-            // "uk" (usually-kana) bias
+            // "uk" (usually-kana) bias — scaled by word frequency so rare uk words
+            // don't beat common non-uk words (e.g. 擤む "blow nose" vs 噛む "bite")
             if (word.PartsOfSpeech.Contains("uk"))
             {
+                bool hasFreqMarker = wordPri.Any(p =>
+                    p is "ichi1" or "ichi2" or "news1" or "news2" || p.StartsWith("nf"));
+                int ukBonus = hasFreqMarker ? 10 : 3;
                 if (form.FormType == JmDictFormType.KanaForm || isKana)
-                    formPriorityScore += 10;
+                    formPriorityScore += ukBonus;
                 else
-                    formPriorityScore -= 10;
+                    formPriorityScore -= ukBonus;
             }
 
             // 4) FormFlagScore
@@ -2770,6 +2787,12 @@ namespace Jiten.Parser
                                                                                 new DefaultOptions { ConvertLongVowelMark = false }));
                     if (normHira == formHira)
                         surfaceMatchScore += 20;
+
+                    // Sudachi's NormalizedForm is kanji but candidate form is kana —
+                    // check if the word owns that kanji form to disambiguate homophones
+                    // (e.g. ふう: 風 "style" vs 封 "seal" — Sudachi says 風)
+                    if (word.Forms.Any(f => f.Text == normalizedForm))
+                        surfaceMatchScore += 30;
                 }
             }
 
@@ -2803,9 +2826,22 @@ namespace Jiten.Parser
                                                                                      })) == sudachiHira);
                 if (hasMatchingReading)
                     readingMatchScore += 50;
-                // Stem fallback — for conjugated verbs the reading is a conjugated stem (e.g. ヒラカ)
-                // that won't exactly match the dictionary kana form (ひらく/あく).
-                // Strip the last kana from both and compare stems to disambiguate.
+                // Prefix match — for ichidan conjugated stems (e.g. かくれ from 隠れる)
+                // the Sudachi reading is the dictionary kana form minus the final る.
+                else if (sudachiHira.Length > 1
+                         && word.Forms
+                                .Where(f => f.FormType == JmDictFormType.KanaForm)
+                                .Any(f =>
+                                {
+                                    var hiragana = KanaNormalizer.Normalize(
+                                        WanaKana.ToHiragana(f.Text,
+                                            new DefaultOptions { ConvertLongVowelMark = false }));
+                                    return hiragana.Length > sudachiHira.Length
+                                           && hiragana.StartsWith(sudachiHira);
+                                }))
+                    readingMatchScore += 50;
+                // Stem fallback — for godan conjugated stems (e.g. ヒラカ from ひらく)
+                // strip the last kana from both and compare stems to disambiguate.
                 else if (sudachiHira.Length > 1)
                 {
                     var sudachiStem = sudachiHira[..^1];
@@ -2823,7 +2859,7 @@ namespace Jiten.Parser
                                                 return hiragana.Length > 1 && hiragana[..^1] == sudachiStem;
                                             });
                     if (hasStemMatch)
-                        readingMatchScore += 50;
+                        readingMatchScore += 25;
                 }
             }
 

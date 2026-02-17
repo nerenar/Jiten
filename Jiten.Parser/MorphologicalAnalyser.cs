@@ -431,6 +431,13 @@ public class MorphologicalAnalyser
             if (word is { Text: "禍", Reading: "カ" })
                 word.Reading = "ワザワイ";
 
+            // 私 (シ) → ワタシ when standalone — シ reading only in compounds (私的, 私立, 私用)
+            if (word is { Text: "私", Reading: "シ" })
+            {
+                word.Reading = "ワタシ";
+                word.PartOfSpeech = PartOfSpeech.Pronoun;
+            }
+
             // 寒気 (カンキ cold air) → サムケ (chills) when followed by が + する
             // e.g. 寒気がする/寒気がした (to have chills) vs 寒気が南下する (cold air moves south)
             if (word is { Text: "寒気", Reading: "カンキ" } &&
@@ -448,6 +455,13 @@ public class MorphologicalAnalyser
                  wordInfos[i + 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral)))
             {
                 word.Reading = "アト";
+            }
+
+            // 次 (ジ) standalone prefix → ツギ noun — ジ reading only in compounds (次回, 次期, 次男)
+            if (word is { Text: "次", Reading: "ジ", PartOfSpeech: PartOfSpeech.Prefix })
+            {
+                word.Reading = "ツギ";
+                word.PartOfSpeech = PartOfSpeech.CommonNoun;
             }
 
             // 長 as suffix (チョウ) means "chief/head" — JMDict only has this as n (1429740), not suf.
@@ -577,6 +591,14 @@ public class MorphologicalAnalyser
         for (int i = 0; i < wordInfos.Count; i++)
         {
             var word = wordInfos[i];
+
+            // Split だな misparsed as 棚 (shelf) → だ (copula) + な (particle)
+            if (word.Text == "だな" && word.PartOfSpeech == PartOfSpeech.Noun && word.NormalizedForm == "棚")
+            {
+                result.Add(new WordInfo { Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "だ" });
+                result.Add(new WordInfo { Text = "な", DictionaryForm = "な", NormalizedForm = "な", PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle, Reading = "な" });
+                continue;
+            }
 
             // Check if this is たって/だって as a conjunctive particle following a verb
             if (i > 0 &&
@@ -852,6 +874,25 @@ public class MorphologicalAnalyser
             }
 
             var prev = result[^1];
+
+            // Pattern 0: [prefix] + [る OOV] + [ー symbol]
+            // Sudachi splits る-verbs when followed by expressive elongation ー
+            // e.g., 来るー → 来(prefix) + る(OOV noun) + ー(symbol)
+            if (current.PartOfSpeech == PartOfSpeech.SupplementarySymbol && current.Text == "ー" &&
+                result.Count >= 2 &&
+                prev is { Text: "る", PartOfSpeech: PartOfSpeech.Noun } &&
+                result[^2].PartOfSpeech == PartOfSpeech.Prefix)
+            {
+                var prefix = result[^2];
+                var verbText = prefix.Text + "る";
+                result.RemoveAt(result.Count - 1);
+                result[^1] = new WordInfo(prefix)
+                {
+                    Text = verbText, DictionaryForm = verbText, NormalizedForm = verbText,
+                    PartOfSpeech = PartOfSpeech.Verb
+                };
+                continue;
+            }
 
             // Pattern 1: Token ending in "るう" that might be a misparsed verb + elongation
             // e.g., "かるう" could be part of "ぶつかる" + "う"
@@ -1310,7 +1351,8 @@ public class MorphologicalAnalyser
         // Insert stop token before っ/ッ when followed by punctuation, whitespace, or end of string
         // Require hiragana before っ/ッ — emphatic っ follows verb/adj conjugations (always hiragana)
         // This avoids breaking katakana interjections like フッ, チッ
-        text = Regex.Replace(text, @"(?<=.\p{IsHiragana})([っッ])(?=[！!？?。、,\s]|$)", $"{_stopToken}$1");
+        // Exclude うわ before っ/ッ — it's the interjection うわっ, not emphatic stress
+        text = Regex.Replace(text, @"(?<=.\p{IsHiragana})(?<!うわ)([っッ])(?=[！!？?。、,\s]|$)", $"{_stopToken}$1");
 
         // Fix Sudachi misparsing 水魔法 as 水魔 (water demon) + 法 (law)
         // Should be 水 (water) + 魔法 (magic)
@@ -1327,6 +1369,17 @@ public class MorphologicalAnalyser
 
         // Fix Sudachi parsing 事大 as じだい (subserviency) — should be 事 + 大X (大好き, 大声, 大人, etc.)
         text = Regex.Replace(text, "事大", $"事{_stopToken}大");
+
+        // Split N日間 → N日 + 間 so Sudachi parses 三日 (three days) + 間 (period)
+        // instead of 三 + 日間 (archaic "daytime")
+        text = Regex.Replace(text, @"(?<=[一二三四五六七八九十百千万何数幾０-９])日間", $"日{_stopToken}間");
+
+        // Split 何本 → 何 + 本 so it parses as "how many" + counter
+        // Sudachi treats 何本 as surname ナニモト or single noun ナンボン; JMDict only has the surname
+        text = Regex.Replace(text, "何本", $"何{_stopToken}本");
+
+        // Normalise katakana imperative 来イ → 来い (emphatic manga/game dialogue style)
+        text = Regex.Replace(text, "来イ", "来い");
 
         // Normalise colloquial ねえ → ない in fixed expressions that Sudachi doesn't recognise
         // e.g., とんでもねえ → とんでもない, しょうがねえ → しょうがない
@@ -1397,6 +1450,27 @@ public class MorphologicalAnalyser
                 {
                     if (w1.Text == sc.Item1 && w2.Text == sc.Item2 && w3.Text == sc.Item3)
                     {
+                        // Check if preceding token + this expression forms a compound verb
+                        // e.g., 板 + に+つい+て → 板につく (idiomatic compound)
+                        if (newList.Count > 0 && HasCompoundLookup != null &&
+                            w2.PartOfSpeech == PartOfSpeech.Verb)
+                        {
+                            var prevWord = newList[^1];
+                            var compoundDictForm = prevWord.Text + sc.Item1 + w2.DictionaryForm;
+                            if (HasCompoundLookup(compoundDictForm))
+                            {
+                                newList.RemoveAt(newList.Count - 1);
+                                var compoundWord = new WordInfo(prevWord);
+                                compoundWord.Text = prevWord.Text + w1.Text + w2.Text + w3.Text;
+                                compoundWord.DictionaryForm = compoundDictForm;
+                                compoundWord.PartOfSpeech = PartOfSpeech.Verb;
+                                newList.Add(compoundWord);
+                                i += 3;
+                                found = true;
+                                break;
+                            }
+                        }
+
                         var newWord = new WordInfo(w1);
                         newWord.Text = w1.Text + w2.Text + w3.Text;
                         newWord.DictionaryForm = newWord.Text;
@@ -1490,6 +1564,27 @@ public class MorphologicalAnalyser
                         i += 2;
                         continue;
                     }
+                }
+
+                // Sudachi misparsing verb stem + とくと as verb + 篤と (adverb)
+                // Should be verb + とく (ておく contraction, auxiliary) + と (particle)
+                // e.g., 見とくと → 見 + とく + と, 食べとくと → 食べ + とく + と
+                if (w1.PartOfSpeech == PartOfSpeech.Verb &&
+                    w2 is { PartOfSpeech: PartOfSpeech.Adverb, Text: "とくと", NormalizedForm: "篤と" })
+                {
+                    newList.Add(w1);
+                    newList.Add(new WordInfo
+                    {
+                        Text = "とく", DictionaryForm = "とく", NormalizedForm = "とく",
+                        PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "トク"
+                    });
+                    newList.Add(new WordInfo
+                    {
+                        Text = "と", DictionaryForm = "と", NormalizedForm = "と",
+                        PartOfSpeech = PartOfSpeech.Particle, Reading = "ト"
+                    });
+                    i += 2;
+                    continue;
                 }
 
                 bool found = false;
@@ -1988,7 +2083,8 @@ public class MorphologicalAnalyser
             WordInfo nextWord = wordInfos[i];
 
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) &&
-                currentWord.PartOfSpeech == PartOfSpeech.Verb)
+                currentWord.PartOfSpeech == PartOfSpeech.Verb &&
+                nextWord.DictionaryForm != "おる")
             {
                 currentWord.Text += nextWord.Text;
             }
@@ -2020,7 +2116,7 @@ public class MorphologicalAnalyser
             // that are often not in JMDict, causing lookup failures. Keep them separate for better parsing.
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
                 currentWord.PartOfSpeech == PartOfSpeech.Verb && !currentWord.Text.EndsWith("たり") &&
-                nextWord.DictionaryForm is "得る" or "する" or "しまう" or "おる" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす")
+                nextWord.DictionaryForm is "得る" or "する" or "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす")
             {
                 currentWord.Text += nextWord.Text;
             }
@@ -2105,7 +2201,8 @@ public class MorphologicalAnalyser
 
                 if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
-                    nextWord.PartOfSpeech == PartOfSpeech.Verb)
+                    nextWord.PartOfSpeech == PartOfSpeech.Verb &&
+                    nextWord.DictionaryForm != "おる")
                 {
                     bool isKnownSubsidiary =
                         (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
@@ -2372,7 +2469,7 @@ public class MorphologicalAnalyser
                 continue;
 
             var prev = wordInfos[i - 1].PartOfSpeech;
-            if (prev is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.Prefix)
+            if (prev is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.Prefix or PartOfSpeech.Pronoun)
                 continue;
 
             wordInfos[i].PartOfSpeech = PartOfSpeech.CommonNoun;

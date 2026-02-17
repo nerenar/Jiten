@@ -199,7 +199,7 @@ public class MorphologicalAnalyserTests
         yield return ["一回だけであとは言わない", new[] { "一回", "だけ", "で", "あと", "は", "言わない" }];
         yield return ["ご親切に恐縮しております", new[] { "ご親切に", "恐縮しております" }];
         yield return ["官吏となっておる者がある", new[] { "官吏", "と", "なっておる", "者", "が", "ある" }];
-        yield return ["間違えておられたようですね", new[] { "間違えておられた", "ようです", "ね" }];
+        yield return ["間違えておられたようですね", new[] { "間違えて", "おられた", "ようです", "ね" }];
         yield return ["人気のせいな", new[] { "人気", "の", "せい", "な" }];
         yield return ["コレはアレ", new[] { "コレ", "は", "アレ" }];
         yield return ["上に文字があったり", new[] { "上", "に", "文字", "が", "あったり" }];
@@ -638,6 +638,8 @@ public class MorphologicalAnalyserTests
         yield return ["休憩ー", new[] { "休憩" }];
         yield return ["この辺りで物々交換しておかないとな", new[] { "この","辺り","で","物々交換","しておかない","と","な" }];
         yield return ["その案件について", new[] { "その","案件","について" }];
+        // 板につく (idiomatic compound) — に+つい+て should NOT merge into particle について
+        yield return ["板について", new[] { "板について" }];
         yield return ["喜んだだろうね", new[] { "喜んだ","だろう","ね" }];
         // Comma (、) should not affect segmentation of preceding compound expressions
         yield return ["そこまで、それは違う", new[] { "そこまで","それ","は","違う" }];
@@ -662,6 +664,32 @@ public class MorphologicalAnalyserTests
         yield return ["僕はやることをやるだけだ", new[] { "僕", "は", "やる", "こと", "を", "やる", "だけ", "だ" }];
         // Copula である (past) + かのように (expression "as if")
         yield return ["自分の運命であったかのように", new[] { "自分", "の", "運命", "であった", "かのように" }];
+        // Interjection うわっ with katakana ッ should not be split by emphatic っ handling
+        yield return ["うわッ人呼んでる", new[] { "うわッ", "人", "呼んでる" }];
+        // ておく contraction + と particle: Sudachi misparsing とくと as adverb 篤と
+        yield return ["よく見とくといいよ", new[] { "よく", "見とく", "と", "いい", "よ" }];
+        yield return ["食べとくといいよ", new[] { "食べとく", "と", "いい", "よ" }];
+        // だな misparsed as 棚 (shelf) — should split into だ + な (copula + filler particle)
+        yield return ["だな気をつけねーと", new[] { "だ", "な", "気をつけねー", "と" }];
+        yield return ["集まってもらったのはだな新生の結成式を執り行うためだ", new[] { "集まってもらった", "の", "は", "だ", "な", "新生", "の", "結成", "式", "を", "執り行う", "ため", "だ" }];
+        // 来イ (katakana imperative) normalised to 来い
+        yield return ["ダッタラオマエガ来イ", new[] { "ダッタラ", "オマエ", "ガ", "来い" }];
+        // N日間 split into N日 + 間 (not numeral + 日間 "daytime")
+        yield return ["三日間だけだが", new[] { "三日", "間", "だけ", "だが" }];
+        yield return ["何日間もずっと", new[] { "何日", "間", "も", "ずっと" }];
+        yield return ["約五日間", new[] { "約", "五日", "間" }];
+        yield return ["四日間に", new[] { "四日", "間", "に" }];
+
+        // Vowel elongation ー after る-verbs — Sudachi splits as prefix + る(OOV) + ー
+        // RepairVowelElongation merges back into verb and drops ー
+        yield return ["手伝って来るー", new[] { "手伝って", "来る" }];
+        yield return ["ダンジョンに潜るー", new[] { "ダンジョン", "に", "潜る" }];
+        yield return ["ここにおるー", new[] { "ここ", "に", "おる" }];
+        yield return ["きっと写るーっ", new[] { "きっと", "写る" }];
+        // 何本 split into 何 + 本 (counter) — Sudachi treats as surname ナニモト or single noun ナンボン
+        yield return ["なら光これは何本", new[] { "なら", "光", "これ", "は", "何", "本" }];
+        yield return ["何本ぐらいにしようかな", new[] { "何", "本", "ぐらい", "に", "しよう", "かな" }];
+        yield return ["何本オレンジジュースを飲むかってこと", new[] { "何", "本", "オレンジジュース", "を", "飲む", "か", "って", "こと" }];
     }
 
     [Theory]

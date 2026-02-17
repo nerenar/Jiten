@@ -145,7 +145,29 @@
 
     if (failedCount === 0) {
       showEditDialog.value = false;
-      await loadItems();
+
+      const wordId = editingWordId.value!;
+      const updatedRubyTexts = { ...editingRubyTexts.value };
+
+      const updatedAllForms = editingForms.value.map(f => ({
+        ...f,
+        rubyText: updatedRubyTexts[f.readingIndex] ?? f.rubyText,
+      }));
+
+      let removedCount = 0;
+      items.value = items.value.filter(item => {
+        if (item.wordId !== wordId) return true;
+        const newRuby = updatedRubyTexts[item.readingIndex];
+        if (newRuby !== undefined && newRuby.includes('[')) {
+          removedCount++;
+          return false;
+        }
+        item.allForms = updatedAllForms;
+        item.rubyText = updatedRubyTexts[item.readingIndex] ?? item.rubyText;
+        return true;
+      });
+
+      totalCount.value = Math.max(0, totalCount.value - removedCount);
     }
   }
 

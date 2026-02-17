@@ -1,6 +1,4 @@
 <script setup lang="ts">
-  import ConfirmDialog from 'primevue/confirmdialog';
-
   useSeoMeta({
     title: 'Jiten',
     description: 'Vocabulary lists and anki decks for all your Japanese media.',

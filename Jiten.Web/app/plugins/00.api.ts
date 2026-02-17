@@ -49,7 +49,9 @@ export default defineNuxtPlugin((nuxtApp) => {
             }
 
             try {
-              return await $fetch(request, options);
+              // Strip interceptor hooks to prevent infinite retry loops
+              const { onRequest: _, onResponse: _r, onResponseError: _e, ...retryOptions } = options;
+              return await $fetch(request, retryOptions);
             } catch (retryError) {
               console.error('Retry after token refresh failed:', retryError);
             }

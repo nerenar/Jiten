@@ -523,6 +523,7 @@ export interface DictionaryEntry {
   wordId: number;
   readingIndex: number;
   text: string;
+  rubyText: string;
   primaryKanjiText?: string;
   partsOfSpeech: string[];
   meanings: string[];

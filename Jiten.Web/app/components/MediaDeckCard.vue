@@ -167,7 +167,7 @@
     <Card class="p-2" :style="{ outline: borderColor }">
       <template #title>
         <div class="flex justify-between items-start">
-          <span>{{ localiseTitle(deck) }}</span>
+          <span class="break-words min-w-0">{{ localiseTitle(deck) }}</span>
           <div class="flex flex-row items-center gap-1 h-6">
             <div v-if="authStore.isAuthenticated" class="flex items-center gap-2">
               <i v-if="deck.isFavourite" class="pi pi-star-fill text-yellow-500 text-lg" />

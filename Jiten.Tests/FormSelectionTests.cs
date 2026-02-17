@@ -209,6 +209,62 @@ public class FormSelectionTests
         // 仏 standalone should resolve to ほとけ/Buddha (1501760), not フツ/France (1501740)
         yield return ["俺だって仏じゃねぇからなあ！", "仏", 1501760, (byte)0];
         yield return ["神も仏も無いこの世界で", "仏", 1501760, (byte)0];
+
+        // 私 standalone → わたし/I (1311110), not し/private affairs (2728300)
+        // FixReadingAmbiguity overrides Sudachi シ→ワタシ + reclassifies as Pronoun
+        yield return ["この本には修行とあります私修行します", "私", 1311110, (byte)0];
+
+        // ことにする → 事にする/to decide to (2215340), not 異にする/to differ (1640290)
+        // FindValidCompoundWordId picks higher-priority expression when multiple expressions match
+        yield return ["ことにしないか", "ことにしない", 2215340, (byte)1];
+
+        // たち after pronoun → 達/pluralising suffix (1416220), not 立ち/departure (1551240)
+        // ReclassifyOrphanedSuffixes preserves Suffix POS after Pronoun; POS compatibility matches suf
+        yield return ["彼女たちは家を預かるプロフェッショナル", "たち", 1416220, (byte)1];
+
+        // うわッ → うわっ interjection (2061250, reading index 2), not split into う + わッ
+        yield return ["うわッ人呼んでる", "うわッ", 2061250, (byte)2];
+
+        // いや as interjection → 嫌/いや (1587610, ichi1), not 弥 archaic adverb (2580180)
+        // Sudachi classifies いや as 副詞; Adverb→Interjection POS compatibility allows correct match
+        yield return ["悪気はなかったのいや助かった", "いや", 1587610, (byte)2];
+
+        // 次 standalone before verb → つぎ/next (1316380), not じ/prefix (1579580)
+        // FixReadingAmbiguity overrides Sudachi ジ→ツギ + reclassifies as CommonNoun
+        yield return ["大丈夫才川次頑張ろう！", "次", 1316380, (byte)0];
+
+        // 忘れてる → 忘れる/to forget (1519210), not archaic 忘る (1519190)
+        // Reduced stem-fallback ReadingMatchScore (25 vs 50) prevents false stem match from outscoring ichi1 entry
+        yield return ["でも何か忘れてるような気がしますけど", "忘れてる", 1519210, (byte)0];
+        yield return ["みんな言うのを忘れてたけど", "忘れてた", 1519210, (byte)0];
+
+        // 見とく → 見る (1259290) with ておく contraction, not 篤と (とくと) adverb
+        // ProcessSpecialCases splits Sudachi's misparse of とくと back to とく + と
+        yield return ["よく見とくといいよ", "見とく", 1259290, (byte)0];
+        yield return ["食べとくといいよ", "食べとく", 1358280, (byte)0];
+
+        // 隠れていれば → 隠れる (1170660), not archaic 隠る (1985190)
+        yield return ["さすがにこれだけ隠れていれば向こうから見えはしないと思うけど", "隠れていれば", 1170660, (byte)0];
+
+        // ふう → 風 "style/manner" (1499730), not 封 "seal" (1499580)
+        yield return ["あんまりそういうふうには見えないけどなー", "ふう", 1499730, (byte)1];
+
+        // がち (hiragana) → colloquial ガチ/serious (2653620), not 雅致/artistry (1197950)
+        // User dic overrides Sudachi 名詞→形状詞 so adj-na POS filter matches the colloquial entry
+        yield return ["のがちこで分かる", "がち", 2653620, (byte)0];
+
+        // ガチ (katakana) → colloquial ガチ/serious (2653620)
+        yield return ["ガチの無人島サバイバル", "ガチ", 2653620, (byte)1];
+
+        // がちがち → onomatopoeia "stiff/rigid" (1003110), not split into がち+が+ちち
+        yield return ["がちがちに緊張する", "がちがち", 1003110, (byte)1];
+
+        // Vowel elongation ー after る-verbs — Sudachi splits as prefix + る(OOV) + ー
+        // RepairVowelElongation merges back into verb and drops ー
+        yield return ["手伝って来るー", "来る", 1547720, (byte)0];
+        yield return ["ダンジョンに潜るー", "潜る", 1609715, (byte)0];
+        yield return ["ここにおるー", "おる", 1577985, (byte)1];
+        yield return ["きっと写るーっ", "写る", 1321820, (byte)0];
     }
 
     [Theory]
