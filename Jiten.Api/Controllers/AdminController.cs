@@ -787,7 +787,8 @@ public partial class AdminController(
     public async Task<IActionResult> GetMissingFurigana(
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null)
     {
         var nameOnlyWordIds = await JmDictHelper.LoadNameOnlyWordIds(dbContext);
 
@@ -801,13 +802,41 @@ public partial class AdminController(
 
         var totalCount = await query.CountAsync();
 
-        var forms = await query
-            .OrderBy(wf => wf.WordId).ThenBy(wf => wf.ReadingIndex)
-            .Skip(offset)
-            .Take(limit)
-            .ToListAsync();
+        List<JmDictWordForm> forms;
+
+        if (sortBy == "frequency")
+        {
+            var joined = query
+                .GroupJoin(
+                    dbContext.JmDictWordFrequencies.AsNoTracking(),
+                    wf => wf.WordId,
+                    freq => freq.WordId,
+                    (wf, freqs) => new { wf, freqs })
+                .SelectMany(
+                    x => x.freqs.DefaultIfEmpty(),
+                    (x, freq) => new { Form = x.wf, FrequencyRank = freq != null ? (int?)freq.FrequencyRank : null });
+
+            forms = await joined
+                .OrderBy(x => x.FrequencyRank == null).ThenBy(x => x.FrequencyRank).ThenBy(x => x.Form.WordId)
+                .Skip(offset)
+                .Take(limit)
+                .Select(x => x.Form)
+                .ToListAsync();
+        }
+        else
+        {
+            forms = await query
+                .OrderBy(wf => wf.WordId).ThenBy(wf => wf.ReadingIndex)
+                .Skip(offset)
+                .Take(limit)
+                .ToListAsync();
+        }
 
         var wordIds = forms.Select(f => f.WordId).Distinct().ToList();
+
+        var frequencyLookup = await dbContext.JmDictWordFrequencies.AsNoTracking()
+            .Where(f => wordIds.Contains(f.WordId))
+            .ToDictionaryAsync(f => f.WordId, f => f.FrequencyRank);
 
         var words = await dbContext.JMDictWords.AsNoTracking()
             .Where(w => wordIds.Contains(w.WordId))
@@ -817,6 +846,7 @@ public partial class AdminController(
         var items = forms.Select(f =>
         {
             words.TryGetValue(f.WordId, out var word);
+            frequencyLookup.TryGetValue(f.WordId, out var freqRank);
             return new MissingFuriganaDto
             {
                 WordId = f.WordId,
@@ -825,6 +855,7 @@ public partial class AdminController(
                 RubyText = f.RubyText ?? "",
                 FormType = f.FormType,
                 PartsOfSpeech = word?.PartsOfSpeech ?? [],
+                FrequencyRank = freqRank > 0 ? freqRank : null,
                 AllForms = word?.Forms.Select(af => new WordFormSummary
                 {
                     ReadingIndex = af.ReadingIndex,

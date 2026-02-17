@@ -11,6 +11,7 @@ public class MissingFuriganaDto
     public JmDictFormType FormType { get; set; }
     public List<string> PartsOfSpeech { get; set; } = [];
     public List<WordFormSummary> AllForms { get; set; } = [];
+    public int? FrequencyRank { get; set; }
 }
 
 public class WordFormSummary

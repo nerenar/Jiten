@@ -239,6 +239,7 @@ export interface MissingFuriganaItem {
   formType: number;
   partsOfSpeech: string[];
   allForms: WordFormSummary[];
+  frequencyRank: number | null;
 }
 
 export interface MissingFuriganaPaginatedResponse {

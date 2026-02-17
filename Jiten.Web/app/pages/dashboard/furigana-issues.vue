@@ -6,6 +6,7 @@
   import Button from 'primevue/button';
   import Dialog from 'primevue/dialog';
   import InputText from 'primevue/inputtext';
+  import Select from 'primevue/select';
   import Tag from 'primevue/tag';
   import ProgressSpinner from 'primevue/progressspinner';
   import { useToast } from 'primevue/usetoast';
@@ -21,6 +22,11 @@
   const totalCount = ref(0);
   const loading = ref(false);
   const searchQuery = ref('');
+  const sortBy = ref('wordId');
+  const sortOptions = [
+    { label: 'Word ID', value: 'wordId' },
+    { label: 'Global Frequency', value: 'frequency' },
+  ];
   const currentPage = ref(0);
   const rowsPerPage = ref(50);
 
@@ -39,6 +45,7 @@
       params.append('limit', rowsPerPage.value.toString());
       params.append('offset', (currentPage.value * rowsPerPage.value).toString());
       if (searchQuery.value.trim()) params.append('search', searchQuery.value.trim());
+      if (sortBy.value !== 'wordId') params.append('sortBy', sortBy.value);
 
       const result = await $api<MissingFuriganaPaginatedResponse>(`/admin/words/missing-furigana?${params.toString()}`);
       items.value = result.items;
@@ -59,6 +66,11 @@
     currentPage.value = 0;
     loadItems();
   }, 400);
+
+  function onSortChange() {
+    currentPage.value = 0;
+    loadItems();
+  }
 
   function onPage(event: any) {
     currentPage.value = event.page;
@@ -200,6 +212,14 @@
         class="w-64"
         @input="debouncedSearch"
       />
+      <Select
+        v-model="sortBy"
+        :options="sortOptions"
+        optionLabel="label"
+        optionValue="value"
+        class="w-48"
+        @change="onSortChange"
+      />
     </div>
 
     <!-- Loading -->
@@ -247,6 +267,12 @@
               <span v-if="form.rubyText" class="ml-1 opacity-70">({{ form.rubyText }})</span>
             </Tag>
           </div>
+        </template>
+      </Column>
+      <Column field="frequencyRank" header="Frequency" style="width: 120px">
+        <template #body="{ data }">
+          <span v-if="data.frequencyRank" class="text-sm">{{ data.frequencyRank.toLocaleString() }}</span>
+          <span v-else class="text-sm text-gray-400">—</span>
         </template>
       </Column>
       <Column field="partsOfSpeech" header="POS" style="width: 200px">
