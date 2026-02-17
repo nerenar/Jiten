@@ -902,7 +902,7 @@ namespace Jiten.Parser
             var textInHiragana = WanaKana.ToHiragana(wordData.wordInfo.Text, new DefaultOptions() { ConvertLongVowelMark = false, });
             _lookups.TryGetValue(textInHiragana, out var candidatesHiragana);
 
-            candidates ??= new List<int>();
+            candidates = candidates != null ? new List<int>(candidates) : [];
 
             var textNormalized = KanaNormalizer.Normalize(textInHiragana);
             if (textNormalized != textInHiragana)
@@ -1908,7 +1908,16 @@ namespace Jiten.Parser
             if (_lookups.TryGetValue(dictForm, out var ids) && ids.Count > 0)
                 return true;
 
-            var hira = KanaNormalizer.Normalize(WanaKana.ToHiragana(dictForm));
+            string hira;
+            try
+            {
+                hira = KanaNormalizer.Normalize(WanaKana.ToHiragana(dictForm));
+            }
+            catch
+            {
+                return false;
+            }
+
             return hira != dictForm && _lookups.TryGetValue(hira, out ids) && ids.Count > 0;
         }
 
