@@ -55,6 +55,7 @@ public class DiagnosticCommands(CliContext context)
             TokenCount = deckWords.Count,
             Sudachi = diagnostics.Sudachi,
             TokenStages = diagnostics.TokenStages,
+            RunSummary = diagnostics.RunSummary,
             Tokens = deckWords.Select(w => new
             {
                 w.OriginalText,

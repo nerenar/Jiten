@@ -1,7 +1,7 @@
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.User;
 
-namespace Jiten.Parser.Tests;
+namespace Jiten.Tests;
 
 public class FsrsTests
 {

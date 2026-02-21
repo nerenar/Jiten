@@ -101,6 +101,22 @@ public static class PosMapper
         "vn", "vr", "aux-v"
     ];
 
+    // Verb tags for directly-conjugating verbs only (excludes suru-verb types and
+    // transitivity markers). Suru-verbs need する before taking endings like た/て,
+    // so generic stem tags (stem-past etc.) shouldn't match vs/vt/vi alone.
+    // Proper suru-verb deconjugation adds vs-i/vs-s tags with their own mappings.
+    private static readonly HashSet<string> DirectConjugationVerbTags =
+    [
+        "v1", "v1-s", "v5aru", "v5b", "v5g", "v5k", "v5k-s", "v5m", "v5n",
+        "v5r", "v5r-i", "v5s", "v5t", "v5u", "v5u-s", "v5uru",
+        "vk", "vz",
+        "v4k", "v4g", "v4s", "v4t", "v4n", "v4b", "v4m", "v4r", "v4h",
+        "v2a-s", "v2b-k", "v2d-s", "v2g-k", "v2g-s", "v2h-k", "v2h-s",
+        "v2k-k", "v2k-s", "v2m-k", "v2m-s", "v2n-s", "v2r-k", "v2r-s",
+        "v2s-s", "v2t-k", "v2t-s", "v2w-s", "v2y-k", "v2y-s", "v2z-s",
+        "vn", "vr", "aux-v"
+    ];
+
     private static readonly Dictionary<string, HashSet<string>> DeconjToJmDictCompatibility =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -122,11 +138,11 @@ public static class PosMapper
             ["v5k-s"] = ["v5k-s", "v5k"],
             ["v5u-s"] = ["v5u-s", "v5u"],
 
-            // Verb stem tags - these indicate a verb conjugation, so only match verbs
-            ["stem-past"] = AllVerbTags,
-            ["stem-te-verbal"] = AllVerbTags,
-            ["stem-ren-less"] = AllVerbTags,
-            ["stem-ren-less-v"] = AllVerbTags,
+            // Verb stem tags — only match directly-conjugating verbs, not suru-verbs
+            ["stem-past"] = DirectConjugationVerbTags,
+            ["stem-te-verbal"] = DirectConjugationVerbTags,
+            ["stem-ren-less"] = DirectConjugationVerbTags,
+            ["stem-ren-less-v"] = DirectConjugationVerbTags,
         };
 
     #endregion
@@ -265,6 +281,11 @@ public static class PosMapper
         // Sudachi 形状詞 (NaAdjective) includes words that JMDict tags as adj-pn (PrenounAdjectival)
         // Examples: この, その, あの, どの, こんな, そんな, あんな, どんな
         if (sudachiPos == PartOfSpeech.NaAdjective && convertedPosList.Contains(PartOfSpeech.PrenounAdjectival))
+            return true;
+
+        // Sudachi 形容詞 (IAdjective) should match JMDict adj-pn (PrenounAdjectival) for
+        // classical attributive forms that have standalone entries (e.g. 亡き, adj-pn "deceased")
+        if (sudachiPos == PartOfSpeech.IAdjective && convertedPosList.Contains(PartOfSpeech.PrenounAdjectival))
             return true;
 
         // Sudachi 連体詞 (PrenounAdjectival) maps to JMDict adj-f/adj-no/adj-t (NominalAdjective)

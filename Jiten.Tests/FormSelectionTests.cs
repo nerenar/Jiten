@@ -64,6 +64,10 @@ public class FormSelectionTests
         // 言える has arch on one definition only — IsFullyArchaic=false prevents the -200 penalty
         yield return ["狂信的ともいえる技術信仰", "いえる", 1008860, (byte)2];
 
+        // 得る should resolve to える (1588760, v1 ichidan), not うる (1454500, v2a-s archaic nidan)
+        // Sudachi returns ウル but archaic POS penalty counteracts the ReadingMatchScore
+        yield return ["得る", "得る", 1588760, (byte)0];
+
         // 身体 in isolation: Sudachi gives reading シンタイ, so しんたい (2830705) wins via ReadingMatchScore.
         // In sentence context where Sudachi gives カラダ, からだ (1409140) wins via EntryPriorityScore.
         yield return ["身体", "身体", 2830705, (byte)0];
@@ -222,6 +226,10 @@ public class FormSelectionTests
         // ReclassifyOrphanedSuffixes preserves Suffix POS after Pronoun; POS compatibility matches suf
         yield return ["彼女たちは家を預かるプロフェッショナル", "たち", 1416220, (byte)1];
 
+        // たち after suffix 者 → 達/pluralising suffix (1416220), not 断つ verb (1597030)
+        // ReclassifyOrphanedSuffixes preserves Suffix POS after another Suffix; POS compatibility matches suf
+        yield return ["覚醒者たちの頂点を極める存在となり", "たち", 1416220, (byte)1];
+
         // うわッ → うわっ interjection (2061250, reading index 2), not split into う + わッ
         yield return ["うわッ人呼んでる", "うわッ", 2061250, (byte)2];
 
@@ -255,6 +263,9 @@ public class FormSelectionTests
 
         // ガチ (katakana) → colloquial ガチ/serious (2653620)
         yield return ["ガチの無人島サバイバル", "ガチ", 2653620, (byte)1];
+        yield return ["ガチ返しをしてきた", "ガチ", 2653620, (byte)1];
+        yield return ["ガチ目の前でやられてる", "ガチ", 2653620, (byte)1];
+        yield return ["ガチ惚れしそうで怖い", "ガチ", 2653620, (byte)1];
 
         // がちがち → onomatopoeia "stiff/rigid" (1003110), not split into がち+が+ちち
         yield return ["がちがちに緊張する", "がちがち", 1003110, (byte)1];
@@ -265,6 +276,116 @@ public class FormSelectionTests
         yield return ["ダンジョンに潜るー", "潜る", 1609715, (byte)0];
         yield return ["ここにおるー", "おる", 1577985, (byte)1];
         yield return ["きっと写るーっ", "写る", 1321820, (byte)0];
+
+        // 玩具 → おもちゃ/toy (1217070), not がんぐ (2863107)
+        // User dic overrides Sudachi reading ガング→オモチャ for the common modern reading
+        yield return ["俺は神連に玩具扱いされておりその一環でみぎりと知り合った。", "玩具", 1217070, (byte)0];
+
+        // なんじ → archaic pronoun 汝/you (2015140), not verb 難じる (2174390)
+        // User dic overrides Sudachi 動詞→代名詞 for the common archaic pronoun reading
+        yield return ["なんじもし私の信者ならば", "なんじ", 2015140, (byte)2];
+
+        // 気附かぬ → 気付く (1591330) — user dic adds 気附く as verb, ぬ reclassified to auxiliary
+        yield return ["気附かぬ如くゆっくり", "気附かぬ", 1591330, (byte)1];
+
+        // 如く stays separate (not merged by CombineAuxiliary) → 如く (1466920)
+        yield return ["気附かぬ如くゆっくり", "如く", 1466920, (byte)0];
+
+        // Noun/verb stem disambiguation: when Sudachi tags an ichidan verb 連用形 as a noun,
+        // the parser should prefer the verb if it has strictly higher priority than the noun.
+        // 抱え: noun "armful" (1516300, nf23) vs verb 抱える (1516310, ichi1/nf08) → verb wins
+        yield return ["お姫様だっこのように抱え", "抱え", 1516310, (byte)0];
+
+        // Regression guards: common nouns that share surface with verb stems must stay as nouns.
+        // 考え: noun "thought" (1281000, ichi1/nf01) vs verb 考える (1281020, ichi1/nf10) → noun wins
+        yield return ["良い考えだ", "考え", 1281000, (byte)0];
+        yield return ["彼の考えに賛成する", "考え", 1281000, (byte)0];
+
+        // 答え: noun "answer" (1449530, ichi1/nf04) vs verb 答える (1449540, news2/nf34) → noun wins
+        yield return ["その答えは正しい", "答え", 1449530, (byte)0];
+
+        // 教え: noun "teaching" (1236890, ichi1/nf12) vs verb 教える (1236900, ichi1/nf38) → noun wins
+        yield return ["先生の教えに従う", "教え", 1236890, (byte)0];
+
+        // 訴え: noun "lawsuit" (1397710, ichi1/nf05) vs verb 訴える (1397720, ichi1/nf39) → noun wins
+        yield return ["訴えを起こす", "訴え", 1397710, (byte)0];
+
+        // Lower-priority nouns: verb should win when noun entry has low/no priority.
+        // 構え: noun (1279690, no priority) vs verb 構える (1279700, ichi1) → verb wins
+        yield return ["銃を構え撃った", "構え", 1279700, (byte)0];
+
+        // 備え: noun (1485630, nf15) vs verb 備える (1244960, ichi1/ichi2/nf09) → verb wins
+        yield return ["武器を備え出発した", "備え", 1244960, (byte)0];
+
+        // 支え: noun (1310080, no priority) vs verb 支える (1310090, ichi1) → verb wins
+        yield return ["体を支え立ち上がった", "支え", 1310090, (byte)0];
+
+        // 蓄え: noun (1854350, nf30) vs verb 蓄える (1596860, ichi1/nf36) → verb wins
+        yield return ["力を蓄え待った", "蓄え", 1596860, (byte)0];
+
+        // 頭 as counter とう (1450690, ctr ichi1) after numeral, not がしら suffix (2252670, suf)
+        // Sudachi tags as 接尾辞,助数詞 — FilterMisparse reclassifies Suffix+Counter to Counter POS
+        yield return ["二頭の猟犬", "頭", 1450690, (byte)0];
+
+        // じまい after verb ず-form → 仕舞い suffix "ending" (2582570), not 地米 "locally produced rice" (1763500)
+        // ReclassifyOrphanedSuffixes preserves Suffix POS for じまい so POS compatibility matches suf
+        yield return ["相変わらず瑛の母親はわからずじまいで…。", "じまい", 2582570, (byte)4];
+
+        // チック should match the colloquial suffix (-esque/-like/-ish), not pomade stick
+        yield return ["小悪魔チックに微笑む彼女。", "チック", 2846862, (byte)0];
+        yield return ["乙女チックー", "チックー", 2846862, (byte)0];
+
+        // 飛んで → 飛ぶ te-form (1429700), not obscure expression 飛んで (2248530, "zero/flying")
+        // Conjugated-form identity penalty + reading match zeroing prevents the expression from outscoring the verb
+        yield return ["早くどうかしないと飛んでもねえ事になるぜ", "飛んで", 1429700, (byte)0];
+        yield return ["無事飛んで戻ってきたら", "飛んで", 1429700, (byte)0];
+
+        // くさい should resolve to 臭い (1333150, adj-i), not 救済 (2673180, noun) or くさる (1497800, verb)
+        yield return ["くさい", "くさい", 1333150, (byte)1];
+        yield return ["とてもくさい", "くさい", 1333150, (byte)1];
+        yield return ["ここがくさい", "くさい", 1333150, (byte)1];
+        yield return ["すごいくさい", "くさい", 1333150, (byte)1];
+
+        // 隙 in context → すき/opening (1253780), not ひま/obsolete (2861550)
+        // FixReadingAmbiguity overrides Sudachi ヒマ→スキ for standalone 隙
+        yield return ["いなくなった隙に奪い取る", "隙", 1253780, (byte)0];
+        yield return ["意識が幼獣に向いている隙に攻撃を加えれば", "隙", 1253780, (byte)0];
+
+        // クスクス → onomatopoeia "chuckle/giggle" (2007850), not couscous (2002980) or cuscus animal (2853576)
+        // on-mim POS bonus breaks the three-way tie in favour of the mimetic word
+        yield return ["クスクスと笑う", "クスクス", 2007850, (byte)1];
+        yield return ["わたしはクスクスと笑う。", "クスクス", 2007850, (byte)1];
+
+        // ぬかるんで → 泥濘む/ぬかるむ "to become muddy" (2009310), not 抜かる "to make a mistake" (1478130)
+        // Sudachi DictionaryForm lemma floor ensures deep deconjugation chains don't nullify Sudachi's identification
+        yield return ["下がぬかるんでたから受け止めた拍子に足を滑らせただけだぞ", "ぬかるんでた", 2009310, (byte)1];
+
+        // 割れ as ichidan verb 連用形 → 割れる "to break" (1208020), not noun 割れ "broken piece" (1208010)
+        // Sudachi misclassifies as noun in sentence 1; GetPriorityScore fallback picks the verb (ichi1)
+        yield return ["壁が大きくきしみ割れ無数の破片へと砕けて十三階の高さから落ちてゆく。", "割れ", 1208020, (byte)0];
+        yield return ["爪が割れ剥がれそうになる…。", "割れ", 1208020, (byte)0];
+
+        // やつら → 奴ら "they/those guys" (1913290), not つら "face" (1584690)
+        yield return ["やつらの思うつぼだ", "やつら", 1913290, (byte)4];
+
+        // ガラ (katakana) → 柄/character (1508300), not gala (2834398)
+        // Pure kana-script difference scoring lets high-priority 柄 overcome the exact-match advantage of gala
+        yield return ["ガラじゃないしさ", "ガラ", 1508300, (byte)1];
+        yield return ["俺だってガラじゃないのは分かってるんだから", "ガラ", 1508300, (byte)1];
+
+        // くすん → sniff/sniffle onomatopoeia (2130690), not くすむ/to be dull (1957380)
+        // User dic overrides Sudachi 動詞(くすむ撥音便)→副詞 for the common onomatopoeia
+        yield return ["くすんと鼻を鳴らし", "くすん", 2130690, (byte)0];
+
+        // リス → 栗鼠/squirrel (1246890), not 離/fracture (1141430)
+        // Sudachi NormalizedForm 栗鼠 matches squirrel's kanji form, overcoming fracture's gai1 priority
+        yield return ["リスのように膨らんだ色白の頬に食べ滓がついている。", "リス", 1246890, (byte)2];
+        yield return ["ところがぼくは小林君というリスのようにすばしっこい助手を持っていました。", "リス", 1246890, (byte)2];
+
+        // つうか → conjunction "or rather" (2848301), not 通過 "passing through" (1433070)
+        // User dic tokenizes as single token; Conjunction POS skips verb-fallback priority comparison
+        yield return ["つうか何を迷走しているんだ。", "つうか", 2848301, (byte)5];
+
     }
 
     [Theory]

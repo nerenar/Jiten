@@ -30,7 +30,16 @@
     if (text.includes('*')) return true;
     const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF]/.test(text);
     if (hasJapanese) return false;
-    return text.includes(' ');
+    if (text.includes(' ')) return true;
+
+    const normalised = response.value?.normalisedText;
+    if (normalised && /[\uFF21-\uFF3A\uFF41-\uFF5A]/.test(normalised)) return true;
+
+    const matched = words.value.filter(w => w.wordId !== 0);
+    const unmatched = words.value.filter(w => w.wordId === 0);
+    if (matched.length > 0 && matched.every(w => w.originalText.length === 1) && unmatched.length > 0) return true;
+
+    return false;
   });
 
   const selectedWord = ref<DeckWord | undefined>();

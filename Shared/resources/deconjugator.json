@@ -624,6 +624,14 @@
   },
   {
     "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["げ"],
+    "dec_tag": ["stem-adj-base"],
+    "con_tag": ["adj-na"],
+    "detail": "seeming"
+  },
+  {
+    "type": "stdrule",
     "dec_end": ["", ""],
     "con_end": ["た", "った"],
     "dec_tag": ["stem-ren-less"],

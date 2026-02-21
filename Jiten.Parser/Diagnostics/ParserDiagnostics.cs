@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Threading;
 using Jiten.Core.Data;
 
 namespace Jiten.Parser.Diagnostics;
@@ -13,6 +14,51 @@ public class ParserDiagnostics
     public SudachiDiagnostics? Sudachi { get; set; }
     public List<TokenProcessingStage> TokenStages { get; set; } = [];
     public List<WordResult> Results { get; set; } = [];
+    public ParserRunSummary RunSummary { get; set; } = new();
+}
+
+/// <summary>
+/// Lightweight counters for parse-run-level health and fallback behavior.
+/// </summary>
+public class ParserRunSummary
+{
+    private int _processSemaphoreTimeoutCount;
+    private int _unresolvedTokenCount;
+    private int _rescueInvocationCount;
+    private int _rescueCandidateCount;
+    private int _rescueRecoveredCount;
+    private int _rescueUnresolvedCount;
+
+    public int ProcessSemaphoreTimeoutCount => _processSemaphoreTimeoutCount;
+    public int UnresolvedTokenCount => _unresolvedTokenCount;
+    public int RescueInvocationCount => _rescueInvocationCount;
+    public int RescueCandidateCount => _rescueCandidateCount;
+    public int RescueRecoveredCount => _rescueRecoveredCount;
+    public int RescueUnresolvedCount => _rescueUnresolvedCount;
+
+    public void IncrementProcessSemaphoreTimeoutCount() =>
+        Interlocked.Increment(ref _processSemaphoreTimeoutCount);
+
+    public void IncrementUnresolvedTokenCount() =>
+        Interlocked.Increment(ref _unresolvedTokenCount);
+
+    public void AddRescueInvocations(int count)
+    {
+        if (count > 0)
+            Interlocked.Add(ref _rescueInvocationCount, count);
+    }
+
+    public void AddRescueCandidates(int count)
+    {
+        if (count > 0)
+            Interlocked.Add(ref _rescueCandidateCount, count);
+    }
+
+    public void IncrementRescueRecoveredCount() =>
+        Interlocked.Increment(ref _rescueRecoveredCount);
+
+    public void IncrementRescueUnresolvedCount() =>
+        Interlocked.Increment(ref _rescueUnresolvedCount);
 }
 
 /// <summary>
@@ -44,6 +90,7 @@ public class SudachiToken
 public class TokenProcessingStage
 {
     public string StageName { get; set; } = string.Empty;
+    public string StageGroup { get; set; } = string.Empty;
     public double ElapsedMs { get; set; }
     public int InputTokenCount { get; set; }
     public int OutputTokenCount { get; set; }
