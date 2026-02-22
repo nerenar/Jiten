@@ -306,6 +306,7 @@ public static class JmDictHelper
         var words = await context.JMDictWords
                                 .AsNoTracking()
                                 .Include(w => w.Forms.OrderBy(f => f.ReadingIndex))
+                                .Include(w => w.Definitions)
                                 .ToListAsync();
         return words;
     }

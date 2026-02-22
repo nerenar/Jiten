@@ -16,6 +16,7 @@ public class WordInfo
     public bool IsInvalid { get; set; }
     public bool IsPersonNameContext { get; set; }
     public int? PreMatchedWordId { get; set; }
+    public List<string>? PreMatchedConjugations { get; set; }
     public bool IsImperative { get; set; }
     public bool WasReclassifiedFromSuffix { get; set; }
 
@@ -34,6 +35,7 @@ public class WordInfo
         IsInvalid = other.IsInvalid;
         IsPersonNameContext = other.IsPersonNameContext;
         PreMatchedWordId = other.PreMatchedWordId;
+        PreMatchedConjugations = other.PreMatchedConjugations;
         IsImperative = other.IsImperative;
         WasReclassifiedFromSuffix = other.WasReclassifiedFromSuffix;
     }

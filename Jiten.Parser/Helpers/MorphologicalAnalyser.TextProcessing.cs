@@ -34,7 +34,7 @@ public partial class MorphologicalAnalyser
         text = Regex.Replace(text, "。", "\n。\n");
         text = Regex.Replace(text, "！", "\n！\n");
         text = Regex.Replace(text, "？", "\n？\n");
-        text = text.Replace("、", "\n");
+
 
         // Normalise tilde characters to chōon mark when used as vowel elongation after kana
         // e.g., ヤバ～ → ヤバー, すご〜 → すごー

@@ -698,7 +698,6 @@ namespace Jiten.Parser
                             var wordCache = await JmDictCache.GetWordsAsync([preMatchedWordId]);
                             if (wordCache.TryGetValue(preMatchedWordId, out var preMatchedWord))
                             {
-                                // Use DictionaryForm for reading lookup since Text may be conjugated (e.g. そうしよう vs そうする)
                                 var textForReadingLookup = !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
                                     ? wordData.wordInfo.DictionaryForm
                                     : wordData.wordInfo.Text;
@@ -707,6 +706,7 @@ namespace Jiten.Parser
                                                 {
                                                     WordId = preMatchedWordId, ReadingIndex = readingIndex,
                                                     OriginalText = wordData.wordInfo.Text, Occurrences = wordData.occurrences,
+                                                    Conjugations = wordData.wordInfo.PreMatchedConjugations ?? [],
                                                     PartsOfSpeech = preMatchedWord.PartsOfSpeech.ToPartOfSpeech(),
                                                     Origin = preMatchedWord.Origin
                                                 };
@@ -777,7 +777,7 @@ namespace Jiten.Parser
                                 wordData.wordInfo.PartOfSpeech = oldPos;
                                 processedWord = verbResult.word;
                             }
-                            else if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Pronoun or PartOfSpeech.Conjunction or PartOfSpeech.Interjection)
+                            else if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Pronoun or PartOfSpeech.Conjunction or PartOfSpeech.Interjection or PartOfSpeech.Particle)
                             {
                                 processedWord = nounResult.word;
                             }
@@ -1798,11 +1798,27 @@ namespace Jiten.Parser
 
                             var originalText = string.Concat(wordInfos.Skip(startIndex).Take(i - startIndex + 1).Select(w => w.Text));
                             var combinedReading = string.Concat(wordInfos.Skip(startIndex).Take(i - startIndex + 1).Select(w => w.Reading));
+
+                            List<string>? conjugations = null;
+                            if (originalText != dictForm)
+                            {
+                                var hiraText = WanaKana.ToHiragana(originalText);
+                                var hiraDictForm = WanaKana.ToHiragana(dictForm);
+                                if (hiraText != hiraDictForm)
+                                {
+                                    var matchingForm = Deconjugator.Instance.Deconjugate(hiraText)
+                                        .FirstOrDefault(d => d.Text == hiraDictForm);
+                                    if (matchingForm != null)
+                                        conjugations = matchingForm.Process.ToList();
+                                }
+                            }
+
                             var combinedWordInfo = new WordInfo
                                                    {
                                                        Text = originalText, DictionaryForm = dictForm,
                                                        PartOfSpeech = PartOfSpeech.Expression, NormalizedForm = dictForm,
-                                                       Reading = WanaKana.ToHiragana(combinedReading), PreMatchedWordId = wordId
+                                                       Reading = WanaKana.ToHiragana(combinedReading), PreMatchedWordId = wordId,
+                                                       PreMatchedConjugations = conjugations
                                                    };
 
                             result.Add((combinedWordInfo, startPosition, combinedLength));

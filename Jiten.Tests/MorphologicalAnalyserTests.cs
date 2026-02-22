@@ -647,8 +647,8 @@ public class MorphologicalAnalyserTests
         // 板につく (idiomatic compound) — に+つい+て should NOT merge into particle について
         yield return ["板について", new[] { "板について" }];
         yield return ["喜んだだろうね", new[] { "喜んだ","だろう","ね" }];
-        // Comma (、) should not affect segmentation of preceding compound expressions
-        yield return ["そこまで、それは違う", new[] { "そこまで","それ","は","違う" }];
+        // Comma (、) is kept inline for Sudachi context — そこまで splits into そこ+まで in broader context
+        yield return ["そこまで、それは違う", new[] { "そこ","まで","それ","は","違う" }];
         // ホント + katakana noun: Sudachi merges adjacent katakana, PreprocessText splits them
         yield return ["ホントバカだな", new[] { "ホント","バカ","だ","な" }];
         yield return ["ホントダメだな", new[] { "ホント","ダメ","だ","な" }];
@@ -719,6 +719,8 @@ public class MorphologicalAnalyserTests
         yield return ["悪いってんだ", new[] { "悪い", "って", "んだ" }];
         yield return ["俺のどこが悪いってんだ", new[] { "俺", "の", "どこ", "が", "悪い", "って", "んだ" }];
         yield return ["どうしろってんだ", new[] { "どう", "しろ", "って", "んだ" }];
+        // Trailing 」 causes Sudachi to tokenize んだ as 感動詞, must not merge って+んだ→ってんだ
+        yield return ["この森になんの用があるってんだ」", new[] { "この", "森", "に", "なん", "の", "用がある", "って", "んだ" }];
         // やつら should not be split into や + つら
         yield return ["やつらの思うつぼだ", new[] { "やつら", "の", "思うつぼ", "だ" }];
         yield return ["やつらに見つかるな", new[] { "やつら", "に", "見つかる", "な" }];

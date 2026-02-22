@@ -300,6 +300,8 @@ public class RedisJmDictCache : IJmDictCache
 
         foreach (var (wordId, word) in words)
         {
+            ComputeArchaicFlag(word);
+            word.Definitions = [];
             var redisKey = BuildWordKey(wordId);
             var json = JsonSerializer.Serialize(word, _jsonOptions);
             tasks.Add(batch.StringSetAsync(redisKey, json, expiry: _cacheExpiry));
@@ -316,8 +318,9 @@ public class RedisJmDictCache : IJmDictCache
         if (!word.PartsOfSpeech.Contains("arch"))
             return;
 
-        word.IsFullyArchaic = word.Definitions.Count > 0
-                              && word.Definitions.All(d => d.PartsOfSpeech.Contains("arch"));
+        var englishDefs = word.Definitions.Where(d => d.EnglishMeanings.Count > 0).ToList();
+        word.IsFullyArchaic = englishDefs.Count > 0
+                              && englishDefs.All(d => d.PartsOfSpeech.Contains("arch"));
     }
 
     public async Task<bool> IsCacheInitializedAsync()

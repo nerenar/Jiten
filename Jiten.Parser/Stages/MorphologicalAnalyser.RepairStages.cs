@@ -331,7 +331,10 @@ public partial class MorphologicalAnalyser
                 var remainder = word.Text[1..];
                 if (NCompoundSuffixes.Contains(remainder) || NCompoundSuffixes.Any(s => remainder.StartsWith(s)))
                 {
-                    split.Add(CreateNToken());
+                    var nToken = CreateNToken();
+                    if (word.PartOfSpeech == PartOfSpeech.Interjection)
+                        nToken.DictionaryForm = "の";
+                    split.Add(nToken);
                     split.Add(new WordInfo(word)
                     {
                         Text = remainder, DictionaryForm = remainder,
@@ -421,6 +424,39 @@ public partial class MorphologicalAnalyser
                         result.Add(combinedWord!);
                         combined = true;
                         i++;
+                    }
+                }
+
+                // Fallback for ん classified as explanatory (from interjection split):
+                // Sudachi sometimes misparsed verb stems as nouns (e.g., 喜んだだろうね → 喜(noun) + んだ)
+                // Validate via dictionary lookup that noun + ぶ/む/ぬ/ぐ is a real verb
+                if (!combined && i + 1 < split.Count && split[i + 1].Text is "だ" or "で" &&
+                    current.DictionaryForm is "の" or "ん" &&
+                    result.Count > 0 && result[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun &&
+                    HasCompoundLookup != null)
+                {
+                    var prev = result[^1];
+                    string[] ndaVerbEndings = ["ぶ", "む", "ぬ", "ぐ"];
+                    foreach (var ending in ndaVerbEndings)
+                    {
+                        if (HasCompoundLookup(prev.Text + ending) ||
+                            HasCompoundLookup(NormalizeToHiragana(prev.Text) + ending))
+                        {
+                            var candidateText = prev.Text + "ん" + split[i + 1].Text;
+                            var candidateReading = WanaKana.ToHiragana(prev.Reading + "ん" + split[i + 1].Reading);
+                            result.RemoveAt(result.Count - 1);
+                            result.Add(new WordInfo(prev)
+                            {
+                                Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
+                                NormalizedForm = candidateText, Reading = candidateReading,
+                                PartOfSpeechSection1 = PartOfSpeechSection.None,
+                                PartOfSpeechSection2 = PartOfSpeechSection.None,
+                                PartOfSpeechSection3 = PartOfSpeechSection.None
+                            });
+                            combined = true;
+                            i++;
+                            break;
+                        }
                     }
                 }
 

@@ -386,6 +386,13 @@ public class FormSelectionTests
         // User dic tokenizes as single token; Conjunction POS skips verb-fallback priority comparison
         yield return ["つうか何を迷走しているんだ。", "つうか", 2848301, (byte)5];
 
+        // 聞ける → potential of 聞く (1591110), not archaic ichidan 聞ける "to tell" (2517260)
+        // Archaic POS penalty ensures the common potential form wins over the exact surface match
+        yield return ["聞ける", "聞ける", 1591110, (byte)0];
+        yield return ["だから彼女が聞けたのはそこから続くやりとりだ。", "聞けた", 1591110, (byte)0];
+        yield return ["娘の私ひとりの話を聞けない人が国民の声を聞けると思えないけど", "聞けない", 1591110, (byte)0];
+        yield return ["いい結果が聞けるといいわね", "聞ける", 1591110, (byte)0];
+
     }
 
     [Theory]

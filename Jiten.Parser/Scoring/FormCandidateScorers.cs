@@ -51,17 +51,12 @@ internal static class WordPriorityScorer
         if (!isNameContext && word.PartsOfSpeech.ToPartOfSpeech().Contains(PartOfSpeech.Name))
             wordScore -= 50;
 
-        if (word.PartsOfSpeech.Contains("arch"))
+        if (word.IsFullyArchaic)
         {
             bool hasFrequencyMarker = word.Priorities?.Any(p =>
                                                                p is "ichi1" or "ichi2" or "news1" or "news2" or "jiten" ||
                                                                p.StartsWith("nf")) == true;
-            bool hasNonArchaicPos = word.PartsOfSpeech.Any(p =>
-                p is not "arch" and not "exp" and not "uk" and not "on-mim"
-                && (p.StartsWith('v') && p is not "vulg" and not "vet" and not "vidg"
-                    || p is "adj-i" or "adj-ix" or "adj-na" or "adj-pn" or "adj-no"
-                    or "n" or "n-suf" or "n-pref" or "adv" or "int" or "conj" or "pn" or "ctr"));
-            if (!hasFrequencyMarker && !hasNonArchaicPos)
+            if (!hasFrequencyMarker)
                 wordScore -= 350;
         }
 
