@@ -64,7 +64,8 @@ public class DiagnosticCommands(CliContext context)
                 PartsOfSpeech = w.PartsOfSpeech?.Select(p => p.ToString()).ToList(),
                 w.Conjugations
             }).ToList(),
-            FormScoring = diagnostics.Results
+            FormScoring = diagnostics.Results,
+            AdjacentScoring = diagnostics.AdjacentScoring
         };
 
         var jsonOptions = new JsonSerializerOptions

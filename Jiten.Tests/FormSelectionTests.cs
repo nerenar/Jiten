@@ -489,6 +489,11 @@ public class FormSelectionTests
         // CombinePrefixes reading-based path matched おにく because にく is 肉's reading;
         // おにく exclusion prevents the spurious merge so 肉 resolves correctly
         yield return ["お、お肉は余計な脂肪が付きやすいのよ。", "肉", 1463520, (byte)0];
+
+        // キリ → 切り/限り (1383800, n/ctr/prt) "end/limit", not 霧 (1531110, n) "fog/mist"
+        // 1383800 has "prt" in JMDict POS → particle-particle-penalty and orphan-counter-penalty
+        // were wrongly firing; both now require CandidateIsNotNounLike so noun-primary words are exempt
+        yield return ["疑いだしたらキリはない", "キリ", 1383800, (byte)5];
     }
     
     [Theory]

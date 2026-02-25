@@ -94,12 +94,12 @@ internal static class TransitionRuleSets
             -40),
 
         new("particle-particle-penalty-left",
-            [ScoringCondition.CandidateIsParticle],
+            [ScoringCondition.CandidateIsParticle, ScoringCondition.CandidateIsNotNounLike],
             [ScoringCondition.PrevIsParticle],
             -20),
 
         new("particle-particle-penalty-right",
-            [ScoringCondition.CandidateIsParticle],
+            [ScoringCondition.CandidateIsParticle, ScoringCondition.CandidateIsNotNounLike],
             [ScoringCondition.NextIsParticle],
             -20),
 

@@ -105,7 +105,7 @@ internal static class RederivationHelper
             {
                 if (matchedWordIds.Contains(id)) continue;
                 if (!wordCache.TryGetValue(id, out var word)) continue;
-                var posList = word.PartsOfSpeech.ToPartOfSpeech();
+                var posList = word.CachedPOS;
                 if (!posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))) continue;
                 bool isPosIncompat = matchedWordIds.Count > 0 &&
                     !PosMapper.IsJmDictCompatibleWithSudachi(word.PartsOfSpeech, state.WordInfo.PartOfSpeech);

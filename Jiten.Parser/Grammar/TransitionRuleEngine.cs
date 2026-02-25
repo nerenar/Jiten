@@ -264,7 +264,7 @@ internal static class TransitionRuleEngine
         bool CandidateIsSuruNounVal = false)
     {
         public static ConditionContext FromScoringWindow(ScoringWindow w) => new(
-            w.Candidate.Word.PartsOfSpeech.ToPartOfSpeech(),
+            w.Candidate.Word.CachedPOS,
             w.Candidate.Form.Text,
             w.PrevResolvedPOS,
             w.PrevText,

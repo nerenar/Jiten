@@ -11,7 +11,7 @@ public class Deconjugator
 
     public static Deconjugator Instance => _instance.Value;
 
-    private const int DefaultMaxCacheEntries = 250_000;
+    private const int DefaultMaxCacheEntries = 10_000;
     private readonly int _maxCacheEntries;
     private volatile ConcurrentDictionary<string, DeconjugationForm[]> _gen0 =
         new(Environment.ProcessorCount, 4096, StringComparer.Ordinal);

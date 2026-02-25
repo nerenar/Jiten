@@ -53,7 +53,7 @@ internal static class ResegmentationEngine
 
         var wordPosByWordId = wordCache.ToDictionary(
             kvp => kvp.Key,
-            kvp => kvp.Value.PartsOfSpeech.ToPartOfSpeech()
+            kvp => kvp.Value.CachedPOS
                        .FirstOrDefault(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown), PartOfSpeech.Noun));
 
         // Phase 3: apply replacements (already in reverse word-index order per sentence from the loop above)
@@ -124,7 +124,7 @@ internal static class ResegmentationEngine
 
         var wordPosByWordId = wordCache.ToDictionary(
             kvp => kvp.Key,
-            kvp => kvp.Value.PartsOfSpeech.ToPartOfSpeech()
+            kvp => kvp.Value.CachedPOS
                        .FirstOrDefault(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown), PartOfSpeech.Noun));
 
         // Phase 3: apply replacements (already in reverse word-index order per sentence from the loop above)
@@ -162,7 +162,7 @@ internal static class ResegmentationEngine
             var pos = PartOfSpeech.Noun;
             if (bestWordId.HasValue && wordCache.TryGetValue(bestWordId.Value, out var jmWord))
             {
-                var posList = jmWord.PartsOfSpeech.ToPartOfSpeech();
+                var posList = jmWord.CachedPOS;
                 pos = posList.FirstOrDefault(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown), PartOfSpeech.Noun);
             }
 

@@ -50,7 +50,7 @@ internal static class WordPriorityScorer
         if (word.Priorities?.Contains("jiten") == true)
             wordScore += 100;
 
-        if (!isNameContext && word.PartsOfSpeech.ToPartOfSpeech().Contains(PartOfSpeech.Name))
+        if (!isNameContext && word.CachedPOS.Contains(PartOfSpeech.Name))
             wordScore -= 50;
 
         if (word.IsFullyArchaic)

@@ -24,7 +24,7 @@ internal static class CompoundWordSelector
             {
                 if (!wordCache.TryGetValue(wordId, out var word)) continue;
 
-                var posList = word.PartsOfSpeech.ToPartOfSpeech();
+                var posList = word.CachedPOS;
                 if (posList.Contains(PartOfSpeech.Expression))
                 {
                     int score = word.GetPriorityScore(isKana);
@@ -48,7 +48,7 @@ internal static class CompoundWordSelector
             {
                 if (!wordCache.TryGetValue(wordId, out var word)) continue;
 
-                var posList = word.PartsOfSpeech.ToPartOfSpeech();
+                var posList = word.CachedPOS;
                 if (posList.Any(PosMapper.IsValidCompoundPOS))
                 {
                     int score = word.GetPriorityScore(isKana);

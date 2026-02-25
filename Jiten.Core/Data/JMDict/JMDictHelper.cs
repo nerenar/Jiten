@@ -313,6 +313,66 @@ public static class JmDictHelper
         return words;
     }
 
+    /// <summary>
+    /// Computes the set of WordIds where every English-bearing definition sense is tagged "arch".
+    /// Only fetches the minimal data needed — does NOT load full definition meanings.
+    /// </summary>
+    public static async Task<HashSet<int>> LoadFullyArchaicWordIds(JitenDbContext context)
+    {
+        var archCandidateIds = await context.JMDictWords
+            .AsNoTracking()
+            .Where(w => w.PartsOfSpeech.Contains("arch"))
+            .Select(w => w.WordId)
+            .ToListAsync();
+
+        if (archCandidateIds.Count == 0)
+            return new HashSet<int>();
+
+        var archWordsWithDefs = await context.JMDictWords
+            .AsNoTracking()
+            .Include(w => w.Definitions)
+            .Where(w => archCandidateIds.Contains(w.WordId))
+            .ToListAsync();
+
+        var result = new HashSet<int>();
+        foreach (var word in archWordsWithDefs)
+        {
+            var englishDefs = word.Definitions.Where(d => d.EnglishMeanings.Count > 0).ToList();
+            if (englishDefs.Count > 0 && englishDefs.All(d => d.PartsOfSpeech.Contains("arch")))
+                result.Add(word.WordId);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Streams all JmDictWords (without Definitions) in ordered batches, calling the processor
+    /// for each batch. Keeps peak memory proportional to batchSize rather than the full corpus.
+    /// </summary>
+    public static async Task StreamWordBatchesAsync(
+        JitenDbContext context, int batchSize, Func<List<JmDictWord>, Task> processor)
+    {
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+        var allIds = await context.JMDictWords
+            .AsNoTracking()
+            .OrderBy(w => w.WordId)
+            .Select(w => w.WordId)
+            .ToListAsync();
+
+        for (int i = 0; i < allIds.Count; i += batchSize)
+        {
+            var batchIds = allIds.Skip(i).Take(batchSize).ToList();
+            var batch = await context.JMDictWords
+                .AsNoTracking()
+                .Include(w => w.Forms.OrderBy(f => f.ReadingIndex))
+                .Where(w => batchIds.Contains(w.WordId))
+                .ToListAsync();
+
+            await processor(batch);
+        }
+    }
+
 
     public static async Task<Dictionary<string, List<int>>> LoadLookupTable(JitenDbContext context)
     {

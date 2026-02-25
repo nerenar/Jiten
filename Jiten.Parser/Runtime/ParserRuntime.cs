@@ -113,16 +113,21 @@ internal sealed class ParserRuntime
             if (await jmDictCache.IsCacheInitializedAsync())
                 return;
 
-            await using var context = await contextFactory.CreateDbContextAsync();
-            var allWords = await JmDictHelper.LoadAllWords(context);
-            const int batchSize = 10000;
+            await using var ctx = await contextFactory.CreateDbContextAsync();
 
-            for (int i = 0; i < allWords.Count; i += batchSize)
+            // Pre-compute the archaic flag from a small targeted query (only arch-tagged words + their def POS).
+            // This avoids loading all 215K definitions into memory just to strip them immediately after.
+            var fullyArchaicIds = await JmDictHelper.LoadFullyArchaicWordIds(ctx);
+
+            // Stream words in small batches WITHOUT definitions (~2-3GB savings vs. LoadAllWords).
+            // ComputeArchaicFlag in SetWordsAsync respects IsFullyArchaic when Definitions is empty.
+            await JmDictHelper.StreamWordBatchesAsync(ctx, 2000, async batch =>
             {
-                var wordsBatch = allWords.Skip(i).Take(batchSize)
-                                         .ToDictionary(w => w.WordId, w => w);
-                await jmDictCache.SetWordsAsync(wordsBatch);
-            }
+                foreach (var word in batch)
+                    word.IsFullyArchaic = fullyArchaicIds.Contains(word.WordId);
+
+                await jmDictCache.SetWordsAsync(batch.ToDictionary(w => w.WordId, w => w));
+            });
 
             await jmDictCache.SetCacheInitializedAsync();
         }

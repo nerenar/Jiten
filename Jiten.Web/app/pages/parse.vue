@@ -294,7 +294,7 @@
     <OmniSearch />
 
     <template v-if="showParseResults">
-      <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex items-center gap-0.5 flex-wrap">
         <span v-for="(word, index) in words" :key="index" class="pr-1.5 font-noto-sans">
           <span
             v-if="word.wordId != 0"

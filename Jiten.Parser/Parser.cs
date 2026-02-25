@@ -489,9 +489,42 @@ namespace Jiten.Parser
                                                                            JmDictCache))
             {
                 diagnostics?.Results.Clear();
+
+                // Build lookup from old results so we can reuse them
+                var oldResultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)>();
+                for (int i = 0; i < wordInfos.Count; i++)
+                {
+                    var key = GetDedupKey(wordInfos[i]);
+                    oldResultLookup.TryAdd(key, processedWithMargins[i]);
+                }
+
                 wordInfos = ExtractWordInfos(sentences);
-                wordsWithOccurrences = wordInfos.Select(w => (w, 0)).ToList();
-                processedWithMargins = await ProcessWordsInBatches(wordsWithOccurrences, Deconjugator.Instance, diagnostics: diagnostics);
+
+                // Only process tokens not already resolved
+                var newTokens = new List<(WordInfo wordInfo, int occurrences)>();
+                foreach (var wi in wordInfos)
+                {
+                    var key = GetDedupKey(wi);
+                    if (!oldResultLookup.ContainsKey(key))
+                        newTokens.Add((wi, 0));
+                }
+
+                if (newTokens.Count > 0)
+                {
+                    var newResults = await ProcessWordsInBatches(newTokens, Deconjugator.Instance, diagnostics: diagnostics);
+                    for (int i = 0; i < newTokens.Count; i++)
+                    {
+                        var key = GetDedupKey(newTokens[i].wordInfo);
+                        oldResultLookup.TryAdd(key, newResults[i]);
+                    }
+                }
+
+                // Rebuild flat list aligned to new token stream
+                processedWithMargins = wordInfos.Select(wi =>
+                {
+                    var key = GetDedupKey(wi);
+                    return oldResultLookup.TryGetValue(key, out var r) ? r : ((DeckWord?)null, (int?)null);
+                }).ToList();
             }
 
             var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, diagnostics);
@@ -592,15 +625,27 @@ namespace Jiten.Parser
             if (await ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
                                                                            JmDictCache))
             {
-                wordInfos = ExtractWordInfos(sentences);
-                uniqueWords = CountUniqueWords(wordInfos);
-                allProcessedWithMargins = await ProcessWordsInBatches(uniqueWords, deconjugator);
-                resultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)>();
-                for (int i = 0; i < uniqueWords.Count; i++)
+                var newWordInfos = ExtractWordInfos(sentences);
+                var newUniqueWords = new List<(WordInfo wordInfo, int occurrences)>();
+                foreach (var wi in newWordInfos)
                 {
-                    var key = GetDedupKey(uniqueWords[i].wordInfo);
-                    resultLookup.TryAdd(key, allProcessedWithMargins[i]);
+                    var key = GetDedupKey(wi);
+                    if (!resultLookup.ContainsKey(key))
+                        newUniqueWords.Add((wi, 0));
                 }
+
+                if (newUniqueWords.Count > 0)
+                {
+                    var deduped = CountUniqueWords(newUniqueWords.Select(w => w.wordInfo).ToList());
+                    var newResults = await ProcessWordsInBatches(deduped, deconjugator);
+                    for (int i = 0; i < deduped.Count; i++)
+                    {
+                        var key = GetDedupKey(deduped[i].wordInfo);
+                        resultLookup.TryAdd(key, newResults[i]);
+                    }
+                }
+
+                wordInfos = newWordInfos;
             }
 
             var corrected = await ApplyAdjacentScoring(sentences, resultLookup);
@@ -809,7 +854,7 @@ namespace Jiten.Parser
                                                     WordId = preMatchedWordId, ReadingIndex = readingIndex,
                                                     OriginalText = wordData.wordInfo.Text, Occurrences = wordData.occurrences,
                                                     Conjugations = wordData.wordInfo.PreMatchedConjugations ?? [],
-                                                    PartsOfSpeech = preMatchedWord.PartsOfSpeech.ToPartOfSpeech(),
+                                                    PartsOfSpeech = preMatchedWord.CachedPOS,
                                                     Origin = preMatchedWord.Origin
                                                 };
                                 break;
@@ -941,7 +986,7 @@ namespace Jiten.Parser
                                                 {
                                                     WordId = bestV1.WordId, OriginalText = wordData.wordInfo.Text,
                                                     ReadingIndex = stemReadingIndex, Occurrences = wordData.occurrences,
-                                                    Conjugations = ["continuative"], PartsOfSpeech = bestV1.PartsOfSpeech.ToPartOfSpeech(),
+                                                    Conjugations = ["continuative"], PartsOfSpeech = bestV1.CachedPOS,
                                                     Origin = bestV1.Origin
                                                 }, (int?)null);
                                         }
@@ -1196,7 +1241,7 @@ namespace Jiten.Parser
                 {
                     if (!wordCache.TryGetValue(id, out var word)) continue;
 
-                    var posList = word.PartsOfSpeech.ToPartOfSpeech();
+                    var posList = word.CachedPOS;
                     bool hasNonNamePos = posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown));
                     if (hasNonNamePos)
                         hasAnyNonNameCandidate = true;
@@ -1254,7 +1299,7 @@ namespace Jiten.Parser
                     foreach (var id in candidates)
                     {
                         if (!wordCache.TryGetValue(id, out var word)) continue;
-                        var posList = word.PartsOfSpeech.ToPartOfSpeech();
+                        var posList = word.CachedPOS;
                         if (posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown)))
                             compatibleNonNameMatches.Add(word);
                     }
@@ -1327,7 +1372,7 @@ namespace Jiten.Parser
                                     {
                                         WordId = bestPair.Word.WordId, OriginalText = wordData.wordInfo.Text,
                                         ReadingIndex = bestPair.ReadingIndex, Occurrences = wordData.occurrences,
-                                        PartsOfSpeech = bestPair.Word.PartsOfSpeech.ToPartOfSpeech(), Origin = bestPair.Word.Origin
+                                        PartsOfSpeech = bestPair.Word.CachedPOS, Origin = bestPair.Word.Origin
                                     };
                 return (true, deckWord, margin);
             }
@@ -1493,7 +1538,7 @@ namespace Jiten.Parser
                                                        ?.Where(p => !string.IsNullOrEmpty(p)).ToList() ?? [];
                                 foreach (var dictWord in dictWordCache.Values)
                                 {
-                                    List<PartOfSpeech> pos = dictWord.PartsOfSpeech.ToPartOfSpeech();
+                                    List<PartOfSpeech> pos = dictWord.CachedPOS;
                                     if (pos.Contains(wordData.wordInfo.PartOfSpeech))
                                     {
                                         var form = new DeconjugationForm(dictFormHiragana, wordData.wordInfo.Text,
@@ -1532,7 +1577,7 @@ namespace Jiten.Parser
                                                        ?.Where(p => !string.IsNullOrEmpty(p)).ToList() ?? [];
                                 foreach (var normalizedWord in normalizedWordCache.Values)
                                 {
-                                    List<PartOfSpeech> pos = normalizedWord.PartsOfSpeech.ToPartOfSpeech();
+                                    List<PartOfSpeech> pos = normalizedWord.CachedPOS;
                                     if (pos.Contains(wordData.wordInfo.PartOfSpeech))
                                     {
                                         var form = new DeconjugationForm(normalizedHiragana, wordData.wordInfo.Text,
@@ -1584,7 +1629,7 @@ namespace Jiten.Parser
             {
                 if (matchedWordIds.Contains(id)) continue;
                 if (!wordCache.TryGetValue(id, out var directWord)) continue;
-                var posList = directWord.PartsOfSpeech.ToPartOfSpeech();
+                var posList = directWord.CachedPOS;
                 if (!posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))) continue;
                 bool isPosIncompat = matches.Count > 0 &&
                                      !PosMapper.IsJmDictCompatibleWithSudachi(directWord.PartsOfSpeech, wordData.wordInfo.PartOfSpeech);
@@ -1645,7 +1690,7 @@ namespace Jiten.Parser
                                     Conjugations = bestPair.DeconjForm?.Process is ["casual kind request"] && bestPair.Word.PartsOfSpeech.Contains("adj-na")
                                         ? []
                                         : bestPair.DeconjForm?.Process.ToList() ?? [],
-                                    PartsOfSpeech = bestPair.Word.PartsOfSpeech.ToPartOfSpeech(), Origin = bestPair.Word.Origin
+                                    PartsOfSpeech = bestPair.Word.CachedPOS, Origin = bestPair.Word.Origin
                                 };
 
             return (true, deckWord, margin);
@@ -2923,13 +2968,15 @@ namespace Jiten.Parser
                                                                    isArchaicSentence, isSentenceInitial: i == 0);
 
                     bool anyNonZeroBonus = false;
+                    var bonusCache = new Dictionary<FormCandidate, (int bonus, List<string> rules)>();
                     foreach (var candidate in candidates)
                     {
                         var trace = FormCandidateScorer.Score(candidate, scoringContext, ArchaicPosTypes);
                         candidate.SetScoreTrace(trace);
 
-                        var (bonus, _) = AdjacentWordScorer.CalculateContextBonus(candidate, context);
-                        if (bonus != 0) anyNonZeroBonus = true;
+                        var cached = AdjacentWordScorer.CalculateContextBonus(candidate, context);
+                        bonusCache[candidate] = cached;
+                        if (cached.bonus != 0) anyNonZeroBonus = true;
                     }
 
                     // Archaic sentence context changes base scores; if it would flip the winner, also re-select.
@@ -2949,11 +2996,10 @@ namespace Jiten.Parser
                     }
 
                     var newBest = FormCandidateSelector.PickTopCandidatesWithBonus(candidates,
-                                                                                   c => AdjacentWordScorer.CalculateContextBonus(c, context)
-                                                                                       .bonus);
-                    var (newBestBonus, newBestRules) = newBest != null
-                        ? AdjacentWordScorer.CalculateContextBonus(newBest, context)
-                        : (0, null);
+                                                                                   c => bonusCache.TryGetValue(c, out var cb) ? cb.bonus : 0);
+                    var (newBestBonus, newBestRules) = newBest != null && bonusCache.TryGetValue(newBest, out var nb)
+                        ? (nb.bonus, nb.rules)
+                        : (0, (List<string>?)null);
                     int newBestAdjusted = newBest != null ? ScoringPolicy.EffectiveScore(newBest) + newBestBonus : int.MinValue;
 
                     bool changed = newBest != null &&
@@ -3008,7 +3054,7 @@ namespace Jiten.Parser
                                             Conjugations = newBest.DeconjForm?.Process is ["casual kind request"] && newBest.Word.PartsOfSpeech.Contains("adj-na")
                                                 ? []
                                                 : newBest.DeconjForm?.Process.ToList() ?? currentResult.Conjugations,
-                                            PartsOfSpeech = newBest.Word.PartsOfSpeech.ToPartOfSpeech(), Origin = newBest.Word.Origin,
+                                            PartsOfSpeech = newBest.Word.CachedPOS, Origin = newBest.Word.Origin,
                                             SudachiReading = currentInfo.Reading, SudachiPartOfSpeech = currentInfo.PartOfSpeech
                                         };
                         currentInfo.ResolvedWordId = newBest.Word.WordId;

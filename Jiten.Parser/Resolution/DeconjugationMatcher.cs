@@ -28,7 +28,7 @@ internal static class DeconjugationMatcher
                 }
                 else
                 {
-                    var posList = word.PartsOfSpeech.ToPartOfSpeech();
+                    var posList = word.CachedPOS;
                     if (!posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown)))
                         continue;
                 }

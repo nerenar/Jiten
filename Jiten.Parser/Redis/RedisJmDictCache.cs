@@ -350,6 +350,10 @@ public class RedisJmDictCache : IJmDictCache
         if (!word.PartsOfSpeech.Contains("arch"))
             return;
 
+        // Definitions weren't loaded — IsFullyArchaic was pre-computed by the caller.
+        if (word.Definitions.Count == 0)
+            return;
+
         var englishDefs = word.Definitions.Where(d => d.EnglishMeanings.Count > 0).ToList();
         word.IsFullyArchaic = englishDefs.Count > 0
                               && englishDefs.All(d => d.PartsOfSpeech.Contains("arch"));

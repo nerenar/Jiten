@@ -15,6 +15,12 @@ public class JmDictWord
     public List<JmDictWordForm> Forms { get; set; } = [];
 
     [NotMapped]
+    private List<PartOfSpeech>? _cachedPartsOfSpeech;
+
+    [NotMapped]
+    public List<PartOfSpeech> CachedPOS => _cachedPartsOfSpeech ??= PartsOfSpeech.ToPartOfSpeech();
+
+    [NotMapped]
     public bool IsFullyArchaic { get; set; }
 
     public int GetPriorityScore(bool isKana)
@@ -72,7 +78,7 @@ public class JmDictWord
         }
 
         // Deprioritise names
-        if (PartsOfSpeech.ToPartOfSpeech().Contains(PartOfSpeech.Name))
+        if (CachedPOS.Contains(PartOfSpeech.Name))
             score -= 50;
 
         return score;
