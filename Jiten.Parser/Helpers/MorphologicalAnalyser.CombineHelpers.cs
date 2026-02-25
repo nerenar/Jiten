@@ -6,7 +6,7 @@ namespace Jiten.Parser;
 
 public partial class MorphologicalAnalyser
 {
-    private bool CompoundExistsInLookup(string compoundForm, Func<string, List<DeconjugationForm>> cachedDeconjugate)
+    private bool CompoundExistsInLookup(string compoundForm, Func<string, IReadOnlyList<DeconjugationForm>> cachedDeconjugate)
     {
         if (HasCompoundLookup!(compoundForm))
             return true;
@@ -14,6 +14,27 @@ public partial class MorphologicalAnalyser
         foreach (var form in cachedDeconjugate(compoundForm))
         {
             if (HasCompoundLookup(form.Text))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static readonly HashSet<char> DictionaryVerbEndings =
+        ['う', 'く', 'ぐ', 'す', 'つ', 'ぬ', 'ぶ', 'む', 'る'];
+
+    private bool VerbDictFormExistsInLookup(string dictForm, string? normalizedForm, Func<string, IReadOnlyList<DeconjugationForm>> cachedDeconjugate)
+    {
+        if (HasCompoundLookup!(dictForm))
+            return true;
+
+        if (normalizedForm != null && normalizedForm != dictForm && HasCompoundLookup(normalizedForm))
+            return true;
+
+        foreach (var form in cachedDeconjugate(dictForm))
+        {
+            if (form.Text.Length > 0 && DictionaryVerbEndings.Contains(form.Text[^1]) &&
+                HasCompoundLookup(form.Text))
                 return true;
         }
 
@@ -65,10 +86,14 @@ public partial class MorphologicalAnalyser
             // Condition uses accumulator (verb) and next word (possible dependant + specific forms)
             // Note: きる is intentionally excluded because it creates compound verbs (e.g., 食べきる)
             // that are often not in JMDict, causing lookup failures. Keep them separate for better parsing.
+            bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith("う") &&
+                                          nextWord.Text.EndsWith("いて");
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
                 currentWord.PartOfSpeech == PartOfSpeech.Verb && !currentWord.Text.EndsWith("たり") &&
                 nextWord.Text != currentWord.Text &&
-                nextWord.DictionaryForm is "得る" or "する" or "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす")
+                !isClassicalWaRowTeForm &&
+                (nextWord.DictionaryForm is "得る" or "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす" ||
+                 (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith("た") || currentWord.Text.EndsWith("だ")))))
             {
                 currentWord.Text += nextWord.Text;
             }
@@ -127,7 +152,8 @@ public partial class MorphologicalAnalyser
         {
             WordInfo currentWord = wordInfos[i];
 
-            // Pattern 1: Verb + て (particle) + いる (3 tokens)
+            // Pattern 1: Verb + て (particle) + te-form auxiliary (3 tokens)
+            // Handles cases where て wasn't merged by CombineConjunctiveParticle
             if (i + 2 < wordInfos.Count)
             {
                 WordInfo nextWord1 = wordInfos[i + 1];
@@ -135,7 +161,7 @@ public partial class MorphologicalAnalyser
 
                 if (currentWord.PartOfSpeech is PartOfSpeech.Verb &&
                     nextWord1.DictionaryForm == "て" &&
-                    nextWord2.DictionaryForm == "いる")
+                    TeFormAuxChainVerbs.Contains(nextWord2.DictionaryForm))
                 {
                     WordInfo combinedWord = new WordInfo(currentWord);
                     combinedWord.Text += nextWord1.Text + nextWord2.Text;
@@ -151,10 +177,15 @@ public partial class MorphologicalAnalyser
             {
                 WordInfo nextWord = wordInfos[i + 1];
 
+                // Classical ワ行 te-form: e.g. 貰いて (DictForm=貰う + いて suffix) vs modern 貰って
+                // These shouldn't be merged as subsidiary verbs; they're their own te-form tokens
+                bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith("う") &&
+                                              nextWord.Text.EndsWith("いて");
                 if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
                     nextWord.PartOfSpeech == PartOfSpeech.Verb &&
-                    nextWord.DictionaryForm != "おる")
+                    nextWord.DictionaryForm != "おる" &&
+                    !isClassicalWaRowTeForm)
                 {
                     bool isKnownSubsidiary =
                         (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
@@ -167,7 +198,7 @@ public partial class MorphologicalAnalyser
                     if (!isKnownSubsidiary)
                     {
                         var deconj = Deconjugator.Instance;
-                        string nextHiragana = KanaNormalizer.Normalize(WanaKana.ToHiragana(nextWord.Text));
+                        string nextHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(nextWord.Text));
                         var forms = deconj.Deconjugate(nextHiragana);
                         isKnownSubsidiary = forms.Any(f => TeFormSubsidiaryVerbs.Contains(f.Text));
                     }

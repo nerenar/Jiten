@@ -55,6 +55,13 @@ public class DeckWord
     [JsonIgnore]
     public string SudachiReading { get; set; } = string.Empty;
 
+    [NotMapped]
+    [JsonIgnore]
+    public PartOfSpeech SudachiPartOfSpeech { get; set; }
+
+    [NotMapped]
+    public int? CachedMargin { get; set; }
+
     [JsonIgnore]
     public Deck Deck { get; set; } = new();
     

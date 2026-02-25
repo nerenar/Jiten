@@ -29,6 +29,7 @@ public partial class MorphologicalAnalyser
         "いたす",
         "いただく",
         "頂く",
+        "する",
     ];
 
     private static readonly HashSet<string> TeFormSubsidiaryVerbs =
@@ -40,6 +41,21 @@ public partial class MorphologicalAnalyser
         "さしあげる", "差し上げる",
         "くださる", "下さる",
         "おく", "置く",
+        "みる", "見る",
+    ];
+
+    // Te-form auxiliary verbs with full deconjugator support (both dict form and conjugated forms)
+    // Used in 3-token combining: verb + て/で + aux
+    // Only include verbs that have deconjugator rules so combined tokens get proper conjugation info
+    private static readonly HashSet<string> TeFormAuxChainVerbs =
+    [
+        "いる", "居る",
+        "ある", "有る",
+        "おく", "置く",
+        "しまう", "仕舞う",
+        "いく", "行く",
+        "くる", "来る",
+        "みる", "見る",
     ];
 
     private static readonly Dictionary<string, string> AuxiliaryVerbStems = new()
@@ -107,6 +123,8 @@ public partial class MorphologicalAnalyser
         ("いっしょ", "に", PartOfSpeech.Adverb),
         ("と", "言った", PartOfSpeech.Conjunction),
         ("その", "時", PartOfSpeech.Expression),
+        ("そう", "いえば", PartOfSpeech.Expression),
+        ("出来", "なさそう", PartOfSpeech.Verb),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

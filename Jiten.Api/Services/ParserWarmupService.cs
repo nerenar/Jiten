@@ -12,7 +12,7 @@ public class ParserWarmupService(IDbContextFactory<JitenDbContext> contextFactor
         {
             logger.LogInformation("Parser warmup starting");
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await Parser.Parser.WarmupAsync(contextFactory);
+            await Parser.Parser.WarmupAsync(contextFactory, msg => logger.LogInformation("{Msg}", msg));
             sw.Stop();
             logger.LogInformation("Parser warmup completed in {ElapsedMs}ms", sw.ElapsedMilliseconds);
         }

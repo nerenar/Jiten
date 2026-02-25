@@ -361,7 +361,8 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             return Results.Ok(new DictionarySearchResultDto { Query = query ?? "" });
 
         limit = Math.Clamp(limit, 1, 100);
-        var trimmed = query.Trim().ToLowerInvariant();
+        var originalTrimmed = query.Trim();
+        var trimmed = originalTrimmed.ToLowerInvariant();
 
         if (trimmed.Length > 200)
             return Results.BadRequest("Query too long");
@@ -383,6 +384,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             return Results.BadRequest("Query must contain searchable text");
 
         var hasJapanese = ContainsJapanese(cleanText);
+        var hasFullwidthLatin = cleanText.Any(c => (c >= '\uFF21' && c <= '\uFF3A') || (c >= '\uFF41' && c <= '\uFF5A'));
         var isAsciiOnly = cleanText.All(c => c < 128);
         var hasSpaces = cleanText.Contains(' ');
 
@@ -415,6 +417,12 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             queryType = "japanese";
             var wordIds = await SearchLookupsExact(trimmed, limit, offset);
             results = await BuildDictionaryEntries(wordIds, trimmed);
+        }
+        else if (hasFullwidthLatin)
+        {
+            queryType = "japanese";
+            var wordIds = await SearchLookupsExact(originalTrimmed, limit, offset);
+            results = await BuildDictionaryEntries(wordIds, originalTrimmed);
         }
         else if (isAsciiOnly && !hasSpaces)
         {
@@ -472,9 +480,10 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
     private async Task<List<int>> SearchLookupsExact(string lookupKey, int limit, int offset)
     {
+        var hiragana = WanaKana.ToHiragana(lookupKey);
         return await context.Lookups
             .AsNoTracking()
-            .Where(l => l.LookupKey == lookupKey)
+            .Where(l => l.LookupKey == lookupKey || (hiragana != lookupKey && l.LookupKey == hiragana))
             .Select(l => l.WordId)
             .Distinct()
             .OrderBy(id => id)

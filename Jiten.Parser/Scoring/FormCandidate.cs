@@ -17,6 +17,7 @@ internal sealed class FormCandidate(
     public DeconjugationForm? DeconjForm { get; } = deconjForm;
 
     public FormScoreTrace ScoreTrace { get; private set; }
+    public bool IsPosIncompatibleDirectSurface { get; set; }
 
     public int TotalScore => ScoreTrace.TotalScore;
     public int WordScore => ScoreTrace.WordScore;
@@ -36,14 +37,18 @@ internal readonly record struct FormScoringContext(
     string? NormalizedForm,
     bool IsNameContext,
     string? SudachiReading,
-    bool IsKanaSurface)
+    bool IsKanaSurface,
+    bool IsArchaicSentence = false,
+    bool IsSentenceInitial = false)
 {
     public static FormScoringContext Create(
         string surface,
         string? dictionaryForm,
         string? normalizedForm,
         bool isNameContext,
-        string? sudachiReading)
+        string? sudachiReading,
+        bool isArchaicSentence = false,
+        bool isSentenceInitial = false)
     {
         return new FormScoringContext(
             surface,
@@ -51,8 +56,20 @@ internal readonly record struct FormScoringContext(
             normalizedForm,
             isNameContext,
             sudachiReading,
-            WanaKana.IsKana(surface));
+            WanaKana.IsKana(surface),
+            isArchaicSentence,
+            isSentenceInitial);
     }
+}
+
+internal sealed record CandidateSelectionResult(
+    FormCandidate? Best,
+    IReadOnlyList<FormCandidate> TopN,
+    int? MarginToSecond)
+{
+    public bool IsLowConfidence    => MarginToSecond.HasValue && MarginToSecond.Value < ScoringPolicy.LowConfidenceThreshold;
+    public bool IsMediumConfidence => MarginToSecond.HasValue && MarginToSecond.Value is >= ScoringPolicy.LowConfidenceThreshold and < ScoringPolicy.HighConfidenceThreshold;
+    public bool IsHighConfidence   => MarginToSecond.HasValue && MarginToSecond.Value >= ScoringPolicy.HighConfidenceThreshold;
 }
 
 internal readonly record struct FormScoreTrace(

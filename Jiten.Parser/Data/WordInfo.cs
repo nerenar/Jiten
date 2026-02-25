@@ -17,8 +17,10 @@ public class WordInfo
     public bool IsPersonNameContext { get; set; }
     public int? PreMatchedWordId { get; set; }
     public List<string>? PreMatchedConjugations { get; set; }
+    public List<int>? PreMatchedCandidateWordIds { get; set; }
     public bool IsImperative { get; set; }
     public bool WasReclassifiedFromSuffix { get; set; }
+    public int? ResolvedWordId { get; set; }
 
     public WordInfo(){}
 
@@ -35,9 +37,11 @@ public class WordInfo
         IsInvalid = other.IsInvalid;
         IsPersonNameContext = other.IsPersonNameContext;
         PreMatchedWordId = other.PreMatchedWordId;
-        PreMatchedConjugations = other.PreMatchedConjugations;
+        PreMatchedConjugations = other.PreMatchedConjugations?.ToList();
+        PreMatchedCandidateWordIds = other.PreMatchedCandidateWordIds?.ToList();
         IsImperative = other.IsImperative;
         WasReclassifiedFromSuffix = other.WasReclassifiedFromSuffix;
+        ResolvedWordId = other.ResolvedWordId;
     }
 
     public WordInfo(string sudachiLine)

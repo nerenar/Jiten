@@ -32,9 +32,6 @@
     if (hasJapanese) return false;
     if (text.includes(' ')) return true;
 
-    const normalised = response.value?.normalisedText;
-    if (normalised && /[\uFF21-\uFF3A\uFF41-\uFF5A]/.test(normalised)) return true;
-
     const matched = words.value.filter(w => w.wordId !== 0);
     const unmatched = words.value.filter(w => w.wordId === 0);
     if (matched.length > 0 && matched.every(w => w.originalText.length === 1) && unmatched.length > 0) return true;
@@ -138,6 +135,12 @@
     );
   });
 
+  const wholeStringMatches = computed(() => {
+    if (!showParseResults.value || !selectedWord.value) return [];
+    if (selectedWord.value.originalText === String(searchContent.value).trim()) return [];
+    return allResults.value;
+  });
+
   const dictionaryMatches = computed(() => {
     if (!showParseResults.value) return allDictResults.value;
     // Only include English gloss results: dictionaryResults from backend,
@@ -154,11 +157,11 @@
   const isSearchLoading = computed(() => searchStatus.value === 'pending');
 
   const directMatchesLabel = computed(() => {
-    if (showParseResults.value && wordDirectMatches.value.length > 0) return 'Direct matches';
     const type = searchQueryType.value;
-    if (type === 'english') return 'Dictionary results';
-    if (type === 'wildcard') return 'Wildcard results';
-    return 'Direct matches';
+    if (type === 'english') return { prefix: 'Dictionary results', subject: '' };
+    if (type === 'wildcard') return { prefix: 'Wildcard results', subject: '' };
+    if (showParseResults.value && selectedWord.value) return { prefix: 'Direct matches for', subject: selectedWord.value.originalText };
+    return { prefix: 'Direct matches for', subject: String(searchContent.value).trim() };
   });
 
   const resultsTotalLabel = computed(() => {
@@ -269,11 +272,7 @@
 
   const handleWordClick = (word: DeckWord) => {
     if (word.wordId !== 0) {
-      if (selectedWord.value?.wordId === word.wordId && selectedWord.value?.readingIndex === word.readingIndex) {
-        selectedWord.value = undefined;
-      } else {
-        selectedWord.value = word;
-      }
+      selectedWord.value = word;
     }
   };
 
@@ -295,16 +294,27 @@
     <OmniSearch />
 
     <template v-if="showParseResults">
-      <span v-for="(word, index) in words" :key="index" class="pr-1.5 font-noto-sans">
-        <span
-          v-if="word.wordId != 0"
-          class="text-purple-600 dark:text-purple-400 text-lg underline underline-offset-4 cursor-pointer hover:font-bold"
-          @click="handleWordClick(word)"
-        >
-          {{ word.originalText }}
+      <div class="flex items-center gap-2 flex-wrap">
+        <span v-for="(word, index) in words" :key="index" class="pr-1.5 font-noto-sans">
+          <span
+            v-if="word.wordId != 0"
+            class="text-purple-600 dark:text-purple-400 text-lg underline underline-offset-4 cursor-pointer hover:font-bold"
+            :class="{ 'font-bold': selectedWord?.wordId === word.wordId && selectedWord?.readingIndex === word.readingIndex }"
+            @click="handleWordClick(word)"
+          >
+            {{ word.originalText }}
+          </span>
+          <span v-else>{{ word.originalText }}</span>
         </span>
-        <span v-else>{{ word.originalText }}</span>
-      </span>
+        <button
+          v-if="selectedWord"
+          class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 ml-1"
+          title="Deselect word"
+          @click="selectedWord = undefined"
+        >
+          Clear selection
+        </button>
+      </div>
 
       <div v-if="selectedWord">
         <Transition name="fade" mode="out-in">
@@ -333,8 +343,8 @@
           class="text-gray-500"
         />
         <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-          {{ directMatchesLabel }}
-          <span class="text-xs">({{ resultsTotalLabel }})</span>
+          {{ directMatchesLabel.prefix }}<template v-if="directMatchesLabel.subject"> <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ directMatchesLabel.subject }}</span></template>
+          <span class="text-xs"> ({{ resultsTotalLabel }})</span>
         </h2>
       </div>
 
@@ -354,6 +364,22 @@
         <div v-if="!directMatchesTruncated && (showParseResults ? canLoadMoreWordResults : canLoadMoreResults)" ref="resultsSentinel" class="flex justify-center py-4">
           <ProgressSpinner v-if="isLoadingMoreResults" style="width: 30px; height: 30px" stroke-width="4" />
         </div>
+      </div>
+    </div>
+
+    <div v-if="wholeStringMatches.length > 0" class="mt-4">
+      <div class="flex items-center gap-2 mb-2">
+        <Icon name="material-symbols:expand-more" class="text-gray-500" />
+        <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
+          Direct matches for <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ String(searchContent).trim() }}</span>
+        </h2>
+      </div>
+      <div class="flex flex-col gap-2">
+        <DictionaryResultEntry
+          v-for="entry in wholeStringMatches"
+          :key="`whole-${entry.wordId}-${entry.readingIndex}`"
+          :entry="entry"
+        />
       </div>
     </div>
 

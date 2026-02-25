@@ -126,6 +126,11 @@ public class Program
             await diagnosticCommands.ParseTest(options);
         }
 
+        if (options.ParseDeckTest != null)
+        {
+            await diagnosticCommands.ParseDeckTest(options);
+        }
+
         if (options.RunParserTests)
         {
             await diagnosticCommands.RunParserTests(options);
@@ -154,6 +159,11 @@ public class Program
         if (options.FlushRedis)
         {
             await diagnosticCommands.FlushRedisCache();
+        }
+
+        if (options.ScanConfidence)
+        {
+            await diagnosticCommands.ScanConfidence(options);
         }
 
         // Dictionary commands

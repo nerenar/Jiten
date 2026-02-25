@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using System.Threading;
 using Jiten.Core.Data;
+using Jiten.Parser.Grammar;
 
 namespace Jiten.Parser.Diagnostics;
 
@@ -14,8 +15,33 @@ public class ParserDiagnostics
     public SudachiDiagnostics? Sudachi { get; set; }
     public List<TokenProcessingStage> TokenStages { get; set; } = [];
     public List<WordResult> Results { get; set; } = [];
+    public List<AdjacentScoringEntry> AdjacentScoring { get; set; } = [];
     public ParserRunSummary RunSummary { get; set; } = new();
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<TransitionViolationEntry>? TransitionViolations { get; private set; }
+
+    internal void LogTransitionViolation(string ruleId, in TokenWindow window)
+    {
+        TransitionViolations ??= [];
+        TransitionViolations.Add(new TransitionViolationEntry(
+            ruleId,
+            window.Current.Text,
+            window.Current.PartOfSpeech,
+            window.Prev?.PartOfSpeech));
+    }
+
+    public IEnumerable<WordResult> GetLowConfidenceResults(int threshold = 15) =>
+        Results.Where(r => r is not null && r.MarginToSecond.HasValue && r.MarginToSecond.Value < threshold);
 }
+
+public sealed record TransitionViolationEntry(
+    string RuleId,
+    string TokenText,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))]
+    PartOfSpeech TokenPos,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))]
+    PartOfSpeech? PrevPos);
 
 /// <summary>
 /// Lightweight counters for parse-run-level health and fallback behavior.
@@ -24,41 +50,15 @@ public class ParserRunSummary
 {
     private int _processSemaphoreTimeoutCount;
     private int _unresolvedTokenCount;
-    private int _rescueInvocationCount;
-    private int _rescueCandidateCount;
-    private int _rescueRecoveredCount;
-    private int _rescueUnresolvedCount;
 
     public int ProcessSemaphoreTimeoutCount => _processSemaphoreTimeoutCount;
     public int UnresolvedTokenCount => _unresolvedTokenCount;
-    public int RescueInvocationCount => _rescueInvocationCount;
-    public int RescueCandidateCount => _rescueCandidateCount;
-    public int RescueRecoveredCount => _rescueRecoveredCount;
-    public int RescueUnresolvedCount => _rescueUnresolvedCount;
 
     public void IncrementProcessSemaphoreTimeoutCount() =>
         Interlocked.Increment(ref _processSemaphoreTimeoutCount);
 
     public void IncrementUnresolvedTokenCount() =>
         Interlocked.Increment(ref _unresolvedTokenCount);
-
-    public void AddRescueInvocations(int count)
-    {
-        if (count > 0)
-            Interlocked.Add(ref _rescueInvocationCount, count);
-    }
-
-    public void AddRescueCandidates(int count)
-    {
-        if (count > 0)
-            Interlocked.Add(ref _rescueCandidateCount, count);
-    }
-
-    public void IncrementRescueRecoveredCount() =>
-        Interlocked.Increment(ref _rescueRecoveredCount);
-
-    public void IncrementRescueUnresolvedCount() =>
-        Interlocked.Increment(ref _rescueUnresolvedCount);
 }
 
 /// <summary>
@@ -123,6 +123,16 @@ public class WordResult
     public int? WordId { get; set; }
     public byte? ReadingIndex { get; set; }
     public List<FormCandidateDiagnostic> Candidates { get; set; } = [];
+    public int? MarginToSecond { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConfidenceLevel => MarginToSecond switch
+    {
+        null    => "single",
+        >= 40   => "high",
+        >= 15   => "medium",
+        _       => "low"
+    };
 }
 
 public class FormCandidateDiagnostic
@@ -192,4 +202,33 @@ public class FormTestFailure
     public int? ActualWordId { get; set; }
     public byte? ActualReadingIndex { get; set; }
     public string Reason { get; set; } = string.Empty;
+}
+
+public class AdjacentScoringEntry
+{
+    public int Position { get; set; }
+    public string Surface { get; set; } = string.Empty;
+    public AdjacentTokenInfo? LeftContext { get; set; }
+    public AdjacentTokenInfo? RightContext { get; set; }
+    public List<string> RulesMatched { get; set; } = [];
+    public AdjacentCandidateInfo? FirstPassWinner { get; set; }
+    public AdjacentCandidateInfo? AdjustedWinner { get; set; }
+    public bool Changed { get; set; }
+}
+
+public class AdjacentTokenInfo
+{
+    public string Text { get; set; } = string.Empty;
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public PartOfSpeech Pos { get; set; }
+}
+
+public class AdjacentCandidateInfo
+{
+    public int WordId { get; set; }
+    public byte ReadingIndex { get; set; }
+    public int Score { get; set; }
+    public int ContextBonus { get; set; }
+    public int AdjustedScore { get; set; }
 }

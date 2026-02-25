@@ -69,7 +69,7 @@ public partial class MorphologicalAnalyser
             var mainVerb = new WordInfo
                            {
                                Text = mainVerbSurface, DictionaryForm = mainVerbDict, NormalizedForm = mainVerbDict,
-                               PartOfSpeech = PartOfSpeech.Verb, Reading = WanaKana.ToHiragana(mainVerbSurface)
+                               PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(mainVerbSurface)
                            };
 
             // Create the auxiliary verb token
@@ -77,7 +77,7 @@ public partial class MorphologicalAnalyser
                           {
                               Text = auxVerbSurface, DictionaryForm = matchedAux, NormalizedForm = matchedAux,
                               PartOfSpeech = PartOfSpeech.Verb, PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant,
-                              Reading = WanaKana.ToHiragana(auxVerbSurface)
+                              Reading = KanaConverter.ToHiragana(auxVerbSurface)
                           };
 
             result.Add(mainVerb);
@@ -104,7 +104,7 @@ public partial class MorphologicalAnalyser
             var word = wordInfos[i];
 
             // Split だな misparsed as 棚 (shelf) → だ (copula) + な (particle)
-            if (word.Text == "だな" && word.PartOfSpeech == PartOfSpeech.Noun && word.NormalizedForm == "棚")
+            if (word is { Text: "だな", PartOfSpeech: PartOfSpeech.Noun, NormalizedForm: "棚" })
             {
                 result.Add(new WordInfo { Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "だ" });
                 result.Add(new WordInfo { Text = "な", DictionaryForm = "な", NormalizedForm = "な", PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle, Reading = "な" });

@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Text;
 using Jiten.Core.Utils;
-using WanaKanaShaapu;
 
 namespace Jiten.Parser;
 
@@ -129,6 +128,20 @@ static class SudachiInterop
         return table;
     }
 
+    private static bool HasNoJapaneseChars(string text)
+    {
+        foreach (char c in text)
+        {
+            if ((c >= 0x3040 && c <= 0x309F) ||
+                (c >= 0x30A0 && c <= 0x30FF) ||
+                (c >= 0x4E00 && c <= 0x9FAF) ||
+                (c >= 0xFF21 && c <= 0xFF3A) ||
+                (c >= 0xFF41 && c <= 0xFF5A))
+                return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Fast character filter using lookup table and ArrayPool.
     /// Returns original string if no characters were removed (fast path).
@@ -235,8 +248,8 @@ static class SudachiInterop
                 // Clean up text using fast lookup table filter
                 inputText = FilterAllowedChars(inputText);
 
-                // if there's no kanas or kanjis, abort
-                if (WanaKana.IsRomaji(inputText))
+                // if there's no kanas, kanjis, or fullwidth letters, abort
+                if (HasNoJapaneseChars(inputText))
                     return "";
 
                 byte[] inputBytes = Encoding.UTF8.GetBytes(inputText + "\0");
@@ -286,8 +299,8 @@ static class SudachiInterop
                 // Clean up text using fast lookup table filter
                 inputText = FilterAllowedChars(inputText);
 
-                // If there's no kanas or kanjis, abort
-                if (WanaKana.IsRomaji(inputText))
+                // If there's no kanas, kanjis, or fullwidth letters, abort
+                if (HasNoJapaneseChars(inputText))
                     return new List<WordInfo>();
 
                 ResetCallbackState();

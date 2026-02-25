@@ -136,7 +136,7 @@ public partial class MorphologicalAnalyser
                 if (prev.Text == "も")
                 {
                     var shiToken = GetPrevToken(2);
-                    if (shiToken != null && shiToken.Text == "し")
+                    if (shiToken is { Text: "し" })
                     {
                         var verbBefore = GetPrevToken(3);
                         if (verbBefore != null && (verbBefore.Text.EndsWith("て") || verbBefore.Text.EndsWith("で") ||
@@ -196,10 +196,10 @@ public partial class MorphologicalAnalyser
                 Text = text, DictionaryForm = text, NormalizedForm = text, Reading = text, PartOfSpeech = PartOfSpeech.Interjection
             };
 
-        static bool IsVerbPast(List<DeconjugationForm> forms) =>
+        static bool IsVerbPast(IReadOnlyList<DeconjugationForm> forms) =>
             forms.Any(f => f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && f.Process.Any(p => p == "past"));
 
-        static bool IsRuVerb(List<DeconjugationForm> forms, string expectedDictionaryHiragana) =>
+        static bool IsRuVerb(IReadOnlyList<DeconjugationForm> forms, string expectedDictionaryHiragana) =>
             forms.Any(f => f.Text == expectedDictionaryHiragana && f.Tags.Any(t => t is "v1" or "v5r"));
 
         for (int i = 0; i < wordInfos.Count; i++)
@@ -218,8 +218,7 @@ public partial class MorphologicalAnalyser
             // Sudachi splits Xん+ー as X + んー when ー causes the filler interpretation
             // e.g., 総ちゃんー → 総 + ちゃ(noun) + んー(filler) → 総 + ちゃん
             if (current.PartOfSpeech is PartOfSpeech.Interjection or PartOfSpeech.Filler &&
-                current.Text.Length >= 2 &&
-                current.Text[0] == 'ん' &&
+                current.Text is ['ん', _, ..] &&
                 current.Text[1..].All(c => c == 'ー') &&
                 prev.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun &&
                 prev.Text.Length <= 2 &&
@@ -232,7 +231,7 @@ public partial class MorphologicalAnalyser
             // Pattern 0: [prefix] + [る OOV] + [ー symbol]
             // Sudachi splits る-verbs when followed by expressive elongation ー
             // e.g., 来るー → 来(prefix) + る(OOV noun) + ー(symbol)
-            if (current.PartOfSpeech == PartOfSpeech.SupplementarySymbol && current.Text == "ー" &&
+            if (current is { PartOfSpeech: PartOfSpeech.SupplementarySymbol, Text: "ー" } &&
                 result.Count >= 2 &&
                 prev is { Text: "る", PartOfSpeech: PartOfSpeech.Noun } &&
                 result[^2].PartOfSpeech == PartOfSpeech.Prefix)
@@ -268,7 +267,7 @@ public partial class MorphologicalAnalyser
                     result[^1] = new WordInfo(prev)
                                  {
                                      Text = verbCandidate, DictionaryForm = verbCandidate, NormalizedForm = verbCandidate,
-                                     Reading = WanaKana.ToHiragana(prev.Reading + current.Text[..^1]), PartOfSpeech = PartOfSpeech.Verb
+                                     Reading = KanaConverter.ToHiragana(prev.Reading + current.Text[..^1]), PartOfSpeech = PartOfSpeech.Verb
                                  };
                     // Add the elongation う as a separate token
                     result.Add(MakeInterjection("う"));
@@ -288,7 +287,7 @@ public partial class MorphologicalAnalyser
 
                 if (isValidVerbPast)
                 {
-                    result[^1] = new WordInfo(prev) { Text = pastCandidate, Reading = WanaKana.ToHiragana(prev.Reading + "た"), PartOfSpeech = PartOfSpeech.Verb };
+                    result[^1] = new WordInfo(prev) { Text = pastCandidate, Reading = KanaConverter.ToHiragana(prev.Reading + "た"), PartOfSpeech = PartOfSpeech.Verb };
                     result.Add(MakeInterjection("あ"));
                     continue;
                 }
@@ -396,7 +395,7 @@ public partial class MorphologicalAnalyser
                 var candidateText = current.Text + split[i + 1].Text;
                 if (IsNdaVerbForm(deconj.Deconjugate(NormalizeToHiragana(candidateText))))
                 {
-                    var candidateReading = WanaKana.ToHiragana(current.Reading + split[i + 1].Reading);
+                    var candidateReading = KanaConverter.ToHiragana(current.Reading + split[i + 1].Reading);
                     result.Add(new WordInfo(current)
                     {
                         Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
@@ -443,7 +442,7 @@ public partial class MorphologicalAnalyser
                             HasCompoundLookup(NormalizeToHiragana(prev.Text) + ending))
                         {
                             var candidateText = prev.Text + "ん" + split[i + 1].Text;
-                            var candidateReading = WanaKana.ToHiragana(prev.Reading + "ん" + split[i + 1].Reading);
+                            var candidateReading = KanaConverter.ToHiragana(prev.Reading + "ん" + split[i + 1].Reading);
                             result.RemoveAt(result.Count - 1);
                             result.Add(new WordInfo(prev)
                             {
@@ -479,7 +478,7 @@ public partial class MorphologicalAnalyser
                             negativeWord.Text = candidateText;
                             negativeWord.DictionaryForm = verbStem.DictionaryForm;
                             negativeWord.NormalizedForm = candidateText;
-                            negativeWord.Reading = WanaKana.ToHiragana(verbStem.Reading + negativeWord.Reading);
+                            negativeWord.Reading = KanaConverter.ToHiragana(verbStem.Reading + negativeWord.Reading);
                         }
                     }
 
@@ -525,7 +524,7 @@ public partial class MorphologicalAnalyser
             // Sudachi sometimes classifies verb te-forms ending in んで/んだ as 表現 (Expression)
             // when a JMDict expression entry exists (e.g., 飛んで → 2248530 "zero; flying").
             // Reclassify as Verb with the correct DictionaryForm so the parser matches the verb.
-            if (w1.PartOfSpeech == PartOfSpeech.Expression && w1.Text.Length >= 3
+            if (w1 is { PartOfSpeech: PartOfSpeech.Expression, Text.Length: >= 3 }
                 && (w1.Text.EndsWith("んで") || w1.Text.EndsWith("んだ")))
             {
                 var hiragana = NormalizeToHiragana(w1.Text);
@@ -744,28 +743,6 @@ public partial class MorphologicalAnalyser
                     continue;
                 }
 
-                // Sudachi sometimes splits slang/informal godan ラ行 verbs as noun + って (particle)
-                // e.g., シコ(noun) + って(particle) should be シコって (te-form of シコる)
-                if (w1.PartOfSpeech == PartOfSpeech.Noun && w2.Text == "って" &&
-                    w2.PartOfSpeech == PartOfSpeech.Particle && HasCompoundLookup != null)
-                {
-                    var candidateVerb = w1.Text + "る";
-                    if (HasCompoundLookup(candidateVerb))
-                    {
-                        var newWord = new WordInfo(w1)
-                        {
-                            Text = w1.Text + w2.Text,
-                            DictionaryForm = candidateVerb,
-                            PartOfSpeech = PartOfSpeech.Verb,
-                            NormalizedForm = candidateVerb,
-                            Reading = w1.Reading + w2.Reading
-                        };
-                        newList.Add(newWord);
-                        i += 2;
-                        continue;
-                    }
-                }
-
                 bool found = false;
                 foreach (var sc in SpecialCases2)
                 {
@@ -957,7 +934,7 @@ public partial class MorphologicalAnalyser
             {
                 string verbStem = prev.Text[^w..];
 
-                if (!verbStem.Any(c => c >= '\u4E00' && c <= '\u9FAF'))
+                if (!verbStem.Any(c => c is >= '\u4E00' and <= '\u9FAF'))
                     continue;
 
                 if (isOrphanedVerbEnding)
@@ -1010,6 +987,70 @@ public partial class MorphologicalAnalyser
             NormalizedForm = dictForm,
             PartOfSpeech = PartOfSpeech.Verb,
         });
+    }
+
+    // Sentence-final particles that Sudachi fuses onto interjections.
+    private static readonly HashSet<string> SentenceFinalParticles = ["ね", "ねえ", "な", "なあ", "よ", "よね", "さ", "わ", "の", "のよ", "もの"];
+
+    /// <summary>
+    /// Splits Sudachi-fused interjection tokens that absorbed a trailing sentence-final particle.
+    /// E.g. ごめんなさいね → ごめんなさい (int) + ね (prt).
+    /// Sudachi sometimes fuses them into one interjection token with no JMDict match.
+    /// </summary>
+    private List<WordInfo> RepairFusedInterjectionParticle(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count == 0) return wordInfos;
+
+        var result = new List<WordInfo>(wordInfos.Count + 2);
+
+        foreach (var word in wordInfos)
+        {
+            if (word.PartOfSpeech != PartOfSpeech.Interjection || word.Text.Length < 3)
+            {
+                result.Add(word);
+                continue;
+            }
+
+            if (HasCompoundLookup != null && HasCompoundLookup(word.Text))
+            {
+                result.Add(word);
+                continue;
+            }
+
+            bool split = false;
+            foreach (var particle in SentenceFinalParticles.OrderByDescending(p => p.Length))
+            {
+                if (!word.Text.EndsWith(particle, StringComparison.Ordinal)) continue;
+
+                var baseText = word.Text[..^particle.Length];
+                if (baseText.Length < 2) continue;
+
+                // Only split when base itself looks like a known interjection (check lookup).
+                if (HasCompoundLookup != null && !HasCompoundLookup(baseText)) continue;
+
+                result.Add(new WordInfo
+                {
+                    Text = baseText,
+                    DictionaryForm = baseText,
+                    NormalizedForm = baseText,
+                    PartOfSpeech = PartOfSpeech.Interjection
+                });
+                result.Add(new WordInfo
+                {
+                    Text = particle,
+                    DictionaryForm = particle,
+                    NormalizedForm = particle,
+                    PartOfSpeech = PartOfSpeech.Particle
+                });
+                split = true;
+                break;
+            }
+
+            if (!split)
+                result.Add(word);
+        }
+
+        return result;
     }
 
 }

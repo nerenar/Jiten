@@ -141,7 +141,9 @@ public class MorphologicalAnalyserTests
         yield return ["をつかむため", new[] { "を", "つかむ", "ため" }];
         yield return ["ときが自分", new[] { "とき", "が", "自分" }];
         yield return ["もうこころ", new[] { "もう", "こころ" }];
-        yield return ["届けしたら", new[] { "届けしたら" }];
+        yield return ["届けしたら", new[] { "届け", "したら" }];
+        yield return ["お答えする", new[] { "お", "答え", "する" }];
+        yield return ["お答えしましょう", new[] { "お", "答え", "しましょう" }];
         yield return ["おまえら低いんだよ", new[] { "おまえら", "低い", "んだ", "よ" }];
         yield return ["すべてがかかっていると思いながら", new[] { "すべて", "が", "かかっている", "と", "思いながら" }];
         yield return ["がいないとこの", new[] { "が", "いない", "と", "この" }];
@@ -211,7 +213,7 @@ public class MorphologicalAnalyserTests
         yield return ["何もかもがめんどい", new[] { "何もかも", "が", "めんどい" }];
         yield return ["なにもかもがめんどい", new[] { "なにもかも", "が", "めんどい" }];
         yield return ["あいつ規制されりゃいいのに", new[] { "あいつ", "規制されりゃ", "いい", "のに" }];
-        yield return ["塗ってみようと思って", new[] { "塗って", "みよう", "と", "思って" }];
+        yield return ["塗ってみようと思って", new[] { "塗ってみよう", "と", "思って" }];
         yield return ["肩を並べられなかった", new[] { "肩を並べられなかった" }];
         yield return ["じゃなくて良かった", new[] { "じゃなくて", "良かった" }];
         yield return ["申し訳なさそう", new[] { "申し訳なさそう" }];
@@ -241,6 +243,8 @@ public class MorphologicalAnalyserTests
         yield return ["調子にのらないほうが", new[] { "調子にのらない", "ほう", "が" }];
         yield return ["こなさそう", new[] { "こなさそう" }];
         yield return ["伸びてこなさそう", new[] { "伸びてこなさそう" }];
+        yield return ["出来なさそう", new[] { "出来なさそう" }];
+        yield return ["食べなさそう", new[] { "食べなさそう" }];
         yield return ["手にとって", new[] { "手にとって" }];
         yield return ["早く杯を手にしてほしいのだがな", new[] { "早く", "杯", "を", "手にして", "ほしい", "の", "だが", "な" }];
         yield return ["私にとっては少しおかしいです", new[] { "私", "にとって", "は", "少し", "おかしい", "です" }];
@@ -517,6 +521,8 @@ public class MorphologicalAnalyserTests
         yield return ["でもなければ難しいだろう無ければ飽きを自覚しにくい", new[] { "でもなければ", "難しい", "だろう", "無ければ", "飽き", "を", "自覚", "しにくい" }];
         yield return ["引っ張り上げて貰って", new[] { "引っ張り上げて貰って" }];
         yield return ["信じて貰えなかった", new[] { "信じて貰えなかった" }];
+        // Classical ワ行 て-form (連用形-一般 + て) must not merge with preceding verb
+        yield return ["繕って貰いて", new[] { "繕って", "貰いて" }];
         yield return ["生きて行けばいい", new[] { "生きて行けば", "いい" }];
         yield return ["持てそうだ", new[] { "持てそう", "だ" }];
         yield return ["引けなくなってしまって", new[] { "引けなく", "なってしまって" }];
@@ -530,7 +536,13 @@ public class MorphologicalAnalyserTests
         // 指弾 is a vs (suru-verb) so 指弾する is correctly combined
         yield return ["俺は奴の民主主義ぶった欺瞞を指弾する", new[] { "俺", "は", "奴", "の", "民主主義", "ぶった", "欺瞞", "を", "指弾する" }];
         yield return ["俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳", "的な", "昂揚感" }];
-        yield return ["欠陥品め", new[] { "欠陥品", "め" }];
+        // め derogatory suffix is filtered — only the noun remains
+        yield return ["欠陥品め", new[] { "欠陥品" }];
+        // め kept as part of an adjectival compound (大きめ = "on the large side")
+        yield return ["大きめの箱を買った", new[] { "大きめ", "の", "箱", "を", "買った" }];
+        yield return ["小さめの服", new[] { "小さめ", "の", "服" }];
+        // 奴め recognized as a single compound entry in JMDict (not split)
+        yield return ["この奴め", new[] { "この", "奴め" }];
         yield return ["本人たちは面白いと思ったのかもしれない", new[] { "本人", "たち", "は", "面白い", "と", "思った", "の", "かもしれない" }];
         yield return ["わかりかねさせられない", new[] { "わかりかねさせられない" }];
         yield return ["読み切れなかった", new[] { "読み切れなかった" }];
@@ -705,8 +717,8 @@ public class MorphologicalAnalyserTests
         yield return ["選んでも一緒よ", new[] { "選んで", "も", "一緒", "よ" }];
         // ごとし (如く) should NOT be merged into preceding verb by CombineAuxiliary
         yield return ["気附かぬ如くゆっくり", new[] { "気附かぬ", "如く", "ゆっくり" }];
-        // Standalone ぬ reclassified from archaic verb 寝 to classical negative auxiliary
-        yield return ["ぬ如く", new[] { "ぬ", "如く" }];
+        // Standalone ぬ at sentence start is stripped (leading auxiliary without a preceding verb)
+        yield return ["ぬ如く", new[] { "如く" }];
         // Adjective stem + ぶり suffix recombined (Sudachi splits 久しぶり after よっ interjection)
         yield return ["よっ久しぶり", new[] { "よっ", "久しぶり" }];
         // おつもり → お (prefix) + つもり (intention), not おつもり (last drink of sake, 2850128)
@@ -740,6 +752,29 @@ public class MorphologicalAnalyserTests
         // RepairOrphanedAuxiliary — Sudachi merges noun+verb into compound noun, orphaning the conjugation
         yield return ["足蹴られた", new[] { "足", "蹴られた" }];  // 足蹴(noun) + られた(aux) → 足 + 蹴られた(passive past)
         yield return ["肉食う", new[] { "肉", "食う" }];  // 肉食(noun) + う(filler) → 肉 + 食う(verb)
+        // こと + って must not merge — ことる (Kotor, place name) is not a verb
+        yield return ["自分のことって自分では分からない", new[] { "自分", "の", "こと", "って", "自分", "では", "分からない" }];
+
+        // となり with trailing comma — Sudachi splits と+なり before comma; CombineToNaru should re-merge
+        yield return ["体験はトラウマとなり、大変だった", new[] { "体験", "は", "トラウマ", "となり", "大変", "だった" }];
+
+        // ごめんなさいね — Sudachi fuses interjection+particle; repair stage should split
+        yield return ["ごめんなさいね？", new[] { "ごめんなさい", "ね" }];
+        // Multi-char trailing particles fused onto interjections — repair must prefer the longer match
+        yield return ["ごめんなさいよね", new[] { "ごめんなさい", "よね" }];
+        yield return ["ごめんなさいなあ", new[] { "ごめんなさい", "なあ" }];
+        yield return ["ごめんなさいのよ", new[] { "ごめんなさい", "の","よ" }];
+        yield return ["ありがとうよね", new[] { "ありがとう", "よね" }];
+
+        // Trailing-particle fallback over-split prevention:
+        // から/けれど/のに at clause end must remain single tokens, not split into character pairs.
+        yield return ["聞こえてるから", new[] { "聞こえてる", "から" }];
+        yield return ["したいけれど", new[] { "したい", "けれど" }];
+        yield return ["見えないのに", new[] { "見えない", "のに" }];
+        yield return ["できないから", new[] { "できない", "から" }];
+        yield return ["そういえばここって", new[] { "そういえば", "ここ", "って" }];
+        // Single-kana Symbol tokens (stutters) must be filtered — ゆ before … tagged as 記号 by Sudachi
+        yield return ["ゆ……夢は", new[] { "夢", "は" }];
     }
 
     [Theory]

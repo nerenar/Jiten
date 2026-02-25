@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Runtime.CompilerServices;
 
@@ -11,13 +12,12 @@ public class Deconjugator
     public static Deconjugator Instance => _instance.Value;
 
     private const int DefaultMaxCacheEntries = 250_000;
-    private const int DefaultEvictionBatchSize = 10_000;
-
     private readonly int _maxCacheEntries;
-    private readonly int _evictionBatchSize;
-    private readonly Lock _cacheLock = new();
-    private readonly Dictionary<string, CacheEntry> _deconjugationCache = new(StringComparer.Ordinal);
-    private readonly LinkedList<string> _cacheOrder = new();
+    private volatile ConcurrentDictionary<string, DeconjugationForm[]> _gen0 =
+        new(Environment.ProcessorCount, 4096, StringComparer.Ordinal);
+    private volatile ConcurrentDictionary<string, DeconjugationForm[]>? _gen1;
+    private int _gen0Count;
+    private int _rotating;
     private long _cacheHitCount;
     private long _cacheMissCount;
     private long _cacheStoreCount;
@@ -30,12 +30,6 @@ public class Deconjugator
 
     private static readonly bool UseCache = true;
 
-    private sealed class CacheEntry(DeconjugationForm[] forms, LinkedListNode<string> node)
-    {
-        public DeconjugationForm[] Forms { get; set; } = forms;
-        public LinkedListNode<string> Node { get; } = node;
-    }
-
     internal sealed record DeconjugationCacheStats(
         long Hits,
         long Misses,
@@ -44,10 +38,9 @@ public class Deconjugator
         int Count,
         int MaxEntries);
 
-    public Deconjugator(int maxCacheEntries = DefaultMaxCacheEntries, int evictionBatchSize = DefaultEvictionBatchSize)
+    public Deconjugator(int maxCacheEntries = DefaultMaxCacheEntries)
     {
         _maxCacheEntries = Math.Max(1, maxCacheEntries);
-        _evictionBatchSize = Math.Clamp(evictionBatchSize, 1, _maxCacheEntries);
 
         var options = new JsonSerializerOptions
         {
@@ -88,27 +81,25 @@ public class Deconjugator
         _virtualRulesCache[rule] = virtualRules;
     }
 
-    private bool TryGetCached(string text, out List<DeconjugationForm> forms)
+    private bool TryGetCached(string text, out IReadOnlyList<DeconjugationForm> forms)
     {
-        lock (_cacheLock)
+        if (_gen0.TryGetValue(text, out var result))
         {
-            if (_deconjugationCache.TryGetValue(text, out var entry))
-            {
-                _cacheHitCount++;
-
-                if (entry.Node != _cacheOrder.Last)
-                {
-                    _cacheOrder.Remove(entry.Node);
-                    _cacheOrder.AddLast(entry.Node);
-                }
-
-                forms = new List<DeconjugationForm>(entry.Forms);
-                return true;
-            }
-
-            _cacheMissCount++;
+            Interlocked.Increment(ref _cacheHitCount);
+            forms = result;
+            return true;
         }
 
+        var gen1 = _gen1;
+        if (gen1 != null && gen1.TryGetValue(text, out result))
+        {
+            _gen0.TryAdd(text, result);
+            Interlocked.Increment(ref _cacheHitCount);
+            forms = result;
+            return true;
+        }
+
+        Interlocked.Increment(ref _cacheMissCount);
         forms = [];
         return false;
     }
@@ -119,78 +110,68 @@ public class Deconjugator
             return;
 
         var snapshot = forms.ToArray();
+        Interlocked.Increment(ref _cacheStoreCount);
 
-        lock (_cacheLock)
+        if (_gen0.TryAdd(text, snapshot))
         {
-            if (_deconjugationCache.TryGetValue(text, out var existing))
-            {
-                existing.Forms = snapshot;
-
-                if (existing.Node != _cacheOrder.Last)
-                {
-                    _cacheOrder.Remove(existing.Node);
-                    _cacheOrder.AddLast(existing.Node);
-                }
-            }
-            else
-            {
-                var node = _cacheOrder.AddLast(text);
-                _deconjugationCache[text] = new CacheEntry(snapshot, node);
-            }
-
-            _cacheStoreCount++;
-
-            if (_deconjugationCache.Count > _maxCacheEntries)
-                EvictOldestEntries();
+            var count = Interlocked.Increment(ref _gen0Count);
+            if (count > _maxCacheEntries)
+                RotateGenerations();
         }
     }
 
-    private void EvictOldestEntries()
+    private void RotateGenerations()
     {
-        var targetCount = Math.Max(0, _maxCacheEntries - _evictionBatchSize);
-        while (_deconjugationCache.Count > targetCount && _cacheOrder.First != null)
+        if (Interlocked.CompareExchange(ref _rotating, 1, 0) != 0)
+            return;
+
+        try
         {
-            var oldestKey = _cacheOrder.First.Value;
-            _cacheOrder.RemoveFirst();
-            if (_deconjugationCache.Remove(oldestKey))
-                _cacheEvictionCount++;
+            var evicted = _gen1?.Count ?? 0;
+            _gen1 = _gen0;
+            _gen0 = new ConcurrentDictionary<string, DeconjugationForm[]>(
+                Environment.ProcessorCount, 4096, StringComparer.Ordinal);
+            Interlocked.Exchange(ref _gen0Count, 0);
+
+            if (evicted > 0)
+                Interlocked.Add(ref _cacheEvictionCount, evicted);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _rotating, 0);
         }
     }
 
     internal DeconjugationCacheStats GetCacheStats()
     {
-        lock (_cacheLock)
-        {
-            return new DeconjugationCacheStats(
-                _cacheHitCount,
-                _cacheMissCount,
-                _cacheStoreCount,
-                _cacheEvictionCount,
-                _deconjugationCache.Count,
-                _maxCacheEntries);
-        }
+        return new DeconjugationCacheStats(
+            Interlocked.Read(ref _cacheHitCount),
+            Interlocked.Read(ref _cacheMissCount),
+            Interlocked.Read(ref _cacheStoreCount),
+            Interlocked.Read(ref _cacheEvictionCount),
+            _gen0.Count + (_gen1?.Count ?? 0),
+            _maxCacheEntries);
     }
 
     internal void ClearCacheForTesting()
     {
-        lock (_cacheLock)
-        {
-            _deconjugationCache.Clear();
-            _cacheOrder.Clear();
-            _cacheHitCount = 0;
-            _cacheMissCount = 0;
-            _cacheStoreCount = 0;
-            _cacheEvictionCount = 0;
-        }
+        _gen0 = new ConcurrentDictionary<string, DeconjugationForm[]>(
+            Environment.ProcessorCount, 4096, StringComparer.Ordinal);
+        _gen1 = null;
+        Interlocked.Exchange(ref _gen0Count, 0);
+        Interlocked.Exchange(ref _cacheHitCount, 0);
+        Interlocked.Exchange(ref _cacheMissCount, 0);
+        Interlocked.Exchange(ref _cacheStoreCount, 0);
+        Interlocked.Exchange(ref _cacheEvictionCount, 0);
     }
 
-    public List<DeconjugationForm> Deconjugate(string text)
+    public IReadOnlyList<DeconjugationForm> Deconjugate(string text)
     {
         if (UseCache && TryGetCached(text, out var cached))
             return cached;
 
         if (string.IsNullOrEmpty(text))
-            return new List<DeconjugationForm>();
+            return [];
 
         var processed = new HashSet<DeconjugationForm>(Math.Min(text.Length * 2, 100));
         var novel = new HashSet<DeconjugationForm>(20);
@@ -441,13 +422,25 @@ public class Deconjugator
         if (rule.ContextRule == "saspecial" && !SaSpecialCheck(form, rule))
             return null;
 
+        if (rule.ContextRule == "temirurule" && !TemiruCheck(form, rule))
+            return null;
+
         return StdRuleDeconjugate(form, rule);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TemiruCheck(DeconjugationForm form, DeconjugationRule rule)
+    {
+        var conEnd = rule.ConEnd[0];
+        if (!form.Text.EndsWith(conEnd, StringComparison.Ordinal)) return false;
+        var prefix = form.Text.AsSpan(0, form.Text.Length - conEnd.Length);
+        return prefix.EndsWith("て") || prefix.EndsWith("で");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool V1InfTrapCheck(DeconjugationForm form)
     {
-        return !(form.Tags.Count == 1 && form.Tags[0] == "stem-ren");
+        return !(form.Tags is ["stem-ren"]);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -12,6 +12,29 @@ public class DeconjugatorTests
     [InlineData("作る", "作る")]
     [InlineData("なかった", "ない")]
     [InlineData("選びださねば", "選びだす")]
+    // Colloquial contractions: てしまう → ちゃう/ちまう/じゃう/じまう
+    [InlineData("食べちゃった", "食べる")]
+    [InlineData("飲んじゃった", "飲む")]
+    [InlineData("食べちまった", "食べる")]
+    [InlineData("飲んじまった", "飲む")]
+    // Colloquial contractions: ていく → てく, ておく → とく
+    [InlineData("食べてく", "食べる")]
+    [InlineData("なってく", "なる")]
+    [InlineData("飲んでく", "飲む")]
+    [InlineData("食べとく", "食べる")]
+    [InlineData("飲んどく", "飲む")]
+    // Colloquial contractions: conditional けりゃ/きゃ, ては → ちゃ, では → じゃ
+    [InlineData("食べなくちゃ", "食べる")]
+    [InlineData("食べなけりゃ", "食べる")]
+    [InlineData("行かなきゃ", "行く")]
+    // Colloquial contractions: slang negative んない, adjective ねえ/ねぇ
+    [InlineData("わかんない", "わかる")]
+    [InlineData("つまんない", "つまる")]
+    [InlineData("すごくねえ", "すごい")]
+    // Na-adjective adnominal form (な is attributive, not casual request)
+    [InlineData("和やかな", "和やか")]
+    [InlineData("大切な", "大切")]
+    [InlineData("静かな", "静か")]
     public void Deconjugation_ShouldContainExpectedDictionaryForm(string text, string expectedBase)
     {
         var deconjugator = new Deconjugator();
@@ -61,16 +84,22 @@ public class DeconjugatorTests
     [Fact]
     public void Cache_ShouldEvict_WhenCapacityIsExceeded()
     {
-        var deconjugator = new Deconjugator(maxCacheEntries: 3, evictionBatchSize: 1);
+        var deconjugator = new Deconjugator(maxCacheEntries: 3);
         deconjugator.ClearCacheForTesting();
 
+        // First 4 entries trigger rotation: gen0→gen1, gen0 becomes empty
         _ = deconjugator.Deconjugate("わからない");
         _ = deconjugator.Deconjugate("みて");
         _ = deconjugator.Deconjugate("なかった");
         _ = deconjugator.Deconjugate("終わってしまった");
 
+        // Next 4 entries trigger second rotation: old gen1 evicted
+        _ = deconjugator.Deconjugate("食べる");
+        _ = deconjugator.Deconjugate("飲んだ");
+        _ = deconjugator.Deconjugate("走った");
+        _ = deconjugator.Deconjugate("書いた");
+
         var stats = deconjugator.GetCacheStats();
-        stats.Count.Should().BeLessOrEqualTo(3);
         stats.Evictions.Should().BeGreaterThan(0);
         stats.Stores.Should().BeGreaterThan(0);
     }
@@ -78,7 +107,7 @@ public class DeconjugatorTests
     [Fact]
     public void Cache_ShouldTrackHitsAndMisses()
     {
-        var deconjugator = new Deconjugator(maxCacheEntries: 10, evictionBatchSize: 2);
+        var deconjugator = new Deconjugator(maxCacheEntries: 10);
         deconjugator.ClearCacheForTesting();
 
         _ = deconjugator.Deconjugate("わからない"); // miss + store

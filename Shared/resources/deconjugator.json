@@ -1105,6 +1105,14 @@
   {
     "type": "stdrule",
     "dec_end": [""],
+    "con_end": ["なさそう"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["adj-na"],
+    "detail": "negative appearance"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
     "con_end": ["あげる"],
     "dec_tag": ["stem-te"],
     "con_tag": ["v5r"],
@@ -1149,6 +1157,15 @@
     "dec_tag": ["stem-te"],
     "con_tag": ["v1"],
     "detail": "teiru"
+  },
+  {
+    "type": "contextrule",
+    "contextrule": "temirurule",
+    "dec_end": [""],
+    "con_end": ["みる"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v1"],
+    "detail": "temiru"
   },
   {
     "type": "contextrule",

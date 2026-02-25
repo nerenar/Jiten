@@ -1,6 +1,7 @@
-using System.Text.Json;
 using Jiten.Core;
 using Jiten.Core.Data.JMDict;
+using MessagePack;
+using MessagePack.Resolvers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using StackExchange.Redis;
@@ -10,14 +11,13 @@ namespace Jiten.Parser.Data.Redis;
 public class RedisJmDictCache : IJmDictCache
 {
     private readonly IDatabase _redisDb;
-    private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly TimeSpan _cacheExpiry = TimeSpan.FromDays(30); // Long cache time for dictionary data
+    private static readonly MessagePackSerializerOptions MsgPackOptions =
+        ContractlessStandardResolver.Options;
+    private readonly TimeSpan _cacheExpiry = TimeSpan.FromDays(30);
     private const string InitializedKey = "jmdict:initialized";
     private readonly IDbContextFactory<JitenDbContext> _contextFactory;
 
-    // Semaphore to limit concurrent database access
     private static readonly SemaphoreSlim DbSemaphore = new SemaphoreSlim(10, 10);
-    // Use Random.Shared for thread-safe jitter (Random is not thread-safe)
 
     public RedisJmDictCache(IConfiguration configuration, IDbContextFactory<JitenDbContext> contextFactory)
     {
@@ -38,28 +38,33 @@ public class RedisJmDictCache : IJmDictCache
     public async Task<List<int>> GetLookupIdsAsync(string key)
     {
         var redisKey = BuildLookupKey(key);
-        var json = await _redisDb.StringGetAsync(redisKey);
-        if (json.IsNullOrEmpty)
+        var value = await _redisDb.StringGetAsync(redisKey);
+        if (value.IsNullOrEmpty)
         {
             await using var dbContext = await _contextFactory.CreateDbContextAsync();
-            // Fetch the lookup from database
             var lookupIds = await dbContext.Lookups
                                            .AsNoTracking()
                                            .Where(l => l.LookupKey == key)
                                            .Select(l => l.WordId)
                                            .ToListAsync();
 
-            // Cache the result if found
             if (lookupIds.Any())
             {
-                var newJson = JsonSerializer.Serialize(lookupIds, _jsonOptions);
-                await _redisDb.StringSetAsync(redisKey, newJson, expiry: _cacheExpiry);
+                var bytes = MessagePackSerializer.Serialize(lookupIds, MsgPackOptions);
+                await _redisDb.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry);
             }
 
             return lookupIds;
         }
 
-        return JsonSerializer.Deserialize<List<int>>(json!, _jsonOptions) ?? new List<int>();
+        try
+        {
+            return MessagePackSerializer.Deserialize<List<int>>((byte[])value!, MsgPackOptions) ?? new List<int>();
+        }
+        catch
+        {
+            return new List<int>();
+        }
     }
 
     public async Task<Dictionary<string, List<int>>> GetLookupIdsAsync(IEnumerable<string> keys)
@@ -81,16 +86,23 @@ public class RedisJmDictCache : IJmDictCache
         // 2. Process the results from Redis
         for (int i = 0; i < redisKeys.Length; i++)
         {
-            var key = uniqueKeys[i];
-            var value = redisValues[i];
+            var lookupKey = uniqueKeys[i];
+            var redisValue = redisValues[i];
 
-            if (value.IsNullOrEmpty)
+            if (redisValue.IsNullOrEmpty)
             {
-                missedKeys.Add(key);
+                missedKeys.Add(lookupKey);
             }
             else
             {
-                results[key] = JsonSerializer.Deserialize<List<int>>(value!, _jsonOptions) ?? new List<int>();
+                try
+                {
+                    results[lookupKey] = MessagePackSerializer.Deserialize<List<int>>((byte[])redisValue!, MsgPackOptions) ?? new List<int>();
+                }
+                catch
+                {
+                    missedKeys.Add(lookupKey);
+                }
             }
         }
 
@@ -115,8 +127,8 @@ public class RedisJmDictCache : IJmDictCache
             {
                 results[kvp.Key] = kvp.Value;
                 var redisKey = BuildLookupKey(kvp.Key);
-                var json = JsonSerializer.Serialize(kvp.Value, _jsonOptions);
-                _ = cacheBatch.StringSetAsync(redisKey, json, expiry: _cacheExpiry);
+                var bytes = MessagePackSerializer.Serialize(kvp.Value, MsgPackOptions);
+                _ = cacheBatch.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry);
             }
 
             // Execute the batch to write all new entries to Redis
@@ -129,8 +141,8 @@ public class RedisJmDictCache : IJmDictCache
     public async Task<JmDictWord?> GetWordAsync(int wordId)
     {
         var redisKey = BuildWordKey(wordId);
-        var json = await _redisDb.StringGetAsync(redisKey);
-        if (json.IsNullOrEmpty)
+        var value = await _redisDb.StringGetAsync(redisKey);
+        if (value.IsNullOrEmpty)
         {
             await using var dbContext = await _contextFactory.CreateDbContextAsync();
 
@@ -143,19 +155,25 @@ public class RedisJmDictCache : IJmDictCache
             if (word != null)
             {
                 ComputeArchaicFlag(word);
-                word.Definitions = [];
-                var newJson = JsonSerializer.Serialize(word, _jsonOptions);
-                await _redisDb.StringSetAsync(redisKey, newJson, expiry: _cacheExpiry);
+                StripDefinitionMeanings(word);
+                var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
+                await _redisDb.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry);
             }
 
             return word;
         }
 
-        var deserialized = JsonSerializer.Deserialize<JmDictWord>(json!, _jsonOptions);
-        return deserialized;
+        try
+        {
+            return MessagePackSerializer.Deserialize<JmDictWord>((byte[])value!, MsgPackOptions);
+        }
+        catch
+        {
+            return null;
+        }
     }
-    
-    
+
+
     public async Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds)
     {
         var uniqueIds = wordIds.Distinct().ToList();
@@ -163,52 +181,52 @@ public class RedisJmDictCache : IJmDictCache
         {
             return new Dictionary<int, JmDictWord>();
         }
-    
+
         var redisKeys = uniqueIds.Select(id => (RedisKey)BuildWordKey(id)).ToArray();
         var redisValues = await _redisDb.StringGetAsync(redisKeys);
-    
+
         var results = new Dictionary<int, JmDictWord>();
         var missedIds = new List<int>();
-    
+
         for (int i = 0; i < redisKeys.Length; i++)
         {
             var id = uniqueIds[i];
             var value = redisValues[i];
-    
+
             if (value.IsNullOrEmpty)
             {
                 missedIds.Add(id);
             }
             else
             {
-                var word = JsonSerializer.Deserialize<JmDictWord>(value!, _jsonOptions);
-                if (word != null)
+                try
                 {
-                    results[id] = word;
+                    var word = MessagePackSerializer.Deserialize<JmDictWord>((byte[])value!, MsgPackOptions);
+                    if (word != null)
+                        results[id] = word;
+                }
+                catch
+                {
+                    missedIds.Add(id);
                 }
             }
         }
-    
+
         if (missedIds.Any())
         {
-            // Process missed IDs in batches to avoid overwhelming the database
             const int batchSize = 1000;
-            
+
             for (int i = 0; i < missedIds.Count; i += batchSize)
             {
                 var batchIds = missedIds.Skip(i).Take(batchSize).ToList();
-                
-                // Try to acquire semaphore with timeout
+
                 if (!await DbSemaphore.WaitAsync(TimeSpan.FromSeconds(5)))
                 {
-                    // If semaphore acquisition times out, return what we have so far
-                    // This prevents blocking indefinitely and contributes to graceful degradation
                     continue;
                 }
-                
+
                 try
                 {
-                    // Retry logic for database operations
                     const int maxRetries = 3;
                     for (int retry = 0; retry < maxRetries; retry++)
                     {
@@ -216,9 +234,8 @@ public class RedisJmDictCache : IJmDictCache
                         {
                             await using var dbContext = await _contextFactory.CreateDbContextAsync();
 
-                            // Set a timeout for the command to avoid long-running queries
                             dbContext.Database.SetCommandTimeout(TimeSpan.FromSeconds(5));
-                            
+
                             var dbWords = await dbContext.JMDictWords
                                 .AsNoTracking()
                                 .Include(w => w.Forms.OrderBy(f => f.ReadingIndex))
@@ -232,27 +249,24 @@ public class RedisJmDictCache : IJmDictCache
                                 foreach (var word in dbWords)
                                 {
                                     ComputeArchaicFlag(word);
-                                    word.Definitions = [];
+                                    StripDefinitionMeanings(word);
                                     results[word.WordId] = word;
                                     var redisKey = BuildWordKey(word.WordId);
-                                    var json = JsonSerializer.Serialize(word, _jsonOptions);
-                                    _ = cacheBatch.StringSetAsync(redisKey, json, expiry: _cacheExpiry, flags: CommandFlags.FireAndForget);
+                                    var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
+                                    _ = cacheBatch.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry, flags: CommandFlags.FireAndForget);
                                 }
                                 cacheBatch.Execute();
                             }
-                            
-                            // If we get here, the operation was successful, so break out of the retry loop
+
                             break;
                         }
                         catch (Npgsql.PostgresException pgEx) when (pgEx.SqlState == "53300" && retry < maxRetries - 1)
                         {
-                            // Connection limit reached, wait with exponential backoff before retrying
                             var backoffMs = (int)Math.Pow(2, retry) * 100 + Random.Shared.Next(50);
                             await Task.Delay(backoffMs);
                         }
                         catch when (retry < maxRetries - 1)
                         {
-                            // For other transient errors, also retry with backoff
                             var backoffMs = (int)Math.Pow(2, retry) * 200 + Random.Shared.Next(100);
                             await Task.Delay(backoffMs);
                         }
@@ -276,8 +290,8 @@ public class RedisJmDictCache : IJmDictCache
         foreach (var lookup in lookups)
         {
             var redisKey = BuildLookupKey(lookup.Key);
-            var json = JsonSerializer.Serialize(lookup.Value, _jsonOptions);
-            tasks.Add(batch.StringSetAsync(redisKey, json, expiry: _cacheExpiry));
+            var bytes = MessagePackSerializer.Serialize(lookup.Value, MsgPackOptions);
+            tasks.Add(batch.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry));
         }
 
         batch.Execute();
@@ -289,8 +303,8 @@ public class RedisJmDictCache : IJmDictCache
     public async Task<bool> SetWordAsync(int wordId, JmDictWord word)
     {
         var redisKey = BuildWordKey(wordId);
-        var json = JsonSerializer.Serialize(word, _jsonOptions);
-        return await _redisDb.StringSetAsync(redisKey, json, expiry: _cacheExpiry);
+        var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
+        return await _redisDb.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry);
     }
 
     public async Task<bool> SetWordsAsync(Dictionary<int, JmDictWord> words)
@@ -301,16 +315,34 @@ public class RedisJmDictCache : IJmDictCache
         foreach (var (wordId, word) in words)
         {
             ComputeArchaicFlag(word);
-            word.Definitions = [];
+            StripDefinitionMeanings(word);
             var redisKey = BuildWordKey(wordId);
-            var json = JsonSerializer.Serialize(word, _jsonOptions);
-            tasks.Add(batch.StringSetAsync(redisKey, json, expiry: _cacheExpiry));
+            var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
+            tasks.Add(batch.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry));
         }
 
         batch.Execute();
         await Task.WhenAll(tasks);
 
         return tasks.All(t => t.Result);
+    }
+
+    private static void StripDefinitionMeanings(JmDictWord word)
+    {
+        foreach (var def in word.Definitions)
+        {
+            def.EnglishMeanings.Clear();
+            def.DutchMeanings.Clear();
+            def.FrenchMeanings.Clear();
+            def.GermanMeanings.Clear();
+            def.SpanishMeanings.Clear();
+            def.HungarianMeanings.Clear();
+            def.RussianMeanings.Clear();
+            def.SlovenianMeanings.Clear();
+            def.Pos.Clear();
+            def.Field.Clear();
+            def.Dial.Clear();
+        }
     }
 
     private static void ComputeArchaicFlag(JmDictWord word)

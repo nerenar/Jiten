@@ -50,6 +50,8 @@ public class PipelineStageTests
             "ReclassifyOrphanedSuffixes",
             "CombineConjunctiveParticle",
             "CombineAuxiliary",
+            "CombineToNaru",
+            "RepairFusedInterjectionParticle",
             "RepairOrphanedAuxiliary",
             "CombineAdverbialParticle",
             "CombineVerbDependant",
@@ -91,6 +93,54 @@ public class PipelineStageTests
 
         output.Select(t => t.Text).Should().Equal("読んだ", "けど");
         output[0].PartOfSpeech.Should().Be(PartOfSpeech.Verb);
+    }
+
+    [Fact]
+    public void RepairStage_FusedInterjectionYone_PreservesMultiCharParticle()
+    {
+        // Without length-first ordering よね would split as ごめんなさいよ + ね (wrong base)
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("ごめんなさいよね", PartOfSpeech.Interjection)
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairFusedInterjectionParticle", input);
+
+        output.Select(t => t.Text).Should().Equal("ごめんなさい", "よね");
+        output[1].PartOfSpeech.Should().Be(PartOfSpeech.Particle);
+    }
+
+    [Fact]
+    public void RepairStage_FusedInterjectionNoYo_PreservesMultiCharParticle()
+    {
+        // のよ must be split as a unit — not split at の (leaving よ stranded)
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("ごめんなさいのよ", PartOfSpeech.Interjection)
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairFusedInterjectionParticle", input);
+
+        output.Select(t => t.Text).Should().Equal("ごめんなさい", "のよ");
+        output[1].PartOfSpeech.Should().Be(PartOfSpeech.Particle);
+    }
+
+    [Fact]
+    public void RepairStage_FusedInterjectionNee_PreservesMultiCharParticle()
+    {
+        // ねえ (elongated ね) must be kept as a unit, not split at ね alone
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("ごめんなさいねえ", PartOfSpeech.Interjection)
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairFusedInterjectionParticle", input);
+
+        output.Select(t => t.Text).Should().Equal("ごめんなさい", "ねえ");
+        output[1].PartOfSpeech.Should().Be(PartOfSpeech.Particle);
     }
 
     [Fact]

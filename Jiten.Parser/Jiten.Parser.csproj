@@ -9,14 +9,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Jiten.Core\Jiten.Core.csproj"/>
+        <ProjectReference Include="..\Jiten.Core\Jiten.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="MessagePack" Version="3.1.4" />
     </ItemGroup>
 
     <Target Name="CopySharedFiles" AfterTargets="Build">
         <ItemGroup>
-            <SharedFiles Include="..\Shared\**\*.*"/>
+            <SharedFiles Include="..\Shared\**\*.*" />
         </ItemGroup>
 
-        <Copy SourceFiles="@(SharedFiles)" DestinationFolder="$(OutputPath)\%(RecursiveDir)"/>
+        <Copy SourceFiles="@(SharedFiles)" DestinationFolder="$(OutputPath)\%(RecursiveDir)" />
     </Target>
 </Project>

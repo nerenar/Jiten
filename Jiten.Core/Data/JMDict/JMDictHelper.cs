@@ -1,10 +1,12 @@
-﻿using System.Globalization;
+﻿using System.Data;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml;
 using CsvHelper;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using WanaKanaShaapu;
 
 namespace Jiten.Core.Data.JMDict;
@@ -314,38 +316,88 @@ public static class JmDictHelper
 
     public static async Task<Dictionary<string, List<int>>> LoadLookupTable(JitenDbContext context)
     {
-        var lookupTable = new Dictionary<string, List<int>>();
-
-        await foreach (var lookup in context.Lookups.AsNoTracking().AsAsyncEnumerable())
+        // GROUP BY in Postgres is faster than transferring every (wordId, lookupKey) row and grouping in C#.
+        // array_agg returns a native int[] which Npgsql reads via binary protocol.
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = conn.State == ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
         {
-            if (!lookupTable.TryGetValue(lookup.LookupKey, out var wordIds))
+            await using var cmd = new NpgsqlCommand(
+                """SELECT "LookupKey", array_agg("WordId") FROM jmdict."Lookups" GROUP BY "LookupKey" """, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var result = new Dictionary<string, List<int>>();
+            while (await reader.ReadAsync())
             {
-                wordIds = new List<int>();
-                lookupTable[lookup.LookupKey] = wordIds;
+                var ids = (int[])reader.GetValue(1);
+                result[reader.GetString(0)] = new List<int>(ids);
             }
-
-            wordIds.Add(lookup.WordId);
+            return result;
         }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
+    }
 
-        return lookupTable;
+    public static async Task<Dictionary<int, int>> LoadWordFrequencyRanks(JitenDbContext context)
+    {
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = conn.State == ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
+        {
+            await using var cmd = new NpgsqlCommand(
+                """SELECT "WordId", "FrequencyRank" FROM jmdict."WordFrequencies" """, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var result = new Dictionary<int, int>();
+            while (await reader.ReadAsync())
+                result[reader.GetInt32(0)] = reader.GetInt32(1);
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
     }
 
     public static async Task<HashSet<int>> LoadNameOnlyWordIds(JitenDbContext context)
     {
-        var result = new HashSet<int>();
-
-        await foreach (var word in context.JMDictWords.AsNoTracking()
-                           .Select(w => new { w.WordId, w.PartsOfSpeech })
-                           .AsAsyncEnumerable())
+        // Filter entirely in Postgres — avoids transferring all PartsOfSpeech text[] arrays to C#.
+        // Mirrors PosMapper.FromJmDict: name if tag starts with "name-" or is in the explicit name list.
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = conn.State == ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
         {
-            if (word.PartsOfSpeech.Count > 0 &&
-                word.PartsOfSpeech.All(p => PosMapper.FromJmDict(p) == PartOfSpeech.Name))
-            {
-                result.Add(word.WordId);
-            }
-        }
+            await using var cmd = new NpgsqlCommand("""
+                SELECT "WordId"
+                FROM jmdict."Words"
+                WHERE array_length("PartsOfSpeech", 1) > 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM unnest("PartsOfSpeech") p(pos)
+                      WHERE pos NOT LIKE 'name-%'
+                        AND pos NOT IN (
+                            'company','given','place','person','product','ship','surname',
+                            'unclass','station','group','char','creat','dei','doc','ev',
+                            'fem','fict','leg','masc','myth','obj','organization','oth',
+                            'relig','serv','work','unc'
+                        )
+                  )
+                """, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
 
-        return result;
+            var result = new HashSet<int>();
+            while (await reader.ReadAsync())
+                result.Add(reader.GetInt32(0));
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
     }
 
     public static List<string> ToHumanReadablePartsOfSpeech(this List<string> pos)

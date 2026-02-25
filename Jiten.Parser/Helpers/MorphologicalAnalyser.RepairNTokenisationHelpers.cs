@@ -8,9 +8,9 @@ namespace Jiten.Parser;
 public partial class MorphologicalAnalyser
 {
     private static string NormalizeToHiragana(string text) =>
-        KanaNormalizer.Normalize(WanaKana.ToHiragana(text, new DefaultOptions { ConvertLongVowelMark = false }));
+        KanaNormalizer.Normalize(KanaConverter.ToHiragana(text, convertLongVowelMark: false));
 
-    private static bool IsNdaVerbForm(List<DeconjugationForm> forms) =>
+    private static bool IsNdaVerbForm(IReadOnlyList<DeconjugationForm> forms) =>
         forms.Any(f => f.Tags.Count > 0 &&
                        ((f.Tags.Any(t => t == "v5m") && f.Text.EndsWith("む")) ||
                         (f.Tags.Any(t => t == "v5n") && f.Text.EndsWith("ぬ")) ||
@@ -37,10 +37,10 @@ public partial class MorphologicalAnalyser
         return IsNdaVerbForm(forms);
     }
 
-    private static bool IsAnyVerbForm(List<DeconjugationForm> forms) =>
+    private static bool IsAnyVerbForm(IReadOnlyList<DeconjugationForm> forms) =>
         forms.Any(f => f.Tags.Count > 0 && f.Tags.Any(t => t.StartsWith("v")));
 
-    private static bool IsMasenVerbForm(List<DeconjugationForm> forms) =>
+    private static bool IsMasenVerbForm(IReadOnlyList<DeconjugationForm> forms) =>
         forms.Any(f => f.Tags.Count > 0 && f.Tags.Any(t => t.StartsWith("v")) && !f.Text.EndsWith("ます"));
 
     private static WordInfo CreateNToken() => new()
@@ -84,7 +84,7 @@ public partial class MorphologicalAnalyser
         string suffix,
         string suffixReading,
         Deconjugator deconj,
-        Func<List<DeconjugationForm>, bool> validator,
+        Func<IReadOnlyList<DeconjugationForm>, bool> validator,
         out WordInfo? combined)
     {
         combined = null;
@@ -151,7 +151,7 @@ public partial class MorphologicalAnalyser
                 combined = new WordInfo(baseWord)
                 {
                     Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
-                    NormalizedForm = candidateText, Reading = WanaKana.ToHiragana(candidateReading),
+                    NormalizedForm = candidateText, Reading = KanaConverter.ToHiragana(candidateReading),
                     PartOfSpeechSection1 = PartOfSpeechSection.None,
                     PartOfSpeechSection2 = PartOfSpeechSection.None,
                     PartOfSpeechSection3 = PartOfSpeechSection.None

@@ -27,6 +27,8 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Cleanup, ReclassifyOrphanedSuffixes),
         Stage(TokenStageGroup.Combine, CombineConjunctiveParticle),
         Stage(TokenStageGroup.Combine, CombineAuxiliary),
+        Stage(TokenStageGroup.Combine, CombineToNaru),
+        Stage(TokenStageGroup.Repair, RepairFusedInterjectionParticle),
         Stage(TokenStageGroup.Repair, RepairOrphanedAuxiliary),
         Stage(TokenStageGroup.Combine, CombineAdverbialParticle),
         Stage(TokenStageGroup.Combine, CombineVerbDependant),

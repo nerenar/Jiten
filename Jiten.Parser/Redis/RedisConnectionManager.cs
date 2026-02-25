@@ -15,12 +15,12 @@ public static class RedisConnectionManager
 
     public static IDatabase GetDatabase(IConfiguration configuration)
     {
-        if (_connection != null && _connection.IsConnected)
+        if (_connection is { IsConnected: true })
             return _connection.GetDatabase();
 
         lock (_lock)
         {
-            if (_connection != null && _connection.IsConnected)
+            if (_connection is { IsConnected: true })
                 return _connection.GetDatabase();
 
             _connectionString = configuration.GetConnectionString("Redis")!;

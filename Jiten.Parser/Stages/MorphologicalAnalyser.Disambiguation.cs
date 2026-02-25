@@ -148,6 +148,33 @@ public partial class MorphologicalAnalyser
             if (word is { Text: "隙", Reading: "ヒマ" })
                 word.Reading = "スキ";
 
+            // 事 (ジ) → コト when Sudachi misclassified as suffix after verb/expression
+            // ジ reading only occurs in kango compounds (仕事, 用事, 無事); those are parsed as single tokens.
+            // When 事 is orphaned (after a non-noun), it is the nominalizer こと.
+            if (word is { Text: "事", Reading: "ジ", WasReclassifiedFromSuffix: true })
+                word.Reading = "コト";
+
+            // たった in time-elapsed context → 経つ (1251100), not 断つ/立つ.
+            // When preceded by a time-unit noun (年/月/日/週/間), the intended meaning is
+            // "X time has passed" (経つ), not "to cut" (断つ) or "to stand" (立つ).
+            if (word.Text == "たった" &&
+                word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary or PartOfSpeech.Unknown)
+            {
+                var prev = i > 0 ? wordInfos[i - 1] : null;
+                if (prev != null && prev.PartOfSpeech != PartOfSpeech.SupplementarySymbol)
+                {
+                    bool precedingIsTimeUnit = prev.Text.EndsWith('年') || prev.Text.EndsWith('月')
+                                              || prev.Text.EndsWith('日') || prev.Text.EndsWith('週')
+                                              || prev.Text.EndsWith('間');
+                    if (precedingIsTimeUnit)
+                    {
+                        word.PreMatchedWordId = 1251100;
+                        word.DictionaryForm = "たつ";
+                        word.PreMatchedConjugations = ["past"];
+                    }
+                }
+            }
+
             // あの: Sudachi sometimes misclassifies as 感動詞 (filler) when it's prenominal,
             // and as 連体詞 when it's actually a filler interjection.
             // Strategy: override 感動詞→PrenounAdjectival always (Sudachi filler detection unreliable),
@@ -161,8 +188,9 @@ public partial class MorphologicalAnalyser
                 else if (word.PartOfSpeech == PartOfSpeech.PrenounAdjectival)
                 {
                     var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
-                    bool nextIsNoun = next != null && next.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Pronoun
-                        or PartOfSpeech.NaAdjective or PartOfSpeech.Counter or PartOfSpeech.Numeral;
+                    bool nextIsNoun = next is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.Pronoun
+                        or PartOfSpeech.NaAdjective or PartOfSpeech.Counter or PartOfSpeech.Numeral
+                    };
                     if (!nextIsNoun)
                         word.PartOfSpeech = PartOfSpeech.Interjection;
                 }

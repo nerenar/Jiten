@@ -2,19 +2,24 @@ namespace Jiten.Parser;
 
 public class KanaNormalizer
 {
-    // Includes Dakuten (が), Handakuten (ぱ), and Small Kana (ゃ, ょ)
-    private const string RowA = "あかさたなはまやらわがざだばぱゃアカサタナハマヤラワガザダバパャ";
-    private const string RowI = "いきしちにひみりぎじぢびぴイキシチニヒミリギジヂビピ";
-    private const string RowU = "うくすつぬふむゆるぐずづぶぷゅウクスツヌフムユルグズヅブプュ";
-    private const string RowE = "えけせてねへめれげぜでべぺエケセテネヘメレゲゼデベペ";
-    private const string RowO = "おこそとのほもよろをごぞどぼぽょオコソトノホモヨロヲゴゾドボポョ";
+    private static readonly Dictionary<char, char> KanaToVowel = BuildKanaToVowelMap();
+
+    private static Dictionary<char, char> BuildKanaToVowelMap()
+    {
+        var map = new Dictionary<char, char>();
+        foreach (char c in "おこそとのほもよろをごぞどぼぽょオコソトノホモヨロヲゴゾドボポョ") map[c] = 'う';
+        foreach (char c in "うくすつぬふむゆるぐずづぶぷゅウクスツヌフムユルグズヅブプュ") map[c] = 'う';
+        foreach (char c in "えけせてねへめれげぜでべぺエケセテネヘメレゲゼデベペ") map[c] = 'え';
+        foreach (char c in "いきしちにひみりぎじぢびぴイキシチニヒミリギジヂビピ") map[c] = 'い';
+        foreach (char c in "あかさたなはまやらわがざだばぱゃアカサタナハマヤラワガザダバパャ") map[c] = 'あ';
+        return map;
+    }
 
     public static string Normalize(string input)
     {
         if (string.IsNullOrEmpty(input) || input.IndexOf('ー') == -1)
             return input;
 
-        // Use StringBuilder to avoid intermediate allocations
         var sb = new System.Text.StringBuilder(input.Length);
 
         for (int i = 0; i < input.Length; i++)
@@ -23,21 +28,7 @@ public class KanaNormalizer
 
             if (c == 'ー' && i > 0)
             {
-                char prev = input[i - 1];
-
-                // JmDict/Standard Rules:
-                // O-row + ー -> う (e.g., どー -> どう, NOT どお)
-                // U-row + ー -> う
-                // E-row + ー -> え (e.g., すげー -> すげえ)
-                // I-row + ー -> い
-                // A-row + ー -> あ
-
-                if (RowO.Contains(prev)) sb.Append('う');
-                else if (RowU.Contains(prev)) sb.Append('う');
-                else if (RowE.Contains(prev)) sb.Append('え');
-                else if (RowI.Contains(prev)) sb.Append('い');
-                else if (RowA.Contains(prev)) sb.Append('あ');
-                else sb.Append('ー'); // Keep it if we can't determine vowel (e.g. after Kanji or symbol)
+                sb.Append(KanaToVowel.GetValueOrDefault(input[i - 1], 'ー'));
             }
             else
             {

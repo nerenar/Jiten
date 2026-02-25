@@ -124,6 +124,12 @@ public class CliOptions
     [Option(longName: "parse-test", Required = false, HelpText = "Parse text with verbose diagnostic output. Use @filepath to read from file.")]
     public string? ParseTest { get; set; }
 
+    [Option(longName: "parse-deck-test", Required = false, HelpText = "Parse text in deck mode (ParseTextToDeck). Use @filepath to read from file. Combine with --watch-word to focus output.")]
+    public string? ParseDeckTest { get; set; }
+
+    [Option(longName: "watch-word", Required = false, HelpText = "Surface text to focus on during --parse-deck-test (e.g. さっき). Shows deck result + standalone sentence diagnostics.")]
+    public string? WatchWord { get; set; }
+
     [Option(longName: "parse-test-output", Required = false, HelpText = "Output file path for parse-test diagnostics. Defaults to stdout.")]
     public string? ParseTestOutput { get; set; }
 
@@ -177,4 +183,13 @@ public class CliOptions
 
     [Option(longName: "benchmark-warmup", Required = false, Default = true, HelpText = "Run a warmup parse before benchmarking (default: true).")]
     public bool BenchmarkWarmup { get; set; }
+
+    [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
+    public bool ScanConfidence { get; set; }
+
+    [Option(longName: "input", Required = false, HelpText = "Input corpus file path (used with --scan-confidence).")]
+    public string? Input { get; set; }
+
+    [Option(longName: "threshold", Required = false, Default = 15, HelpText = "Confidence margin threshold for --scan-confidence (default: 15).")]
+    public int Threshold { get; set; } = 15;
 }
