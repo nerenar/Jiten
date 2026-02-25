@@ -588,6 +588,7 @@ namespace Jiten.Parser
                 var text = texts[textIndex];
                 var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype);
                 decks.Add(deck);
+                batchedSentences[textIndex] = null!;
             }
 
             timer.Stop();

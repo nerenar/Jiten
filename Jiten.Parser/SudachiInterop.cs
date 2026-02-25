@@ -55,9 +55,10 @@ static class SudachiInterop
 
     private static readonly IntPtr _libHandle;
 
-    // Context management (lazy, reusable)
+    // Context management (lazy, reusable with periodic recycling to prevent native memory growth)
     private static IntPtr _sudachiContext = IntPtr.Zero;
-    private static readonly object _contextLock = new();
+    private static long _contextCallCount;
+    private const long ContextRecycleThreshold = 5_000;
 
     // Limit concurrent Sudachi processing to match parse worker count (ProcessorCount / 4, min 1)
     // This reduces lock contention by gating how many threads attempt to acquire ProcessTextLock
@@ -345,7 +346,13 @@ static class SudachiInterop
                 if (_cbError != null)
                     throw new InvalidOperationException("Sudachi streaming callback error", _cbError);
 
-                return _wordInfos!;
+                var result = _wordInfos!;
+                _wordInfos = null;
+
+                if (Interlocked.Increment(ref _contextCallCount) % ContextRecycleThreshold == 0)
+                    RecycleContext();
+
+                return result;
             }
         }
         finally
@@ -354,26 +361,31 @@ static class SudachiInterop
         }
     }
 
+    private static void RecycleContext()
+    {
+        if (_sudachiContext != IntPtr.Zero && _freeContext != null)
+        {
+            _freeContext(_sudachiContext);
+            _sudachiContext = IntPtr.Zero;
+        }
+    }
+
     private static IntPtr GetOrCreateContext(string configPath, string dictionaryPath)
     {
         if (_sudachiContext != IntPtr.Zero)
             return _sudachiContext;
 
-        lock (_contextLock)
-        {
-            if (_sudachiContext != IntPtr.Zero || _createContext == null)
-                return _sudachiContext;
+        if (_createContext == null)
+            return IntPtr.Zero;
 
-            IntPtr errPtr = _createContext(configPath, dictionaryPath, out IntPtr ctx);
-            string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
-            _freeString(errPtr);
+        IntPtr errPtr = _createContext(configPath, dictionaryPath, out IntPtr ctx);
+        string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
+        _freeString(errPtr);
 
-            if (!string.IsNullOrEmpty(err) || ctx == IntPtr.Zero)
-                throw new InvalidOperationException(err.Length != 0 ? err : "Failed to create Sudachi context");
+        if (!string.IsNullOrEmpty(err) || ctx == IntPtr.Zero)
+            throw new InvalidOperationException(err.Length != 0 ? err : "Failed to create Sudachi context");
 
-            _sudachiContext = ctx;
-        }
-
+        _sudachiContext = ctx;
         return _sudachiContext;
     }
 
