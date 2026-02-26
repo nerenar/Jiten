@@ -33,7 +33,7 @@
       } catch (refreshError) {
         console.error('Coverage refresh API error:', refreshError);
         isRefreshing.value = false;
-        showErrorToast(toast, 'Error refreshing coverage', 'There was an error refreshing your coverage, please try again.');
+        showErrorToast(toast, 'Error refreshing coverage', extractApiError(refreshError, 'There was an error refreshing your coverage, please try again.'));
         return;
       }
 

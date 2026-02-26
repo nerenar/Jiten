@@ -119,6 +119,8 @@
       });
   };
 
+  const authStore = useAuthStore();
+
   useHead({
     title: 'Media Updates',
     meta: [
@@ -141,7 +143,10 @@
 
 <template>
   <div class="flex flex-col gap-4">
-    <h1 class="text-2xl font-bold">Media Updates</h1>
+    <div class="flex items-center gap-3">
+      <h1 class="text-2xl font-bold">Media Updates</h1>
+      <NuxtLink v-if="authStore.isAuthenticated" to="/requests" class="text-sm hover:underline">Request Media</NuxtLink>
+    </div>
 
     <div v-if="status === 'pending'" class="flex flex-col gap-4">
       <Card v-for="i in 5" :key="i" class="p-2">

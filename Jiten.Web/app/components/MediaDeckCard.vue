@@ -144,7 +144,7 @@
 </script>
 
 <template>
-  <div class="relative">
+  <div class="relative" :class="isCompact ? 'max-w-80' : ''">
     <div
       v-if="showIgnoreOverlay"
       class="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-lg bg-black/50 rounded-lg ignore-overlay"

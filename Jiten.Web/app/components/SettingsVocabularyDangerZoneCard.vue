@@ -26,7 +26,7 @@
           emit('changed');
         } catch (e) {
           console.error(e);
-          toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to clear known words on server.', life: 5000 });
+          toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(e, 'Failed to clear known words on server.'), life: 5000 });
         }
       },
       reject: () => {},

@@ -203,6 +203,11 @@ public class FormSelectionTests
         // やろう as noun 野郎/guy (1537700) → Sudachi POS=名詞, DictForm=やろう (no penalty: dictForm==surface)
         yield return ["あのやろうが来た", "やろう", 1537700, (byte)1];
 
+        // やろ (Kansai dialect, volitional of copula や) → expression やろう/やろ (2083340)
+        // ExpressionConflictPenalty is softened when DictForm "や" is a prefix of surface "やろ",
+        // preventing noun 夜露 (1537230, "evening dew") from winning via its coincidental やろ kana reading
+        yield return ["いやもっと楽しそうにしとったやろ", "やろ", 2083340, (byte)1];
+
         // 長 as suffix (チョウ) should resolve to ちょう "chief/head" (1429740), not なが "long" (2647210)
         yield return ["騎士団長", "長", 1429740, (byte)0];
 
@@ -361,6 +366,9 @@ public class FormSelectionTests
         yield return ["ここがくさい", "くさい", 1333150, (byte)1];
         yield return ["すごいくさい", "くさい", 1333150, (byte)1];
 
+        // colloquial せぇ → さい: 面倒くせぇ = 面倒くさい (1533560, adj-i)
+        yield return ["面倒くせぇ", "面倒くさい", 1533560, (byte)0];
+
         // 隙 in context → すき/opening (1253780), not ひま/obsolete (2861550)
         // FixReadingAmbiguity overrides Sudachi ヒマ→スキ for standalone 隙
         yield return ["いなくなった隙に奪い取る", "隙", 1253780, (byte)0];
@@ -514,6 +522,15 @@ public class FormSelectionTests
         // NaK's reading ナク is phonetically identical to なく; the conjugated-identity
         // penalty must fire for pure kana script differences to suppress false matches.
         yield return ["気配といっても曖昧な何かではなく、単に落ち葉がかすれる微かな音が聞こえただけだ。", "なく", 1529520, (byte)1];
+
+        // チックショー (colloquial geminated form of ちくしょう) → 畜生 (1422200)
+        // Sudachi splits into チック(suffix)+ショー(noun); user_dic + NormalizedForm lookup fix recombines
+        yield return ["チックショー", "チックショー", 1422200, (byte)1];
+
+        // さん after a name should resolve to the honorific suffix (1005340), not the numeral 三 (1579350)
+        // ReclassifyOrphanedSuffixes now preserves Suffix POS for さん, and Suffix tokens skip the
+        // verb-fallback comparison that was selecting the high-frequency numeral
+        yield return ["やっと会えました。待ってましたよ、桐島玲さん", "さん", 1005340, (byte)0];
 
         // 様 disambiguation: さま (honorific suffix, 1545790) vs よう (appearance/manner, 1605840)
         // After removing jiten priority from 1605840, context must drive the choice.

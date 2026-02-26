@@ -197,10 +197,23 @@
 
 <template>
   <div class="flex flex-col gap-4">
-    <!-- Upload -->
     <input ref="fileInputRef" type="file" accept=".zip" class="hidden" @change="onFileInputChange" />
+
+    <!-- Mobile: select file button only -->
+    <div class="sm:hidden flex items-center gap-3">
+      <template v-if="importing">
+        <i class="pi pi-spin pi-spinner text-primary" />
+        <div class="flex-1 flex flex-col gap-1">
+          <span class="text-sm text-gray-600 dark:text-gray-300">{{ progressLabel }}</span>
+          <ProgressBar :value="progressPercent" style="height: 0.5rem" />
+        </div>
+      </template>
+      <Button v-else label="Select File" icon="pi pi-folder-open" severity="secondary" outlined size="small" @click="openFilePicker" />
+    </div>
+
+    <!-- Desktop: drag & drop zone -->
     <div
-      class="border-2 border-dashed rounded-xl p-6 text-center transition-colors"
+      class="hidden sm:block border-2 border-dashed rounded-xl p-6 text-center transition-colors"
       :class="dragOver
         ? 'border-primary bg-primary-50 dark:bg-primary-900/20'
         : 'border-gray-300 dark:border-gray-600'"
@@ -246,9 +259,15 @@
         @dragend="onDragEnd"
         @drop.prevent="onDropReorder(index)"
       >
-        <!-- Drag handle + priority badge -->
-        <div class="flex items-center gap-2 shrink-0 cursor-grab active:cursor-grabbing">
-          <i class="pi pi-bars text-gray-400 dark:text-gray-500 text-xs" />
+        <!-- Arrows + drag handle (desktop only) + priority badge -->
+        <div class="flex items-center gap-1 shrink-0">
+          <div class="flex flex-col gap-0.5">
+            <Button icon="pi pi-chevron-up" text rounded size="small" :disabled="index === 0" @click="moveUp(index)" class="!w-6 !h-6" />
+            <Button icon="pi pi-chevron-down" text rounded size="small" :disabled="index === dictionaries.length - 1" @click="moveDown(index)" class="!w-6 !h-6" />
+          </div>
+          <span class="max-sm:hidden cursor-grab active:cursor-grabbing">
+            <i class="pi pi-bars text-gray-400 dark:text-gray-500 text-xs" />
+          </span>
           <span class="w-7 h-7 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-xs font-bold flex items-center justify-center">
             {{ index + 1 }}
           </span>
@@ -300,10 +319,6 @@
             class="text-xs w-48"
             size="small"
           />
-          <div class="flex flex-col gap-0.5">
-            <Button icon="pi pi-chevron-up" text rounded size="small" :disabled="index === 0" @click="moveUp(index)" class="!w-6 !h-6" />
-            <Button icon="pi pi-chevron-down" text rounded size="small" :disabled="index === dictionaries.length - 1" @click="moveDown(index)" class="!w-6 !h-6" />
-          </div>
           <Button v-if="!isJmDict(dict)" icon="pi pi-trash" severity="danger" text rounded size="small" @click="confirmRemove(dict)" />
           <div v-else class="w-8" />
         </div>

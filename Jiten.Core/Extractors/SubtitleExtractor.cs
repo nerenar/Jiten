@@ -53,6 +53,7 @@ public partial class SubtitleExtractor
             // Remove ruby/furigana annotations in both half-width and full-width parentheses
             lines[i] = RubyPattern().Replace(lines[i], "");
             lines[i] = FullWidthRubyPattern().Replace(lines[i], "");
+            lines[i] = SquareBracketPattern().Replace(lines[i], "");
 
             if (string.IsNullOrWhiteSpace(lines[i]))
             {
@@ -86,4 +87,7 @@ public partial class SubtitleExtractor
 
     [GeneratedRegex(@"（(.*?)）")]
     private static partial Regex FullWidthRubyPattern();
+
+    [GeneratedRegex(@"\[.*?\]")]
+    private static partial Regex SquareBracketPattern();
 }

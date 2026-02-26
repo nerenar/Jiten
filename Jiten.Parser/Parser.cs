@@ -937,7 +937,7 @@ namespace Jiten.Parser
                             }
                             else if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Pronoun or PartOfSpeech.Conjunction
                                      or PartOfSpeech.Interjection or PartOfSpeech.Particle or PartOfSpeech.Adverb
-                                     or PartOfSpeech.NaAdjective)
+                                     or PartOfSpeech.NaAdjective or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix)
                             {
                                 processedWord = nounResult.word;
                                 resolvedMargin = nounResult.margin;
@@ -1210,6 +1210,17 @@ namespace Jiten.Parser
             {
                 var collected = LookupCandidateCollector.CollectIds(_lookups, text,
                                                                     includeKanaNormalized: true, includeLongVowelStripped: true);
+
+                // Also look up Sudachi's NormalizedForm when it differs from the surface (e.g., チックショー → チクショー for 畜生)
+                if (!string.IsNullOrEmpty(wordData.wordInfo.NormalizedForm) &&
+                    wordData.wordInfo.NormalizedForm != text)
+                {
+                    var normalizedCollected = LookupCandidateCollector.CollectIds(_lookups, wordData.wordInfo.NormalizedForm,
+                                                                                  includeKanaNormalized: true, includeLongVowelStripped: true);
+                    if (normalizedCollected.Count > 0)
+                        collected = collected.Concat(normalizedCollected).Distinct().ToList();
+                }
+
                 candidates = collected.Count > 0 ? collected : null;
 
                 if (text.Contains('ー'))

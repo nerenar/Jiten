@@ -99,7 +99,7 @@
       const sets = await $api<WordSetInfo[]>('/admin/word-sets');
       wordSet.value = sets.find(s => s.setId === setId) || null;
     } catch (error: any) {
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load word set', life: 5000 });
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to load word set'), life: 5000 });
     } finally {
       loadingSet.value = false;
     }
@@ -129,7 +129,7 @@
       members.value = result.data.map(m => ({ ...m, key: `${m.wordId}-${m.readingIndex}` }));
       totalMembers.value = result.totalItems;
     } catch (error: any) {
-      if (!silent) toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load members', life: 5000 });
+      if (!silent) toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to load members'), life: 5000 });
     } finally {
       loadingMembers.value = false;
     }
@@ -192,7 +192,7 @@
       selectedForms.value = new Set(eligibleForms.map(f => f.readingIndex));
       showFormDialog.value = true;
     } catch (error: any) {
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load word forms', life: 5000 });
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to load word forms'), life: 5000 });
     }
   }
 
@@ -226,7 +226,7 @@
       showFormDialog.value = true;
       wordIdInput.value = '';
     } catch (error: any) {
-      toast.add({ severity: 'error', summary: 'Error', detail: error?.data?.message || 'Word not found', life: 5000 });
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Word not found'), life: 5000 });
     } finally {
       addingByWordId.value = false;
     }
@@ -268,7 +268,7 @@
       }
       loadMembers(true);
     } catch (error: any) {
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to add members', life: 5000 });
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to add members'), life: 5000 });
     }
   }
 
@@ -303,7 +303,7 @@
         loadMembers(true);
       }
     } catch (error: any) {
-      toast.add({ severity: 'error', summary: 'Error', detail: error?.data?.message || 'Failed to remove members', life: 5000 });
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to remove members'), life: 5000 });
     } finally {
       removing.value = false;
     }
@@ -366,7 +366,7 @@
       showEditDialog.value = false;
       await loadWordSet();
     } catch (error: any) {
-      toast.add({ severity: 'error', summary: 'Error', detail: error?.data?.message || 'Update failed', life: 5000 });
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Update failed'), life: 5000 });
     } finally {
       savingEdit.value = false;
     }

@@ -86,6 +86,13 @@
     });
   });
 
+  const { startPolling, stopPolling } = useNotifications();
+  watch(() => auth.isAuthenticated, (isAuth) => {
+    if (isAuth) startPolling();
+    else stopPolling();
+  }, { immediate: true });
+  onUnmounted(() => stopPolling());
+
   const settings = ref();
 
   const titleLanguageOptions = ref([
@@ -149,6 +156,7 @@
           <nuxt-link v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions" to="/Dashboard" :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'">Dashboard</nuxt-link>
           <a v-if="auth.isAuthenticated" href="#" class="!text-white cursor-pointer" @click.prevent="auth.logout()">Logout</a>
           <nuxt-link v-else to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'">Login</nuxt-link>
+          <NotificationBell v-if="auth.isAuthenticated" />
           <Button
             type="button"
             label="Settings"
@@ -165,15 +173,18 @@
           </Button>
         </nav>
 
-        <!-- Mobile hamburger button -->
-        <button
-          class="md:hidden inline-flex items-center justify-center p-2 rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
-          @click="toggleMobileMenu"
-          aria-label="Toggle navigation menu"
-          :aria-expanded="mobileMenuOpen.toString()"
-        >
-          <Icon :name="mobileMenuOpen ? 'material-symbols:close' : 'material-symbols:menu'" size="28" />
-        </button>
+        <!-- Mobile: bell + hamburger -->
+        <div class="md:hidden flex items-center gap-1">
+          <NotificationBell v-if="auth.isAuthenticated" />
+          <button
+            class="inline-flex items-center justify-center p-2 rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
+            @click="toggleMobileMenu"
+            aria-label="Toggle navigation menu"
+            :aria-expanded="mobileMenuOpen.toString()"
+          >
+            <Icon :name="mobileMenuOpen ? 'material-symbols:close' : 'material-symbols:menu'" size="28" />
+          </button>
+        </div>
       </div>
 
       <!-- Mobile menu panel -->

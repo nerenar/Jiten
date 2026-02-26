@@ -37,6 +37,9 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<!い)っしょ[ーう]?(?=[\s\n]|$)")]
     private static partial Regex ColloquialSshoRegex();
 
+    [GeneratedRegex(@"(?<=[\u4E00-\u9FAF])番っ")]
+    private static partial Regex BanCompoundTsuRegex();
+
     [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]{2})…+(?=[^\r\n…])")]
     private static partial Regex MidSentenceEllipsisRegex();
 
@@ -73,6 +76,7 @@ public partial class MorphologicalAnalyser
         text = text.Replace("もやる", $"も{_stopToken}やる");
         text = HayaruWithoutGaRegex().Replace(text, $"は{_stopToken}やる");
         text = text
+            .Replace("ええんや", $"ええ{_stopToken}んや")
             .Replace("べや", $"べ{_stopToken}や")
             .Replace("はいい", $"は{_stopToken}いい")
             .Replace("元国王", $"元{_stopToken}国王")
@@ -85,6 +89,7 @@ public partial class MorphologicalAnalyser
         text = DeNaiCompoundRegex().Replace(text, $"$1{_stopToken}出$2");
         text = text.Replace("ぶっち切", "ぶち切");
         text = EmphaticTsuRegex().Replace(text, $"{_stopToken}$1");
+        text = BanCompoundTsuRegex().Replace(text, $"番{_stopToken}っ");
 
         text = text
             .Replace("水魔法", $"水{_stopToken}魔法")
@@ -105,7 +110,8 @@ public partial class MorphologicalAnalyser
         text = text
             .Replace("来イ", "来い")
             .Replace("とんでもねえ", "とんでもない")
-            .Replace("しょうがねえ", "しょうがない");
+            .Replace("しょうがねえ", "しょうがない")
+            .Replace("せぇ", "さい");
 
         text = ColloquialSshoRegex().Replace(text, $"{_stopToken}っしょ");
         text = MidSentenceEllipsisRegex().Replace(text, "");

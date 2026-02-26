@@ -45,6 +45,15 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
                     throw new Exception("No text found in the mokuro file.");
                 }
             }
+            else if (new[] { ".ass", ".srt", ".ssa" }.Contains(Path.GetExtension(filePath).ToLower()))
+            {
+                text = await new SubtitleExtractor().Extract(filePath);
+
+                if (string.IsNullOrEmpty(text))
+                {
+                    throw new Exception("No text found in the subtitle file.");
+                }
+            }
             else
             {
                 text = await File.ReadAllTextAsync(filePath);
@@ -218,6 +227,7 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
         {
             ".epub" => await new EbookExtractor().ExtractTextFromEbook(filePath),
             ".mokuro" => await new MokuroExtractor().Extract(filePath, false),
+            ".ass" or ".srt" or ".ssa" => await new SubtitleExtractor().Extract(filePath),
             _ => await File.ReadAllTextAsync(filePath)
         };
     }

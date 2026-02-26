@@ -37,4 +37,12 @@ public class BunnyCdnHelper
 
         return $"{_cdnBaseUrl}/{fileName}";
     }
+
+    public static async Task DeleteFile(string storagePath)
+    {
+        var bunnyCDNStorage = new BunnyCDNStorage(_storageZoneName, _secret, "de");
+        await bunnyCDNStorage.DeleteObjectAsync($"{_storageZoneName}/{storagePath}");
+    }
+
+    public static string GetCdnUrl(string storagePath) => $"{_cdnBaseUrl}/{storagePath}";
 }

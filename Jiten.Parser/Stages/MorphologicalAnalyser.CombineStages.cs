@@ -699,8 +699,8 @@ public partial class MorphologicalAnalyser
                 continue;
 
             // じまい (仕舞い) is a genuine suffix that attaches to verb ず-forms (e.g., わからずじまい)
-            // ちゃん is always the familiar-person suffix, never reclassified (avoids matching 父)
-            if (wordInfos[i].DictionaryForm is "じまい" or "仕舞い" or "ちゃん")
+            // Honorific suffixes (さん/くん/ちゃん/様/殿/氏) are always person-title suffixes, never reclassified
+            if (wordInfos[i].DictionaryForm is "じまい" or "仕舞い" or "ちゃん" or "さん" or "くん" or "様" or "殿" or "氏")
                 continue;
 
             var prev = wordInfos[i - 1].PartOfSpeech;
@@ -708,8 +708,10 @@ public partial class MorphologicalAnalyser
                 continue;
 
             // Adjectival suffixes (形容詞的) like くさい, らしい, っぽい should keep their POS
-            // so the parser's Adjectival section check routes them through the verb/adj branch
-            if (wordInfos[i].PartOfSpeechSection1 == PartOfSpeechSection.Adjectival)
+            // so the parser's Adjectival section check routes them through the verb/adj branch.
+            // NaAdjectiveLike (形状詞的) like 気 can start compound expressions (e.g. 気を引き締める)
+            // so don't mark them as reclassified — that would block the compound detection window.
+            if (wordInfos[i].PartOfSpeechSection1 is PartOfSpeechSection.Adjectival or PartOfSpeechSection.NaAdjectiveLike)
                 continue;
 
             wordInfos[i].PartOfSpeech = PartOfSpeech.CommonNoun;

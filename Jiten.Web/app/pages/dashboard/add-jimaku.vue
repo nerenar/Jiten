@@ -46,7 +46,7 @@ const fetchNext = async () => {
     selectedFileUrls.value = []; // Start with empty selection
   } catch (error) {
     console.error(error);
-    toast.add({ severity: 'error', summary: 'Error', detail: `Failed to fetch Jimaku data for ID ${currentId.value}.`, life: 3000 });
+    toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, `Failed to fetch Jimaku data for ID ${currentId.value}.`), life: 3000 });
     await fetchNext(); // Try next id
   }
 };
@@ -76,7 +76,7 @@ const submit = async () => {
     await fetchNext();
   } catch (error) {
     console.error(error);
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to add media.', life: 3000 });
+    toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to add media.'), life: 3000 });
   }
 };
 

@@ -439,7 +439,13 @@ internal static class PenaltyScorer
             || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
         if (!dictFormMatchesWord)
         {
-            surfaceMatchScore -= 250;
+            // If DictionaryForm is a strict prefix of the surface, the expression likely derives
+            // from a dialectal or auxiliary base (e.g. Kansai copula や → やろ from やろう).
+            // Apply a softer penalty to avoid suppressing the correct expression entry.
+            bool dictFormIsPrefixOfSurface = context.DictionaryFormHiragana is { Length: > 0 }
+                && context.SurfaceHiragana.Length > context.DictionaryFormHiragana.Length
+                && context.SurfaceHiragana.StartsWith(context.DictionaryFormHiragana, StringComparison.Ordinal);
+            surfaceMatchScore -= dictFormIsPrefixOfSurface ? 100 : 250;
             return true;
         }
 

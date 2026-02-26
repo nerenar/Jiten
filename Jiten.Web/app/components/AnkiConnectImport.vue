@@ -300,7 +300,7 @@
         reviewByCard = new Map();
       } catch (error) {
         console.error('Error importing Anki data:', error);
-        toast.add({ severity: 'error', detail: 'Failed to import data.', life: 5000 });
+        toast.add({ severity: 'error', detail: extractApiError(error, 'Failed to import data.'), life: 5000 });
       } finally {
         isLoading.value = false;
         currentStep.value = 1;

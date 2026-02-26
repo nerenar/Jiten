@@ -212,6 +212,11 @@ internal static class TransitionRuleSets
             [ScoringCondition.CandidateIsNounSuffix],
             [ScoringCondition.PrevIsNounLike],
             15),
+
+        new("honorific-after-name-synergy",
+            [ScoringCondition.CandidateIsHonorific],
+            [ScoringCondition.PrevIsName],
+            30),
     ];
 
     // Parity rules encoding current ValidateGrammaticalSequences behavior (phases 1–3)

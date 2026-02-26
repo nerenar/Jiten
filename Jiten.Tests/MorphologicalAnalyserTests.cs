@@ -581,6 +581,12 @@ public class MorphologicalAnalyserTests
         // JMnedict celebrity names - keep as single token (in JMnedict)
         yield return ["加藤紀子", new[] { "加藤紀子" }];
         yield return ["わかってねえじゃねえか", new[] { "わかってねえ", "じゃねえ", "か" }];
+        // Slang negatives where verb stem ends in え — ええ user_dic entry must not absorb the え
+        yield return ["食えねえんだよ", new[] { "食えねえ", "んだ", "よ" }];
+        yield return ["見えねえよ", new[] { "見えねえ", "よ" }];
+        yield return ["やれねえじゃん", new[] { "やれねえ", "じゃん" }];
+        // ええ as standalone Kansai interjection before a slang negative verb
+        yield return ["ええ、知らねえよ", new[] { "ええ", "知らねえ", "よ" }];
         yield return ["なんにもしたくないときもある", new[] { "なんにも", "したくない", "とき", "も", "ある" }];
         yield return ["いやあんま外出ないから", new[] { "いや", "あんま", "外", "出ない", "から" }];
         yield return ["外出ない", new[] { "外", "出ない" }];
@@ -775,6 +781,9 @@ public class MorphologicalAnalyserTests
         yield return ["そういえばここって", new[] { "そういえば", "ここ", "って" }];
         // Single-kana Symbol tokens (stutters) must be filtered — ゆ before … tagged as 記号 by Sudachi
         yield return ["ゆ……夢は", new[] { "夢", "は" }];
+        // チックショー: colloquial geminated form of ちくしょう — Sudachi splits into チック(suffix)+ショー
+        // but user_dic overrides to produce a single 感動詞 token
+        yield return ["チックショー", new[] { "チックショー" }];
         // I-adjective stem resegmentation: Sudachi fuses adj-i stems in slang compounds
         // ださ → ださ+い in lookups fallback enables the split; きも → きも matches 肝 directly
         yield return ["ダサキモ", new[] { "ダサ", "キモ" }];

@@ -789,6 +789,338 @@ namespace Jiten.Core.Migrations
                     b.ToTable("Links", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int?>("ExternalLinkType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExternalUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("FulfilledDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MediaType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequesterId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UpvoteCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FulfilledDeckId");
+
+                    b.HasIndex("MediaType")
+                        .HasDatabaseName("IX_MediaRequest_MediaType");
+
+                    b.HasIndex("RequesterId")
+                        .HasDatabaseName("IX_MediaRequest_RequesterId");
+
+                    b.HasIndex("Title")
+                        .HasDatabaseName("IX_MediaRequest_Title");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_MediaRequest_Status_CreatedAt");
+
+                    b.HasIndex("Status", "UpvoteCount")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_MediaRequest_Status_UpvoteCount");
+
+                    b.ToTable("MediaRequests", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestComment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Text")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaRequestId")
+                        .HasDatabaseName("IX_MediaRequestComment_MediaRequestId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_MediaRequestComment_UserId");
+
+                    b.ToTable("MediaRequestComments", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestSubscription", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaRequestId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MediaRequestSubscription_RequestId_UserId");
+
+                    b.ToTable("MediaRequestSubscriptions", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestUpload", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("AdminReviewed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("FileDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("MediaRequestCommentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OriginalFileCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaRequestCommentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MediaRequestUpload_CommentId");
+
+                    b.HasIndex("MediaRequestId")
+                        .HasDatabaseName("IX_MediaRequestUpload_RequestId");
+
+                    b.ToTable("MediaRequestUploads", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestUpvote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaRequestId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MediaRequestUpvote_RequestId_UserId");
+
+                    b.ToTable("MediaRequestUpvotes", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Notification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LinkUrl")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_Notification_CreatedAt");
+
+                    b.HasIndex("UserId", "IsRead", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("IX_Notification_UserId_IsRead_CreatedAt");
+
+                    b.ToTable("Notifications", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.RequestActivityLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<int?>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetUserId")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action", "CreatedAt")
+                        .HasDatabaseName("IX_RequestActivityLog_Action_CreatedAt");
+
+                    b.HasIndex("MediaRequestId", "CreatedAt")
+                        .HasDatabaseName("IX_RequestActivityLog_RequestId_CreatedAt");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_RequestActivityLog_UserId_CreatedAt");
+
+                    b.ToTable("RequestActivityLogs", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Tag", b =>
                 {
                     b.Property<int>("TagId")
@@ -1092,6 +1424,68 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequest", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "FulfilledDeck")
+                        .WithMany()
+                        .HasForeignKey("FulfilledDeckId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("FulfilledDeck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestComment", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Comments")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestSubscription", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Subscriptions")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestUpload", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequestComment", "Comment")
+                        .WithOne("Upload")
+                        .HasForeignKey("Jiten.Core.Data.MediaRequestUpload", "MediaRequestCommentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Uploads")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Comment");
+
+                    b.Navigation("MediaRequest");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestUpvote", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Upvotes")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.WordSetMember", b =>
                 {
                     b.HasOne("Jiten.Core.Data.WordSet", "Set")
@@ -1147,6 +1541,22 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.JMDict.Kanji", b =>
                 {
                     b.Navigation("WordKanjis");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequest", b =>
+                {
+                    b.Navigation("Comments");
+
+                    b.Navigation("Subscriptions");
+
+                    b.Navigation("Uploads");
+
+                    b.Navigation("Upvotes");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestComment", b =>
+                {
+                    b.Navigation("Upload");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.Tag", b =>

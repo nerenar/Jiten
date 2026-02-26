@@ -40,50 +40,43 @@ public class UserDbContext : IdentityDbContext<User>
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var isNpgsql = Database.ProviderName?.Contains("Npgsql") == true;
+
         var guidToString = new ValueConverter<string, Guid>(
             v => Guid.Parse(v),
             v => v.ToString());
 
-        modelBuilder.HasDefaultSchema("user");
+        if (isNpgsql)
+            modelBuilder.HasDefaultSchema("user");
 
         modelBuilder.Entity<User>(entity =>
         {
-            entity.Property(e => e.Id)
-                  .HasConversion(guidToString)
-                  .HasColumnType("uuid")
-                  .IsRequired();
+            if (isNpgsql)
+                entity.Property(e => e.Id).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
         });
 
         modelBuilder.Entity<IdentityUserClaim<string>>(entity =>
         {
-            entity.Property(e => e.UserId)
-                  .HasConversion(guidToString)
-                  .HasColumnType("uuid")
-                  .IsRequired();
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
         });
 
         modelBuilder.Entity<IdentityUserLogin<string>>(entity =>
         {
-            entity.Property(e => e.UserId)
-                  .HasConversion(guidToString)
-                  .HasColumnType("uuid")
-                  .IsRequired();
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
         });
 
         modelBuilder.Entity<IdentityUserToken<string>>(entity =>
         {
-            entity.Property(e => e.UserId)
-                  .HasConversion(guidToString)
-                  .HasColumnType("uuid")
-                  .IsRequired();
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
         });
 
         modelBuilder.Entity<IdentityUserRole<string>>(entity =>
         {
-            entity.Property(e => e.UserId)
-                  .HasConversion(guidToString)
-                  .HasColumnType("uuid")
-                  .IsRequired();
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
         });
 
 
@@ -92,7 +85,8 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasKey(rt => rt.Token);
             entity.Property(rt => rt.JwtId).IsRequired();
             entity.Property(rt => rt.ExpiryDate).IsRequired();
-            entity.Property(rt => rt.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(rt => rt.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.HasOne(rt => rt.User)
                   .WithMany()
                   .HasForeignKey(rt => rt.UserId);
@@ -105,7 +99,8 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasKey(uc => new { uc.UserId, uc.DeckId }).HasName("PK_UserCoverages");
             entity.Property(uc => uc.Coverage).IsRequired();
             entity.Property(uc => uc.UniqueCoverage).IsRequired();
-            entity.Property(uc => uc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(uc => uc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
 
             entity.HasIndex(uc => uc.UserId).HasDatabaseName("IX_UserCoverage_UserId");
         });
@@ -113,9 +108,12 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<UserCoverageChunk>(entity =>
         {
             entity.HasKey(uc => new { uc.UserId, uc.Metric, uc.ChunkIndex }).HasName("PK_UserCoverageChunks");
-            entity.Property(uc => uc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+            {
+                entity.Property(uc => uc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(uc => uc.Values).HasColumnType("smallint[]").IsRequired();
+            }
             entity.Property(uc => uc.Metric).HasColumnType("smallint").IsRequired();
-            entity.Property(uc => uc.Values).HasColumnType("smallint[]").IsRequired();
             entity.Property(uc => uc.ComputedAt).IsRequired();
             entity.HasIndex(uc => uc.UserId).HasDatabaseName("IX_UserCoverageChunks_UserId");
         });
@@ -125,7 +123,8 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasKey(uk => new { uk.UserId, uk.WordId, uk.ReadingIndex });
             entity.Property(uk => uk.LearnedDate).IsRequired();
             entity.Property(uk => uk.KnownState).IsRequired();
-            entity.Property(uk => uk.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(uk => uk.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
 
             entity.HasIndex(uk => uk.UserId).HasDatabaseName("IX_UserKnownWord_UserId");
         });
@@ -136,7 +135,8 @@ public class UserDbContext : IdentityDbContext<User>
             entity.Property(um => um.CoverageRefreshedAt).IsRequired(false);
             entity.Property(um => um.CoverageDirty).IsRequired();
             entity.Property(um => um.CoverageDirtyAt).IsRequired(false);
-            entity.Property(um => um.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(um => um.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
 
             entity.HasOne<User>()
                   .WithOne()
@@ -146,7 +146,8 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<ApiKey>(entity =>
         {
             entity.HasKey(k => k.Id);
-            entity.Property(k => k.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(k => k.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.Property(k => k.Hash).IsRequired().HasMaxLength(88);
             entity.Property(k => k.CreatedAt).IsRequired();
             entity.Property(k => k.IsRevoked).HasDefaultValue(false);
@@ -170,7 +171,8 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<UserDeckPreference>(entity =>
         {
             entity.HasKey(udp => new { udp.UserId, udp.DeckId });
-            entity.Property(udp => udp.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(udp => udp.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.Property(udp => udp.Status).IsRequired();
             entity.Property(udp => udp.IsFavourite).IsRequired();
             entity.Property(udp => udp.IsIgnored).IsRequired();
@@ -190,7 +192,8 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<FsrsCard>(entity =>
         {
             entity.HasKey(c => c.CardId);
-            entity.Property(c => c.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(c => c.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.HasIndex(c => new { c.UserId, c.WordId, c.ReadingIndex }).IsUnique();
             entity.HasIndex(c => c.UserId);
         });
@@ -209,7 +212,8 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<UserAccomplishment>(entity =>
         {
             entity.HasKey(ua => ua.AccomplishmentId);
-            entity.Property(ua => ua.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(ua => ua.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
 
             entity.HasOne<User>()
                   .WithMany()
@@ -225,7 +229,8 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<UserProfile>(entity =>
         {
             entity.HasKey(up => up.UserId);
-            entity.Property(up => up.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            if (isNpgsql)
+                entity.Property(up => up.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.Property(up => up.IsPublic).HasDefaultValue(false);
 
             entity.HasOne<User>()
@@ -237,8 +242,15 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<UserKanjiGrid>(entity =>
         {
             entity.HasKey(ukg => ukg.UserId);
-            entity.Property(ukg => ukg.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
-            entity.Property(ukg => ukg.KanjiScoresJson).HasColumnType("jsonb").IsRequired();
+            if (isNpgsql)
+            {
+                entity.Property(ukg => ukg.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(ukg => ukg.KanjiScoresJson).HasColumnType("jsonb").IsRequired();
+            }
+            else
+            {
+                entity.Property(ukg => ukg.KanjiScoresJson).IsRequired();
+            }
             entity.Property(ukg => ukg.LastComputedAt).IsRequired();
             entity.Ignore(ukg => ukg.KanjiScores);
 
@@ -251,8 +263,15 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<UserFsrsSettings>(entity =>
         {
             entity.HasKey(ufs => ufs.UserId);
-            entity.Property(ufs => ufs.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
-            entity.Property(ufs => ufs.ParametersJson).HasColumnType("jsonb").IsRequired();
+            if (isNpgsql)
+            {
+                entity.Property(ufs => ufs.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(ufs => ufs.ParametersJson).HasColumnType("jsonb").IsRequired();
+            }
+            else
+            {
+                entity.Property(ufs => ufs.ParametersJson).IsRequired();
+            }
             entity.Property(ufs => ufs.DesiredRetention).HasColumnType("double precision");
             entity.Ignore(ufs => ufs.Parameters);
 
@@ -265,10 +284,8 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<UserWordSetState>(entity =>
         {
             entity.HasKey(uwss => new { uwss.UserId, uwss.SetId });
-            entity.Property(uwss => uwss.UserId)
-                  .HasConversion(guidToString)
-                  .HasColumnType("uuid")
-                  .IsRequired();
+            if (isNpgsql)
+                entity.Property(uwss => uwss.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.Property(uwss => uwss.CreatedAt).IsRequired();
             entity.HasIndex(uwss => uwss.UserId).HasDatabaseName("IX_UserWordSetState_UserId");
         });

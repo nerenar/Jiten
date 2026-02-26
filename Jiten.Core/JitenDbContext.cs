@@ -41,6 +41,14 @@ public class JitenDbContext : DbContext
     public DbSet<WordSet> WordSets { get; set; }
     public DbSet<WordSetMember> WordSetMembers { get; set; }
 
+    public DbSet<MediaRequest> MediaRequests { get; set; }
+    public DbSet<MediaRequestUpvote> MediaRequestUpvotes { get; set; }
+    public DbSet<MediaRequestSubscription> MediaRequestSubscriptions { get; set; }
+    public DbSet<MediaRequestComment> MediaRequestComments { get; set; }
+    public DbSet<MediaRequestUpload> MediaRequestUploads { get; set; }
+    public DbSet<RequestActivityLog> RequestActivityLogs { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
+
     public JitenDbContext()
     {
     }
@@ -52,9 +60,13 @@ public class JitenDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.HasPostgresExtension("fuzzystrmatch");
+        var isNpgsql = Database.ProviderName?.Contains("Npgsql") == true;
 
-        modelBuilder.HasDefaultSchema("jiten"); // Set a default schema
+        if (isNpgsql)
+        {
+            modelBuilder.HasPostgresExtension("fuzzystrmatch");
+            modelBuilder.HasDefaultSchema("jiten");
+        }
 
         modelBuilder.Entity<Deck>(entity =>
         {
@@ -100,9 +112,15 @@ public class JitenDbContext : DbContext
               entity.Property(dt => dt.Title).IsRequired().HasMaxLength(200);
               entity.Property(dt => dt.TitleType).IsRequired();
 
-              // TitleNoSpaces is a generated column computed by PostgreSQL
-              entity.Property(dt => dt.TitleNoSpaces)
-                    .HasComputedColumnSql("REPLACE(\"Title\", ' ', '')", stored: true);
+              if (isNpgsql)
+              {
+                  entity.Property(dt => dt.TitleNoSpaces)
+                        .HasComputedColumnSql("REPLACE(\"Title\", ' ', '')", stored: true);
+              }
+              else
+              {
+                  entity.Ignore(dt => dt.TitleNoSpaces);
+              }
 
               entity.HasOne(dt => dt.Deck)
                     .WithMany(d => d.Titles)
@@ -184,13 +202,13 @@ public class JitenDbContext : DbContext
                   .HasPrecision(4, 2)
                   .IsRequired();
 
-            entity.Property(dd => dd.DecilesJson)
-                  .HasColumnType("jsonb")
-                  .IsRequired();
-
-            entity.Property(dd => dd.ProgressionJson)
-                  .HasColumnType("jsonb")
-                  .IsRequired();
+            var decilesBuilder = entity.Property(dd => dd.DecilesJson).IsRequired();
+            var progressionBuilder = entity.Property(dd => dd.ProgressionJson).IsRequired();
+            if (isNpgsql)
+            {
+                decilesBuilder.HasColumnType("jsonb");
+                progressionBuilder.HasColumnType("jsonb");
+            }
 
             entity.Property(dd => dd.LastUpdated)
                   .IsRequired();
@@ -228,15 +246,17 @@ public class JitenDbContext : DbContext
                   .HasForeignKey(f => f.WordId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.Property(e => e.PartsOfSpeech)
-                  .HasColumnType("text[]");
+            if (isNpgsql)
+            {
+                entity.Property(e => e.PartsOfSpeech).HasColumnType("text[]");
+                entity.Property(e => e.PitchAccents).HasColumnType("int[]").IsRequired(false);
+            }
+            else
+            {
+                entity.Property(e => e.PitchAccents).IsRequired(false);
+            }
 
-            entity.Property(e => e.PitchAccents)
-                  .HasColumnType("int[]")
-                  .IsRequired(false);
-            
-            entity.Property(e => e.Origin)
-                  .HasColumnType("int");
+            entity.Property(e => e.Origin).HasColumnType("int");
         });
 
         modelBuilder.Entity<JmDictDefinition>(entity =>
@@ -246,44 +266,30 @@ public class JitenDbContext : DbContext
             entity.Property(e => e.DefinitionId).ValueGeneratedOnAdd();
             entity.Property(e => e.WordId).IsRequired();
 
-            entity.Property(e => e.PartsOfSpeech)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.EnglishMeanings)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.DutchMeanings)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.FrenchMeanings)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.GermanMeanings)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.SpanishMeanings)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.HungarianMeanings)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.RussianMeanings)
-                  .HasColumnType("text[]");
-            entity.Property(e => e.SlovenianMeanings)
-                  .HasColumnType("text[]");
+            if (isNpgsql)
+            {
+                entity.Property(e => e.PartsOfSpeech).HasColumnType("text[]");
+                entity.Property(e => e.EnglishMeanings).HasColumnType("text[]");
+                entity.Property(e => e.DutchMeanings).HasColumnType("text[]");
+                entity.Property(e => e.FrenchMeanings).HasColumnType("text[]");
+                entity.Property(e => e.GermanMeanings).HasColumnType("text[]");
+                entity.Property(e => e.SpanishMeanings).HasColumnType("text[]");
+                entity.Property(e => e.HungarianMeanings).HasColumnType("text[]");
+                entity.Property(e => e.RussianMeanings).HasColumnType("text[]");
+                entity.Property(e => e.SlovenianMeanings).HasColumnType("text[]");
+                entity.Property(e => e.Pos).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+                entity.Property(e => e.Misc).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+                entity.Property(e => e.Field).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+                entity.Property(e => e.Dial).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+                entity.Property(e => e.RestrictedToReadingIndices).HasColumnType("smallint[]").IsRequired(false);
+            }
+            else
+            {
+                entity.Property(e => e.RestrictedToReadingIndices).IsRequired(false);
+            }
 
-            entity.Property(e => e.SenseIndex)
-                  .HasDefaultValue(0);
-            entity.Property(e => e.Pos)
-                  .HasColumnType("text[]")
-                  .HasDefaultValueSql("'{}'");
-            entity.Property(e => e.Misc)
-                  .HasColumnType("text[]")
-                  .HasDefaultValueSql("'{}'");
-            entity.Property(e => e.Field)
-                  .HasColumnType("text[]")
-                  .HasDefaultValueSql("'{}'");
-            entity.Property(e => e.Dial)
-                  .HasColumnType("text[]")
-                  .HasDefaultValueSql("'{}'");
-            entity.Property(e => e.RestrictedToReadingIndices)
-                  .HasColumnType("smallint[]")
-                  .IsRequired(false);
-            entity.Property(e => e.IsActiveInLatestSource)
-                  .HasDefaultValue(true);
+            entity.Property(e => e.SenseIndex).HasDefaultValue(0);
+            entity.Property(e => e.IsActiveInLatestSource).HasDefaultValue(true);
 
             entity.HasIndex(e => new { e.WordId, e.SenseIndex })
                   .HasDatabaseName("IX_Definitions_WordId_SenseIndex");
@@ -311,16 +317,18 @@ public class JitenDbContext : DbContext
             entity.ToTable("WordForms", "jmdict");
             entity.HasKey(e => new { e.WordId, e.ReadingIndex });
 
-            entity.Property(e => e.FormType)
-                  .HasColumnType("smallint");
+            entity.Property(e => e.FormType).HasColumnType("smallint");
 
-            entity.Property(e => e.Priorities)
-                  .HasColumnType("text[]")
-                  .IsRequired(false);
-
-            entity.Property(e => e.InfoTags)
-                  .HasColumnType("text[]")
-                  .IsRequired(false);
+            if (isNpgsql)
+            {
+                entity.Property(e => e.Priorities).HasColumnType("text[]").IsRequired(false);
+                entity.Property(e => e.InfoTags).HasColumnType("text[]").IsRequired(false);
+            }
+            else
+            {
+                entity.Property(e => e.Priorities).IsRequired(false);
+                entity.Property(e => e.InfoTags).IsRequired(false);
+            }
 
             entity.HasIndex(e => new { e.WordId, e.FormType, e.Text })
                   .IsUnique()
@@ -357,14 +365,12 @@ public class JitenDbContext : DbContext
                   .ValueGeneratedNever()
                   .IsRequired();
 
-            entity.Property(e => e.OnReadings)
-                  .HasColumnType("text[]");
-
-            entity.Property(e => e.KunReadings)
-                  .HasColumnType("text[]");
-
-            entity.Property(e => e.Meanings)
-                  .HasColumnType("text[]");
+            if (isNpgsql)
+            {
+                entity.Property(e => e.OnReadings).HasColumnType("text[]");
+                entity.Property(e => e.KunReadings).HasColumnType("text[]");
+                entity.Property(e => e.Meanings).HasColumnType("text[]");
+            }
 
             entity.Property(e => e.StrokeCount)
                   .IsRequired();
@@ -571,6 +577,186 @@ public class JitenDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(wsm => new { wsm.WordId, wsm.ReadingIndex })
                   .HasDatabaseName("IX_WordSetMember_WordId_ReadingIndex");
+        });
+
+        modelBuilder.Entity<MediaRequest>(entity =>
+        {
+            entity.ToTable("MediaRequests", "jiten");
+            entity.HasKey(mr => mr.Id);
+            entity.Property(mr => mr.Id).ValueGeneratedOnAdd();
+            entity.Property(mr => mr.Title).IsRequired().HasMaxLength(300);
+            entity.Property(mr => mr.MediaType).IsRequired();
+            entity.Property(mr => mr.ExternalUrl).HasMaxLength(500);
+            entity.Property(mr => mr.Description).HasMaxLength(1000);
+            entity.Property(mr => mr.Status).IsRequired();
+            entity.Property(mr => mr.AdminNote).HasMaxLength(500);
+            entity.Property(mr => mr.RequesterId).IsRequired().HasMaxLength(36);
+            entity.Property(mr => mr.UpvoteCount).HasDefaultValue(0);
+            entity.Property(mr => mr.CreatedAt).IsRequired();
+            entity.Property(mr => mr.UpdatedAt).IsRequired();
+
+            entity.HasOne(mr => mr.FulfilledDeck)
+                  .WithMany()
+                  .HasForeignKey(mr => mr.FulfilledDeckId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            if (isNpgsql)
+            {
+                entity.HasIndex(mr => new { mr.Status, mr.UpvoteCount })
+                      .IsDescending(false, true)
+                      .HasDatabaseName("IX_MediaRequest_Status_UpvoteCount");
+                entity.HasIndex(mr => new { mr.Status, mr.CreatedAt })
+                      .IsDescending(false, true)
+                      .HasDatabaseName("IX_MediaRequest_Status_CreatedAt");
+            }
+            else
+            {
+                entity.HasIndex(mr => new { mr.Status, mr.UpvoteCount })
+                      .HasDatabaseName("IX_MediaRequest_Status_UpvoteCount");
+                entity.HasIndex(mr => new { mr.Status, mr.CreatedAt })
+                      .HasDatabaseName("IX_MediaRequest_Status_CreatedAt");
+            }
+            entity.HasIndex(mr => mr.MediaType)
+                  .HasDatabaseName("IX_MediaRequest_MediaType");
+            entity.HasIndex(mr => mr.RequesterId)
+                  .HasDatabaseName("IX_MediaRequest_RequesterId");
+            entity.HasIndex(mr => mr.Title)
+                  .HasDatabaseName("IX_MediaRequest_Title");
+        });
+
+        modelBuilder.Entity<MediaRequestUpvote>(entity =>
+        {
+            entity.ToTable("MediaRequestUpvotes", "jiten");
+            entity.HasKey(u => u.Id);
+            entity.Property(u => u.Id).ValueGeneratedOnAdd();
+            entity.Property(u => u.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(u => u.CreatedAt).IsRequired();
+
+            entity.HasOne(u => u.MediaRequest)
+                  .WithMany(mr => mr.Upvotes)
+                  .HasForeignKey(u => u.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(u => new { u.MediaRequestId, u.UserId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_MediaRequestUpvote_RequestId_UserId");
+        });
+
+        modelBuilder.Entity<MediaRequestSubscription>(entity =>
+        {
+            entity.ToTable("MediaRequestSubscriptions", "jiten");
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Id).ValueGeneratedOnAdd();
+            entity.Property(s => s.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(s => s.CreatedAt).IsRequired();
+
+            entity.HasOne(s => s.MediaRequest)
+                  .WithMany(mr => mr.Subscriptions)
+                  .HasForeignKey(s => s.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(s => new { s.MediaRequestId, s.UserId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_MediaRequestSubscription_RequestId_UserId");
+        });
+
+        modelBuilder.Entity<MediaRequestComment>(entity =>
+        {
+            entity.ToTable("MediaRequestComments", "jiten");
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Id).ValueGeneratedOnAdd();
+            entity.Property(c => c.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(c => c.Text).HasMaxLength(500);
+            entity.Property(c => c.CreatedAt).IsRequired();
+
+            entity.HasOne(c => c.MediaRequest)
+                  .WithMany(mr => mr.Comments)
+                  .HasForeignKey(c => c.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(c => c.MediaRequestId)
+                  .HasDatabaseName("IX_MediaRequestComment_MediaRequestId");
+            entity.HasIndex(c => c.UserId)
+                  .HasDatabaseName("IX_MediaRequestComment_UserId");
+        });
+
+        modelBuilder.Entity<MediaRequestUpload>(entity =>
+        {
+            entity.ToTable("MediaRequestUploads", "jiten");
+            entity.HasKey(u => u.Id);
+            entity.Property(u => u.Id).ValueGeneratedOnAdd();
+            entity.Property(u => u.FileName).IsRequired().HasMaxLength(255);
+            entity.Property(u => u.StoragePath).IsRequired().HasMaxLength(500);
+            entity.Property(u => u.FileSize).IsRequired();
+            entity.Property(u => u.OriginalFileCount).HasDefaultValue(1);
+            entity.Property(u => u.CreatedAt).IsRequired();
+            entity.Property(u => u.AdminReviewed).HasDefaultValue(false);
+            entity.Property(u => u.AdminNote).HasMaxLength(500);
+            entity.Property(u => u.FileDeleted).HasDefaultValue(false);
+
+            entity.HasOne(u => u.Comment)
+                  .WithOne(c => c.Upload)
+                  .HasForeignKey<MediaRequestUpload>(u => u.MediaRequestCommentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(u => u.MediaRequest)
+                  .WithMany(mr => mr.Uploads)
+                  .HasForeignKey(u => u.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(u => u.MediaRequestCommentId)
+                  .IsUnique()
+                  .HasDatabaseName("IX_MediaRequestUpload_CommentId");
+            entity.HasIndex(u => u.MediaRequestId)
+                  .HasDatabaseName("IX_MediaRequestUpload_RequestId");
+        });
+
+        modelBuilder.Entity<RequestActivityLog>(entity =>
+        {
+            entity.ToTable("RequestActivityLogs", "jiten");
+            entity.HasKey(l => l.Id);
+            entity.Property(l => l.Id).ValueGeneratedOnAdd();
+            entity.Property(l => l.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(l => l.Action).IsRequired();
+            entity.Property(l => l.TargetUserId).HasMaxLength(36);
+            entity.Property(l => l.Detail).HasMaxLength(1000);
+            entity.Property(l => l.IpAddress).HasMaxLength(45);
+            entity.Property(l => l.CreatedAt).IsRequired();
+
+            entity.HasIndex(l => new { l.MediaRequestId, l.CreatedAt })
+                  .HasDatabaseName("IX_RequestActivityLog_RequestId_CreatedAt");
+            entity.HasIndex(l => new { l.UserId, l.CreatedAt })
+                  .HasDatabaseName("IX_RequestActivityLog_UserId_CreatedAt");
+            entity.HasIndex(l => new { l.Action, l.CreatedAt })
+                  .HasDatabaseName("IX_RequestActivityLog_Action_CreatedAt");
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("Notifications", "jiten");
+            entity.HasKey(n => n.Id);
+            entity.Property(n => n.Id).ValueGeneratedOnAdd();
+            entity.Property(n => n.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(n => n.Type).IsRequired();
+            entity.Property(n => n.Title).IsRequired().HasMaxLength(200);
+            entity.Property(n => n.Message).IsRequired().HasMaxLength(500);
+            entity.Property(n => n.LinkUrl).HasMaxLength(300);
+            entity.Property(n => n.IsRead).HasDefaultValue(false);
+            entity.Property(n => n.CreatedAt).IsRequired();
+
+            if (isNpgsql)
+            {
+                entity.HasIndex(n => new { n.UserId, n.IsRead, n.CreatedAt })
+                      .IsDescending(false, false, true)
+                      .HasDatabaseName("IX_Notification_UserId_IsRead_CreatedAt");
+            }
+            else
+            {
+                entity.HasIndex(n => new { n.UserId, n.IsRead, n.CreatedAt })
+                      .HasDatabaseName("IX_Notification_UserId_IsRead_CreatedAt");
+            }
+            entity.HasIndex(n => n.CreatedAt)
+                  .HasDatabaseName("IX_Notification_CreatedAt");
         });
 
         base.OnModelCreating(modelBuilder);

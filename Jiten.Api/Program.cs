@@ -243,22 +243,25 @@ if (enableOtlpExporter)
     });
 }
 
-builder.Services.AddDbContextFactory<JitenDbContext>(options =>
-                                                         options.UseNpgsql(builder.Configuration.GetConnectionString("JitenDatabase"),
-                                                                           o =>
-                                                                           {
-                                                                               o.UseQuerySplittingBehavior(QuerySplittingBehavior
-                                                                                   .SplitQuery);
-                                                                           }));
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddDbContextFactory<JitenDbContext>(options =>
+                                                             options.UseNpgsql(builder.Configuration.GetConnectionString("JitenDatabase"),
+                                                                               o =>
+                                                                               {
+                                                                                   o.UseQuerySplittingBehavior(QuerySplittingBehavior
+                                                                                       .SplitQuery);
+                                                                               }));
+
+    builder.Services.AddDbContextFactory<UserDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("JitenDatabase"),
+                                                                                     o =>
+                                                                                     {
+                                                                                         o.UseQuerySplittingBehavior(QuerySplittingBehavior
+                                                                                             .SplitQuery);
+                                                                                     }));
+}
 
 // Authentication
-
-builder.Services.AddDbContextFactory<UserDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("JitenDatabase"),
-                                                                                 o =>
-                                                                                 {
-                                                                                     o.UseQuerySplittingBehavior(QuerySplittingBehavior
-                                                                                         .SplitQuery);
-                                                                                 }));
 
 builder.Services.AddIdentity<User, IdentityRole>(options =>
        {
@@ -338,6 +341,9 @@ builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(sp.GetRequiredService<IConfiguration>().GetConnectionString("Redis")!));
 builder.Services.AddScoped<WordReplacementService>();
+builder.Services.AddScoped<ICdnService, BunnyCdnService>();
+builder.Services.AddScoped<Jiten.Core.Services.RequestActivityService>();
+builder.Services.AddScoped<Jiten.Core.Services.NotificationService>();
 builder.Services.AddHostedService<ParserWarmupService>();
 
 builder.Services.AddRateLimiter(options =>
@@ -540,8 +546,10 @@ builder.Services.Configure<FormOptions>(options => { options.ValueCountLimit = 8
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
+
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     foreach (var roleName in Enum.GetNames(typeof(UserRole)))
     {
@@ -617,7 +625,11 @@ else
                        });
 }
 
-app.UseHangfireDashboard("/hangfire", new DashboardOptions() { Authorization = [new HangfireAuthorizationFilter(app.Configuration)] });
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions() { Authorization = [new HangfireAuthorizationFilter(app.Configuration)] });
+    app.MapHangfireDashboard();
+}
 
 app.MapSwagger();
 if (enableOtlpExporter)
@@ -627,7 +639,6 @@ if (enableOtlpExporter)
 
 app.UseAuthorization();
 app.MapControllers();
-app.MapHangfireDashboard();
 
 app.Run();
 
@@ -658,3 +669,5 @@ static string GetClientIp(HttpContext context)
     // Fallback to connection IP (will be Traefik's IP)
     return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }
+
+public partial class Program { }

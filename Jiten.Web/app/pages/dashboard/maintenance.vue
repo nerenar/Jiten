@@ -23,8 +23,8 @@
       const data = await $api<{ isActive: boolean; message: string | null }>('/maintenance/banner');
       isActive.value = data.isActive;
       message.value = data.message ?? '';
-    } catch {
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load banner state', life: 5000 });
+    } catch (e) {
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(e, 'Failed to load banner state'), life: 5000 });
     }
   });
 
@@ -41,8 +41,8 @@
         detail: isActive.value ? 'Maintenance banner activated' : 'Maintenance banner deactivated',
         life: 5000,
       });
-    } catch {
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to update banner', life: 5000 });
+    } catch (e) {
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(e, 'Failed to update banner'), life: 5000 });
     } finally {
       saving.value = false;
     }

@@ -454,6 +454,13 @@ internal static class TransitionRuleEngine
                                                    or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
                                                    or PartOfSpeech.Name or PartOfSpeech.NominalAdjective),
 
+                ScoringCondition.CandidateIsHonorific =>
+                    TransitionRuleSets.HonorificSuffixes.Contains(ctx.CandidateText) &&
+                    ctx.CandidatePOS.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix),
+
+                ScoringCondition.PrevIsName =>
+                    ctx.PrevPOS?.Contains(PartOfSpeech.Name) == true,
+
                 _ => false
             };
             if (!ok) return false;

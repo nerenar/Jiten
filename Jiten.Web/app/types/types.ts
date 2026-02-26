@@ -559,6 +559,7 @@ export interface MediaRequestDto {
   isOwnRequest: boolean;
   requesterName?: string;
   createdAt: string;
+  completedAt?: string;
 }
 
 export interface MediaRequestCommentDto {
@@ -584,7 +585,6 @@ export interface MediaRequestUploadAdminDto extends MediaRequestUploadDto {
   adminReviewed: boolean;
   adminNote?: string;
   fileDeleted: boolean;
-  storagePath: string;
 }
 
 export interface DuplicateCheckResultDto {

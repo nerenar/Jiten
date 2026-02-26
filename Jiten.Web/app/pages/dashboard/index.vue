@@ -97,6 +97,26 @@
           </div>
         </template>
       </Card>
+
+      <Card class="shadow-md">
+        <template #title>Request Activity</template>
+        <template #content>
+          <p class="mb-4">Monitor request activity and user contributions</p>
+          <div class="flex justify-center">
+            <Button label="View Activity" class="p-button-primary" @click="navigateTo('/dashboard/request-activity')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Send Notification</template>
+        <template #content>
+          <p class="mb-4">Send a notification to a specific user or to everyone</p>
+          <div class="flex justify-center">
+            <Button label="Send Notification" class="p-button-primary" @click="navigateTo('/dashboard/send-notification')" />
+          </div>
+        </template>
+      </Card>
     </div>
   </div>
 </template>
