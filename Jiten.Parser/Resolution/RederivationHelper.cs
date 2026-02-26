@@ -121,7 +121,9 @@ internal static class RederivationHelper
         foreach (var id in state.CandidateIds)
         {
             if (!wordCache.TryGetValue(id, out var word)) continue;
-            if (!PosMapper.IsJmDictCompatibleWithSudachi(word.PartsOfSpeech, state.WordInfo.PartOfSpeech))
+            bool isNameWord = word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
+            if (!PosMapper.IsJmDictCompatibleWithSudachi(word.PartsOfSpeech, state.WordInfo.PartOfSpeech)
+                && !(state.WordInfo.IsPersonNameContext && isNameWord))
                 continue;
 
             var forms = FormCandidateFactory.EnumerateCandidateForms(word, state.TextInHiragana, allowLooseLvmMatch: true, surface: state.Text);

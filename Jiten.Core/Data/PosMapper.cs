@@ -220,7 +220,7 @@ public static class PosMapper
             // Name types
             "company" or "given" or "place" or "person" or "product" or "ship" or "surname"
                 or "unclass" or "name-fem" or "name-masc" or "name-male" or "station" or "group" or "char"
-                or "creat" or "dei" or "doc" or "ev" or "fem" or "fict" or "leg" or "masc"
+                or "creat" or "dei" or "doc" or "ev" or "fict" or "leg"
                 or "myth" or "obj" or "organization" or "oth" or "relig" or "serv" or "work"
                 or "unc" => PartOfSpeech.Name,
             _ => PartOfSpeech.Unknown

@@ -9,6 +9,7 @@
   import type { Metadata } from '~/types';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import SearchDialog from '~/components/dashboard/SearchDialog.vue';
 
   useHead({
@@ -35,6 +36,7 @@
   const originalTitle = ref('');
   const romajiTitle = ref('');
   const englishTitle = ref('');
+  const romanizing = ref(false);
   const releaseDate = ref<Date>();
   const description = ref('');
   const rating = ref(0);
@@ -210,6 +212,22 @@
   }
 
   const currentProvider = ref('');
+
+  async function autoRomanize() {
+    if (!originalTitle.value) return;
+    romanizing.value = true;
+    try {
+      const data = await $api<{ romaji: string }>('utils/romanize', {
+        method: 'POST',
+        body: { title: originalTitle.value },
+      });
+      romajiTitle.value = data.romaji;
+    } catch {
+      showToast('error', 'Error', 'Failed to auto-romanize title');
+    } finally {
+      romanizing.value = false;
+    }
+  }
 
   function goBack() {
     if (currentScreen.value === SCREEN_FILE_UPLOAD) {
@@ -412,7 +430,17 @@
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Romaji Title</label>
-                  <InputText v-model="romajiTitle" class="w-full" />
+                  <div class="flex gap-2">
+                    <InputText v-model="romajiTitle" class="flex-1" />
+                    <Button
+                      v-tooltip.top="'Auto-romanize from original title'"
+                      :disabled="!originalTitle || romanizing"
+                      @click="autoRomanize"
+                    >
+                      <Icon v-if="!romanizing" name="material-symbols-light:translate" size="1.5em" />
+                      <Icon v-else name="line-md:loading-loop" size="1.5em" />
+                    </Button>
+                  </div>
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">English Title</label>
@@ -421,6 +449,19 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Release Date</label>
                   <DatePicker v-model="releaseDate" class="w-full" />
+                </div>
+                <div v-if="selectedMetadata?.links?.length" class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Links</label>
+                  <div class="flex flex-wrap gap-2">
+                    <a
+                      v-for="link in selectedMetadata.links"
+                      :key="link.url"
+                      :href="link.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-sm text-primary underline"
+                    >{{ getLinkTypeText(link.linkType) }}</a>
+                  </div>
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Description</label>
@@ -490,6 +531,7 @@
                 <template v-else-if="selectedMediaType === MediaType.Novel || selectedMediaType === MediaType.NonFiction">
                   <Button label="Anilist" @click="searchAPI('AnilistNovel')" />
                   <Button label="Google Books" @click="searchAPI('GoogleBooks')" />
+                  <Button label="Bookmeter" @click="searchAPI('Bookmeter')" />
                 </template>
                 <template v-else-if="selectedMediaType === MediaType.VideoGame">
                   <Button label="IGDB" @click="searchAPI('Igdb')" />

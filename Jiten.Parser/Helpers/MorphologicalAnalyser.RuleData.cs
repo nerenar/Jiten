@@ -78,6 +78,8 @@ public partial class MorphologicalAnalyser
         ("それ", "も", PartOfSpeech.Conjunction),
         ("それ", "だけ", PartOfSpeech.Noun),
         ("くせ", "に", PartOfSpeech.Conjunction),
+        ("なの", "に", PartOfSpeech.Conjunction),
+        ("なの", "で", PartOfSpeech.Conjunction),
         ("の", "で", PartOfSpeech.Particle),
         ("誰", "も", PartOfSpeech.Expression),
         ("誰", "か", PartOfSpeech.Expression),

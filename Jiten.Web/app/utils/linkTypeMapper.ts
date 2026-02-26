@@ -20,6 +20,10 @@ export function getLinkTypeText(linkType: LinkType): string {
       return 'IGDB';
     case LinkType.Syosetsu:
       return 'Syosetu';
+    case LinkType.Bookmeter:
+      return 'Bookmeter';
+    case LinkType.Amazon:
+      return 'Amazon';
 
     default:
       return 'Unknown';

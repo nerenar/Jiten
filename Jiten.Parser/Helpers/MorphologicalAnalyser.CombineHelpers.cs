@@ -59,6 +59,7 @@ public partial class MorphologicalAnalyser
                 nextWord.Text != currentWord.Text)
             {
                 currentWord.Text += nextWord.Text;
+                currentWord.Reading += nextWord.Reading;
             }
             else
             {
@@ -96,6 +97,7 @@ public partial class MorphologicalAnalyser
                  (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith("た") || currentWord.Text.EndsWith("だ")))))
             {
                 currentWord.Text += nextWord.Text;
+                currentWord.Reading += nextWord.Reading;
             }
             else
             {
@@ -127,7 +129,7 @@ public partial class MorphologicalAnalyser
                 {
                     WordInfo combinedWord = new WordInfo(currentWord);
                     combinedWord.Text += nextWord.Text;
-                    // combinedWord.PartOfSpeech = PartOfSpeech.Verb;
+                    combinedWord.Reading += nextWord.Reading;
                     newList.Add(combinedWord);
                     i += 2;
                     continue;
@@ -165,6 +167,7 @@ public partial class MorphologicalAnalyser
                 {
                     WordInfo combinedWord = new WordInfo(currentWord);
                     combinedWord.Text += nextWord1.Text + nextWord2.Text;
+                    combinedWord.Reading += nextWord1.Reading + nextWord2.Reading;
                     newList.Add(combinedWord);
                     i += 3;
                     continue;
@@ -207,6 +210,7 @@ public partial class MorphologicalAnalyser
                     {
                         WordInfo combinedWord = new WordInfo(currentWord);
                         combinedWord.Text += nextWord.Text;
+                        combinedWord.Reading += nextWord.Reading;
                         newList.Add(combinedWord);
                         i += 2;
                         continue;

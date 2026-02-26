@@ -36,7 +36,7 @@ internal static class FormCandidateScorer
                                   surfaceMatchScore,
                                   scriptScore,
                                   readingMatchScore,
-                                  conjugatedIdentityPenaltyApplied);
+                                  conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied);
     }
 }
 
@@ -55,9 +55,7 @@ internal static class WordPriorityScorer
 
         if (word.IsFullyArchaic)
         {
-            bool hasFrequencyMarker = word.Priorities?.Any(p =>
-                                                               p is "ichi1" or "ichi2" or "news1" or "news2" or "jiten" ||
-                                                               p.StartsWith("nf")) == true;
+            bool hasFrequencyMarker = KanaScoringHelpers.HasFrequencyMarker(word.Priorities);
             if (!hasFrequencyMarker)
                 wordScore -= isArchaicSentence ? 50 : 350;
         }
@@ -175,8 +173,8 @@ internal static class FormPriorityScorer
         // "uk" (usually-kana) bias, scaled by whether the word has stronger frequency evidence.
         if (word.PartsOfSpeech.Contains("uk"))
         {
-            bool hasFreqMarker = wordPri.Any(p =>
-                                                 p is "ichi1" or "ichi2" or "news1" or "news2" || p.StartsWith("nf"));
+            // "uk" bias — jiten is excluded because it's an internal priority, not public frequency evidence
+            bool hasFreqMarker = KanaScoringHelpers.HasFrequencyMarker(wordPri, includeJiten: false);
             int ukBonus = hasFreqMarker ? 10 : 3;
             if (candidate.Form.FormType == JmDictFormType.KanaForm || isKanaSurface)
                 formPriorityScore += ukBonus;
@@ -230,23 +228,18 @@ internal static class SurfaceScorer
         var formText = candidate.Form.Text;
         int score = 0;
 
-        var surfaceHira = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: false);
-        var formHira = KanaScoringHelpers.ToNormalizedHiragana(formText, convertLongVowelMark: false);
-
         if (surface == formText)
         {
             score += 300;
         }
-        else if (surfaceHira == formHira)
+        else if (context.SurfaceHiragana == candidate.FormTextHiragana)
         {
             score += KanaScoringHelpers.IsPureKanaScriptDifference(surface, formText) ? 280 : 120;
         }
         else
         {
-            // Loose normalisation match (long vowel mark / small-tsu handling).
-            var surfaceLoose = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: true);
             var formLoose = KanaScoringHelpers.ToNormalizedHiragana(formText, convertLongVowelMark: true);
-            if (surfaceLoose == formLoose)
+            if (context.SurfaceHiraganaLoose == formLoose)
                 score += 60;
         }
 
@@ -261,7 +254,6 @@ internal static class LemmaScorer
         int score = 0;
         var word = candidate.Word;
         var formText = candidate.Form.Text;
-        var formHira = KanaScoringHelpers.ToNormalizedHiragana(formText, convertLongVowelMark: false);
 
         var surface = context.Surface;
         var dictionaryForm = context.DictionaryForm;
@@ -282,8 +274,7 @@ internal static class LemmaScorer
             }
             else
             {
-                var dictHira = KanaScoringHelpers.ToNormalizedHiragana(dictionaryForm, convertLongVowelMark: false);
-                if (dictHira == formHira)
+                if (context.DictionaryFormHiragana == candidate.FormTextHiragana)
                     score += (int)(40 * lemmaScale);
             }
         }
@@ -297,8 +288,7 @@ internal static class LemmaScorer
             }
             else
             {
-                var normHira = KanaScoringHelpers.ToNormalizedHiragana(normalizedForm, convertLongVowelMark: false);
-                if (normHira == formHira)
+                if (context.NormalizedFormHiragana == candidate.FormTextHiragana)
                     score += (int)(20 * lemmaScale);
 
                 // Sudachi normalized form matches a form of this word (e.g. リス → 栗鼠).
@@ -314,7 +304,7 @@ internal static class LemmaScorer
                                                                      candidate.DeconjForm.Text,
                                                                      convertLongVowelMark: false);
 
-            if (deconjHira == formHira)
+            if (deconjHira == candidate.FormTextHiragana)
                 score += (int)(100 * lemmaScale);
         }
 
@@ -329,9 +319,12 @@ internal static class PenaltyScorer
         FormScoringContext context,
         ref int surfaceMatchScore)
     {
+        bool surfaceMatchesFormDirectly = context.Surface == candidate.Form.Text
+            || KanaScoringHelpers.IsPureKanaScriptDifference(context.Surface, candidate.Form.Text);
+
         if (!string.IsNullOrEmpty(context.DictionaryForm)
             && context.DictionaryForm != context.Surface
-            && context.Surface == candidate.Form.Text
+            && surfaceMatchesFormDirectly
             && (candidate.DeconjForm == null || candidate.DeconjForm.Process.Count == 0))
         {
             // Non-inflectable words (adj-pn, etc.) cannot be conjugated forms,
@@ -360,15 +353,47 @@ internal static class PenaltyScorer
                 // word's own forms. If DictForm points to a completely different word
                 // (e.g. させる→する), fall through to the nounHasDictForm check below.
                 bool isAdnominal = posToCheck.Any(p => p is "adj-pn" or "adj-t");
-                if (isAdnominal && candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm))
+                if (isAdnominal && candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
+                        || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm)))
                     return false;
 
                 // For non-inflectable words (e.g., plain nouns), still apply the penalty when Sudachi's
                 // DictionaryForm doesn't appear in this word's forms — it points to a different (inflectable) word.
                 // E.g., surface=答え, DictForm=答える: noun 答え shouldn't beat verb 答える via surface match.
-                bool nounHasDictForm = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm);
+                bool nounHasDictForm = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
+                    || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
                 if (!nounHasDictForm)
                 {
+                    // Interjections (e.g. やった "hooray!") can never be conjugated verb forms.
+                    // When DictForm points to a verb, the -200 base penalty leaves them too close to the
+                    // verb candidate. Use -300 to fully cancel the surface-match bonus.
+                    bool isInterjection = posToCheck.Any(p => p is "int");
+                    if (isInterjection)
+                    {
+                        surfaceMatchScore -= 300;
+                        return true;
+                    }
+
+                    // If the noun's kana reading exactly matches Sudachi's reading, it IS the right word
+                    // for this surface — use a softer penalty so reading evidence still counts.
+                    // E.g. 生き (noun いき, DictForm=生きる): reading match confirms the noun entry.
+                    if (!string.IsNullOrEmpty(context.SudachiReading) && !context.IsKanaSurface)
+                    {
+                        var sudachiHira = KanaScoringHelpers.ToNormalizedHiragana(context.SudachiReading, convertLongVowelMark: false);
+                        bool hasExactReadingMatch = candidate.Word.Forms
+                            .Where(f => f.FormType == JmDictFormType.KanaForm)
+                            .Any(f => KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false) == sudachiHira);
+                        // Only grant the soft penalty to prefix-tagged nouns (pref POS): these are
+                        // independent morphological units (e.g. 生き いき = liveliness, used in 生き物/生き方)
+                        // that stand on their own. Plain verb-stem nouns without pref (答え, 構え, etc.)
+                        // remain at full penalty because they more often appear as verb masu-stems.
+                        if (hasExactReadingMatch && candidate.Word.PartsOfSpeech.Contains("pref"))
+                        {
+                            surfaceMatchScore -= 100;
+                            return false;
+                        }
+                    }
+
                     surfaceMatchScore -= 200;
                     return true;
                 }
@@ -392,9 +417,12 @@ internal static class PenaltyScorer
         FormScoringContext context,
         ref int surfaceMatchScore)
     {
+        bool expressionSurfaceMatchesForm = context.Surface == candidate.Form.Text
+            || KanaScoringHelpers.IsPureKanaScriptDifference(context.Surface, candidate.Form.Text);
+
         if (string.IsNullOrEmpty(context.DictionaryForm)
             || context.DictionaryForm == context.Surface
-            || context.Surface != candidate.Form.Text)
+            || !expressionSurfaceMatchesForm)
             return false;
 
         var readingPos = ReadingPosHelper.GetPosForReading(candidate.Word, candidate.ReadingIndex);
@@ -403,12 +431,12 @@ internal static class PenaltyScorer
         if (!isExpressionOnly)
             return false;
 
-        bool hasFreqMarker = candidate.Word.Priorities?.Any(p =>
-            p is "ichi1" or "ichi2" or "news1" or "news2" or "jiten" || p.StartsWith("nf")) == true;
+        bool hasFreqMarker = KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities);
         if (hasFreqMarker)
             return false;
 
-        bool dictFormMatchesWord = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm);
+        bool dictFormMatchesWord = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
+            || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
         if (!dictFormMatchesWord)
         {
             surfaceMatchScore -= 250;
@@ -447,7 +475,8 @@ internal static class ScriptScorer
         {
             bool dictFormConflicts = context.DictionaryForm is not null
                                      && context.DictionaryForm != surface
-                                     && !word.Forms.Any(f => f.Text == context.DictionaryForm);
+                                     && !word.Forms.Any(f => f.Text == context.DictionaryForm
+                                         || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
 
             if (!dictFormConflicts)
             {
@@ -462,7 +491,7 @@ internal static class ScriptScorer
 
 internal static class ReadingScorer
 {
-    public static int Score(FormCandidate candidate, FormScoringContext context, bool conjugatedIdentityPenaltyApplied)
+    public static int Score(FormCandidate candidate, FormScoringContext context, bool identityPenaltyApplied)
     {
         int readingMatchScore = 0;
         if (!string.IsNullOrEmpty(context.SudachiReading) && !context.IsKanaSurface)
@@ -528,7 +557,7 @@ internal static class ReadingScorer
             }
         }
 
-        if (conjugatedIdentityPenaltyApplied)
+        if (identityPenaltyApplied)
             readingMatchScore = 0;
 
         return readingMatchScore;
@@ -592,6 +621,18 @@ internal static class KanaScoringHelpers
                 return true;
         }
 
+        return false;
+    }
+
+    public static bool HasFrequencyMarker(IReadOnlyList<string>? priorities, bool includeJiten = true)
+    {
+        if (priorities == null) return false;
+        foreach (var p in priorities)
+        {
+            if (p is "ichi1" or "ichi2" or "news1" or "news2") return true;
+            if (includeJiten && p == "jiten") return true;
+            if (p.StartsWith("nf")) return true;
+        }
         return false;
     }
 }

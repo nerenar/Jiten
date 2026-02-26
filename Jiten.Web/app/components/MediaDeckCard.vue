@@ -372,7 +372,7 @@
                   </Tooltip>
                 </template>
                 <div v-if="!hideControl" class="mt-4">
-                  <div class="flex flex-col md:flex-row gap-2" :class="{ 'justify-center': isCompact }">
+                  <div class="flex gap-2" :class="[isCompact ? 'flex-row' : 'flex-col md:flex-row', { 'justify-center': isCompact }]">
                     <Tooltip content="Details">
                       <Button
                         as="router-link"
@@ -400,7 +400,7 @@
                       />
                     </Tooltip>
                     <Button
-                      v-if="!isCompact && displayAdminFunctions"
+                      v-if="!isCompact && authStore.isAdmin && displayAdminFunctions"
                       as="router-link"
                       :to="`/dashboard/media/${deck.deckId}`"
                       label="Edit"

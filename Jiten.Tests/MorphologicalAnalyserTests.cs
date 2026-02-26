@@ -775,6 +775,10 @@ public class MorphologicalAnalyserTests
         yield return ["そういえばここって", new[] { "そういえば", "ここ", "って" }];
         // Single-kana Symbol tokens (stutters) must be filtered — ゆ before … tagged as 記号 by Sudachi
         yield return ["ゆ……夢は", new[] { "夢", "は" }];
+        // I-adjective stem resegmentation: Sudachi fuses adj-i stems in slang compounds
+        // ださ → ださ+い in lookups fallback enables the split; きも → きも matches 肝 directly
+        yield return ["ダサキモ", new[] { "ダサ", "キモ" }];
+        yield return ["百合豚ダサキモ眼鏡", new[] { "百合豚", "ダサ", "キモ", "眼鏡" }];
     }
 
     [Theory]

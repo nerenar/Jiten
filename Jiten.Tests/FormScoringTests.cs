@@ -135,7 +135,7 @@ public class FormScoringTests
         var penalized = FormCandidateScorer.Score(candidate, penalizedContext, new HashSet<string>());
         var nonPenalized = FormCandidateScorer.Score(candidate, nonPenalizedContext, new HashSet<string>());
 
-        penalized.ConjugatedIdentityPenaltyApplied.Should().BeTrue();
+        penalized.IdentityPenaltyApplied.Should().BeTrue();
         penalized.ReadingMatchScore.Should().Be(0);
         nonPenalized.ReadingMatchScore.Should().BeGreaterThan(0);
     }

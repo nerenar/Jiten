@@ -228,21 +228,25 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // Pattern 0: [prefix] + [る OOV] + [ー symbol]
+            // Pattern 0: [prefix/suffix] + [る OOV] + [ー symbol]
             // Sudachi splits る-verbs when followed by expressive elongation ー
             // e.g., 来るー → 来(prefix) + る(OOV noun) + ー(symbol)
+            // e.g., おいしすぎるー → おいし + すぎ(suffix) + る(OOV) + ー → おいし + すぎる
             if (current is { PartOfSpeech: PartOfSpeech.SupplementarySymbol, Text: "ー" } &&
                 result.Count >= 2 &&
                 prev is { Text: "る", PartOfSpeech: PartOfSpeech.Noun } &&
-                result[^2].PartOfSpeech == PartOfSpeech.Prefix)
+                result[^2].PartOfSpeech is PartOfSpeech.Prefix or PartOfSpeech.Suffix)
             {
-                var prefix = result[^2];
-                var verbText = prefix.Text + "る";
+                var preceding = result[^2];
+                var verbText = preceding.Text + "る";
                 result.RemoveAt(result.Count - 1);
-                result[^1] = new WordInfo(prefix)
+                result[^1] = new WordInfo(preceding)
                 {
                     Text = verbText, DictionaryForm = verbText, NormalizedForm = verbText,
-                    PartOfSpeech = PartOfSpeech.Verb
+                    PartOfSpeech = PartOfSpeech.Verb,
+                    PartOfSpeechSection1 = preceding.PartOfSpeech == PartOfSpeech.Suffix
+                        ? PartOfSpeechSection.PossibleDependant
+                        : PartOfSpeechSection.None
                 };
                 continue;
             }

@@ -23,6 +23,7 @@
         <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="9.0.4" />
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="9.0.4" />
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.4" />
+        <PackageReference Include="WanaKanaShaapu" Version="2.0.2" />
 
         <!-- OpenTelemetry packages -->
         <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.11.2" />

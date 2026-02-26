@@ -494,6 +494,37 @@ public class FormSelectionTests
         // 1383800 has "prt" in JMDict POS → particle-particle-penalty and orphan-counter-penalty
         // were wrongly firing; both now require CandidateIsNotNounLike so noun-primary words are exempt
         yield return ["疑いだしたらキリはない", "キリ", 1383800, (byte)5];
+
+        // なの → expression "that's the way it is" (2425930), not nano- prefix (1090530)
+        // "fem" in JMDict POS [exp, fem, col] was incorrectly mapped to PartOfSpeech.Name, triggering
+        // the -50 name penalty; fix: "fem"/"masc"/"male" are register markers, not name-type tags
+        yield return ["あなたたち生き人形なの", "なの", 2425930, (byte)0];
+        yield return ["何をご所望なのかな", "なの", 2425930, (byte)0];
+        yield return ["あんたはその程度の執事なのかい", "なの", 2425930, (byte)0];
+
+        // なのに → conjunction "and yet; despite this" (2395490)
+        // SpecialCases2 merges Sudachi's なの+に into なのに before form scoring
+        yield return ["はずなのに忘れてた", "なのに", 2395490, (byte)0];
+
+        // なので → conjunction/particle "because; since" (2827864)
+        // SpecialCases2 merges Sudachi's なの+で into なので before form scoring
+        yield return ["降りてもカードを晒すルールなので互いの手札が晒される", "なので", 2827864, (byte)0];
+
+        // なく (adverbial form of ない) → ない (1529520), not NaK chemical (2617400)
+        // NaK's reading ナク is phonetically identical to なく; the conjugated-identity
+        // penalty must fire for pure kana script differences to suppress false matches.
+        yield return ["気配といっても曖昧な何かではなく、単に落ち葉がかすれる微かな音が聞こえただけだ。", "なく", 1529520, (byte)1];
+
+        // 様 disambiguation: さま (honorific suffix, 1545790) vs よう (appearance/manner, 1605840)
+        // After removing jiten priority from 1605840, context must drive the choice.
+        // Honorific さま: after a katakana name or polite pronoun
+        yield return ["私は今日からケイト様にお仕えする生き人形です", "様", 1545790, (byte)0];
+        yield return ["田中様にご連絡ください", "様", 1545790, (byte)0];
+        yield return ["どなた様でございましょうか", "様", 1545790, (byte)0];
+        // よう: appearance/manner after demonstratives or nouns (non-honorific context)
+        yield return ["この様に話す", "様", 1605840, (byte)0];
+        yield return ["そんな様では困る", "様", 1605840, (byte)0];
+        yield return ["生き物の様に動く", "様", 1605840, (byte)0];
     }
     
     [Theory]

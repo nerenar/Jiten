@@ -9,11 +9,7 @@ internal static class AdjacentWordScorer
         List<PartOfSpeech>? PrevResolvedPOS,
         List<PartOfSpeech>? NextResolvedPOS,
         string? PrevText,
-        string? NextText,
-        int? PrevWordId,
-        int? NextWordId,
-        bool IsSentenceInitial,
-        bool IsSentenceFinal);
+        string? NextText);
 
     internal static (int bonus, List<string> rulesMatched) CalculateContextBonus(
         FormCandidate candidate,

@@ -33,6 +33,7 @@ internal static class ResegmentationScorer
                     var hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(slice, convertLongVowelMark: false));
                     if (hira != slice && lookups.TryGetValue(hira, out var hiraIds) && hiraIds.Count > 0)
                         wordIds = hiraIds;
+
                 }
                 catch { }
             }

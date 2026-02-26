@@ -10,5 +10,7 @@ public enum LinkType
     GoogleBooks = 6,
     Imdb = 7,
     Igdb = 8,
-    Syosetsu = 9
+    Syosetsu = 9,
+    Bookmeter = 10,
+    Amazon = 11
 }

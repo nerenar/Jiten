@@ -49,9 +49,8 @@ internal static class FormCandidateSelector
 
         var sorted = allCandidates.OrderByDescending(EffectiveScore).ToList();
         var top = sorted.Take(topN).ToList();
-        // Margin = winner's EffectiveScore minus the best alternative word's EffectiveScore.
-        // Alternatives are drawn from non-POS-incompatible candidates so penalised runners-up
-        // (e.g. noun 1197950 after -15 for ガチ) don't produce a false low margin.
+        // Filter out POS-incompatible runners-up so their -15 penalty doesn't produce a false low margin.
+        // Fallback: if ALL candidates are POS-incompatible, use the full pool (WordId != guard prevents self-comparison).
         var legitimateCandidates = sorted.Where(c => !c.IsPosIncompatibleDirectSurface).ToList();
         var alternatePool = legitimateCandidates.Count > 0 ? legitimateCandidates : sorted;
         int? margin = null;
@@ -113,7 +112,9 @@ internal static class FormCandidateSelector
         {
             int adjusted = ScoringPolicy.EffectiveScore(candidate) + bonusFunc(candidate);
             if (adjusted > bestAdjusted ||
-                (adjusted == bestAdjusted && best != null && candidate.Word.WordId < best.Word.WordId))
+                (adjusted == bestAdjusted && best != null && candidate.Word.WordId < best.Word.WordId) ||
+                (adjusted == bestAdjusted && best != null && candidate.Word.WordId == best.Word.WordId
+                                           && HasPreferredConjugation(candidate, best)))
             {
                 bestAdjusted = adjusted;
                 best = candidate;

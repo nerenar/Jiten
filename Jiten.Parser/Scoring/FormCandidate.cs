@@ -15,6 +15,7 @@ internal sealed class FormCandidate(
     public byte ReadingIndex { get; } = readingIndex;
     public string TargetHiragana { get; } = targetHiragana;
     public DeconjugationForm? DeconjForm { get; } = deconjForm;
+    public string FormTextHiragana { get; } = KanaScoringHelpers.ToNormalizedHiragana(form.Text, convertLongVowelMark: false);
 
     public FormScoreTrace ScoreTrace { get; private set; }
     public bool IsPosIncompatibleDirectSurface { get; set; }
@@ -38,6 +39,10 @@ internal readonly record struct FormScoringContext(
     bool IsNameContext,
     string? SudachiReading,
     bool IsKanaSurface,
+    string SurfaceHiragana,
+    string SurfaceHiraganaLoose,
+    string? DictionaryFormHiragana,
+    string? NormalizedFormHiragana,
     bool IsArchaicSentence = false,
     bool IsSentenceInitial = false)
 {
@@ -50,6 +55,15 @@ internal readonly record struct FormScoringContext(
         bool isArchaicSentence = false,
         bool isSentenceInitial = false)
     {
+        var surfaceHiragana = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: false);
+        var surfaceHiraganaLoose = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: true);
+        var dictionaryFormHiragana = !string.IsNullOrEmpty(dictionaryForm)
+            ? KanaScoringHelpers.ToNormalizedHiragana(dictionaryForm, convertLongVowelMark: false)
+            : null;
+        var normalizedFormHiragana = !string.IsNullOrEmpty(normalizedForm)
+            ? KanaScoringHelpers.ToNormalizedHiragana(normalizedForm, convertLongVowelMark: false)
+            : null;
+
         return new FormScoringContext(
             surface,
             dictionaryForm,
@@ -57,6 +71,10 @@ internal readonly record struct FormScoringContext(
             isNameContext,
             sudachiReading,
             WanaKana.IsKana(surface),
+            surfaceHiragana,
+            surfaceHiraganaLoose,
+            dictionaryFormHiragana,
+            normalizedFormHiragana,
             isArchaicSentence,
             isSentenceInitial);
     }
@@ -80,7 +98,7 @@ internal readonly record struct FormScoreTrace(
     int SurfaceMatchScore,
     int ScriptScore,
     int ReadingMatchScore,
-    bool ConjugatedIdentityPenaltyApplied)
+    bool IdentityPenaltyApplied)
 {
     public int TotalScore =>
         WordScore + EntryPriorityScore + FormPriorityScore + FormFlagScore + SurfaceMatchScore + ScriptScore +

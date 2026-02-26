@@ -47,6 +47,7 @@ public partial class AdminController(
                 await MetadataProviderHelper.GoogleBooksSearchApi(query + (!string.IsNullOrEmpty(author) ? $"+inauthor:{author}" : "")),
             "Vndb" => await MetadataProviderHelper.VndbSearchApi(query),
             "Igdb" => await MetadataProviderHelper.IgdbSearchApi(config["IgdbClientId"]!, config["IgdbClientSecret"]!, query),
+            "Bookmeter" => await MetadataProviderHelper.BookmeterSearchApi(query),
             _ => new List<Metadata>()
         });
     }
