@@ -1,4 +1,4 @@
-import { type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type ReadingType, type WordSetStateType } from '~/types';
+import { type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -537,4 +537,102 @@ export interface DictionarySearchResult {
   results: DictionaryEntry[];
   dictionaryResults: DictionaryEntry[];
   hasMore: boolean;
+}
+
+// Media Request types
+export interface MediaRequestDto {
+  id: number;
+  title: string;
+  mediaType: MediaType;
+  externalUrl?: string;
+  externalLinkType?: LinkType;
+  description?: string;
+  status: RequestStatus;
+  adminNote?: string;
+  fulfilledDeckId?: number;
+  fulfilledDeckTitle?: string;
+  upvoteCount: number;
+  commentCount: number;
+  uploadCount: number;
+  hasUserUpvoted: boolean;
+  isSubscribed: boolean;
+  isOwnRequest: boolean;
+  requesterName?: string;
+  createdAt: string;
+}
+
+export interface MediaRequestCommentDto {
+  id: number;
+  text?: string;
+  role: 'Requester' | 'Contributor';
+  isOwnComment: boolean;
+  userName?: string;
+  upload?: MediaRequestUploadDto;
+  createdAt: string;
+}
+
+export interface MediaRequestUploadDto {
+  id: number;
+  fileName: string;
+  fileSize: number;
+  originalFileCount: number;
+  createdAt: string;
+}
+
+export interface MediaRequestUploadAdminDto extends MediaRequestUploadDto {
+  uploaderEmail?: string;
+  adminReviewed: boolean;
+  adminNote?: string;
+  fileDeleted: boolean;
+  storagePath: string;
+}
+
+export interface DuplicateCheckResultDto {
+  existingDecks: DuplicateCheckDeckDto[];
+  existingRequests: DuplicateCheckRequestDto[];
+}
+
+export interface DuplicateCheckDeckDto {
+  deckId: number;
+  title: string;
+  mediaType: MediaType;
+}
+
+export interface DuplicateCheckRequestDto {
+  id: number;
+  title: string;
+  mediaType: MediaType;
+  status: RequestStatus;
+  upvoteCount: number;
+}
+
+export interface RequestActivityLogDto {
+  id: number;
+  mediaRequestId?: number;
+  requestTitle?: string;
+  userId: string;
+  userName?: string;
+  targetUserId?: string;
+  action: RequestAction;
+  detail?: string;
+  createdAt: string;
+}
+
+export interface RequestUserSummaryDto {
+  requestCount: number;
+  upvoteCount: number;
+  subscriptionCount: number;
+  uploadCount: number;
+  fulfilledCount: number;
+}
+
+export interface NotificationDto {
+  id: number;
+  type: NotificationType;
+  title: string;
+  message: string;
+  linkUrl?: string;
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
 }

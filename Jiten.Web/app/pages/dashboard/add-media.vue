@@ -6,7 +6,7 @@
   import InputText from 'primevue/inputtext';
   import Toast from 'primevue/toast';
   import { useToast } from 'primevue/usetoast';
-  import type { Metadata } from '~/types';
+  import type { Metadata, DuplicateCheckDeckDto } from '~/types';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
@@ -34,6 +34,22 @@
 
   const selectedFile = ref<File | null>(null);
   const originalTitle = ref('');
+  const duplicateDecks = ref<DuplicateCheckDeckDto[]>([]);
+
+  let duplicateTimeout: ReturnType<typeof setTimeout> | null = null;
+  watch(originalTitle, (newTitle) => {
+    if (duplicateTimeout) clearTimeout(duplicateTimeout);
+    if (newTitle.trim().length < 2) {
+      duplicateDecks.value = [];
+      return;
+    }
+    duplicateTimeout = setTimeout(async () => {
+      duplicateDecks.value = await $api<DuplicateCheckDeckDto[]>('admin/duplicate-check', {
+        query: { title: newTitle.trim(), mediaType: selectedMediaType.value },
+      }) ?? [];
+    }, 500);
+  });
+
   const romajiTitle = ref('');
   const englishTitle = ref('');
   const romanizing = ref(false);
@@ -92,6 +108,7 @@
       URL.revokeObjectURL(coverImageObjectUrl.value);
       coverImageObjectUrl.value = null;
     }
+    if (duplicateTimeout) clearTimeout(duplicateTimeout);
   });
 
   function selectMediaType(mediaType: MediaType) {
@@ -246,6 +263,7 @@
       selectedMetadata.value = null;
       subdecks.value = [];
       rating.value = 0;
+      duplicateDecks.value = [];
     }
   }
 
@@ -427,6 +445,14 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Original Title</label>
                   <InputText v-model="originalTitle" class="w-full" />
+                  <div v-if="duplicateDecks.length > 0" class="mt-2">
+                    <p class="text-sm font-semibold text-orange-600 dark:text-orange-400 mb-1">This media may already exist:</p>
+                    <div v-for="deck in duplicateDecks" :key="deck.deckId" class="flex items-center gap-2 text-sm py-1">
+                      <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="text-primary hover:underline" target="_blank">
+                        {{ deck.title }}
+                      </NuxtLink>
+                    </div>
+                  </div>
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Romaji Title</label>

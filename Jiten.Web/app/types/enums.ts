@@ -162,3 +162,34 @@ export enum WordSetStateType {
   Blacklisted = 1,
   Mastered = 2,
 }
+
+export enum RequestStatus {
+  Open = 1,
+  InProgress = 2,
+  Completed = 3,
+  Rejected = 4,
+}
+
+export enum NotificationType {
+  RequestStatusChanged = 1,
+  RequestCompleted = 2,
+  RequestFileUploaded = 3,
+  General = 10,
+}
+
+export enum RequestAction {
+  RequestCreated = 1,
+  RequestDeleted = 2,
+  Upvoted = 10,
+  UpvoteRemoved = 11,
+  Subscribed = 12,
+  Unsubscribed = 13,
+  CommentAdded = 20,
+  FileUploaded = 30,
+  FileDeletedByAdmin = 31,
+  StatusChangedToInProgress = 40,
+  StatusChangedToCompleted = 41,
+  StatusChangedToRejected = 42,
+  StatusChangedToOpen = 43,
+  RequestEditedByAdmin = 50,
+}
