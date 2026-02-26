@@ -20,6 +20,6 @@ public class DuplicateCheckRequestDto
     public int Id { get; set; }
     public required string Title { get; set; }
     public MediaType MediaType { get; set; }
-    public RequestStatus Status { get; set; }
+    public MediaRequestStatus Status { get; set; }
     public int UpvoteCount { get; set; }
 }
