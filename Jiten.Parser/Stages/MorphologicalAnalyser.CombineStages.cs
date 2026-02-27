@@ -169,6 +169,7 @@ public partial class MorphologicalAnalyser
                     if (stealForms.Any(f => f.Text == stealTarget))
                     {
                         currentWord.Text = stealCandidate;
+                        currentWord.EndOffset = nextWord.EndOffset;
                         currentWord.Reading += nextWord.Reading;
                         if (currentPOS == PartOfSpeech.Noun)
                         {
@@ -249,6 +250,7 @@ public partial class MorphologicalAnalyser
                 if (merged)
                 {
                     currentWord.Text = candidateText;
+                    currentWord.EndOffset = nextWord.EndOffset;
                     currentWord.Reading += nextWord.Reading;
                     currentWord.PartOfSpeech = currentPOS;
                     if (newDictForm != null)
@@ -305,10 +307,12 @@ public partial class MorphologicalAnalyser
                     if (!PrefixCombineExclusions.Contains(combinedText) &&
                         HasCompoundLookup(combinedText))
                     {
+                        var prefixStart = currentWord.StartOffset;
                         currentWord = new WordInfo(nextWord);
                         currentWord.Text = combinedText;
                         currentWord.DictionaryForm = combinedText;
                         currentWord.NormalizedForm = combinedText;
+                        currentWord.StartOffset = prefixStart;
                         if (nextWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective)
                             currentWord.PartOfSpeech = PartOfSpeech.Noun;
                         newList.Add(currentWord);
@@ -327,10 +331,12 @@ public partial class MorphologicalAnalyser
                             var readingCombined = currentWord.Text + readingHira;
                             if (!PrefixCombineExclusions.Contains(readingCombined) && HasCompoundLookup(readingCombined))
                             {
+                                var prefixStart = currentWord.StartOffset;
                                 currentWord = new WordInfo(nextWord);
                                 currentWord.Text = combinedText;
                                 currentWord.DictionaryForm = readingCombined;
                                 currentWord.NormalizedForm = readingCombined;
+                                currentWord.StartOffset = prefixStart;
                                 newList.Add(currentWord);
                                 i += 2;
                                 continue;
@@ -354,10 +360,13 @@ public partial class MorphologicalAnalyser
                             {
                                 var combinedWord = new WordInfo(nextWord);
                                 combinedWord.Text = partialText;
+                                combinedWord.StartOffset = currentWord.StartOffset;
+                                combinedWord.EndOffset = nextWord.StartOffset >= 0 ? nextWord.StartOffset + len : -1;
                                 newList.Add(combinedWord);
 
                                 var remainder = new WordInfo(nextWord);
                                 remainder.Text = nextWord.Text[len..];
+                                remainder.StartOffset = nextWord.StartOffset >= 0 ? nextWord.StartOffset + len : -1;
                                 newList.Add(remainder);
 
                                 i += 2;
@@ -395,8 +404,10 @@ public partial class MorphologicalAnalyser
                 AmountCombinations.Combinations.Contains((currentWord.Text, nextWord.Text)))
             {
                 var text = currentWord.Text + nextWord.Text;
+                var startOff = currentWord.StartOffset;
                 currentWord = new WordInfo(nextWord);
                 currentWord.Text = text;
+                currentWord.StartOffset = startOff;
                 currentWord.PartOfSpeech = PartOfSpeech.Noun;
             }
             else
@@ -425,6 +436,7 @@ public partial class MorphologicalAnalyser
             if (currentWord.Text.EndsWith("っ") && nextWord.Text.StartsWith("て"))
             {
                 currentWord.Text += nextWord.Text;
+                currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
@@ -471,6 +483,7 @@ public partial class MorphologicalAnalyser
 
             {
                 currentWord.Text += nextWord.Text;
+                currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
@@ -503,6 +516,7 @@ public partial class MorphologicalAnalyser
                 previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary)
             {
                 previousWord.Text += currentWord.Text;
+                previousWord.EndOffset = currentWord.EndOffset;
                 previousWord.Reading += currentWord.Reading;
                 combined = true;
             }
@@ -542,6 +556,7 @@ public partial class MorphologicalAnalyser
                     currentWord.DictionaryForm is "ある" or "有る")
                 {
                     previousWord.Text = "で" + currentWord.Text;
+                    previousWord.EndOffset = currentWord.EndOffset;
                     previousWord.Reading += currentWord.Reading;
                     previousWord.PartOfSpeech = currentWord.PartOfSpeech;
                     previousWord.DictionaryForm = "である";
@@ -591,6 +606,7 @@ public partial class MorphologicalAnalyser
                )
             {
                 previousWord.Text += currentWord.Text;
+                previousWord.EndOffset = currentWord.EndOffset;
                 previousWord.Reading += currentWord.Reading;
                 combined = true;
             }
@@ -631,6 +647,7 @@ public partial class MorphologicalAnalyser
                  isAdjectivalSuffix))
             {
                 currentWord.Text += nextWord.Text;
+                currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
@@ -668,6 +685,7 @@ public partial class MorphologicalAnalyser
                         wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun && wordInfos[i - 1].Text != "貴様")))
             {
                 currentWord.Text += nextWord.Text;
+                currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             // Handle がったり misparsed as adverb after adjective stem (e.g., 怖がったり, 悲しがったり)
@@ -678,6 +696,7 @@ public partial class MorphologicalAnalyser
                      && currentWord.DictionaryForm.EndsWith("い"))
             {
                 currentWord.Text += nextWord.Text;
+                currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
@@ -741,6 +760,7 @@ public partial class MorphologicalAnalyser
             {
                 WordInfo combinedWord = new WordInfo(currentWord);
                 combinedWord.Text = currentWord.Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text;
+                combinedWord.EndOffset = wordInfos[i + 2].EndOffset;
                 combinedWord.Reading = currentWord.Reading + wordInfos[i + 1].Reading + wordInfos[i + 2].Reading;
                 combinedWord.PartOfSpeech = PartOfSpeech.Expression;
                 newList.Add(combinedWord);
@@ -762,6 +782,7 @@ public partial class MorphologicalAnalyser
                 {
                     WordInfo combinedWord = new WordInfo(currentWord);
                     combinedWord.Text = combinedText;
+                    combinedWord.EndOffset = nextWord.EndOffset;
                     combinedWord.Reading = currentWord.Reading + nextWord.Reading;
                     newList.Add(combinedWord);
                     i += 2;
@@ -794,6 +815,7 @@ public partial class MorphologicalAnalyser
                 if (nextWord.Text == "ば" && currentWord.PartOfSpeech == PartOfSpeech.Verb)
                 {
                     currentWord.Text += nextWord.Text;
+                    currentWord.EndOffset = nextWord.EndOffset;
                     currentWord.Reading += nextWord.Reading;
                     newList.Add(currentWord);
                     i++;
@@ -809,6 +831,7 @@ public partial class MorphologicalAnalyser
                         var merged = new WordInfo(currentWord)
                         {
                             Text = currentWord.Text + nextWord.Text,
+                            EndOffset = nextWord.EndOffset,
                             Reading = currentWord.Reading + nextWord.Reading,
                             DictionaryForm = currentWord.Text + nextWord.Text
                         };
@@ -868,6 +891,8 @@ public partial class MorphologicalAnalyser
                         var merged = new WordInfo(next)
                         {
                             Text = word.Text + next.Text,
+                            StartOffset = word.StartOffset,
+                            EndOffset = next.EndOffset,
                             Reading = word.Reading + next.Reading,
                             DictionaryForm = "となる",
                             NormalizedForm = "なる"

@@ -6,6 +6,8 @@ namespace Jiten.Parser;
 public class WordInfo
 {
     public string Text { get; set; } = string.Empty;
+    public int StartOffset { get; set; } = -1;
+    public int EndOffset { get; set; } = -1;
     public PartOfSpeech PartOfSpeech { get; set; }
     public PartOfSpeechSection PartOfSpeechSection1 { get; set; }
     public PartOfSpeechSection PartOfSpeechSection2 { get; set; }
@@ -27,6 +29,8 @@ public class WordInfo
     public WordInfo(WordInfo other)
     {
         Text = other.Text;
+        StartOffset = other.StartOffset;
+        EndOffset = other.EndOffset;
         PartOfSpeech = other.PartOfSpeech;
         PartOfSpeechSection1 = other.PartOfSpeechSection1;
         PartOfSpeechSection2 = other.PartOfSpeechSection2;

@@ -69,7 +69,9 @@ public partial class MorphologicalAnalyser
             var mainVerb = new WordInfo
                            {
                                Text = mainVerbSurface, DictionaryForm = mainVerbDict, NormalizedForm = mainVerbDict,
-                               PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(mainVerbSurface)
+                               PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(mainVerbSurface),
+                               StartOffset = word.StartOffset,
+                               EndOffset = word.StartOffset >= 0 ? word.StartOffset + mainVerbDictLen : -1
                            };
 
             // Create the auxiliary verb token
@@ -77,7 +79,9 @@ public partial class MorphologicalAnalyser
                           {
                               Text = auxVerbSurface, DictionaryForm = matchedAux, NormalizedForm = matchedAux,
                               PartOfSpeech = PartOfSpeech.Verb, PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant,
-                              Reading = KanaConverter.ToHiragana(auxVerbSurface)
+                              Reading = KanaConverter.ToHiragana(auxVerbSurface),
+                              StartOffset = word.StartOffset >= 0 ? word.StartOffset + mainVerbDictLen : -1,
+                              EndOffset = word.EndOffset
                           };
 
             result.Add(mainVerb);
@@ -106,8 +110,10 @@ public partial class MorphologicalAnalyser
             // Split だな misparsed as 棚 (shelf) → だ (copula) + な (particle)
             if (word is { Text: "だな", PartOfSpeech: PartOfSpeech.Noun, NormalizedForm: "棚" })
             {
-                result.Add(new WordInfo { Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "だ" });
-                result.Add(new WordInfo { Text = "な", DictionaryForm = "な", NormalizedForm = "な", PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle, Reading = "な" });
+                result.Add(new WordInfo { Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "だ",
+                    StartOffset = word.StartOffset, EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1 });
+                result.Add(new WordInfo { Text = "な", DictionaryForm = "な", NormalizedForm = "な", PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle, Reading = "な",
+                    StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1, EndOffset = word.EndOffset });
                 continue;
             }
 
@@ -132,7 +138,9 @@ public partial class MorphologicalAnalyser
                         DictionaryForm = pastMarker,
                         NormalizedForm = pastMarker,
                         PartOfSpeech = PartOfSpeech.Auxiliary,
-                        Reading = pastMarker
+                        Reading = pastMarker,
+                        StartOffset = word.StartOffset,
+                        EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
                     });
 
                     // Add the quotative particle (って)
@@ -143,7 +151,9 @@ public partial class MorphologicalAnalyser
                         NormalizedForm = "って",
                         PartOfSpeech = PartOfSpeech.Particle,
                         PartOfSpeechSection1 = PartOfSpeechSection.ConjunctionParticle,
-                        Reading = "って"
+                        Reading = "って",
+                        StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                        EndOffset = word.EndOffset
                     });
 
                     continue;

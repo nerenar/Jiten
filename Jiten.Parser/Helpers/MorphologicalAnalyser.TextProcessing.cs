@@ -118,6 +118,25 @@ public partial class MorphologicalAnalyser
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
     }
 
+    private static void ComputeTokenOffsets(string originalText, List<WordInfo> wordInfos)
+    {
+        var text = originalText.Replace("\r", "").Replace("\n", "");
+        int pos = 0;
+        foreach (var word in wordInfos)
+        {
+            if (string.IsNullOrEmpty(word.Text) || word.PartOfSpeech == PartOfSpeech.BlankSpace)
+                continue;
+
+            int found = text.IndexOf(word.Text, pos, StringComparison.Ordinal);
+            if (found >= 0)
+            {
+                word.StartOffset = found;
+                word.EndOffset = found + word.Text.Length;
+                pos = word.EndOffset;
+            }
+        }
+    }
+
     private List<SentenceInfo> SplitIntoSentences(string text, List<WordInfo> wordInfos)
     {
         // Normalise text - remove line breaks for consistent sentence boundaries
@@ -166,11 +185,10 @@ public partial class MorphologicalAnalyser
         if (sentenceData.Count == 0)
             return [];
 
-        // Phase 2: Assign words using linear position tracking
-        // Instead of O(n*m) repeated IndexOf per sentence, we do O(n+m):
-        // - One IndexOf per word in the global text (O(n) total across all words)
-        // - O(1) sentence lookup per word using position boundaries
-        int globalPos = 0;
+        // Phase 2: Assign words using precomputed offsets
+        // Token offsets were computed once from raw Sudachi output (before pipeline stages),
+        // then propagated through all merge/split stages. This avoids fragile IndexOf matching
+        // that breaks when stages modify token Text (e.g., RepairVowelElongation strips ー).
         int sentenceIdx = 0;
 
         foreach (var word in wordInfos)
@@ -178,10 +196,11 @@ public partial class MorphologicalAnalyser
             if (string.IsNullOrEmpty(word.Text) || word.PartOfSpeech == PartOfSpeech.BlankSpace)
                 continue;
 
-            // Find word in the global text starting from current position
-            int wordPos = text.IndexOf(word.Text, globalPos, StringComparison.Ordinal);
-            if (wordPos < 0)
+            if (word.StartOffset < 0 || word.EndOffset < 0)
                 continue;
+
+            int wordPos = word.StartOffset;
+            int wordEnd = word.EndOffset;
 
             // Advance to the correct sentence based on word position
             while (sentenceIdx < sentenceData.Count - 1)
@@ -194,7 +213,6 @@ public partial class MorphologicalAnalyser
 
             var (sentence, sentenceStart) = sentenceData[sentenceIdx];
             int sentenceEnd = sentenceStart + sentence.Text.Length;
-            int wordEnd = wordPos + word.Text.Length;
 
             // Handle words that span sentence boundaries - merge sentences
             while (wordEnd > sentenceEnd && sentenceIdx + 1 < sentenceData.Count)
@@ -207,9 +225,8 @@ public partial class MorphologicalAnalyser
 
             // Calculate position within the sentence and add word
             int posInSentence = wordPos - sentenceStart;
-            sentence.Words.Add((word, posInSentence, word.Text.Length));
-
-            globalPos = wordEnd;
+            int spanLength = wordEnd - wordPos;
+            sentence.Words.Add((word, posInSentence, spanLength));
         }
 
         return sentenceData.Select(s => s.info).ToList();

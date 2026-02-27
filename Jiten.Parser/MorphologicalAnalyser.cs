@@ -151,6 +151,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            ComputeTokenOffsets(originalTexts[i], wordInfos);
             wordInfos = RunPipeline(wordInfos, diagnostics);
 
             results.Add(SplitIntoSentences(originalTexts[i], wordInfos));

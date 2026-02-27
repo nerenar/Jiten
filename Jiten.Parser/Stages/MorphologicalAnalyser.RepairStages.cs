@@ -124,9 +124,14 @@ public partial class MorphologicalAnalyser
                             }
                         }
 
-                        result.Add(new WordInfo(verbBefore) { Text = combinedText, PartOfSpeech = PartOfSpeech.Verb });
-                        result.Add(CreateNToken());
-                        result.Add(new WordInfo { Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か" });
+                        result.Add(new WordInfo(verbBefore) { Text = combinedText, PartOfSpeech = PartOfSpeech.Verb,
+                            EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1 });
+                        var nTok2 = CreateNToken();
+                        nTok2.StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1;
+                        nTok2.EndOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1;
+                        result.Add(nTok2);
+                        result.Add(new WordInfo { Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か",
+                            StartOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1, EndOffset = word.EndOffset });
                         continue;
                     }
                 }
@@ -150,11 +155,16 @@ public partial class MorphologicalAnalyser
                             // Remove in descending index order
                             var indices = new[] { moIdx, shiIdx, verbIdx }.Where(x => x >= 0).OrderByDescending(x => x).ToList();
                             foreach (var idx in indices) result.RemoveAt(idx);
-                            result.Add(new WordInfo(verbBefore) { Text = combinedText, PartOfSpeech = PartOfSpeech.Verb });
-                            result.Add(CreateNToken());
+                            result.Add(new WordInfo(verbBefore) { Text = combinedText, PartOfSpeech = PartOfSpeech.Verb,
+                                EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1 });
+                            var nTok3 = CreateNToken();
+                            nTok3.StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1;
+                            nTok3.EndOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1;
+                            result.Add(nTok3);
                             result.Add(new WordInfo
                                        {
-                                           Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か"
+                                           Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か",
+                                           StartOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1, EndOffset = word.EndOffset
                                        });
                             continue;
                         }
@@ -168,11 +178,16 @@ public partial class MorphologicalAnalyser
                 var prevIdx = GetPrevTokenIndex(1);
                 if (prevIdx >= 0)
                 {
-                    result[prevIdx] = new WordInfo(prev) { Text = prev.Text + "た", PartOfSpeech = PartOfSpeech.Verb };
+                    result[prevIdx] = new WordInfo(prev) { Text = prev.Text + "た", PartOfSpeech = PartOfSpeech.Verb,
+                        EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1 };
                 }
 
-                result.Add(CreateNToken());
-                result.Add(new WordInfo { Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か" });
+                var nTok = CreateNToken();
+                nTok.StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1;
+                nTok.EndOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1;
+                result.Add(nTok);
+                result.Add(new WordInfo { Text = "か", DictionaryForm = "か", PartOfSpeech = PartOfSpeech.Particle, Reading = "か",
+                    StartOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1, EndOffset = word.EndOffset });
             }
             else
             {
@@ -224,7 +239,7 @@ public partial class MorphologicalAnalyser
                 prev.Text.Length <= 2 &&
                 !prev.Text.EndsWith("ん"))
             {
-                result[^1] = new WordInfo(prev) { Text = prev.Text + "ん", PartOfSpeech = PartOfSpeech.Suffix };
+                result[^1] = new WordInfo(prev) { Text = prev.Text + "ん", EndOffset = current.EndOffset, PartOfSpeech = PartOfSpeech.Suffix };
                 continue;
             }
 
@@ -242,7 +257,8 @@ public partial class MorphologicalAnalyser
                 result.RemoveAt(result.Count - 1);
                 result[^1] = new WordInfo(preceding)
                 {
-                    Text = verbText, DictionaryForm = verbText, NormalizedForm = verbText,
+                    Text = verbText, EndOffset = current.EndOffset,
+                    DictionaryForm = verbText, NormalizedForm = verbText,
                     PartOfSpeech = PartOfSpeech.Verb,
                     PartOfSpeechSection1 = preceding.PartOfSpeech == PartOfSpeech.Suffix
                         ? PartOfSpeechSection.PossibleDependant
@@ -271,10 +287,14 @@ public partial class MorphologicalAnalyser
                     result[^1] = new WordInfo(prev)
                                  {
                                      Text = verbCandidate, DictionaryForm = verbCandidate, NormalizedForm = verbCandidate,
-                                     Reading = KanaConverter.ToHiragana(prev.Reading + current.Text[..^1]), PartOfSpeech = PartOfSpeech.Verb
+                                     Reading = KanaConverter.ToHiragana(prev.Reading + current.Text[..^1]), PartOfSpeech = PartOfSpeech.Verb,
+                                     EndOffset = current.EndOffset >= 0 ? current.EndOffset - 1 : -1
                                  };
                     // Add the elongation う as a separate token
-                    result.Add(MakeInterjection("う"));
+                    var interjection = MakeInterjection("う");
+                    interjection.StartOffset = current.EndOffset >= 0 ? current.EndOffset - 1 : -1;
+                    interjection.EndOffset = current.EndOffset;
+                    result.Add(interjection);
                     continue;
                 }
             }
@@ -291,8 +311,15 @@ public partial class MorphologicalAnalyser
 
                 if (isValidVerbPast)
                 {
-                    result[^1] = new WordInfo(prev) { Text = pastCandidate, Reading = KanaConverter.ToHiragana(prev.Reading + "た"), PartOfSpeech = PartOfSpeech.Verb };
-                    result.Add(MakeInterjection("あ"));
+                    result[^1] = new WordInfo(prev)
+                    {
+                        Text = pastCandidate, Reading = KanaConverter.ToHiragana(prev.Reading + "た"), PartOfSpeech = PartOfSpeech.Verb,
+                        EndOffset = current.StartOffset >= 0 ? current.StartOffset + 1 : -1
+                    };
+                    var interjection = MakeInterjection("あ");
+                    interjection.StartOffset = current.StartOffset >= 0 ? current.StartOffset + 1 : -1;
+                    interjection.EndOffset = current.EndOffset;
+                    result.Add(interjection);
                     continue;
                 }
             }
@@ -335,13 +362,16 @@ public partial class MorphologicalAnalyser
                 if (NCompoundSuffixes.Contains(remainder) || NCompoundSuffixes.Any(s => remainder.StartsWith(s)))
                 {
                     var nToken = CreateNToken();
+                    nToken.StartOffset = word.StartOffset;
+                    nToken.EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1;
                     if (word.PartOfSpeech == PartOfSpeech.Interjection)
                         nToken.DictionaryForm = "の";
                     split.Add(nToken);
                     split.Add(new WordInfo(word)
                     {
                         Text = remainder, DictionaryForm = remainder,
-                        NormalizedForm = remainder, Reading = remainder
+                        NormalizedForm = remainder, Reading = remainder,
+                        StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
                     });
                     continue;
                 }
@@ -354,11 +384,15 @@ public partial class MorphologicalAnalyser
                 var remainder = word.Text[1..];
                 if (DaCompoundSuffixes.Contains(remainder))
                 {
-                    split.Add(CreateDaToken());
+                    var daToken = CreateDaToken();
+                    daToken.StartOffset = word.StartOffset;
+                    daToken.EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1;
+                    split.Add(daToken);
                     split.Add(new WordInfo(word)
                     {
                         Text = remainder, DictionaryForm = remainder,
-                        NormalizedForm = remainder, Reading = remainder
+                        NormalizedForm = remainder, Reading = remainder,
+                        StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
                     });
                     continue;
                 }
@@ -370,9 +404,13 @@ public partial class MorphologicalAnalyser
                 split.Add(new WordInfo(word)
                           {
                               Text = "そう", DictionaryForm = "そう", NormalizedForm = "そう", Reading = "そう",
-                              PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.AuxiliaryVerbStem
+                              PartOfSpeech = PartOfSpeech.Auxiliary, PartOfSpeechSection1 = PartOfSpeechSection.AuxiliaryVerbStem,
+                              EndOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1
                           });
-                split.Add(CreateDaToken());
+                var daToken = CreateDaToken();
+                daToken.StartOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1;
+                daToken.EndOffset = word.EndOffset;
+                split.Add(daToken);
                 continue;
             }
 
@@ -403,7 +441,8 @@ public partial class MorphologicalAnalyser
                     result.Add(new WordInfo(current)
                     {
                         Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
-                        NormalizedForm = candidateText, Reading = candidateReading
+                        NormalizedForm = candidateText, Reading = candidateReading,
+                        EndOffset = split[i + 1].EndOffset
                     });
                     i++;
                     continue;
@@ -424,7 +463,8 @@ public partial class MorphologicalAnalyser
                     var suffixReading = "ん" + split[i + 1].Reading;
                     if (TryCombineWithLookback(result, suffix, suffixReading, deconj, IsNdaVerbForm, out var combinedWord))
                     {
-                        result.Add(combinedWord!);
+                        combinedWord!.EndOffset = split[i + 1].EndOffset;
+                        result.Add(combinedWord);
                         combined = true;
                         i++;
                     }
@@ -452,6 +492,7 @@ public partial class MorphologicalAnalyser
                             {
                                 Text = candidateText, PartOfSpeech = PartOfSpeech.Verb,
                                 NormalizedForm = candidateText, Reading = candidateReading,
+                                EndOffset = split[i + 1].EndOffset,
                                 PartOfSpeechSection1 = PartOfSpeechSection.None,
                                 PartOfSpeechSection2 = PartOfSpeechSection.None,
                                 PartOfSpeechSection3 = PartOfSpeechSection.None
@@ -468,9 +509,11 @@ public partial class MorphologicalAnalyser
                 if (!combined && current.DictionaryForm == "ぬ" &&
                     TryCombineWithLookback(result, "ん", "ん", deconj, IsAnyVerbForm, out var negativeWord))
                 {
+                    negativeWord!.EndOffset = current.EndOffset;
+
                     // After combining ませ+ん→ません, try to combine preceding verb stem with ません
                     // e.g., [し, ませ] + ん → [しません]
-                    if (negativeWord!.Text.EndsWith("ません") && result.Count > 0)
+                    if (negativeWord.Text.EndsWith("ません") && result.Count > 0)
                     {
                         var verbStem = result[^1];
                         var candidateText = verbStem.Text + negativeWord.Text;
@@ -480,6 +523,7 @@ public partial class MorphologicalAnalyser
                         {
                             result.RemoveAt(result.Count - 1);
                             negativeWord.Text = candidateText;
+                            negativeWord.StartOffset = verbStem.StartOffset;
                             negativeWord.DictionaryForm = verbStem.DictionaryForm;
                             negativeWord.NormalizedForm = candidateText;
                             negativeWord.Reading = KanaConverter.ToHiragana(verbStem.Reading + negativeWord.Reading);
@@ -583,6 +627,7 @@ public partial class MorphologicalAnalyser
                 && !newList[^1].Text.EndsWith("い"))
             {
                 newList[^1].Text += w1.Text;
+                newList[^1].EndOffset = w1.EndOffset;
                 i++;
                 continue;
             }
@@ -609,6 +654,7 @@ public partial class MorphologicalAnalyser
                                 newList.RemoveAt(newList.Count - 1);
                                 var compoundWord = new WordInfo(prevWord);
                                 compoundWord.Text = prevWord.Text + w1.Text + w2.Text + w3.Text;
+                                compoundWord.EndOffset = w3.EndOffset;
                                 compoundWord.DictionaryForm = compoundDictForm;
                                 compoundWord.PartOfSpeech = PartOfSpeech.Verb;
                                 newList.Add(compoundWord);
@@ -620,6 +666,7 @@ public partial class MorphologicalAnalyser
 
                         var newWord = new WordInfo(w1);
                         newWord.Text = w1.Text + w2.Text + w3.Text;
+                        newWord.EndOffset = w3.EndOffset;
                         newWord.DictionaryForm = newWord.Text;
 
                         if (sc.Item4 != null)
@@ -648,7 +695,7 @@ public partial class MorphologicalAnalyser
                                              wordInfos[i - 1].PartOfSpeech == PartOfSpeech.NaAdjective;
                     if (!prevIsAuxVerbStem && !prevIsNaAdjective)
                     {
-                        var newWord = new WordInfo(w1) { Text = "なんだ", DictionaryForm = "なんだ", PartOfSpeech = PartOfSpeech.Auxiliary };
+                        var newWord = new WordInfo(w1) { Text = "なんだ", EndOffset = w3.EndOffset, DictionaryForm = "なんだ", PartOfSpeech = PartOfSpeech.Auxiliary };
                         newList.Add(newWord);
                         i += 3;
                         continue;
@@ -667,7 +714,7 @@ public partial class MorphologicalAnalyser
                                              wordInfos[i - 1].PartOfSpeech == PartOfSpeech.NaAdjective;
                     if (!prevIsAuxVerbStem && !prevIsNaAdjective)
                     {
-                        var newWord = new WordInfo(w1) { Text = "なん", DictionaryForm = "なん", PartOfSpeech = PartOfSpeech.Auxiliary };
+                        var newWord = new WordInfo(w1) { Text = "なん", EndOffset = w2.EndOffset, DictionaryForm = "なん", PartOfSpeech = PartOfSpeech.Auxiliary };
                         newList.Add(newWord);
                         i += 2;
                         continue;
@@ -691,7 +738,7 @@ public partial class MorphologicalAnalyser
                 {
                     var w3 = wordInfos[i + 2];
                     newList.Add(w1); // Keep ん separate
-                    var daSuffix = new WordInfo(w2) { Text = w2.Text + w3.Text, PartOfSpeech = PartOfSpeech.Conjunction };
+                    var daSuffix = new WordInfo(w2) { Text = w2.Text + w3.Text, EndOffset = w3.EndOffset, PartOfSpeech = PartOfSpeech.Conjunction };
                     newList.Add(daSuffix);
                     i += 3;
                     continue;
@@ -706,7 +753,7 @@ public partial class MorphologicalAnalyser
                         or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun;
                     if (!prevIsNoun)
                     {
-                        var newWord = new WordInfo(w1) { Text = "にしろ", DictionaryForm = "にしろ", PartOfSpeech = PartOfSpeech.Expression };
+                        var newWord = new WordInfo(w1) { Text = "にしろ", EndOffset = w2.EndOffset, DictionaryForm = "にしろ", PartOfSpeech = PartOfSpeech.Expression };
                         newList.Add(newWord);
                         i += 2;
                         continue;
@@ -718,6 +765,7 @@ public partial class MorphologicalAnalyser
                     && w2 is { PartOfSpeech: PartOfSpeech.Verb, DictionaryForm: "ぐれる" })
                 {
                     w2.Text = "は" + w2.Text;
+                    w2.StartOffset = w1.StartOffset;
                     w2.DictionaryForm = "はぐれる";
                     w2.NormalizedForm = "はぐれる";
                     w2.Reading = "ハ" + w2.Reading;
@@ -736,12 +784,16 @@ public partial class MorphologicalAnalyser
                     newList.Add(new WordInfo
                     {
                         Text = "とく", DictionaryForm = "とく", NormalizedForm = "とく",
-                        PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "トク"
+                        PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "トク",
+                        StartOffset = w2.StartOffset,
+                        EndOffset = w2.StartOffset >= 0 ? w2.StartOffset + 2 : -1
                     });
                     newList.Add(new WordInfo
                     {
                         Text = "と", DictionaryForm = "と", NormalizedForm = "と",
-                        PartOfSpeech = PartOfSpeech.Particle, Reading = "ト"
+                        PartOfSpeech = PartOfSpeech.Particle, Reading = "ト",
+                        StartOffset = w2.StartOffset >= 0 ? w2.StartOffset + 2 : -1,
+                        EndOffset = w2.EndOffset
                     });
                     i += 2;
                     continue;
@@ -753,7 +805,7 @@ public partial class MorphologicalAnalyser
                     if (w1.Text == sc.Item1 && w2.Text == sc.Item2
                         && !(sc.Item3 == PartOfSpeech.Verb && w1.PartOfSpeech == PartOfSpeech.Conjunction))
                     {
-                        var newWord = new WordInfo(w1) { Text = w1.Text + w2.Text };
+                        var newWord = new WordInfo(w1) { Text = w1.Text + w2.Text, EndOffset = w2.EndOffset };
 
                         // For verb merges where the first token is a conjugated verb form,
                         // preserve the original dictionary form (e.g., し+て → して with DictionaryForm=する)
@@ -803,12 +855,14 @@ public partial class MorphologicalAnalyser
                 var da = new WordInfo
                          {
                              Text = "だ", DictionaryForm = "だ", PartOfSpeech = PartOfSpeech.Auxiliary,
-                             PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "だ"
+                             PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "だ",
+                             StartOffset = w1.StartOffset, EndOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1
                          };
                 var shi = new WordInfo
                           {
                               Text = "し", DictionaryForm = "し", PartOfSpeech = PartOfSpeech.Conjunction,
-                              PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "し"
+                              PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "し",
+                              StartOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1, EndOffset = w1.EndOffset
                           };
 
                 newList.Add(da);
@@ -831,9 +885,11 @@ public partial class MorphologicalAnalyser
                     // Don't consume conjectural だろ/だろう — those are separate grammar points
                     string combined = "な" + wordInfos[i + 1].Text;
                     int j = i + 2;
+                    int lastEndOffset = wordInfos[i + 1].EndOffset;
                     if (j < wordInfos.Count && wordInfos[j].Text == "だ" && wordInfos[j].PartOfSpeech == PartOfSpeech.Auxiliary)
                     {
                         combined += wordInfos[j].Text;
+                        lastEndOffset = wordInfos[j].EndOffset;
                         j++;
                     }
 
@@ -841,10 +897,12 @@ public partial class MorphologicalAnalyser
                     if (j < wordInfos.Count && wordInfos[j].Text == "と" && wordInfos[j].PartOfSpeech == PartOfSpeech.Particle)
                     {
                         combined += wordInfos[j].Text;
+                        lastEndOffset = wordInfos[j].EndOffset;
                         j++;
                     }
 
                     w1.Text = combined;
+                    w1.EndOffset = lastEndOffset;
                     w1.DictionaryForm = combined;
                     w1.PartOfSpeech = PartOfSpeech.Auxiliary;
                     newList.Add(w1);
@@ -859,6 +917,7 @@ public partial class MorphologicalAnalyser
                     && !newList[^1].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem))
                 {
                     newList[^1].Text += w1.Text;
+                    newList[^1].EndOffset = w1.EndOffset;
                     i++;
                     continue;
                 }
@@ -978,7 +1037,9 @@ public partial class MorphologicalAnalyser
         WordInfo noun, WordInfo orphan, string nounRemainder, string verbStem, string dictForm, List<WordInfo> result)
     {
         int w = noun.Text.Length - nounRemainder.Length;
+        int origNounEnd = noun.EndOffset;
         noun.Text = nounRemainder;
+        noun.EndOffset = noun.StartOffset >= 0 ? noun.StartOffset + nounRemainder.Length : -1;
         if (noun.DictionaryForm.EndsWith(verbStem))
             noun.DictionaryForm = noun.DictionaryForm[..^w];
         if (noun.NormalizedForm.EndsWith(verbStem))
@@ -990,6 +1051,8 @@ public partial class MorphologicalAnalyser
             DictionaryForm = dictForm,
             NormalizedForm = dictForm,
             PartOfSpeech = PartOfSpeech.Verb,
+            StartOffset = origNounEnd >= 0 ? origNounEnd - w : -1,
+            EndOffset = orphan.EndOffset,
         });
     }
 
@@ -1037,14 +1100,18 @@ public partial class MorphologicalAnalyser
                     Text = baseText,
                     DictionaryForm = baseText,
                     NormalizedForm = baseText,
-                    PartOfSpeech = PartOfSpeech.Interjection
+                    PartOfSpeech = PartOfSpeech.Interjection,
+                    StartOffset = word.StartOffset,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + baseText.Length : -1
                 });
                 result.Add(new WordInfo
                 {
                     Text = particle,
                     DictionaryForm = particle,
                     NormalizedForm = particle,
-                    PartOfSpeech = PartOfSpeech.Particle
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    StartOffset = word.StartOffset >= 0 ? word.StartOffset + baseText.Length : -1,
+                    EndOffset = word.EndOffset
                 });
                 split = true;
                 break;

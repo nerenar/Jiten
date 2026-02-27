@@ -33,29 +33,22 @@ public static partial class MetadataProviderHelper
         http.DefaultRequestHeaders.Add("User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-        var searchUrl = $"https://bookmeter.com/search?keyword={Uri.EscapeDataString(query)}&partial=true&sort=recommended&type=japanese_v2";
-        var response = await http.GetAsync(searchUrl);
+        var escapedQuery = Uri.EscapeDataString(query);
+        var searchUrl1 = $"https://bookmeter.com/search?keyword={escapedQuery}&partial=true&sort=recommended&type=japanese_v2";
+        var searchUrl2 = $"https://bookmeter.com/search?author=&keyword={escapedQuery}&partial=true&sort=recommended&type=japanese&page=1";
 
-        if (!response.IsSuccessStatusCode) return [];
+        var searchResults = await Task.WhenAll(
+            BookmeterFetchSearchItems(http, searchUrl1),
+            BookmeterFetchSearchItems(http, searchUrl2));
 
-        var html = await response.Content.ReadAsStringAsync();
-        var parser = new HtmlParser();
-        var document = await parser.ParseDocumentAsync(html);
+        var seen = new HashSet<string>();
+        var combined = searchResults[0].Concat(searchResults[1])
+            .Where(x => seen.Add(x.BookPath))
+            .ToList();
 
-        var items = document.QuerySelectorAll("li.group__book").ToList();
-
-        var metadatas = await Task.WhenAll(items.Select(async item =>
+        var metadatas = await Task.WhenAll(combined.Select(async item =>
         {
-            var coverImg = item.QuerySelector("img.cover__image");
-            var bookLink = item.QuerySelector("div.thumbnail__cover a");
-
-            if (coverImg == null || bookLink == null) return null;
-
-            var fallbackTitle = coverImg.GetAttribute("alt") ?? "";
-            var imageUrl = coverImg.GetAttribute("src") ?? "";
-            var bookPath = bookLink.GetAttribute("href") ?? "";
-            var bookmeterUrl = $"https://bookmeter.com{bookPath}";
-
+            var bookmeterUrl = $"https://bookmeter.com{item.BookPath}";
             List<Link> links = [new Link { LinkType = LinkType.Bookmeter, Url = bookmeterUrl }];
 
             var details = await BookmeterGetDetails(http, bookmeterUrl);
@@ -65,8 +58,8 @@ public static partial class MetadataProviderHelper
 
             return new Metadata
             {
-                OriginalTitle = details.CleanTitle ?? fallbackTitle,
-                Image = imageUrl,
+                OriginalTitle = details.CleanTitle ?? item.FallbackTitle,
+                Image = item.ImageUrl,
                 Links = links,
                 Description = details.Description,
                 Rating = details.Rating,
@@ -75,6 +68,41 @@ public static partial class MetadataProviderHelper
         }));
 
         return metadatas.OfType<Metadata>().ToList();
+    }
+
+    private record BookmeterSearchItem(string BookPath, string FallbackTitle, string ImageUrl);
+
+    private static async Task<List<BookmeterSearchItem>> BookmeterFetchSearchItems(HttpClient http, string url)
+    {
+        try
+        {
+            var response = await http.GetAsync(url);
+            if (!response.IsSuccessStatusCode) return [];
+
+            var html = await response.Content.ReadAsStringAsync();
+            var document = await new HtmlParser().ParseDocumentAsync(html);
+
+            return document.QuerySelectorAll("li.group__book")
+                .SelectMany(item =>
+                {
+                    var coverImg = item.QuerySelector("img.cover__image");
+                    var bookLink = item.QuerySelector("div.thumbnail__cover a");
+                    if (coverImg == null || bookLink == null) return Enumerable.Empty<BookmeterSearchItem>();
+
+                    var bookPath = bookLink.GetAttribute("href") ?? "";
+                    if (string.IsNullOrEmpty(bookPath)) return Enumerable.Empty<BookmeterSearchItem>();
+
+                    return [new BookmeterSearchItem(
+                        bookPath,
+                        coverImg.GetAttribute("alt") ?? "",
+                        coverImg.GetAttribute("src") ?? "")];
+                })
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private record BookmeterDetails(
