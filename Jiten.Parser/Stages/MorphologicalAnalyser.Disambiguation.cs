@@ -58,6 +58,26 @@ public partial class MorphologicalAnalyser
                 word.DictionaryForm = "です";
                 word.PartOfSpeech = PartOfSpeech.Auxiliary;
             }
+
+            // いかんせん (如何せん): prevent resegmentation into いかん + せん
+            if (word.Text == "いかんせん")
+                word.PreMatchedWordId = 1919420;
+
+            // Standalone prefix-tagged せん that wasn't combined by CombinePrefixes
+            // is the Kansai-ben negative of する (= しない), not the numeral prefix 千
+            if (word is { Text: "せん", PartOfSpeech: PartOfSpeech.Prefix })
+            {
+                word.PartOfSpeech = PartOfSpeech.Expression;
+                word.PreMatchedWordId = 2844926;
+            }
+
+            // セン in katakana not preceded by a numeral → 線 (line), not 千 (thousand)
+            if (word.Text == "セン")
+            {
+                var prev = i > 0 ? wordInfos[i - 1] : null;
+                if (prev is not { PartOfSpeech: PartOfSpeech.Numeral })
+                    word.PreMatchedWordId = 1391780;
+            }
         }
 
         return wordInfos;

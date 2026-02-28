@@ -225,6 +225,8 @@ public class MorphologicalAnalyserTests
         yield return ["ぶっこんでいるようで", new[] { "ぶっこんでいる", "よう", "で" }];
         yield return ["じゃないけど下手に", new[] { "じゃない", "けど", "下手", "に" }];
         yield return ["的にそうではない", new[] { "的", "に", "そう", "ではない" }];
+        yield return ["恋の終わりではなく", new[] { "恋", "の", "終わり", "ではなく" }];
+        yield return ["問題ではなかった", new[] { "問題", "ではなかった" }];
         yield return ["入り込めなかった", new[] { "入り込めなかった" }];
         yield return ["がいまいちなんだよ", new[] { "が", "いまいち", "なんだ", "よ" }];
         yield return ["脱がしにかかってる", new[] { "脱がし", "に", "かかってる" }];
@@ -581,6 +583,11 @@ public class MorphologicalAnalyserTests
         // JMnedict celebrity names - keep as single token (in JMnedict)
         yield return ["加藤紀子", new[] { "加藤紀子" }];
         yield return ["わかってねえじゃねえか", new[] { "わかってねえ", "じゃねえ", "か" }];
+        // Colloquial ねえ negative after te/de-form — Sudachi splits ねえ into ね+え or tags as noun (姉)
+        yield return ["入ってねえのに", new[] { "入ってねえ", "のに" }];
+        yield return ["飲んでねえのに", new[] { "飲んでねえ", "のに" }];
+        yield return ["入ってねえだろ", new[] { "入ってねえ", "だろ" }];
+        yield return ["知ってねえの", new[] { "知ってねえ", "の" }];
         // Slang negatives where verb stem ends in え — ええ user_dic entry must not absorb the え
         yield return ["食えねえんだよ", new[] { "食えねえ", "んだ", "よ" }];
         yield return ["見えねえよ", new[] { "見えねえ", "よ" }];
@@ -788,6 +795,40 @@ public class MorphologicalAnalyserTests
         // ださ → ださ+い in lookups fallback enables the split; きも → きも matches 肝 directly
         yield return ["ダサキモ", new[] { "ダサ", "キモ" }];
         yield return ["百合豚ダサキモ眼鏡", new[] { "百合豚", "ダサ", "キモ", "眼鏡" }];
+        // として/からして/クセして compound particle combination
+        yield return ["護衛として彼女に付き従う", new[] { "護衛", "として", "彼女", "に", "付き従う" }];
+        yield return ["憮然として言う", new[] { "憮然", "として", "言う" }];
+        yield return ["好みからして", new[] { "好み", "からして" }];
+        yield return ["クセして", new[] { "クセして" }];
+        // しようとして: Sudachi splits し(conjunction)+ようとして(expression) → must recombine
+        yield return ["しようとして", new[] { "しようとして" }];
+        // Kansai-ben negative せん: suru-noun + せん should combine
+        yield return ["卑下せんでもいい", new[] { "卑下せん", "でも", "いい" }];
+        // いかんせん must stay as a single token (如何せん), not split into いかん + せん
+        yield return ["いかんせん、距離が離れすぎている", new[] { "いかんせん", "距離", "が", "離れすぎている" }];
+
+        yield return ["ないなかった", new[] { "ない", "なかった" }];
+        yield return ["箱庭の外に行き場なんてないなかったんだ", new[] { "箱庭", "の", "外", "に", "行き場", "なんて", "ない", "なかった", "んだ" }];
+
+        // は+ね should separate as topic particle + emphatic particle, not merge into はね (feather)
+        yield return ["僕はねこう見えても式部卿なんだよ", new[] { "僕", "は", "ね", "こう", "見えて", "も", "式部", "卿", "なんだ", "よ" }];
+        yield return ["俺はね同じ気持ちなのにそれを伝えないなんて", new[] { "俺", "は", "ね", "同じ", "気持ち", "なのに", "それ", "を", "伝えない", "なんて" }];
+        yield return ["私はねここに存在していることが酷く恥ずかしい", new[] { "私", "は", "ね", "ここ", "に", "存在している", "こと", "が", "酷く", "恥ずかしい" }];
+        yield return ["南アルプス市", new[] { "南アルプス", "市" }];
+        yield return ["よかったなラムシャーリー様までもうすぐだ", new[] { "よかった", "ラム", "シャーリー", "様", "まで", "もうすぐ", "だ" }];
+        yield return ["それはたまたまで", new[] { "それ", "は", "たまたま", "で" }];
+        yield return ["生年未公開", new[] { "生年", "未公開" }];
+        yield return ["ポチろうとした瞬間に鼻血が出てな", new[] { "ポチろう", "と", "した", "瞬間", "に", "鼻血が出て", "な" }];
+
+        // 朝+verb should not combine into 朝見 (ちょうけん) via false compound deconjugation
+        yield return ["朝見る", new[] { "朝", "見る" }];
+        yield return ["今朝見たときよりも、炎が小さくなっている。", new[] { "今朝", "見た", "とき", "より", "も", "炎", "が", "小さく", "なっている" }];
+
+        // Compound expression with conjugated final verb: お目にかかれる (potential of お目にかかる)
+        yield return ["お目にかかれるとは思ってもみませんでした", new[] { "お目にかかれる", "とは", "思って", "も", "みませんでした" }];
+
+        // 少し must not be split into 少 + し after なら (Sudachi user_dic fix)
+        yield return ["それにキャンプなら少しは", new[] { "それ", "に", "キャンプ", "なら", "少し", "は" }];
     }
 
     [Theory]

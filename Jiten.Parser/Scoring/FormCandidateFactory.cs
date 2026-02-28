@@ -29,6 +29,13 @@ internal static class FormCandidateFactory
                 var targetLoose = KanaNormalizer.Normalize(KanaConverter.ToHiragana(targetHiragana));
                 var formLoose = KanaNormalizer.Normalize(KanaConverter.ToHiragana(form.Text));
                 phoneticMatch = formLoose == targetLoose;
+
+                if (!phoneticMatch && targetHiragana.Contains('ー'))
+                {
+                    var targetStripped = targetHiragana.Replace("ー", "");
+                    var formStripped = formHiragana.Replace("ー", "");
+                    phoneticMatch = targetStripped.Length > 0 && targetStripped == formStripped;
+                }
             }
 
             if (!phoneticMatch)

@@ -7,6 +7,6 @@ public class MediaRequestCommentDto
     public required string Role { get; set; }
     public bool IsOwnComment { get; set; }
     public string? UserName { get; set; }
-    public MediaRequestUploadDto? Upload { get; set; }
+    public object? Upload { get; set; }
     public DateTime CreatedAt { get; set; }
 }

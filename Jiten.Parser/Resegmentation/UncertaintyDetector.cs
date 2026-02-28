@@ -53,6 +53,16 @@ internal static class UncertaintyDetector
         {
             var hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(text, convertLongVowelMark: false));
             if (hira != text && lookups.TryGetValue(hira, out ids) && ids.Count > 0) return true;
+
+            if (text.Contains('ー'))
+            {
+                var stripped = text.Replace("ー", "");
+                if (stripped.Length > 0)
+                {
+                    var strippedHira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(stripped, convertLongVowelMark: false));
+                    if (lookups.TryGetValue(strippedHira, out ids) && ids.Count > 0) return true;
+                }
+            }
         }
         catch { }
         return false;

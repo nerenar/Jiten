@@ -27,6 +27,7 @@ internal enum MatchCondition
     PrevIsVerbAuxOrIAdj,         // Prev.PartOfSpeech is Verb, Auxiliary, or IAdjective
     PrevIsVerbAuxIAdjOrSfp,      // Prev.PartOfSpeech is Verb, Auxiliary, IAdjective, or sentence-ending particle
     PrevIsAuxiliary,             // Prev.PartOfSpeech is Auxiliary
+    PrevIsAuxiliaryOrParticle,   // Prev.PartOfSpeech is Auxiliary or Particle
     PrevIsNumericOrNoun, // Prev.PartOfSpeech is Numeral, Noun, CommonNoun, Pronoun, or Name
     PrevExists,          // Prev != null
     IsSentenceEndingParticle, // PartOfSpeech == Particle && Section == SentenceEndingParticle

@@ -45,6 +45,6 @@
             <SharedFiles Include="..\Shared\**\*.*" />
         </ItemGroup>
 
-        <Copy SourceFiles="@(SharedFiles)" DestinationFolder="$(OutputPath)\%(RecursiveDir)" />
+        <Copy SourceFiles="@(SharedFiles)" DestinationFolder="$(OutputPath)\%(RecursiveDir)" SkipUnchangedFiles="true" />
     </Target>
 </Project>

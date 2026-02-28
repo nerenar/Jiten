@@ -90,6 +90,9 @@ internal static class ResegmentationEngine
                     continue;
                 if (Array.IndexOf(UncertaintyDetector.SkipPos, word.PartOfSpeech) >= 0)
                     continue;
+                if (PosMapper.IsNameLikeSudachiNoun(word.PartOfSpeech, word.PartOfSpeechSection1,
+                        word.PartOfSpeechSection2, word.PartOfSpeechSection3))
+                    continue;
                 if (!marginMap.TryGetValue((si, wi), out var margin) || margin == null || margin >= ScoringPolicy.LowConfidenceThreshold)
                     continue;
 

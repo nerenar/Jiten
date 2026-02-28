@@ -8,12 +8,13 @@
 
   const props = defineProps<{
     word: Word;
+    knownStatesOverride?: KnownState[];
   }>();
 
-  const knownStates = ref([...props.word.knownStates]);
+  const knownStates = ref([...(props.knownStatesOverride ?? props.word.knownStates ?? [])]);
 
-  watch(() => props.word.knownStates, (newStates) => {
-    knownStates.value = [...newStates];
+  watch([() => props.knownStatesOverride, () => props.word.knownStates], ([override, wordStates]) => {
+    knownStates.value = [...(override ?? wordStates ?? [])];
   });
 
   const toggleWordKnown = async () => {

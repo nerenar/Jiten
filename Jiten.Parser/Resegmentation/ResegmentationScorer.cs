@@ -93,7 +93,8 @@ internal static class ResegmentationScorer
                         };
                     }
 
-                    int nextPartial = state.partialScore + edgeFreqBonus - 15;
+                    int edgeLengthBonus = edge.Length switch { >= 5 => 40, >= 4 => 25, >= 3 => 10, _ => 0 };
+                    int nextPartial = state.partialScore + edgeFreqBonus + edgeLengthBonus - 15;
 
                     if (!beamByPos.TryGetValue(nextPos, out var nextStates))
                     {
@@ -189,6 +190,8 @@ internal static class ResegmentationScorer
                 <= 30000 => 5,
                 _        => 0
             };
+
+            score += seg.Length switch { >= 5 => 40, >= 4 => 25, >= 3 => 10, _ => 0 };
         }
 
         if (allSegmentsAtLeast2)

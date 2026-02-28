@@ -92,6 +92,70 @@ public partial class MorphologicalAnalyser
     }
 
     /// <summary>
+    /// Splits たん(suffix) + だ/です(auxiliary) into [prev+た] + ん + だ/です when the preceding token
+    /// forms a valid verb past tense. Sudachi sometimes tokenizes たんだ as たん(suffix) + だ(auxiliary),
+    /// e.g., イッ(noun) + たん(suffix) + だ(aux) instead of イッた + んだ.
+    /// After this split, ProcessSpecialCases merges ん + だ → んだ (explanatory のだ).
+    /// </summary>
+    private List<WordInfo> SplitTanSuffix(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2) return wordInfos;
+
+        var deconj = Deconjugator.Instance;
+        var result = new List<WordInfo>(wordInfos.Count + 2);
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (word is not { Text: "たん", PartOfSpeech: PartOfSpeech.Suffix }
+                || i + 1 >= wordInfos.Count
+                || wordInfos[i + 1] is not { PartOfSpeech: PartOfSpeech.Auxiliary, DictionaryForm: "だ" or "です" }
+                || result.Count == 0)
+            {
+                result.Add(word);
+                continue;
+            }
+
+            var prev = result[^1];
+            bool shouldSplit = false;
+
+            if (prev.Text[^1] is 'て' or 'で')
+            {
+                shouldSplit = true;
+            }
+            else
+            {
+                var candidateText = NormalizeToHiragana(prev.Text + "た");
+                var forms = deconj.Deconjugate(candidateText);
+                if (forms.Any(f => f.Tags.Any(t => t.StartsWith("v")) && f.Process.Any(p => p == "past")))
+                    shouldSplit = true;
+            }
+
+            if (!shouldSplit)
+            {
+                result.Add(word);
+                continue;
+            }
+
+            result[^1] = new WordInfo(prev)
+            {
+                Text = prev.Text + "た",
+                EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
+            };
+            result.Add(new WordInfo
+            {
+                Text = "ん", DictionaryForm = "の", NormalizedForm = "ん", Reading = "ん",
+                PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.Juntaijoushi,
+                StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                EndOffset = word.EndOffset
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Splits the conjunctive particle たって/だって into た/だ (past auxiliary) + って (quotative particle)
     /// when it follows a verb in 連用形 (infinitive/stem form).
     /// Sudachi treats たって as a single 接続助詞 but it should be た + って for proper deconjugation.

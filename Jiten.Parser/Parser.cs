@@ -63,7 +63,7 @@ namespace Jiten.Parser
             (2394370, 4), (1203250, 2), (1537250, 2), (2783750, 1), (2654250, 0), (2609820, 1),
             (2080360, 3), (1333240, 2), (2035220, 2), (5616612, 5), (2249020, 1), (2783700, 1),
             (2411420, 0), (1604890, 2), (2602280, 1), (1407450, 1), (1595120, 1), (2083370, 1),
-            (2862482, 0), (2849996, 0), (1266970,2)
+            (2862482, 0), (2849996, 0), (1266970,2), (2574180,2), (2574180,1), (1550770,1)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -865,6 +865,7 @@ namespace Jiten.Parser
                                                     PartsOfSpeech = preMatchedWord.CachedPOS,
                                                     Origin = preMatchedWord.Origin
                                                 };
+                                resolvedMargin = ScoringPolicy.HighConfidenceThreshold;
                                 break;
                             }
                         }
@@ -1308,6 +1309,12 @@ namespace Jiten.Parser
                     candidatePool = nameCandidates;
                     isNameContext = true;
                 }
+                else if (isNameLikeSudachiNoun && nameCandidates.Count > 0)
+                {
+                    candidatePool = new List<JmDictWord>(compatibleNonNameMatches);
+                    candidatePool.AddRange(nameCandidates);
+                    isNameContext = true;
+                }
                 else if (compatibleNonNameMatches.Count > 0)
                 {
                     candidatePool = compatibleNonNameMatches;
@@ -1530,14 +1537,21 @@ namespace Jiten.Parser
             // remove identity matches for suru-nouns that are only Verb-compatible through vs tags.
             // This prevents nouns like 移管 from winning via surface match over the actual expression (行かん)
             // or deconjugated verb (行く) when the surface happens to be homophonic with the suru-noun.
+            HashSet<int>? filteredSuruNounIds = null;
             if (matches.Count > 1 && normalizedText != baseDictionaryWord && !string.IsNullOrEmpty(baseDictionaryWord))
             {
                 bool hasDictFormMatch = matches.Any(m => m.form.Text == baseDictionaryWord && m.form.Process.Count > 0);
                 if (hasDictFormMatch)
                 {
-                    matches.RemoveAll(m =>
-                                          m.form.Process.Count == 0 &&
-                                          FormCandidateFactory.IsSuruNounWithoutExpression(m.word.PartsOfSpeech));
+                    filteredSuruNounIds = matches
+                        .Where(m => m.form.Process.Count == 0 &&
+                                    FormCandidateFactory.IsSuruNounWithoutExpression(m.word.PartsOfSpeech))
+                        .Select(m => m.word.WordId)
+                        .ToHashSet();
+                    if (filteredSuruNounIds.Count > 0)
+                        matches.RemoveAll(m => filteredSuruNounIds.Contains(m.word.WordId));
+                    else
+                        filteredSuruNounIds = null;
                 }
             }
 
@@ -1654,6 +1668,7 @@ namespace Jiten.Parser
             foreach (var id in directSurfaceIds)
             {
                 if (matchedWordIds.Contains(id)) continue;
+                if (filteredSuruNounIds != null && filteredSuruNounIds.Contains(id)) continue;
                 if (!wordCache.TryGetValue(id, out var directWord)) continue;
                 var posList = directWord.CachedPOS;
                 if (!posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))) continue;
@@ -2251,7 +2266,7 @@ namespace Jiten.Parser
                                                          ParserDiagnostics? diagnostics = null)
         {
             foreach (var sentence in sentences)
-                TransitionRuleEngine.ApplyHardRules(sentence.Words, HasLookup, diagnostics);
+                TransitionRuleEngine.ApplyHardRules(sentence.Words, HasNonNameLookup, diagnostics);
         }
 
         /// <summary>
@@ -2322,6 +2337,25 @@ namespace Jiten.Parser
             {
                 var hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(text, convertLongVowelMark: false));
                 if (hira != text && _lookups.TryGetValue(hira, out ids) && ids.Count > 0)
+                    return true;
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private static bool HasNonNameLookup(string text)
+        {
+            if (_lookups.TryGetValue(text, out var ids) && ids.Count > 0
+                && !ids.All(id => _nameOnlyWordIds.Contains(id)))
+                return true;
+            try
+            {
+                var hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(text, convertLongVowelMark: false));
+                if (hira != text && _lookups.TryGetValue(hira, out ids) && ids.Count > 0
+                    && !ids.All(id => _nameOnlyWordIds.Contains(id)))
                     return true;
             }
             catch
@@ -2686,22 +2720,42 @@ namespace Jiten.Parser
                 }
             }
 
-            // Fallback: try deconjugated forms for conjugated compound expressions
-            // Only when Sudachi didn't deconjugate (dictForm == surface text) AND the token
-            // contains kanji. Pure-kana tokens (いい, じゃない) are already in dictionary form;
-            // kanji tokens (明かん) indicate Sudachi genuinely failed to deconjugate.
-            if (dictForm == verb.Text && verb.Text.Any(c => WanaKana.IsKanji(c.ToString())))
+            if (dictForm == verb.Text)
             {
-                var deconj = Deconjugator.Instance.Deconjugate(KanaConverter.ToHiragana(verb.Text));
-                foreach (var form in deconj
-                                     .Select(d => d.Text)
-                                     .Where(t => !string.IsNullOrEmpty(t) && t != dictForm)
-                                     .Distinct()
-                                     .OrderBy(t => t.Length)
-                                     .ThenBy(t => t, StringComparer.Ordinal))
+                // Try NormalizedForm for lexicalized conjugated forms where Sudachi treats the
+                // surface as its own dictionary entry (e.g., go-dan potential かかれる has
+                // dictForm="かかれる" but normalizedForm="掛かる" → enables お目にかかる match)
+                if (verb.PartOfSpeech == PartOfSpeech.Verb
+                    && !string.IsNullOrEmpty(verb.NormalizedForm) && verb.NormalizedForm != dictForm)
                 {
-                    result = await TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, form);
+                    result = await TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, verb.NormalizedForm);
                     if (result.HasValue) return result;
+
+                    var hiraganaNorm = KanaConverter.ToHiragana(verb.NormalizedForm, convertLongVowelMark: false);
+                    if (hiraganaNorm != verb.NormalizedForm)
+                    {
+                        result = await TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, hiraganaNorm);
+                        if (result.HasValue) return result;
+                    }
+                }
+
+                // Try deconjugated forms for kanji tokens where Sudachi failed to deconjugate.
+                // Skip if the kana form ends in a standard dictionary verb ending.
+                var verbKana = KanaConverter.ToHiragana(verb.Text, convertLongVowelMark: false);
+                if (verb.Text.Any(c => WanaKana.IsKanji(c.ToString()))
+                    && !DictionaryVerbEndings.Contains(verbKana[^1]))
+                {
+                    var deconj = Deconjugator.Instance.Deconjugate(KanaConverter.ToHiragana(verb.Text));
+                    foreach (var form in deconj
+                                         .Select(d => d.Text)
+                                         .Where(t => !string.IsNullOrEmpty(t) && t != dictForm)
+                                         .Distinct()
+                                         .OrderBy(t => t.Length)
+                                         .ThenBy(t => t, StringComparer.Ordinal))
+                    {
+                        result = await TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, form);
+                        if (result.HasValue) return result;
+                    }
                 }
             }
 
@@ -2729,7 +2783,7 @@ namespace Jiten.Parser
                 if (firstWord.WasReclassifiedFromSuffix)
                     continue;
 
-                bool expressionOnly = firstWord.PartOfSpeech == PartOfSpeech.Suffix;
+                bool expressionOnly = firstWord.PartOfSpeech is PartOfSpeech.Suffix or PartOfSpeech.Auxiliary;
 
                 bool hasPunctuation = false;
                 for (int j = startIndex; j < wordIndex; j++)
@@ -2745,6 +2799,10 @@ namespace Jiten.Parser
                     continue;
 
                 var prefix = string.Concat(wordInfos.Skip(startIndex).Take(windowSize - 1).Select(w => w.Text));
+
+                if (windowSize == 2 && prefix == dictForm && wordInfos[wordIndex].Text != dictForm)
+                    continue;
+
                 var candidate = prefix + dictForm;
 
                 if (!expressionOnly)

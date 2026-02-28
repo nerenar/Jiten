@@ -114,6 +114,9 @@ internal static class TransitionRuleEngine
                 MatchCondition.PrevIsAuxiliary =>
                     w.Prev?.PartOfSpeech == PartOfSpeech.Auxiliary,
 
+                MatchCondition.PrevIsAuxiliaryOrParticle =>
+                    w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle,
+
                 MatchCondition.PrevExists =>
                     w.Prev != null,
 

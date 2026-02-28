@@ -241,6 +241,14 @@ internal static class SurfaceScorer
             var formLoose = KanaScoringHelpers.ToNormalizedHiragana(formText, convertLongVowelMark: true);
             if (context.SurfaceHiraganaLoose == formLoose)
                 score += 60;
+            else if (surface.Contains('ー'))
+            {
+                var surfaceStripped = surface.Replace("ー", "");
+                var formStripped = formText.Replace("ー", "");
+                if (surfaceStripped.Length > 0 && (surfaceStripped == formStripped ||
+                    KanaScoringHelpers.IsPureKanaScriptDifference(surfaceStripped, formStripped)))
+                    score += 40;
+            }
         }
 
         return score;
@@ -293,7 +301,18 @@ internal static class LemmaScorer
 
                 // Sudachi normalized form matches a form of this word (e.g. リス → 栗鼠).
                 if (word.Forms.Any(f => f.Text == normalizedForm))
-                    score += (int)(50 * lemmaScale);
+                {
+                    int normBonus = 50;
+                    // Suffix-only words (n-suf without n) getting a kanji NormalizedForm boost
+                    // on a kana surface are almost always wrong — e.g. ねえ (interjection) being
+                    // matched to 姉 (n-suf "older sister"). Suffixes are bound morphemes; standalone
+                    // kana tokens are virtually always the function-word reading.
+                    if (context.IsKanaSurface && KanaScoringHelpers.ContainsKanji(normalizedForm)
+                        && word.PartsOfSpeech.Contains("n-suf")
+                        && !word.PartsOfSpeech.Any(p => p is "n" or "n-adv" or "n-t"))
+                        normBonus = 10;
+                    score += (int)(normBonus * lemmaScale);
+                }
             }
         }
 
@@ -305,7 +324,18 @@ internal static class LemmaScorer
                                                                      convertLongVowelMark: false);
 
             if (deconjHira == candidate.FormTextHiragana)
-                score += (int)(100 * lemmaScale);
+            {
+                // When Sudachi's DictionaryForm points to a different word and this candidate
+                // has no frequency evidence, the deconjugation match is likely spurious.
+                // E.g. 背負っていた deconj→背負ってる (exp "conceited") instead of 背負う ("carry").
+                bool dictFormConflicts = !string.IsNullOrEmpty(context.DictionaryForm)
+                    && context.DictionaryForm != context.Surface
+                    && !word.Forms.Any(f => f.Text == context.DictionaryForm
+                        || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
+
+                if (!dictFormConflicts || KanaScoringHelpers.HasFrequencyMarker(word.Priorities))
+                    score += (int)(100 * lemmaScale);
+            }
         }
 
         return score;
@@ -344,8 +374,10 @@ internal static class PenaltyScorer
                 // Particles are function words whose surface form IS their canonical form.
                 // Sudachi may give DictionaryForm=だ for で (etymological), but で the particle
                 // is not a conjugation — don't penalise it.
+                // Restrict to kana surfaces: kanji forms of particles (e.g. 許し for ばかし)
+                // are archaic and virtually never intended; let them fall through to the penalty.
                 bool isParticle = posToCheck.Any(p => p is "prt");
-                if (isParticle) return false;
+                if (isParticle && context.IsKanaSurface) return false;
 
                 // adj-pn/adj-t are standalone prenominal adjectives (e.g. 亡き, 無き, 堂々たる).
                 // Their surface IS their dictionary form; Sudachi may give a different DictionaryForm
@@ -427,8 +459,8 @@ internal static class PenaltyScorer
 
         var readingPos = ReadingPosHelper.GetPosForReading(candidate.Word, candidate.ReadingIndex);
         IEnumerable<string> posToCheck = readingPos.Count > 0 ? readingPos : candidate.Word.PartsOfSpeech;
-        bool isExpressionOnly = posToCheck.All(p => p is "exp" or "on-mim");
-        if (!isExpressionOnly)
+        bool isExpression = posToCheck.Any(p => p is "exp" or "on-mim");
+        if (!isExpression)
             return false;
 
         bool hasFreqMarker = KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities);
@@ -558,6 +590,21 @@ internal static class ReadingScorer
 
                                             return hiragana.Length > 1 && hiragana[..^1] == sudachiStem;
                                         });
+
+                // い-onbin fallback for godan カ行/ガ行 (e.g. 開いた reading ひらいた vs form ひらく)
+                if (!hasStemMatch && sudachiStem.Length > 1 && sudachiStem[^1] == 'い')
+                {
+                    var rootStem = sudachiStem[..^1];
+                    hasStemMatch = word.Forms
+                                      .Where(f => f.FormType == JmDictFormType.KanaForm)
+                                      .Any(f =>
+                                      {
+                                          var hiragana = KanaScoringHelpers.ToNormalizedHiragana(
+                                              f.Text, convertLongVowelMark: false);
+                                          return hiragana.Length > 1 && hiragana[..^1] == rootStem;
+                                      });
+                }
+
                 if (hasStemMatch)
                     readingMatchScore += 25;
             }

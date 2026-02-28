@@ -7,7 +7,7 @@
     readingIndex: string;
   }>();
 
-  const { data: word, status } = await useApiFetch<Word>(`vocabulary/${props.wordId}/${props.readingIndex}`);
+  const { data: word, status } = await useApiFetch<Word>(`vocabulary/${props.wordId}/${props.readingIndex}/info`);
 
   function extractReading(text: string): string {
     return text.replace(/([\u4E00-\u9FFF\uFF10-\uFF5A々]+)\[([\u3040-\u309F\u30A0-\u30FF]+)]/g, (_m, _k, f) => f);

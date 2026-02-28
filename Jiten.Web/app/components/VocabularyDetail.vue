@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { ExampleSentence, MediaType, Word } from '~/types';
+  import { KnownState, type ExampleSentence, type MediaType, type Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
@@ -33,10 +33,13 @@
   const convertToRuby = useConvertToRuby();
 
   const currentReadingIndex = ref(props.readingIndex);
-  const url = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}`);
+  const infoUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/info`);
+  const mediaFreqUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/media-frequency`);
+  const knownStateUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/known-state`);
 
-  // Just use useApiFetch directly - no wrapping needed!
-  const { data: response } = useApiFetch<Word>(url);
+  const { data: response, refresh: refreshInfo } = useApiFetch<Word>(infoUrl, { watch: false });
+  const { data: mediaFrequency, status: mediaFreqStatus, refresh: refreshMediaFrequency } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, watch: false });
+  const { data: knownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, { lazy: true, watch: false });
 
   const { resolvedGroups } = useDictionaryDefinitions(
     computed(() => response.value?.mainReading?.text),
@@ -71,12 +74,22 @@
     getRandomExampleSentences();
   };
 
+  const isTransitioning = ref(false);
+
   const switchReadingOrWord = async () => {
+    isTransitioning.value = true;
+    await refreshInfo();
+    isTransitioning.value = false;
+
+    selectedMediaType.value = null;
+    mediaAccordionValue.value = '0';
+
+    refreshMediaFrequency();
+    refreshKnownStates();
+
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
-    await getRandomExampleSentences();
-    const result = await $api<Word>(url.value);
-    response.value = result;
+    getRandomExampleSentences();
   };
 
   const selectReading = async (index: number) => {
@@ -114,11 +127,13 @@
 
   const exampleSentences = ref<ExampleSentence[]>([]);
   const canLoadExampleSentences = ref(true);
+  const isLoadingExampleSentences = ref(true);
   onMounted(() => {
     getRandomExampleSentences();
   });
 
   async function getRandomExampleSentences() {
+    isLoadingExampleSentences.value = true;
     let url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences`;
 
     if (selectedMediaType.value != null) {
@@ -131,6 +146,8 @@
       body: alreadyLoaded,
     });
 
+    isLoadingExampleSentences.value = false;
+
     if (results.length == 0) {
       canLoadExampleSentences.value = false;
       return;
@@ -141,7 +158,7 @@
 </script>
 
 <template>
-  <Card class="p-4">
+  <Card class="p-4" :class="{ 'opacity-60': isTransitioning }">
     <template v-if="response" #content>
       <div class="flex flex-col justify-between md:flex-row">
         <div class="flex flex-col gap-4 max-w-2xl">
@@ -155,7 +172,7 @@
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
               <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.mainReading.frequencyRank.toLocaleString() }}</div>
-              <VocabularyStatus :word="response" />
+              <VocabularyStatus :word="response" :known-states-override="knownStates ?? undefined" />
             </div>
           </div>
 
@@ -186,7 +203,7 @@
           </div>
 
           <ClientOnly>
-            <div v-if="response.pitchAccents && response.pitchAccents.length > 0">
+            <div v-if="response.pitchAccents && response.pitchAccents.length > 0" :key="`pitch-${wordId}-${currentReadingIndex}`">
               <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Pitch accents</h1>
               <div class="pl-2 flex flex-row flex-wrap gap-8">
                 <span v-for="pitchAccent in response.pitchAccents" :key="pitchAccent">
@@ -198,12 +215,12 @@
             </div>
           </ClientOnly>
 
-          <KanjiBreakdown :word-id="wordId" :reading-index="currentReadingIndex" />
+          <KanjiBreakdown :key="`${wordId}-${currentReadingIndex}`" :word-id="wordId" :reading-index="currentReadingIndex" />
         </div>
 
         <div class="md:min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
-            <VocabularyStatus :word="response" />
+            <VocabularyStatus :word="response" :known-states-override="knownStates ?? undefined" />
             Rank #{{ response.mainReading.frequencyRank }}
           </div>
           <div class="md:text-right pt-4 cursor-pointer" @click="selectMediaType(null)">
@@ -211,7 +228,10 @@
             ({{ totalMediaCount > 0 ? ((response.mainReading.usedInMediaAmount / totalMediaCount) * 100).toFixed(0) : '0' }}%)
           </div>
           <ClientOnly>
-            <table v-if="response.mainReading.usedInMediaAmount > 0">
+            <div v-if="mediaFreqStatus === 'pending' && response.mainReading.usedInMediaAmount > 0" class="space-y-2 mt-2">
+              <div v-for="i in 3" :key="i" class="h-4 w-48 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+            </div>
+            <table v-else-if="mediaFrequency && Object.keys(mediaFrequency).length > 0">
               <thead>
                 <tr>
                   <th />
@@ -220,7 +240,7 @@
                 </tr>
               </thead>
               <tr
-                v-for="(amount, mediaType) in response.mainReading.usedInMediaAmountByType"
+                v-for="(amount, mediaType) in mediaFrequency"
                 :key="mediaType"
                 class="cursor-pointer hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
                 @click="selectMediaType(mediaType)"
@@ -235,7 +255,7 @@
       </div>
 
       <ClientOnly>
-        <div v-if="exampleSentences != null && exampleSentences.length > 0">
+        <div v-if="exampleSentences.length > 0 || isLoadingExampleSentences">
           <Accordion value="1" lazy>
             <AccordionPanel value="1">
               <AccordionHeader>
@@ -246,7 +266,19 @@
                   Quotations belong to their original creators and are presented here for educational purposes only, as per the
                   <NuxtLink :to="`/terms`" target="_blank" class="hover:underline text-primary-600"> terms of service.</NuxtLink>
                 </div>
-                <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" />
+                <template v-if="exampleSentences.length > 0">
+                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" />
+                </template>
+                <template v-else>
+                  <div v-for="i in 3" :key="i" class="flex flex-col mb-2">
+                    <div class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
+                      <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+                    </div>
+                    <div class="flex items-center mb-2 ml-4 mt-1">
+                      <div class="h-3 w-48 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+                    </div>
+                  </div>
+                </template>
                 <Button @click="getRandomExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>
               </AccordionContent>
             </AccordionPanel>

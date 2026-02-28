@@ -7,7 +7,6 @@ public partial class MorphologicalAnalyser
     private static HashSet<(string, string, string, PartOfSpeech?)> SpecialCases3 =
     [
         ("な", "の", "で", PartOfSpeech.Expression),
-        ("で", "は", "ない", PartOfSpeech.Expression),
         ("それ", "で", "も", PartOfSpeech.Conjunction),
         ("なく", "なっ", "た", PartOfSpeech.Verb),
         ("さ", "せ", "て", PartOfSpeech.Verb),
@@ -72,8 +71,10 @@ public partial class MorphologicalAnalyser
         ("で", "さえ", PartOfSpeech.Expression),
         ("で", "すら", PartOfSpeech.Expression),
         ("と", "いう", PartOfSpeech.Expression),
+        ("と", "して", PartOfSpeech.Expression),
         ("と", "か", PartOfSpeech.Conjunction),
         ("だ", "から", PartOfSpeech.Conjunction),
+        ("から", "して", PartOfSpeech.Expression),
         ("これ", "まで", PartOfSpeech.Expression),
         ("それ", "も", PartOfSpeech.Conjunction),
         ("それ", "だけ", PartOfSpeech.Noun),
@@ -127,6 +128,11 @@ public partial class MorphologicalAnalyser
         ("その", "時", PartOfSpeech.Expression),
         ("そう", "いえば", PartOfSpeech.Expression),
         ("出来", "なさそう", PartOfSpeech.Verb),
+        ("それ", "相応", PartOfSpeech.NaAdjective),
+        ("当", "たった", PartOfSpeech.Verb),
+        ("こそ", "あれ", PartOfSpeech.Conjunction),
+        ("かく", "も", PartOfSpeech.NominalAdjective),
+        ("よう", "さん", PartOfSpeech.NominalAdjective),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

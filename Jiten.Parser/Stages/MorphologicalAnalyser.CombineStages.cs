@@ -114,6 +114,12 @@ public partial class MorphologicalAnalyser
                     currentWord.Text.EndsWith("て"))
                     isValidPart = true;
 
+                // Sudachi sometimes tags colloquial ねえ (= ない negative) as noun (姉)
+                // After te/de-form, ねえ is the negative auxiliary, not the word for sister
+                if (!isValidPart && nextWord is { Text: "ねえ", PartOfSpeech: PartOfSpeech.Noun } &&
+                    (currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")))
+                    isValidPart = true;
+
                 // Greedy steal: handle そうだ/そうか by taking just そう if it forms valid inflection
                 // e.g., 新しそうだ → 新しそう + だ, 話そうか → 話そう + か
                 if (!isValidPart && nextWord.Text is "そうだ" or "そうか")
@@ -183,6 +189,12 @@ public partial class MorphologicalAnalyser
                         break;
                     }
                 }
+
+                // Kansai-ben negative せん (= しない): Sudachi tags this as a plain noun/prefix,
+                // but after a PossibleSuru base it's a valid inflection (e.g. 卑下せん → 卑下する neg.)
+                if (!isValidPart && nextWord.Text == "せん" &&
+                    currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru))
+                    isValidPart = true;
 
                 if (!isValidPart) break;
 
@@ -611,6 +623,16 @@ public partial class MorphologicalAnalyser
                 combined = true;
             }
 
+            if (!combined && previousWord.PartOfSpeech == PartOfSpeech.Expression
+                          && currentWord.DictionaryForm == "た"
+                          && (previousWord.Text[^1] is 'て' or 'で'))
+            {
+                previousWord.Text += currentWord.Text;
+                previousWord.EndOffset = currentWord.EndOffset;
+                previousWord.Reading += currentWord.Reading;
+                combined = true;
+            }
+
             if (!combined)
             {
                 newList.Add(currentWord);
@@ -784,6 +806,24 @@ public partial class MorphologicalAnalyser
                     combinedWord.Text = combinedText;
                     combinedWord.EndOffset = nextWord.EndOffset;
                     combinedWord.Reading = currentWord.Reading + nextWord.Reading;
+
+                    // では + conjugated form of ない → ではない expression
+                    if (combinedText == "では" && i + 2 < wordInfos.Count)
+                    {
+                        var lookAhead = wordInfos[i + 2];
+                        if (lookAhead.DictionaryForm is "ない" or "無い")
+                        {
+                            combinedWord.Text += lookAhead.Text;
+                            combinedWord.EndOffset = lookAhead.EndOffset;
+                            combinedWord.Reading += lookAhead.Reading;
+                            combinedWord.DictionaryForm = "ではない";
+                            combinedWord.PartOfSpeech = PartOfSpeech.Expression;
+                            newList.Add(combinedWord);
+                            i += 3;
+                            continue;
+                        }
+                    }
+
                     newList.Add(combinedWord);
                     i += 2;
                     continue;

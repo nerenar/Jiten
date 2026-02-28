@@ -34,30 +34,29 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     [SwaggerOperation(Summary = "Get word by ID and reading index", Description = "Returns a word with main and alternative readings, definitions, parts of speech, pitch accents, frequency and known state.")]
     [ProducesResponseType(typeof(WordDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    // [ResponseCache(Duration = 3600)]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client)]
     public async Task<IResult> GetWord([FromRoute] int wordId, [FromRoute] byte readingIndex)
     {
-        var word = await context.JMDictWords.AsNoTracking()
-                                .Include(w => w.Definitions)
-                                .FirstOrDefaultAsync(w => w.WordId == wordId);
+        await using var ctx1 = await contextFactory.CreateDbContextAsync();
+        await using var ctx2 = await contextFactory.CreateDbContextAsync();
+        await using var ctx3 = await contextFactory.CreateDbContextAsync();
+        await using var ctx4 = await contextFactory.CreateDbContextAsync();
 
-        if (word == null)
-            return Results.NotFound();
+        var wordTask = ctx1.JMDictWords.AsNoTracking()
+                           .Include(w => w.Definitions)
+                           .FirstOrDefaultAsync(w => w.WordId == wordId);
 
-        var wordForms = await WordFormHelper.LoadWordFormsForWord(context, wordId);
-        var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
-        if (mainForm == null)
-            return Results.NotFound();
+        var wordFormsTask = WordFormHelper.LoadWordFormsForWord(ctx2, wordId);
 
-        var formFreqs = await context.WordFormFrequencies
+        var formFreqsTask = ctx3.WordFormFrequencies
             .AsNoTracking()
             .Where(wff => wff.WordId == wordId)
             .ToDictionaryAsync(wff => wff.ReadingIndex);
 
-        var usedInMediaByType = await context.DeckWords.AsNoTracking()
+        var usedInMediaByTypeTask = ctx4.DeckWords.AsNoTracking()
                                              .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
                                              .Join(
-                                                   context.Decks.AsNoTracking()
+                                                   ctx4.Decks.AsNoTracking()
                                                           .Where(d => d.ParentDeckId == null)
                                                           .Select(d => new { d.DeckId, d.MediaType }),
                                                    dw => dw.DeckId,
@@ -67,6 +66,22 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                                              .GroupBy(mediaType => mediaType)
                                              .Select(g => new { MediaType = g.Key, Count = g.Count() })
                                              .ToDictionaryAsync(x => (int)x.MediaType, x => x.Count);
+
+        var knownStatesTask = currentUserService.GetKnownWordState(wordId, readingIndex);
+
+        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, usedInMediaByTypeTask, knownStatesTask);
+
+        var word = await wordTask;
+        if (word == null)
+            return Results.NotFound();
+
+        var wordForms = await wordFormsTask;
+        var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
+        if (mainForm == null)
+            return Results.NotFound();
+
+        var formFreqs = await formFreqsTask;
+        var usedInMediaByType = await usedInMediaByTypeTask;
 
         var mainFreq = formFreqs.GetValueOrDefault(mainForm.ReadingIndex);
         var mainReading = WordFormHelper.ToFormDto(mainForm, mainFreq, usedInMediaByType);
@@ -83,8 +98,90 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents, KnownStates = await currentUserService.GetKnownWordState(wordId, readingIndex)
+                              PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask
                           });
+    }
+
+    [HttpGet("{wordId}/{readingIndex}/info")]
+    [SwaggerOperation(Summary = "Get word info (no user state)", Description = "Returns word data without user-specific known state or media frequency breakdown. Publicly cached.")]
+    [ProducesResponseType(typeof(WordDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ResponseCache(Duration = 3600)]
+    public async Task<IResult> GetWordInfo([FromRoute] int wordId, [FromRoute] byte readingIndex)
+    {
+        await using var ctx1 = await contextFactory.CreateDbContextAsync();
+        await using var ctx2 = await contextFactory.CreateDbContextAsync();
+
+        var wordTask = context.JMDictWords.AsNoTracking()
+                              .Include(w => w.Definitions)
+                              .FirstOrDefaultAsync(w => w.WordId == wordId);
+
+        var wordFormsTask = WordFormHelper.LoadWordFormsForWord(ctx1, wordId);
+
+        var formFreqsTask = ctx2.WordFormFrequencies
+            .AsNoTracking()
+            .Where(wff => wff.WordId == wordId)
+            .ToDictionaryAsync(wff => wff.ReadingIndex);
+
+        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask);
+
+        var word = await wordTask;
+        if (word == null)
+            return Results.NotFound();
+
+        var wordForms = await wordFormsTask;
+        var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
+        if (mainForm == null)
+            return Results.NotFound();
+
+        var formFreqs = await formFreqsTask;
+
+        var mainFreq = formFreqs.GetValueOrDefault(mainForm.ReadingIndex);
+        var mainReading = WordFormHelper.ToFormDto(mainForm, mainFreq);
+
+        List<WordFormDto> alternativeReadings = wordForms
+                                                   .Select(form =>
+                                                   {
+                                                       var freq = formFreqs.GetValueOrDefault(form.ReadingIndex);
+                                                       return WordFormHelper.ToPlainFormDto(form, freq);
+                                                   })
+                                                   .ToList();
+
+        return Results.Ok(new WordDto
+                          {
+                              WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
+                              Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
+                              PitchAccents = word.PitchAccents
+                          });
+    }
+
+    [HttpGet("{wordId}/{readingIndex}/media-frequency")]
+    [SwaggerOperation(Summary = "Get media frequency breakdown", Description = "Returns how many media of each type contain this word. Publicly cached.")]
+    [ProducesResponseType(typeof(Dictionary<int, int>), StatusCodes.Status200OK)]
+    [ResponseCache(Duration = 3600)]
+    public async Task<Dictionary<int, int>> GetWordMediaFrequency([FromRoute] int wordId, [FromRoute] byte readingIndex)
+    {
+        return await context.DeckWords.AsNoTracking()
+                                      .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
+                                      .Join(
+                                            context.Decks.AsNoTracking()
+                                                   .Where(d => d.ParentDeckId == null)
+                                                   .Select(d => new { d.DeckId, d.MediaType }),
+                                            dw => dw.DeckId,
+                                            d => d.DeckId,
+                                            (dw, d) => d.MediaType
+                                           )
+                                      .GroupBy(mediaType => mediaType)
+                                      .Select(g => new { MediaType = g.Key, Count = g.Count() })
+                                      .ToDictionaryAsync(x => (int)x.MediaType, x => x.Count);
+    }
+
+    [HttpGet("{wordId}/{readingIndex}/known-state")]
+    [SwaggerOperation(Summary = "Get user's known state for a word", Description = "Returns the current user's known/learning state for a specific word and reading.")]
+    [ProducesResponseType(typeof(List<KnownState>), StatusCodes.Status200OK)]
+    public async Task<List<KnownState>> GetWordKnownState([FromRoute] int wordId, [FromRoute] byte readingIndex)
+    {
+        return await currentUserService.GetKnownWordState(wordId, readingIndex);
     }
 
     /// <summary>

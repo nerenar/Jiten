@@ -31,15 +31,17 @@ internal static class KanaConverter
             return result;
         }
 
+        var input = text.Replace("ヶ", "ケ").Replace("ヵ", "カ");
+
         try
         {
-            result = WanaKana.ToHiragana(text, convertLongVowelMark ? LongVowelConversion : NoLongVowelConversion);
+            result = WanaKana.ToHiragana(input, convertLongVowelMark ? LongVowelConversion : NoLongVowelConversion);
         }
         catch (InvalidOperationException)
         {
             // WanaKanaShaapu crashes when ー appears without a preceding kana (e.g. reading starts with ー).
             // Fall back to no long-vowel conversion — the mark can't be resolved without context anyway.
-            result = WanaKana.ToHiragana(text, NoLongVowelConversion);
+            result = WanaKana.ToHiragana(input, NoLongVowelConversion);
         }
 
         if (_gen0.TryAdd(key, result))

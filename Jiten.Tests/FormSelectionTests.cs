@@ -518,10 +518,9 @@ public class FormSelectionTests
         // SpecialCases2 merges Sudachi's なの+で into なので before form scoring
         yield return ["降りてもカードを晒すルールなので互いの手札が晒される", "なので", 2827864, (byte)0];
 
-        // なく (adverbial form of ない) → ない (1529520), not NaK chemical (2617400)
-        // NaK's reading ナク is phonetically identical to なく; the conjugated-identity
-        // penalty must fire for pure kana script differences to suppress false matches.
-        yield return ["気配といっても曖昧な何かではなく、単に落ち葉がかすれる微かな音が聞こえただけだ。", "なく", 1529520, (byte)1];
+        // ではなく (adverbial form of ではない) → ではない (2823770)
+        // CombineParticles merges で+は+なく into ではなく expression
+        yield return ["気配といっても曖昧な何かではなく、単に落ち葉がかすれる微かな音が聞こえただけだ。", "ではなく", 2823770, (byte)1];
 
         // チックショー (colloquial geminated form of ちくしょう) → 畜生 (1422200)
         // Sudachi splits into チック(suffix)+ショー(noun); user_dic + NormalizedForm lookup fix recombines
@@ -542,6 +541,62 @@ public class FormSelectionTests
         yield return ["この様に話す", "様", 1605840, (byte)0];
         yield return ["そんな様では困る", "様", 1605840, (byte)0];
         yield return ["生き物の様に動く", "様", 1605840, (byte)0];
+
+        // Kansai-ben せん (negative of する): suru-noun + せん combines to the suru-verb entry
+        yield return ["卑下せんでもいい", "卑下せん", 1482700, (byte)0];
+        // Standalone prefix-tagged せん → 2844926 (do not / will not do)
+        yield return ["遠出はせんほうがいいぞ", "せん", 2844926, (byte)0];
+        // いかんせん = 如何せん (1919420), not いかん + せん
+        yield return ["いかんせん、距離が離れすぎている", "いかんせん", 1919420, (byte)1];
+        yield return ["いかんせん頑張ってるだけで勝てるほど甘くはない", "いかんせん", 1919420, (byte)1];
+        // セン in katakana → 線 (1391780, line), not 千 (1388740, thousand)
+        yield return ["いいセンいってるとかいったじゃないか", "セン", 1391780, (byte)1];
+        // リッキー = Rickey/Ricky (5091164), not 六気 (2656100)
+        yield return ["さすがだなリッキー", "リッキー", 5091164, (byte)0];
+
+        // Katakana words with extra ー in the middle should match dictionary forms without it
+        // アボカード → アボカド/avocado (1018410)
+        yield return ["アボカードを食べる", "アボカード", 1018410, (byte)0];
+        // アモローソ → アモロソ/amoroso (2434210)
+        yield return ["アモローソ", "アモローソ", 2434210, (byte)0];
+
+        // 許し should resolve to verb 許す (1232870, v5s "to forgive"), not particle ばかし (2256550, prt)
+        // Kanji-surface particle exemption: particles in kanji get the conjugated-identity penalty
+        yield return ["私をお許しくださいぃ！", "許し", 1232870, (byte)0];
+        yield return ["あの人ならばきっとそれを許しはしないだろうから。", "許し", 1232870, (byte)0];
+        yield return ["誤解しそうになった私を、お許しください", "許し", 1232870, (byte)0];
+
+        // 背負う (1472860, せおう "carry on back") should beat 背負ってる (2831946, しょってる "conceited")
+        yield return ["背負っていた籠を下ろす", "背負っていた", 1472860, (byte)0];
+        yield return ["背負ってるものを完全に理解することはできない", "背負ってる", 1472860, (byte)0];
+        yield return ["頭の上にある空気の重さを全部背負ってるんだ", "背負ってる", 1472860, (byte)0];
+        // しょってる in kana → the expression 背負ってる (2831946, "conceited")
+        yield return ["あいつしょってるよな", "しょってる", 2831946, (byte)1];
+
+        // 刃向かい should be continuative form of 刃向かう (1601070, v5u "to strike back")
+        yield return ["刃向かいやがって", "刃向かい", 1601070, (byte)2];
+
+        // ねえ → particle/interjection "hey" (2029080), not 姉/older sister suffix (2266990)
+        // Sudachi misclassifies ねえ as 名詞 with NormalizedForm=姉 in sentence context;
+        // n-suf NormalizedForm bonus is reduced so the spec1 particle wins
+        yield return ["ねえ君、こいつも連れてってやろうよ。", "ねえ", 2029080, (byte)2];
+        yield return ["ねえ三人とも、目線こっちにちょうだい？", "ねえ", 2029080, (byte)2];
+        yield return ["ねえ陽南ちゃん、あれ全部カットできなかったの？", "ねえ", 2029080, (byte)2];
+        yield return ["部屋を出て行こうとした加奈が、ふと足を止め「ねえ」", "ねえ", 2029080, (byte)2];
+
+        // ないわ should NOT merge into ナイワ (Najwa, name 5057701).
+        // わ is a sentence-ending particle and should stay separate from ない (1529520, adj-i).
+        yield return ["あなたがここの団長じゃあないわよね", "ない", 1529520, (byte)1];
+        yield return ["例のプラスチック爆薬が主食になる、なんてことはないわよね", "ない", 1529520, (byte)1];
+        yield return ["この子は悩みなんてないわよね", "ない", 1529520, (byte)1];
+
+        // よう after verb/aux should NOT resolve to interjection よう (2853599, "hey/yo").
+        // 陽 (1605845, n, ichi1+news1+nf06) wins by EntryPriority over 様 (1605840, n-suf, ichi1)
+        yield return ["彼女は彼女で、かなり今回のことについて、いろいろと考えているようだった。", "よう", 1605845, (byte)1];
+        yield return ["直哉の動揺には気付いていないようだった。", "よう", 1605845, (byte)1];
+        yield return ["捜しようがないし", "よう", 1605845, (byte)1];
+        yield return ["文句を垂れているようで、その場を歩きながらめちゃくちゃご機嫌そうな信田。", "よう", 1605845, (byte)1];
+        yield return ["側に浮いていた黒いキューブが変形していたようなので、おそらく装備品でしょう」", "よう", 1605845, (byte)1];
     }
     
     [Theory]

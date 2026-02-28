@@ -198,6 +198,41 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
+    private List<WordInfo> RepairColloquialNegativeNee(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 3) return wordInfos;
+
+        var result = new List<WordInfo>(wordInfos.Count);
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var current = wordInfos[i];
+
+            // Sudachi splits colloquial ねえ (= ない negative) into ね + え after te/de-form
+            // e.g., 入ってねえのに → 入っ + て + ね + え + のに
+            // e.g., 飲んでねえのに → 飲んで (already merged by RepairN) + ね + え + のに
+            if (current is { Text: "え", PartOfSpeech: PartOfSpeech.Interjection } &&
+                result.Count >= 2 &&
+                result[^1] is { Text: "ね", PartOfSpeech: PartOfSpeech.Particle } &&
+                (result[^2] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" } ||
+                 (result[^2].PartOfSpeech == PartOfSpeech.Verb &&
+                  (result[^2].Text.EndsWith("て") || result[^2].Text.EndsWith("で")))))
+            {
+                result[^1] = new WordInfo(result[^1])
+                {
+                    Text = "ねえ", EndOffset = current.EndOffset,
+                    PartOfSpeech = PartOfSpeech.Auxiliary, DictionaryForm = "ない",
+                    NormalizedForm = "ない", Reading = "ネエ"
+                };
+                continue;
+            }
+
+            result.Add(current);
+        }
+
+        return result;
+    }
+
     private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2) return wordInfos;
@@ -794,6 +829,22 @@ public partial class MorphologicalAnalyser
                         PartOfSpeech = PartOfSpeech.Particle, Reading = "ト",
                         StartOffset = w2.StartOffset >= 0 ? w2.StartOffset + 2 : -1,
                         EndOffset = w2.EndOffset
+                    });
+                    i += 2;
+                    continue;
+                }
+
+                // Sudachi misidentifies し as a conjunction (接続詞) in しようとして,
+                // splitting into し (conjunction) + ようとして (expression).
+                // Recombine into しようとして (te-form of しようとする).
+                if (w1 is { Text: "し", PartOfSpeech: PartOfSpeech.Conjunction } &&
+                    w2 is { Text: "ようとして" })
+                {
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = "しようとして", EndOffset = w2.EndOffset,
+                        Reading = w1.Reading + w2.Reading,
+                        DictionaryForm = "しようとして", PartOfSpeech = PartOfSpeech.Verb
                     });
                     i += 2;
                     continue;

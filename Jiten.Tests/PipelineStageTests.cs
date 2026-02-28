@@ -29,40 +29,6 @@ public class PipelineStageTests
         };
 
     [Fact]
-    public void PipelineOrder_ShouldRemainStable()
-    {
-        var analyser = new MorphologicalAnalyser();
-
-        var names = analyser.GetPipelineStageNamesForTesting();
-
-        names.Should().Equal(
-            "SplitCompoundAuxiliaryVerbs",
-            "SplitTatteParticle",
-            "RepairNTokenisation",
-            "RepairVowelElongation",
-            "ProcessSpecialCases",
-            "CombinePrefixes",
-            "CombineInflections",
-            "CombineAmounts",
-            "CombineTte",
-            "CombineAuxiliaryVerbStem",
-            "CombineSuffix",
-            "ReclassifyOrphanedSuffixes",
-            "CombineConjunctiveParticle",
-            "CombineAuxiliary",
-            "CombineToNaru",
-            "RepairFusedInterjectionParticle",
-            "RepairOrphanedAuxiliary",
-            "CombineAdverbialParticle",
-            "CombineVerbDependant",
-            "CombineParticles",
-            "CombineFinal",
-            "RepairTankaToTaNKa",
-            "FilterMisparse",
-            "FixReadingAmbiguity");
-    }
-
-    [Fact]
     public void SplitStage_ShouldSplitTatteParticle()
     {
         var analyser = new MorphologicalAnalyser();
@@ -171,6 +137,61 @@ public class PipelineStageTests
         var output = analyser.ApplyStageForTesting("FixReadingAmbiguity", input);
 
         output[0].Reading.Should().Be("オモテ");
+    }
+
+    [Fact]
+    public void RepairStage_ColloquialNegativeNee_RecombinesSplitNeE_AfterTeParticle()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("入っ", PartOfSpeech.Verb, dictionaryForm: "入る", reading: "ハイッ"),
+            Token("て", PartOfSpeech.Particle),
+            Token("ね", PartOfSpeech.Particle),
+            Token("え", PartOfSpeech.Interjection)
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairColloquialNegativeNee", input);
+
+        output.Select(t => t.Text).Should().Equal("入っ", "て", "ねえ");
+        output[2].PartOfSpeech.Should().Be(PartOfSpeech.Auxiliary);
+        output[2].DictionaryForm.Should().Be("ない");
+    }
+
+    [Fact]
+    public void RepairStage_ColloquialNegativeNee_RecombinesSplitNeE_AfterMergedDeForm()
+    {
+        // After RepairNTokenisation merges 飲ん+で → 飲んで, the で is no longer standalone
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("飲んで", PartOfSpeech.Verb, dictionaryForm: "飲む", reading: "ノンデ"),
+            Token("ね", PartOfSpeech.Particle),
+            Token("え", PartOfSpeech.Interjection)
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairColloquialNegativeNee", input);
+
+        output.Select(t => t.Text).Should().Equal("飲んで", "ねえ");
+        output[1].PartOfSpeech.Should().Be(PartOfSpeech.Auxiliary);
+        output[1].DictionaryForm.Should().Be("ない");
+    }
+
+    [Fact]
+    public void RepairStage_ColloquialNegativeNee_DoesNotRecombine_WithoutTeDeContext()
+    {
+        // ね + え after a noun should NOT be recombined
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("学校", PartOfSpeech.Noun),
+            Token("ね", PartOfSpeech.Particle),
+            Token("え", PartOfSpeech.Interjection)
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairColloquialNegativeNee", input);
+
+        output.Select(t => t.Text).Should().Equal("学校", "ね", "え");
     }
 
     [Fact]

@@ -8,7 +8,6 @@
     readings?: Reading[];
   }>();
 
-  const definitions = unref(props.definitions);
   const store = useJitenStore();
   const hideDefinition = computed({
     get: () => store.hideVocabularyDefinitions,
@@ -41,12 +40,12 @@
   }
 
   const definitionsWithPartsOfSpeech = computed(() => {
-    if (!Array.isArray(definitions)) {
+    if (!Array.isArray(props.definitions)) {
       return [];
     }
     let previousPartOfSpeech = null;
 
-    return definitions.map((definition) => {
+    return props.definitions.map((definition) => {
       const isDifferentPartOfSpeech = JSON.stringify(previousPartOfSpeech) !== JSON.stringify(definition.partsOfSpeech);
       previousPartOfSpeech = definition.partsOfSpeech;
       return {

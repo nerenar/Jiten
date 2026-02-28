@@ -84,7 +84,8 @@ public partial class MorphologicalAnalyser
             .Replace("一人静かに", $"一人{_stopToken}静かに")
             .Replace("いやあんま", $"いや{_stopToken}あんま")
             .Replace("この手紙", $"この{_stopToken}手紙")
-            .Replace("少女の手", $"少女{_stopToken}の手");
+            .Replace("少女の手", $"少女{_stopToken}の手")
+            .Replace("はたまたま", $"は{_stopToken}たまたま");
 
         text = DeNaiCompoundRegex().Replace(text, $"$1{_stopToken}出$2");
         text = text.Replace("ぶっち切", "ぶち切");
@@ -102,7 +103,8 @@ public partial class MorphologicalAnalyser
             .Replace("バカバカ", $"バカ{_stopToken}バカ")
             .Replace("事大", $"事{_stopToken}大")
             .Replace("日間", $"日{_stopToken}間")
-            .Replace("何本", $"何{_stopToken}本");
+            .Replace("何本", $"何{_stopToken}本")
+            .Replace("年未公開", $"年{_stopToken}未公開");
 
         text = KatakanaInHiraganaRegex().Replace(text,
             m => ((char)(m.Value[0] - 0x60)).ToString());
@@ -111,8 +113,10 @@ public partial class MorphologicalAnalyser
             .Replace("来イ", "来い")
             .Replace("とんでもねえ", "とんでもない")
             .Replace("しょうがねえ", "しょうがない")
+            .Replace("にちがいねえ", "にちがいない")
             .Replace("せぇ", "さい");
 
+        text = text.Replace("できんよう", $"できん{_stopToken}よう");
         text = ColloquialSshoRegex().Replace(text, $"{_stopToken}っしょ");
         text = MidSentenceEllipsisRegex().Replace(text, "");
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");

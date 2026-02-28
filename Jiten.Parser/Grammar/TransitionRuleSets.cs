@@ -38,7 +38,7 @@ internal static class TransitionRuleSets
 
     internal static readonly HashSet<string> Interjections =
     [
-        "ああ", "ええ", "まあ", "ほら"
+        "ああ", "ええ", "まあ", "ほら", "よう"
     ];
 
     internal static readonly HashSet<string> SuruForms =
@@ -183,6 +183,11 @@ internal static class TransitionRuleSets
             [ScoringCondition.IsSentenceInitial],
             15),
 
+        new("interjection-after-predicate-penalty",
+            [ScoringCondition.CandidateIsInterjection],
+            [ScoringCondition.PrevIsVerbAuxOrIAdj],
+            -120),
+
         new("noun-suru-synergy",
             [ScoringCondition.CandidateIsSuruNoun],
             [ScoringCondition.NextIsSuru],
@@ -255,12 +260,12 @@ internal static class TransitionRuleSets
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
 
         // Phase 4: sentence-final particles (よ/ね/な/ぞ/ぜ/わ) must be near clause end
-        // Exception: SFP after an auxiliary (e.g. だな) is a valid terminal sub-clause expression
+        // Exception: SFP after an auxiliary or particle (e.g. だな, はね) is valid
         new(
             Id: "sfp-must-be-near-clause-end",
             Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.NextIsContentWord],
-            ValidIf: [MatchCondition.PrevIsAuxiliary],
+            ValidIf: [MatchCondition.PrevIsAuxiliaryOrParticle],
             OnViolation: ViolationAction.MergeWithPrevious),
 
         // Phase 5a: prefix at sentence-end is almost always a misparse → reclassify as noun

@@ -1,3 +1,4 @@
+using System.Text;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -39,10 +40,30 @@ public class UtilsController(IDbContextFactory<JitenDbContext> contextFactory) :
             if (string.IsNullOrEmpty(romaji)) continue;
 
             bool isParticle = word.PartsOfSpeech.Contains(PartOfSpeech.Particle);
+            if (isParticle)
+            {
+                if (romaji == "wo") romaji = "o";
+                else if (romaji == "ha") romaji = "wa";
+                else if (romaji == "he") romaji = "e";
+            }
+
             parts.Add(isParticle ? romaji : char.ToUpperInvariant(romaji[0]) + romaji[1..]);
         }
 
-        return Results.Ok(new { romaji = string.Join(" ", parts) });
+        return Results.Ok(new { romaji = ToHalfWidth(string.Join(" ", parts)) });
+    }
+
+    private static string ToHalfWidth(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (c >= '\uFF01' && c <= '\uFF5E')
+                sb.Append((char)(c - 0xFEE0));
+            else
+                sb.Append(c);
+        }
+        return sb.ToString();
     }
 }
 

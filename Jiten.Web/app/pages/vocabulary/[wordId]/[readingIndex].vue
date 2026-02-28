@@ -9,7 +9,7 @@
   const wordId = ref(Number(route.params.wordId) || 0);
   const readingIndex = ref(Number(route.params.readingIndex) || 0);
 
-  const url = computed(() => `vocabulary/${wordId.value}/${readingIndex.value}`);
+  const url = computed(() => `vocabulary/${wordId.value}/${readingIndex.value}/info`);
   const { data: wordData } = await useApiFetch<Word>(url);
 
   const title = computed(() => {
