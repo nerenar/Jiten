@@ -49,10 +49,10 @@ public partial class MorphologicalAnalyser
         const int sudachiMaxBytes = 49_000;
         var processedTexts = new List<string>(texts.Count);
         var originalTexts = new List<string>(texts.Count);
-        for (int i = 0; i < texts.Count; i++)
+        foreach (var text in texts)
         {
-            var copy = texts[i];
-            if (Encoding.UTF8.GetByteCount(copy) > sudachiMaxBytes)
+            var copy = text;
+            if (!copy.Contains('\n') && Encoding.UTF8.GetByteCount(copy) > sudachiMaxBytes)
             {
                 processedTexts.Add("");
                 originalTexts.Add("");

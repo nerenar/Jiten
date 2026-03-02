@@ -97,7 +97,7 @@
   const authStore = useAuthStore();
   const isConnected = computed(() => authStore.isAuthenticated);
 
-  const sortOrder = ref(route.query.sortOrder ? route.query.sortOrder : SortOrder.Ascending);
+  const sortOrder = ref(route.query.sortOrder ? Number(route.query.sortOrder) : SortOrder.Ascending);
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
   const wordIdRef = ref(props.word?.wordId);
   const readingIndexRef = ref(props.word?.mainReading?.readingIndex);

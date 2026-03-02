@@ -28,11 +28,12 @@ public partial class MetadataProviderHelper
     
     public static async Task<List<JimakuEntry>?> JimakuSearchAsync(
         HttpClient httpClient, string apiKey,
-        int? anilistId = null, string? tmdbId = null, string? query = null)
+        int? anilistId = null, string? tmdbId = null, string? query = null, bool anime = true)
     {
         var queryParams = new List<string>();
+        queryParams.Add($"anime={anime.ToString().ToLowerInvariant()}");
         if (anilistId.HasValue) queryParams.Add($"anilist_id={anilistId.Value}");
-        if (tmdbId != null) queryParams.Add($"tmdb_id={Uri.EscapeDataString(tmdbId)}");
+        if (tmdbId != null) queryParams.Add($"tmdb_id={tmdbId}");
         if (query != null) queryParams.Add($"query={Uri.EscapeDataString(query)}");
 
         var url = $"https://jimaku.cc/api/entries/search?{string.Join("&", queryParams)}";

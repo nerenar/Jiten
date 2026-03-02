@@ -534,15 +534,17 @@ public class DeckCommands(CliContext context)
 
             Console.WriteLine($"Processing: {parentDeck.OriginalTitle}");
 
+            bool isAnime = deckType == MediaType.Anime;
+
             await RespectRateLimit(rateLimit);
             var entries = anilistId.HasValue
-                ? await MetadataProviderHelper.JimakuSearchAsync(httpClient, jimakuApiKey, anilistId: anilistId)
+                ? await MetadataProviderHelper.JimakuSearchAsync(httpClient, jimakuApiKey, anilistId: anilistId, anime: isAnime)
                 : null;
 
             if ((entries == null || entries.Count == 0) && tmdbId != null)
             {
                 await RespectRateLimit(rateLimit);
-                entries = await MetadataProviderHelper.JimakuSearchAsync(httpClient, jimakuApiKey, tmdbId: tmdbId);
+                entries = await MetadataProviderHelper.JimakuSearchAsync(httpClient, jimakuApiKey, tmdbId: tmdbId, anime: isAnime);
             }
 
             if (entries == null || entries.Count == 0)

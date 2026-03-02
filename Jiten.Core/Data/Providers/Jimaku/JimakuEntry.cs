@@ -16,7 +16,7 @@ public class JimakuEntry
 
     [JsonPropertyName("english_name")] public string? EnglishName { get; set; }
 
-    [JsonPropertyName("japanese_name")] public required string JapaneseName { get; set; }
+    [JsonPropertyName("japanese_name")] public string? JapaneseName { get; set; }
 
     [JsonPropertyName("creator_id")] public int CreatorId { get; set; }
 
