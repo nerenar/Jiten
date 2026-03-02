@@ -193,6 +193,8 @@ static class SudachiInterop
             return Path.Combine(basePath, "sudachi_lib.dll");
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             return Path.Combine(basePath, "libsudachi_lib.so");
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return Path.Combine(basePath, "libsudachi_lib.dylib");
         else
             throw new PlatformNotSupportedException("Unsupported platform");
     }
@@ -328,7 +330,10 @@ static class SudachiInterop
                         _freeString(errPtr);
 
                         if (!string.IsNullOrEmpty(err))
+                        {
+                            RecycleContext();
                             throw new InvalidOperationException($"Sudachi streaming error: {err}");
+                        }
                     }
                 }
 

@@ -235,6 +235,52 @@ public partial class MorphologicalAnalyser
 
     private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
     {
+        // Strip expressive internal ー from hiragana tokens when Sudachi's NormalizedForm contains kanji
+        // (e.g., なーい → ない via NormalizedForm=無い), or when the stripped form exactly matches the
+        // NormalizedForm (e.g., でーす → です via NormalizedForm=です).
+        // Tokens where NormalizedForm is kana-only and differs from the stripped form are left intact
+        // (e.g., おーい → おおい is a real word).
+        // Trailing ー (e.g., すげー, うるせー) is a valid colloquial form marker and is preserved.
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var w = wordInfos[i];
+            if (!w.Text.Contains('ー') || w.Text[^1] == 'ー') continue;
+
+            bool allHiraganaOrBar = true;
+            foreach (var c in w.Text)
+            {
+                if (c != 'ー' && !(c >= '\u3040' && c <= '\u309F'))
+                {
+                    allHiraganaOrBar = false;
+                    break;
+                }
+            }
+
+            if (!allHiraganaOrBar) continue;
+
+            var stripped = w.Text.Replace("ー", "");
+            if (stripped.Length == 0 || stripped == w.Text) continue;
+
+            bool normalizedHasKanji = false;
+            foreach (var c in w.NormalizedForm)
+            {
+                if (c >= '\u4E00' && c <= '\u9FFF')
+                {
+                    normalizedHasKanji = true;
+                    break;
+                }
+            }
+
+            if (!normalizedHasKanji && stripped != w.NormalizedForm) continue;
+
+            wordInfos[i] = new WordInfo(w)
+            {
+                Text = stripped,
+                DictionaryForm = w.DictionaryForm.Replace("ー", ""),
+                Reading = w.Reading.Replace("ー", ""),
+            };
+        }
+
         if (wordInfos.Count < 2) return wordInfos;
 
         var deconjugator = Deconjugator.Instance;
@@ -592,6 +638,16 @@ public partial class MorphologicalAnalyser
         {
             WordInfo w1 = wordInfos[i];
 
+            // Sudachi misclassifies katakana particle sequences as nouns (e.g. ノヨ → name 乃代).
+            // Split into individual particles: ノ + ヨ, ノネ, ノサ, etc.
+            if (w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.NaAdjective && w1.Text == "ノヨ")
+            {
+                newList.Add(new WordInfo { Text = "ノ", DictionaryForm = "の", NormalizedForm = "の", PartOfSpeech = PartOfSpeech.Particle, Reading = "ノ", StartOffset = w1.StartOffset, EndOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1 });
+                newList.Add(new WordInfo { Text = "ヨ", DictionaryForm = "よ", NormalizedForm = "よ", PartOfSpeech = PartOfSpeech.Particle, Reading = "ヨ", StartOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1, EndOffset = w1.EndOffset });
+                i++;
+                continue;
+            }
+
             if (w1 is { PartOfSpeech: PartOfSpeech.Conjunction or PartOfSpeech.Auxiliary, Text: "で" })
             {
                 bool nextIsMo = i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "も";
@@ -829,6 +885,26 @@ public partial class MorphologicalAnalyser
                         PartOfSpeech = PartOfSpeech.Particle, Reading = "ト",
                         StartOffset = w2.StartOffset >= 0 ? w2.StartOffset + 2 : -1,
                         EndOffset = w2.EndOffset
+                    });
+                    i += 2;
+                    continue;
+                }
+
+                // Sudachi splits Vたそう (seemingness of wanting to V) as
+                // noun + いたそう (volitional of いたす) when the verb stem kanji is also a standalone noun.
+                // e.g., 何か言いたそうな → 言(noun) + いたそう(いたす volitional)
+                // Correct: 言い + た + そう = 言う + want + seemingness
+                // The pattern only occurs with godan ワ行 verbs (dictionary form = kanji + う)
+                if (w1.PartOfSpeech == PartOfSpeech.Noun
+                    && w2 is { Text: "いたそう", DictionaryForm: "いたす", PartOfSpeech: PartOfSpeech.Verb })
+                {
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = w1.Text + w2.Text,
+                        EndOffset = w2.EndOffset,
+                        PartOfSpeech = PartOfSpeech.Verb,
+                        DictionaryForm = w1.Text + "う",
+                        NormalizedForm = w1.Text + "う",
                     });
                     i += 2;
                     continue;
@@ -1108,6 +1184,43 @@ public partial class MorphologicalAnalyser
     }
 
     // Sentence-final particles that Sudachi fuses onto interjections.
+    private static List<WordInfo> RepairHasaNoun(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count == 0) return wordInfos;
+
+        var result = new List<WordInfo>(wordInfos.Count + 2);
+
+        foreach (var word in wordInfos)
+        {
+            if (word.Text != "はさ" || word.PartOfSpeech != PartOfSpeech.Noun)
+            {
+                result.Add(word);
+                continue;
+            }
+
+            result.Add(new WordInfo
+            {
+                Text = "は",
+                DictionaryForm = "は",
+                NormalizedForm = "は",
+                PartOfSpeech = PartOfSpeech.Particle,
+                StartOffset = word.StartOffset,
+                EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
+            });
+            result.Add(new WordInfo
+            {
+                Text = "さ",
+                DictionaryForm = "さ",
+                NormalizedForm = "さ",
+                PartOfSpeech = PartOfSpeech.Particle,
+                StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                EndOffset = word.EndOffset
+            });
+        }
+
+        return result;
+    }
+
     private static readonly HashSet<string> SentenceFinalParticles = ["ね", "ねえ", "な", "なあ", "よ", "よね", "さ", "わ", "の", "のよ", "もの"];
 
     /// <summary>

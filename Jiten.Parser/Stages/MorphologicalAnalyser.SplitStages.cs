@@ -42,6 +42,15 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // If the full compound exists in JMDict, keep it intact so the form scoring
+            // pipeline can use the Sudachi reading for disambiguation (e.g. 滲み出す
+            // read as にじみだす vs しみだす — both share the kanji form but are different entries)
+            if (HasCompoundLookup != null && HasCompoundLookup(word.DictionaryForm))
+            {
+                result.Add(word);
+                continue;
+            }
+
             // Calculate the main verb prefix length from dictionary form
             int mainVerbDictLen = word.DictionaryForm.Length - matchedAux.Length;
             string mainVerbDict = word.DictionaryForm[..mainVerbDictLen];

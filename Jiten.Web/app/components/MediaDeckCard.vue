@@ -32,6 +32,23 @@
   const displayAdminFunctions = computed(() => store.displayAdminFunctions);
   const readingSpeed = computed(() => store.readingSpeed);
   const readingDuration = computed(() => Math.round(props.deck.characterCount / readingSpeed.value));
+  const speechSpeed = computed(() => props.deck.speechSpeed ?? 0);
+
+  const isAudioVisual = computed(() =>
+    [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType)
+  );
+
+  const formattedSpeechDuration = computed(() => {
+    if (props.deck.speechDuration <= 0) return '';
+    const totalSeconds = Math.floor(props.deck.speechDuration / 1000);
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours === 0) return `${minutes}min`;
+    if (minutes === 0) return `${hours}h`;
+    return `${hours}h ${minutes}min`;
+  });
 
   const toggleMenu = (event: Event) => {
     menu.value.toggle(event);
@@ -230,7 +247,13 @@
               <div>
                 <div class="flex flex-col gap-x-6 gap-y-2" :class="isCompact ? '' : 'md:flex-row md:flex-wrap'">
                   <div class="w-full md:w-64">
-                    <div class="flex justify-between flex-wrap stat-row">
+                    <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex justify-between flex-wrap stat-row">
+                      <Tooltip content="Total duration of speech, excluding silence.">
+                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Speech duration</span>
+                      </Tooltip>
+                      <span class="tabular-nums font-semibold">{{ formattedSpeechDuration }}</span>
+                    </div>
+                    <div v-else class="flex justify-between flex-wrap stat-row">
                       <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Character count</span>
                       <span class="tabular-nums font-semibold">{{ deck.characterCount.toLocaleString() }}</span>
                     </div>
@@ -271,6 +294,13 @@
                         </span>
                       </Tooltip>
                       <DifficultyDisplay :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" />
+                    </div>
+
+                    <div v-if="speechSpeed > 0" class="flex justify-between flex-wrap stat-row">
+                      <Tooltip content="Average speed of speech in mora per minute.">
+                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Speech speed</span>
+                      </Tooltip>
+                      <span class="tabular-nums font-semibold">{{ speechSpeed.toFixed(0) }}</span>
                     </div>
                   </div>
 

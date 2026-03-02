@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Jiten.Core.Data;
 using Jiten.Parser.Diagnostics;
 using Jiten.Parser.Runtime;
@@ -45,11 +46,19 @@ public partial class MorphologicalAnalyser
         var dic = runtimeSettings.DictionaryPath;
 
         // Preprocess each text separately (preserves transformations per-text)
+        const int sudachiMaxBytes = 49_000;
         var processedTexts = new List<string>(texts.Count);
         var originalTexts = new List<string>(texts.Count);
-        foreach (var text in texts)
+        for (int i = 0; i < texts.Count; i++)
         {
-            var copy = text;
+            var copy = texts[i];
+            if (Encoding.UTF8.GetByteCount(copy) > sudachiMaxBytes)
+            {
+                processedTexts.Add("");
+                originalTexts.Add("");
+                continue;
+            }
+
             PreprocessText(ref copy, preserveStopToken);
             processedTexts.Add(copy);
 

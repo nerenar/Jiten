@@ -36,7 +36,7 @@ const isDeleting = ref(false);
 // File upload
 const selectedFiles = ref<File[]>([]);
 const isStrippingEpub = ref(false);
-const allowedExtensions = ['.srt', '.ass', '.ssa', '.epub', '.zip', '.rar', '.7z', '.txt'];
+const allowedExtensions = ['.srt', '.ass', '.ssa', '.epub', '.zip', '.rar', '.7z', '.txt', '.mokuro'];
 const dragOver = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 
@@ -376,7 +376,7 @@ onMounted(() => loadData());
           </div>
 
           <div v-if="request.fulfilledDeckId" class="mb-4">
-            <NuxtLink :to="`/decks/media/${request.fulfilledDeckId}/detail`" class="text-primary hover:underline flex items-center gap-1">
+            <NuxtLink :to="`/decks/media/${request.fulfilledDeckId}/detail`" target="_blank" class="text-primary hover:underline flex items-center gap-1">
               <i class="pi pi-check-circle" />
               View deck: {{ request.fulfilledDeckTitle || `#${request.fulfilledDeckId}` }}
             </NuxtLink>
@@ -526,8 +526,8 @@ onMounted(() => loadData());
                       class="text-xs"
                     />
                   </div>
-                  <div v-if="(comment.upload as any)?.uploaderEmail" class="text-xs text-muted-color mt-1">
-                    Uploader: {{ (comment.upload as MediaRequestUploadAdminDto).uploaderEmail }}
+                  <div v-if="(comment.upload as any)?.uploaderName" class="text-xs text-muted-color mt-1">
+                    Uploader: {{ (comment.upload as MediaRequestUploadAdminDto).uploaderName }}
                   </div>
                   <div class="flex gap-1 mt-2">
                     <Button

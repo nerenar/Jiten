@@ -23,6 +23,18 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<char> DictionaryVerbEndings =
         ['う', 'く', 'ぐ', 'す', 'つ', 'ぬ', 'ぶ', 'む', 'る'];
 
+    internal static string? TryGodanDictForm(string text)
+    {
+        if (text.Length < 2) return null;
+        var dictEnding = text[^1] switch
+        {
+            'い' => 'う', 'き' => 'く', 'ぎ' => 'ぐ', 'し' => 'す',
+            'ち' => 'つ', 'に' => 'ぬ', 'び' => 'ぶ', 'み' => 'む', 'り' => 'る',
+            _ => '\0'
+        };
+        return dictEnding == '\0' ? null : text[..^1] + dictEnding;
+    }
+
     private bool VerbDictFormExistsInLookup(string dictForm, string? normalizedForm, Func<string, IReadOnlyList<DeconjugationForm>> cachedDeconjugate)
     {
         if (HasCompoundLookup!(dictForm))

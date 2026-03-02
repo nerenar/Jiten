@@ -81,7 +81,7 @@ public static class PosMapper
         // Auxiliary
         "aux",
         // Verb stem tags (should only match verbs, not nouns)
-        "stem-past", "stem-te-verbal", "stem-ren-less", "stem-ren-less-v"
+        "stem-past", "stem-te", "stem-te-defective", "stem-te-verbal", "stem-ren-less", "stem-ren-less-v"
     };
 
     /// <summary>
@@ -140,6 +140,8 @@ public static class PosMapper
 
             // Verb stem tags — only match directly-conjugating verbs, not suru-verbs
             ["stem-past"] = DirectConjugationVerbTags,
+            ["stem-te"] = DirectConjugationVerbTags,
+            ["stem-te-defective"] = DirectConjugationVerbTags,
             ["stem-te-verbal"] = DirectConjugationVerbTags,
             ["stem-ren-less"] = DirectConjugationVerbTags,
             ["stem-ren-less-v"] = DirectConjugationVerbTags,

@@ -71,6 +71,12 @@ public partial class MorphologicalAnalyser
                 if (nextWord.Text == "な" && !isNegativeStemBeforeDependant)
                     break;
 
+                // Don't merge よう (様, "seeming/manner") with preceding verb/adjective.
+                // Sudachi tags it as 形状詞/助動詞語幹, but as a standalone token it's always the
+                // noun 様, not a volitional suffix (volitional forms are produced as single tokens).
+                if (nextWord is { Text: "よう", DictionaryForm: "よう" })
+                    break;
+
                 // Don't merge いけ/いけない after ちゃ/じゃ/きゃ/にゃ (obligation/prohibition patterns)
                 // e.g., しちゃいけない = "must not do", なきゃいけない = "must do"
                 // But allow merging after て (continuation: やっていける = "can get by")
@@ -229,6 +235,7 @@ public partial class MorphologicalAnalyser
                 }
                 // Scenario B: Suffix transition - creates new compound verb
                 // Handle both: Suffix with VerbLike (かねる) and Verb with PossibleDependant (切れる, 合う, etc.)
+                // Also handles noun-like suffixes that are verb 連用形 (e.g. 合い from 合う)
                 // IMPORTANT: Only apply when:
                 // 1. Base is a Verb, not a Noun (e.g. 提出+いただき should NOT combine)
                 // 2. Current word doesn't end in te-form or auxiliary patterns (these are grammatical constructions, not compounds)
@@ -246,10 +253,20 @@ public partial class MorphologicalAnalyser
                          !AuxiliaryVerbs.Contains(nextWord.DictionaryForm) &&
                          (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike) ||
                           (nextWord.PartOfSpeech == PartOfSpeech.Verb &&
-                           nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))))
+                           nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant)) ||
+                          nextWord.PartOfSpeech == PartOfSpeech.Suffix))
                 {
                     var suffixDict = KanaNormalizer.Normalize(KanaConverter.ToHiragana(nextWord.DictionaryForm));
                     var match = forms.FirstOrDefault(f => f.Text.EndsWith(suffixDict) && f.Text.Length > suffixDict.Length);
+
+                    // For suffix tokens tagged with noun-like DictionaryForm (e.g. 合い instead of 合う),
+                    // also try the godan verb dictionary form
+                    if (match == null && nextWord.PartOfSpeech == PartOfSpeech.Suffix)
+                    {
+                        var verbDict = TryGodanDictForm(suffixDict);
+                        if (verbDict != null)
+                            match = forms.FirstOrDefault(f => f.Text.EndsWith(verbDict) && f.Text.Length > verbDict.Length);
+                    }
 
                     if (match != null && (HasCompoundLookup == null || CompoundExistsInLookup(match.Text, CachedDeconjugate)))
                     {

@@ -97,6 +97,10 @@ public partial class MorphologicalAnalyser
         ("し", "ちゃ", PartOfSpeech.Verb),
         ("何", "の", PartOfSpeech.Pronoun),
         ("カッコ", "いい", PartOfSpeech.IAdjective),
+        ("ドキッ", "と", PartOfSpeech.Adverb),
+        ("ドキっ", "と", PartOfSpeech.Adverb),
+        ("チラッ", "と", PartOfSpeech.Adverb),
+        ("チラっ", "と", PartOfSpeech.Adverb),
         ("か", "な", PartOfSpeech.Particle),
         ("よう", "です", PartOfSpeech.Expression),
         ("何も", "かも", PartOfSpeech.Expression),
@@ -133,6 +137,10 @@ public partial class MorphologicalAnalyser
         ("こそ", "あれ", PartOfSpeech.Conjunction),
         ("かく", "も", PartOfSpeech.NominalAdjective),
         ("よう", "さん", PartOfSpeech.NominalAdjective),
+        ("と", "する", PartOfSpeech.Expression),
+        ("しきり", "と", PartOfSpeech.Adverb),
+        ("しきり", "に", PartOfSpeech.Adverb),
+        ("ない", "ない", PartOfSpeech.IAdjective),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

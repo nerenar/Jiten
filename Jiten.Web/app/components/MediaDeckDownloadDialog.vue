@@ -750,7 +750,7 @@
                   <div class="flex items-center gap-2">
                     <InputNumber
                       :model-value="frequencyRange?.[0] ?? 0"
-                      @update:model-value="(v) => (frequencyRange[0] = v)"
+                      @update:model-value="(v) => (frequencyRange = [v ?? 0, frequencyRange?.[1] ?? 0])"
                       inputClass="text-center p-1 text-xs w-16 h-7"
                       :min="0"
                       :max="currentSliderMax"
@@ -759,7 +759,7 @@
                     <span class="text-gray-400 dark:text-gray-500">-</span>
                     <InputNumber
                       :model-value="frequencyRange?.[1] ?? 0"
-                      @update:model-value="(v) => (frequencyRange[1] = v)"
+                      @update:model-value="(v) => (frequencyRange = [frequencyRange?.[0] ?? 0, v ?? 0])"
                       inputClass="text-center p-1 text-xs w-16 h-7"
                       :min="0"
                       :max="currentSliderMax"

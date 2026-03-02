@@ -80,7 +80,7 @@ public class ReaderController(
                 }
                 else
                 {
-                    wordPosition = combinedText.IndexOf(word.OriginalText, positionInCombined, StringComparison.Ordinal);
+                    (wordPosition, _) = TokenPositionHelper.FindTokenInSource(combinedText, word.OriginalText, positionInCombined);
                 }
 
                 if (wordPosition < 0)
@@ -88,6 +88,8 @@ public class ReaderController(
                     wordIndex++;
                     continue;
                 }
+
+                var (_, wordSourceLength) = TokenPositionHelper.FindTokenInSource(combinedText, word.OriginalText, wordPosition);
 
                 // Check if this match might be wrong (found too far ahead)
                 // by looking for subsequent words between current position and found position
@@ -105,7 +107,7 @@ public class ReaderController(
                         else
                         {
                             var futureWord = allParsedWords[futureIdx];
-                            futurePos = combinedText.IndexOf(futureWord.OriginalText, positionInCombined, StringComparison.Ordinal);
+                            (futurePos, _) = TokenPositionHelper.FindTokenInSource(combinedText, futureWord.OriginalText, positionInCombined);
                             if (futurePos >= 0)
                                 positionCache[futureIdx] = futurePos;
                         }
@@ -129,8 +131,10 @@ public class ReaderController(
 
                 if (wordPosition >= paragraphOffsets[i])
                 {
+                    if (wordSourceLength != word.OriginalText.Length)
+                        word.OriginalText = combinedText.Substring(wordPosition, wordSourceLength);
                     paragraphWords.Add(word);
-                    positionInCombined = wordPosition + word.OriginalText.Length;
+                    positionInCombined = wordPosition + wordSourceLength;
                 }
 
                 wordIndex++;

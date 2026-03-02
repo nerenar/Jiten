@@ -78,6 +78,10 @@ public partial class MorphologicalAnalyser
                 if (prev is not { PartOfSpeech: PartOfSpeech.Numeral })
                     word.PreMatchedWordId = 1391780;
             }
+
+            // ノリ in katakana → 乗り (riding/enthusiasm/vibe, nf07), not 海苔 (seaweed, nf38)
+            if (word.Text == "ノリ")
+                word.PreMatchedWordId = 1354720;
         }
 
         return wordInfos;
@@ -168,6 +172,59 @@ public partial class MorphologicalAnalyser
             if (word is { Text: "隙", Reading: "ヒマ" })
                 word.Reading = "スキ";
 
+            // 角 (カド) — Sudachi always gives カド but standalone 角 has three common readings:
+            //   かど (corner): 角を曲がる, 建物の角
+            //   つの (horn):   鬼の角, 角が生えている
+            //   かく (angle):  三角形の角, 角が90度
+            if (word is { Text: "角", Reading: "カド" })
+            {
+                var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
+                var prev = i > 0 ? wordInfos[i - 1] : null;
+                var next2 = i + 2 < wordInfos.Count ? wordInfos[i + 2] : null;
+                var prev2 = i >= 2 ? wordInfos[i - 2] : null;
+
+                // つの: 角が生え… / 角が折れ… (only horns grow/break off)
+                bool isHornVerb = next is { Text: "が" or "を" } && next2 != null &&
+                                  next2.DictionaryForm is "生える" or "生やす" or "折れる" or "折る"
+                                      or "研ぐ" or "磨く";
+
+                // つの: creature/demon + の + 角
+                bool afterCreature = prev is { Text: "の" } && prev2 != null &&
+                                     IsHornBearerWord(prev2.Text);
+
+                // つの: 頭/額/おでこ + に/の + 角
+                bool afterHead = prev is { Text: "に" or "の" } && prev2 != null &&
+                                 prev2.Text is "頭" or "額" or "おでこ";
+
+                // かく: geometry word + の + 角 (三角形の角, 多角形の角)
+                bool afterGeometry = prev is { Text: "の" } && prev2 != null &&
+                                     (prev2.Text.EndsWith("角形") || prev2.Text.EndsWith("多角"));
+
+                // かく: 角 + が/は/も + degree/equality (角が90度, 角は等しい)
+                var next3 = i + 3 < wordInfos.Count ? wordInfos[i + 3] : null;
+                bool beforeDegree = next is { Text: "が" or "は" or "も" } && next2 != null &&
+                                    (next2.Text.Contains('度') || next2.DictionaryForm is "等しい"
+                                     || ((next2.PartOfSpeech == PartOfSpeech.Numeral
+                                         || next2.HasPartOfSpeechSection(PartOfSpeechSection.Numeral))
+                                        && next3 is { Text: "度" }));
+
+                if (isHornVerb || afterCreature || afterHead)
+                    word.Reading = "ツノ";
+                else if (afterGeometry || beforeDegree)
+                    word.Reading = "カク";
+            }
+
+            // 額 (ガク) → ヒタイ (forehead) when standalone
+            // がく reading primarily in compounds (金額, 総額, 月額, 高額) parsed as single tokens.
+            // Exception: 額にして (amounting to) is genuine standalone がく.
+            if (word is { Text: "額", Reading: "ガク" })
+            {
+                bool isAmountExpression = i + 2 < wordInfos.Count &&
+                    wordInfos[i + 1].Text == "に" && wordInfos[i + 2].DictionaryForm == "する";
+                if (!isAmountExpression)
+                    word.Reading = "ヒタイ";
+            }
+
             // 事 (ジ) → コト when Sudachi misclassified as suffix after verb/expression
             // ジ reading only occurs in kango compounds (仕事, 用事, 無事); those are parsed as single tokens.
             // When 事 is orphaned (after a non-noun), it is the nominalizer こと.
@@ -220,4 +277,10 @@ public partial class MorphologicalAnalyser
 
         return wordInfos;
     }
+
+    private static bool IsHornBearerWord(string text) => text is
+        "鬼" or "牛" or "鹿" or "羊" or "山羊" or "馬" or "竜" or "龍"
+        or "悪魔" or "怪物" or "獣" or "魔物" or "魔族" or "動物"
+        or "トナカイ" or "ドラゴン" or "モンスター" or "ユニコーン" or "サイ"
+        or "カブトムシ" or "クワガタ" or "虫" or "デーモン";
 }

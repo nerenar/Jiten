@@ -110,6 +110,16 @@ public class Program
             if (await deckCommands.Insert(options)) return;
         }
 
+        if (options.BackfillSpeechStats != null)
+        {
+            await deckCommands.BackfillSpeechStats(options);
+        }
+
+        if (options.BackfillSpeechStatsJimaku)
+        {
+            await deckCommands.BackfillSpeechStatsFromJimaku(options);
+        }
+
         if (options.ComputeFrequencies)
         {
             await JitenHelper.ComputeFrequencies(context.ContextFactory);

@@ -23,6 +23,9 @@ public class DeckDto
     public float DifficultyRaw { get; set; }
     public float DifficultyOverride { get; set; }
     public int SentenceCount { get; set; }
+    public long SpeechDuration { get; set; }
+    public long SpeechMoraCount { get; set; }
+    public float SpeechSpeed { get; set; }
     public float AverageSentenceLength { get; set; }
     public int? ParentDeckId { get; set; }
     public List<Link> Links { get; set; } = new();
@@ -69,6 +72,9 @@ public class DeckDto
         DifficultyRaw = deck.GetDifficulty();
         DifficultyOverride = deck.DifficultyOverride;
         SentenceCount = deck.SentenceCount;
+        SpeechDuration = deck.SpeechDuration;
+        SpeechMoraCount = deck.SpeechMoraCount;
+        SpeechSpeed = (float)deck.SpeechSpeed;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
         Links = deck.Links;
@@ -109,6 +115,9 @@ public class DeckDto
         DifficultyRaw = deck.GetDifficulty();
         DifficultyOverride = deck.DifficultyOverride;
         SentenceCount = deck.SentenceCount;
+        SpeechDuration = deck.SpeechDuration;
+        SpeechMoraCount = deck.SpeechMoraCount;
+        SpeechSpeed = (float)deck.SpeechSpeed;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
         Links = deck.Links;

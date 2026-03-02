@@ -6,6 +6,8 @@ using System.Text.Unicode;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Providers;
+using Jiten.Core.Data.Providers.Jimaku;
+using Jiten.Parser;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Cli.Commands;
@@ -19,6 +21,181 @@ public class DeckCommands(CliContext context)
         "OP", "字幕", "诸神", "负责", "阿里", "日校",
         "翻译", "校对", "片源", "◎", "m"
     ];
+
+    public async Task BackfillSpeechStats(CliOptions options)
+    {
+        if (options.DeckType == null || !Enum.TryParse(options.DeckType, out MediaType deckType))
+        {
+            Console.WriteLine("Please specify a deck type with --deck-type. Available types:");
+            foreach (var type in Enum.GetNames(typeof(MediaType)))
+                Console.WriteLine(type);
+            return;
+        }
+
+        var rootDir = options.BackfillSpeechStats!;
+        if (!Directory.Exists(rootDir))
+        {
+            Console.WriteLine($"Directory not found: {rootDir}");
+            return;
+        }
+
+        var directories = Directory.GetDirectories(rootDir);
+        int updated = 0, skipped = 0;
+        var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, options.Threads) };
+
+        await Parallel.ForEachAsync(directories, parallelOptions, async (directory, _) =>
+        {
+            var metadataPath = Path.Combine(directory, "metadata.json");
+            if (!File.Exists(metadataPath))
+            {
+                if (options.Verbose)
+                    Console.WriteLine($"No metadata.json in {directory}, skipping.");
+                Interlocked.Increment(ref skipped);
+                return;
+            }
+
+            var metadata = JsonSerializer.Deserialize<Metadata>(await File.ReadAllTextAsync(metadataPath));
+            if (metadata == null)
+            {
+                Console.WriteLine($"Failed to deserialize metadata in {directory}, skipping.");
+                Interlocked.Increment(ref skipped);
+                return;
+            }
+
+            Console.WriteLine($"Processing: {metadata.OriginalTitle}");
+
+            await using var db = await context.ContextFactory.CreateDbContextAsync();
+
+            var parentDeck = await db.Decks
+                .Include(d => d.Children).ThenInclude(c => c.RawText)
+                .Include(d => d.RawText)
+                .FirstOrDefaultAsync(d => d.OriginalTitle == metadata.OriginalTitle
+                                          && d.MediaType == deckType
+                                          && d.ParentDeckId == null);
+
+            if (parentDeck == null)
+            {
+                Console.WriteLine($"  No deck found for '{metadata.OriginalTitle}', skipping.");
+                Interlocked.Increment(ref skipped);
+                return;
+            }
+
+            if (options.Resume)
+            {
+                var hasStats = parentDeck.Children.Count > 0
+                    ? parentDeck.Children.All(c => c.SpeechDuration > 0)
+                    : parentDeck.SpeechDuration > 0;
+
+                if (hasStats)
+                {
+                    if (options.Verbose)
+                        Console.WriteLine($"  Already has speech stats, skipping.");
+                    Interlocked.Increment(ref skipped);
+                    return;
+                }
+            }
+
+            var subtitleFiles = Directory.GetFiles(directory)
+                .Where(f => SubtitleExtractor.SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .ToList();
+
+            if (subtitleFiles.Count == 0)
+            {
+                if (options.Verbose)
+                    Console.WriteLine($"  No subtitle files found in {directory}, skipping.");
+                Interlocked.Increment(ref skipped);
+                return;
+            }
+
+            var targetDecks = parentDeck.Children.Count > 0
+                ? parentDeck.Children.ToList()
+                : new List<Deck> { parentDeck };
+
+            var normalizedRawTexts = targetDecks
+                .Where(d => d.RawText != null)
+                .ToDictionary(d => d.DeckId, d => NormalizeForComparison(d.RawText!.RawText));
+
+            var matched = new HashSet<int>();
+            int matchedCount = 0;
+            var extractor = new SubtitleExtractor();
+
+            foreach (var subtitleFile in subtitleFiles)
+            {
+                var subText = await extractor.Extract(subtitleFile);
+                var normalizedSub = NormalizeForComparison(subText);
+
+                Deck? matchedDeck = null;
+                double bestRatio = 0;
+                foreach (var target in targetDecks)
+                {
+                    if (matched.Contains(target.DeckId)) continue;
+                    if (!normalizedRawTexts.TryGetValue(target.DeckId, out var normalizedRaw)) continue;
+
+                    var ratio = LengthRatio(normalizedSub, normalizedRaw);
+                    if (ratio > bestRatio)
+                    {
+                        bestRatio = ratio;
+                        matchedDeck = target;
+                    }
+                }
+
+                if (bestRatio < 0.90)
+                    matchedDeck = null;
+
+                if (matchedDeck == null)
+                {
+                    Console.WriteLine($"  No match for: {Path.GetFileName(subtitleFile)} (best ratio: {bestRatio:P1})");
+                    continue;
+                }
+
+                var items = await extractor.ExtractItems(subtitleFile);
+                if (items.Count == 0) continue;
+
+                SubtitleStats stats;
+                try
+                {
+                    stats = await Jiten.Parser.SubtitleMoraRateCalculator.ComputeAsync(items);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  Sudachi error for {Path.GetFileName(subtitleFile)}: {ex.Message}");
+                    continue;
+                }
+
+                matchedDeck.SpeechDuration = stats.DurationMs;
+                matchedDeck.SpeechMoraCount = stats.MoraCount;
+                matched.Add(matchedDeck.DeckId);
+                matchedCount++;
+
+                if (options.Verbose)
+                    Console.WriteLine($"  Matched: {Path.GetFileName(subtitleFile)} → {matchedDeck.OriginalTitle} (ratio={bestRatio:P1}, duration={stats.DurationMs}ms, mora={stats.MoraCount})");
+            }
+
+            if (parentDeck.Children.Count > 0 && matched.Count > 0)
+            {
+                var childrenWithSpeech = parentDeck.Children.Where(c => c.SpeechDuration > 0).ToList();
+                if (childrenWithSpeech.Count > 0)
+                {
+                    var avgSpeed = childrenWithSpeech.Average(c => c.SpeechSpeed);
+                    parentDeck.SpeechDuration = childrenWithSpeech.Sum(c => c.SpeechDuration);
+                    parentDeck.SpeechMoraCount = (long)(avgSpeed * (parentDeck.SpeechDuration / 60000.0));
+                }
+            }
+
+            if (matchedCount > 0)
+            {
+                await db.SaveChangesAsync();
+                Interlocked.Add(ref updated, matchedCount);
+                Console.WriteLine($"  Updated {matchedCount} deck(s).");
+            }
+            else
+            {
+                Console.WriteLine($"  No matches found for any subtitle files.");
+            }
+        });
+
+        Console.WriteLine($"\nDone. Updated: {updated}, Skipped directories: {skipped}");
+    }
 
     public async Task<bool> Insert(CliOptions options)
     {
@@ -169,7 +346,10 @@ public class DeckCommands(CliContext context)
             }
 
             List<string> lines = [];
-            if (Path.GetExtension(filePath)?.ToLower() == ".epub")
+            Jiten.Parser.SubtitleStats? subtitleStats = null;
+            var extension = Path.GetExtension(filePath)?.ToLowerInvariant();
+
+            if (extension == ".epub")
             {
                 var extractor = new EbookExtractor();
                 var text = await ExtractEpub(filePath, extractor, options);
@@ -181,6 +361,19 @@ public class DeckCommands(CliContext context)
                 }
 
                 lines = text.Split(Environment.NewLine).ToList();
+            }
+            else if (extension != null && SubtitleExtractor.SupportedExtensions.Contains(extension))
+            {
+                var extractor = new SubtitleExtractor();
+                var text = await extractor.Extract(filePath);
+                if (!string.IsNullOrEmpty(text))
+                    lines = text.Split(Environment.NewLine).ToList();
+
+                var items = await extractor.ExtractItems(filePath);
+                if (items.Count > 0)
+                {
+                    subtitleStats = await Jiten.Parser.SubtitleMoraRateCalculator.ComputeAsync(items);
+                }
             }
             else
             {
@@ -214,6 +407,11 @@ public class DeckCommands(CliContext context)
             deck.DeckOrder = deckOrder;
             deck.OriginalTitle = metadata.OriginalTitle;
             deck.MediaType = deckType;
+            if (subtitleStats.HasValue)
+            {
+                deck.SpeechDuration = subtitleStats.Value.DurationMs;
+                deck.SpeechMoraCount = subtitleStats.Value.MoraCount;
+            }
 
             if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
                 deck.SentenceCount = 0;
@@ -268,5 +466,245 @@ public class DeckCommands(CliContext context)
         }
 
         return "";
+    }
+
+    public async Task BackfillSpeechStatsFromJimaku(CliOptions options)
+    {
+        if (options.DeckType == null || !Enum.TryParse(options.DeckType, out MediaType deckType))
+        {
+            Console.WriteLine("Please specify a deck type with --deck-type. Available types:");
+            foreach (var type in Enum.GetNames(typeof(MediaType)))
+                Console.WriteLine(type);
+            return;
+        }
+
+        var jimakuApiKey = context.Configuration["JimakuApiKey"];
+        if (string.IsNullOrEmpty(jimakuApiKey))
+        {
+            Console.WriteLine("JimakuApiKey not found in configuration.");
+            return;
+        }
+
+        using var httpClient = new HttpClient();
+        var rateLimit = new[] { DateTime.UtcNow.Ticks };
+
+        await using var db = await context.ContextFactory.CreateDbContextAsync();
+
+        var parentDecks = await db.Decks
+            .Include(d => d.Links)
+            .Include(d => d.Children).ThenInclude(c => c.RawText)
+            .Include(d => d.RawText)
+            .Where(d => d.ParentDeckId == null
+                        && d.MediaType == deckType
+                        && d.SpeechDuration == 0
+                        && d.Children.All(c => c.SpeechDuration == 0))
+            .ToListAsync();
+
+        Console.WriteLine($"Found {parentDecks.Count} parent decks with no speech stats for type {deckType}.");
+
+        int updated = 0, skipped = 0;
+
+        foreach (var parentDeck in parentDecks)
+        {
+            var anilistLink = parentDeck.Links.FirstOrDefault(l => l.LinkType == LinkType.Anilist);
+            var tmdbLink = parentDeck.Links.FirstOrDefault(l => l.LinkType == LinkType.Tmdb);
+
+            int? anilistId = null;
+            string? tmdbId = null;
+
+            if (anilistLink != null)
+            {
+                var match = Regex.Match(anilistLink.Url, @"/anime/(\d+)");
+                if (match.Success) anilistId = int.Parse(match.Groups[1].Value);
+            }
+
+            if (tmdbLink != null)
+            {
+                var match = Regex.Match(tmdbLink.Url, @"/(movie|tv)/(\d+)");
+                if (match.Success) tmdbId = $"{match.Groups[1].Value}:{match.Groups[2].Value}";
+            }
+
+            if (anilistId == null && tmdbId == null)
+            {
+                if (options.Verbose)
+                    Console.WriteLine($"  Skipping '{parentDeck.OriginalTitle}': no Anilist or TMDB link.");
+                skipped++;
+                continue;
+            }
+
+            Console.WriteLine($"Processing: {parentDeck.OriginalTitle}");
+
+            await RespectRateLimit(rateLimit);
+            var entries = anilistId.HasValue
+                ? await MetadataProviderHelper.JimakuSearchAsync(httpClient, jimakuApiKey, anilistId: anilistId)
+                : null;
+
+            if ((entries == null || entries.Count == 0) && tmdbId != null)
+            {
+                await RespectRateLimit(rateLimit);
+                entries = await MetadataProviderHelper.JimakuSearchAsync(httpClient, jimakuApiKey, tmdbId: tmdbId);
+            }
+
+            if (entries == null || entries.Count == 0)
+            {
+                Console.WriteLine($"  No Jimaku entry found.");
+                skipped++;
+                continue;
+            }
+
+            var jimakuEntry = entries[0];
+            if (options.Verbose)
+                Console.WriteLine($"  Jimaku entry: {jimakuEntry.Id} - {jimakuEntry.Name}");
+
+            await RespectRateLimit(rateLimit);
+            var files = await MetadataProviderHelper.JimakuGetFilesAsync(httpClient, jimakuApiKey, jimakuEntry.Id);
+            if (files == null || files.Count == 0)
+            {
+                Console.WriteLine($"  No files found for Jimaku entry {jimakuEntry.Id}.");
+                skipped++;
+                continue;
+            }
+
+            var subtitleFiles = files
+                .Where(f => SubtitleExtractor.SupportedExtensions
+                    .Contains(Path.GetExtension(f.Name).ToLowerInvariant()))
+                .ToList();
+
+            if (subtitleFiles.Count == 0)
+            {
+                Console.WriteLine($"  No subtitle files (only archives or unsupported formats).");
+                skipped++;
+                continue;
+            }
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "jiten-jimaku-backfill", Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                var downloadTasks = subtitleFiles.Select(async file =>
+                {
+                    var filePath = Path.Combine(tempDir, file.Name);
+                    await MetadataProviderHelper.JimakuDownloadFileAsync(httpClient, file.Url, filePath);
+                    return filePath;
+                });
+                var downloadedPaths = (await Task.WhenAll(downloadTasks)).ToList();
+
+                var targetDecks = parentDeck.Children.Count > 0
+                    ? parentDeck.Children.ToList()
+                    : new List<Deck> { parentDeck };
+
+                var normalizedRawTexts = targetDecks
+                    .Where(d => d.RawText != null)
+                    .ToDictionary(d => d.DeckId, d => NormalizeForComparison(d.RawText!.RawText));
+
+                var matched = new HashSet<int>();
+                int matchedCount = 0;
+                var extractor = new SubtitleExtractor();
+
+                foreach (var subtitlePath in downloadedPaths)
+                {
+                    var subText = await extractor.Extract(subtitlePath);
+                    var normalizedSub = NormalizeForComparison(subText);
+
+                    Deck? matchedDeck = null;
+                    double bestRatio = 0;
+                    foreach (var target in targetDecks)
+                    {
+                        if (matched.Contains(target.DeckId)) continue;
+                        if (!normalizedRawTexts.TryGetValue(target.DeckId, out var normalizedRaw)) continue;
+
+                        var ratio = LengthRatio(normalizedSub, normalizedRaw);
+                        if (ratio > bestRatio)
+                        {
+                            bestRatio = ratio;
+                            matchedDeck = target;
+                        }
+                    }
+
+                    if (bestRatio < 0.90)
+                        matchedDeck = null;
+
+                    if (matchedDeck == null)
+                    {
+                        if (options.Verbose)
+                            Console.WriteLine($"    No match for: {Path.GetFileName(subtitlePath)} (best ratio: {bestRatio:P1})");
+                        continue;
+                    }
+
+                    var items = await extractor.ExtractItems(subtitlePath);
+                    if (items.Count == 0) continue;
+
+                    var stats = await SubtitleMoraRateCalculator.ComputeAsync(items);
+                    matchedDeck.SpeechDuration = stats.DurationMs;
+                    matchedDeck.SpeechMoraCount = stats.MoraCount;
+                    matched.Add(matchedDeck.DeckId);
+                    matchedCount++;
+
+                    if (options.Verbose)
+                        Console.WriteLine($"    Matched: {Path.GetFileName(subtitlePath)} → {matchedDeck.OriginalTitle} (ratio={bestRatio:P1}, duration={stats.DurationMs}ms, mora={stats.MoraCount})");
+                }
+
+                if (parentDeck.Children.Count > 0 && matched.Count > 0)
+                {
+                    var childrenWithSpeech = parentDeck.Children.Where(c => c.SpeechDuration > 0).ToList();
+                    if (childrenWithSpeech.Count > 0)
+                    {
+                        var avgSpeed = childrenWithSpeech.Average(c => c.SpeechSpeed);
+                        parentDeck.SpeechDuration = childrenWithSpeech.Sum(c => c.SpeechDuration);
+                        parentDeck.SpeechMoraCount = (long)(avgSpeed * (parentDeck.SpeechDuration / 60000.0));
+                    }
+                }
+
+                if (matchedCount > 0)
+                {
+                    await db.SaveChangesAsync();
+                    updated += matchedCount;
+                    Console.WriteLine($"  Updated {matchedCount} deck(s).");
+                }
+                else
+                {
+                    Console.WriteLine($"  No matches found for any subtitle files.");
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(tempDir, true); } catch { /* cleanup best-effort */ }
+            }
+        }
+
+        Console.WriteLine($"\nDone. Updated: {updated}, Skipped: {skipped}");
+    }
+
+    private static async Task RespectRateLimit(long[] nextAllowedTicks)
+    {
+        var now = DateTime.UtcNow.Ticks;
+        if (now < nextAllowedTicks[0])
+        {
+            var delay = TimeSpan.FromTicks(nextAllowedTicks[0] - now);
+            Console.WriteLine($"  Rate limit: waiting {delay.TotalMilliseconds:F0}ms...");
+            await Task.Delay(delay);
+        }
+        nextAllowedTicks[0] = DateTime.UtcNow.AddMilliseconds(2500).Ticks;
+    }
+
+    private static readonly Regex HalfWidthParens = new(@"\(.*?\)");
+    private static readonly Regex FullWidthParens = new(@"（.*?）");
+    private static readonly Regex SquareBrackets = new(@"\[.*?\]");
+    private static readonly Regex Whitespace = new(@"\s+");
+
+    private static string NormalizeForComparison(string text)
+    {
+        text = HalfWidthParens.Replace(text, "");
+        text = FullWidthParens.Replace(text, "");
+        text = SquareBrackets.Replace(text, "");
+        return Whitespace.Replace(text, "");
+    }
+
+    private static double LengthRatio(string a, string b)
+    {
+        if (a.Length == 0 && b.Length == 0) return 1.0;
+        if (a.Length == 0 || b.Length == 0) return 0.0;
+        return (double)Math.Min(a.Length, b.Length) / Math.Max(a.Length, b.Length);
     }
 }

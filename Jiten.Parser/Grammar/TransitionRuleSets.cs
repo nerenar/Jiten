@@ -154,7 +154,7 @@ internal static class TransitionRuleSets
             20),
 
         new("na-adj-no-connector-penalty",
-            [ScoringCondition.CandidateIsNaAdj],
+            [ScoringCondition.CandidateIsNaAdj, ScoringCondition.CandidateIsNotAdverb],
             [ScoringCondition.NextIsNotNaAdjConnector],
             -20),
 

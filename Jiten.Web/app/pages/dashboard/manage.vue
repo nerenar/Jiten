@@ -69,6 +69,7 @@
     accomplishments: false,
     kanjiGrids: false,
     difficulties: false,
+    speechSpeed: false,
     wordReplacementPreview: false,
     wordReplacementExecute: false,
     splitWordPreview: false,
@@ -501,6 +502,32 @@
       });
       console.error('Error with deck stats recomputation:', error);
     } finally {
+    }
+  };
+
+  const recomputeParentSpeechSpeed = async () => {
+    try {
+      isLoading.value.speechSpeed = true;
+      const data = await $api<{ count: number }>('/admin/recompute-parent-speech-speed', {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Recomputed speech speed for ${data.count} parent decks`,
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to recompute parent speech speed',
+        life: 5000,
+      });
+      console.error('Error recomputing parent speech speed:', error);
+    } finally {
+      isLoading.value.speechSpeed = false;
     }
   };
 
@@ -1097,6 +1124,24 @@
               :disabled="isLoading.difficulties"
               :loading="isLoading.difficulties"
               @click="confirmReaggregateParentDifficulties"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Recompute Parent Speech Speed</template>
+        <template #content>
+          <p class="mb-4">Recompute speech speed for all parent decks by averaging their children's speeds.</p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Recompute Parent Speech Speed"
+              icon="pi pi-volume-up"
+              class="p-button-warning"
+              :disabled="isLoading.speechSpeed"
+              :loading="isLoading.speechSpeed"
+              @click="recomputeParentSpeechSpeed"
             />
           </div>
         </template>

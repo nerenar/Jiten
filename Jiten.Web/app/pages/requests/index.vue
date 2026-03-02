@@ -25,7 +25,7 @@ function parseTypeFromQuery() { return route.query.type !== undefined ? Number(r
 function parseStatusFromQuery() {
   if (route.query.status === 'all') return undefined;
   if (route.query.status !== undefined) return Number(route.query.status) as RequestStatus;
-  return RequestStatus.Open;
+  return parseTabFromQuery() === 0 ? RequestStatus.Open : undefined;
 }
 function parseSortFromQuery() { return typeof route.query.sort === 'string' ? route.query.sort : 'votes'; }
 function parseOffsetFromQuery() { return route.query.page ? (Number(route.query.page) - 1) * limit : 0; }
@@ -56,27 +56,45 @@ const sortOptions = [
   { label: 'Newest', value: 'recent' },
 ];
 
+const attachmentOptions = [
+  { label: 'All', value: undefined },
+  { label: 'Has Attachments', value: 'yes' },
+  { label: 'No Attachments', value: 'no' },
+];
+
+function parseAttachmentsFromQuery() {
+  const v = route.query.attachments;
+  return v === 'yes' || v === 'no' ? v : undefined;
+}
+
+const selectedAttachments = ref<string | undefined>(parseAttachmentsFromQuery());
+
+const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '');
+const debouncedSearch = ref(searchQuery.value);
+let searchTimeout: ReturnType<typeof setTimeout>;
+watch(searchQuery, (val) => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => { debouncedSearch.value = val; }, 300);
+});
+
 const isMine = computed(() => activeTab.value === 1);
 
 const displaySections = computed(() => {
-  if (!isMine.value) {
-    return [{ title: '', items: requests.value, muted: false }];
-  }
-  return [
-    { title: 'Active', items: requests.value.filter(r => r.status === RequestStatus.Open || r.status === RequestStatus.InProgress), muted: false },
-    { title: 'Fulfilled', items: requests.value.filter(r => r.status === RequestStatus.Completed), muted: false },
-    { title: 'Rejected', items: requests.value.filter(r => r.status === RequestStatus.Rejected), muted: true },
-  ];
+  return [{ title: '', items: requests.value, muted: false }];
 });
 
 async function loadRequests() {
+  const search = debouncedSearch.value.trim() || undefined;
   if (isMine.value) {
     await fetchRequests({
       mediaType: selectedMediaType.value,
-      sort: 'recent',
+      status: selectedStatus.value,
+      sort: sortBy.value,
       offset: 0,
       limit: 200,
       mine: true,
+      search,
+      attachments: selectedAttachments.value,
     });
   } else {
     await fetchRequests({
@@ -86,11 +104,19 @@ async function loadRequests() {
       offset: offset.value,
       limit,
       mine: false,
+      search,
+      attachments: selectedAttachments.value,
     });
   }
 }
 
-watch([selectedMediaType, selectedStatus, sortBy, activeTab], () => {
+watch(activeTab, () => {
+  searchQuery.value = '';
+  debouncedSearch.value = '';
+  selectedStatus.value = activeTab.value === 0 ? RequestStatus.Open : undefined;
+});
+
+watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, selectedAttachments], () => {
   offset.value = 0;
   loadRequests();
   if (activeTab.value === 1) {
@@ -100,16 +126,16 @@ watch([selectedMediaType, selectedStatus, sortBy, activeTab], () => {
 
 watch(offset, () => loadRequests());
 
-watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset], () => {
+watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset, debouncedSearch, selectedAttachments], () => {
   const query: Record<string, string> = {};
   if (activeTab.value === 1) query.tab = 'mine';
   if (selectedMediaType.value !== undefined) query.type = String(selectedMediaType.value);
-  if (!isMine.value) {
-    if (selectedStatus.value === undefined) query.status = 'all';
-    else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
-    if (sortBy.value !== 'votes') query.sort = sortBy.value;
-    if (offset.value > 0) query.page = String(offset.value / limit + 1);
-  }
+  if (debouncedSearch.value.trim()) query.search = debouncedSearch.value.trim();
+  if (selectedAttachments.value) query.attachments = selectedAttachments.value;
+  if (selectedStatus.value === undefined) query.status = 'all';
+  else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
+  if (sortBy.value !== 'votes') query.sort = sortBy.value;
+  if (!isMine.value && offset.value > 0) query.page = String(offset.value / limit + 1);
   router.replace({ query });
 });
 
@@ -182,16 +208,28 @@ onMounted(() => loadRequests());
       </TabList>
     </Tabs>
 
-    <div class="flex flex-wrap gap-3 my-4 items-center">
-      <Select
-        v-model="selectedMediaType"
-        :options="mediaTypeOptions"
-        optionLabel="label"
-        optionValue="value"
-        placeholder="Media Type"
-        class="w-40"
-      />
-      <template v-if="!isMine">
+    <div class="flex flex-wrap gap-3 my-4 items-end">
+      <div class="flex flex-col gap-1">
+        <label class="text-sm text-muted-color">Search</label>
+        <IconField>
+          <InputIcon class="pi pi-search" />
+          <InputText v-model="searchQuery" placeholder="Search titles..." class="w-56" />
+          <InputIcon v-if="searchQuery" class="pi pi-times cursor-pointer" @click="searchQuery = ''" />
+        </IconField>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm text-muted-color">Media Type</label>
+        <Select
+          v-model="selectedMediaType"
+          :options="mediaTypeOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Media Type"
+          class="w-40"
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm text-muted-color">Status</label>
         <Select
           v-model="selectedStatus"
           :options="statusOptions"
@@ -200,6 +238,9 @@ onMounted(() => loadRequests());
           placeholder="Status"
           class="w-40"
         />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm text-muted-color">Sort</label>
         <Select
           v-model="sortBy"
           :options="sortOptions"
@@ -207,7 +248,18 @@ onMounted(() => loadRequests());
           optionValue="value"
           class="w-40"
         />
-      </template>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm text-muted-color">Attachments</label>
+        <Select
+          v-model="selectedAttachments"
+          :options="attachmentOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Attachments"
+          class="w-44"
+        />
+      </div>
     </div>
 
     <div v-if="isLoading" class="flex justify-center py-12">
@@ -241,69 +293,71 @@ onMounted(() => loadRequests());
             {{ section.title }}
             <span class="text-sm font-normal text-muted-color">({{ section.items.length }})</span>
           </h3>
-          <div class="flex flex-col gap-3">
-            <Card
+          <TransitionGroup name="request-list" tag="div" class="flex flex-col gap-3">
+            <NuxtLink
               v-for="request in section.items"
               :key="request.id"
-              class="shadow-sm cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
-              @click="router.push(`/requests/${request.id}`)"
+              :to="`/requests/${request.id}`"
+              class="no-underline! text-inherit"
             >
-              <template #content>
-                <div class="flex items-start gap-4">
-                  <div @click.stop>
-                    <UpvoteButton
-                      :has-upvoted="request.hasUserUpvoted"
-                      :upvote-count="request.upvoteCount"
-                      compact
-                      @toggle="handleUpvote(request)"
-                    />
-                  </div>
-
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap mb-1">
-                      <span class="font-semibold text-lg">{{ request.title }}</span>
-                      <Tag :value="getMediaTypeText(request.mediaType)" severity="secondary" />
-                      <Tag
-                        :value="getRequestStatusText(request.status)"
-                        :severity="getRequestStatusSeverity(request.status)"
+              <Card class="shadow-sm cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors">
+                <template #content>
+                  <div class="flex items-start gap-2 md:gap-4">
+                    <div @click.prevent>
+                      <UpvoteButton
+                        :has-upvoted="request.hasUserUpvoted"
+                        :upvote-count="request.upvoteCount"
+                        compact
+                        @toggle="handleUpvote(request)"
                       />
-                      <span v-if="request.isOwnRequest && !isMine" class="text-xs text-muted-color italic">
-                        Your request
-                      </span>
                     </div>
 
-                    <div class="flex items-center gap-3 text-sm text-muted-color">
-                      <span v-if="request.externalLinkType" class="flex items-center gap-1">
-                        <i class="pi pi-external-link text-xs" />
-                        {{ getLinkTypeText(request.externalLinkType) }}
-                      </span>
-                      <span v-if="request.commentCount > 0" class="flex items-center gap-1">
-                        <i class="pi pi-comments text-xs" />
-                        {{ request.commentCount }}
-                      </span>
-                      <span v-if="request.uploadCount > 0" class="flex items-center gap-1">
-                        <i class="pi pi-paperclip text-xs" />
-                        {{ request.uploadCount }}
-                      </span>
-                      <span>{{ formatTimeAgo(request.createdAt) }}</span>
-                      <span v-if="request.completedAt" class="flex items-center gap-1">
-                        <i class="pi pi-check-circle text-xs" />
-                        completed {{ formatCompletedAt(request.completedAt) }}
-                      </span>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap mb-1">
+                        <span class="font-semibold text-lg">{{ request.title }}</span>
+                        <Tag :value="getMediaTypeText(request.mediaType)" severity="secondary" />
+                        <Tag
+                          :value="getRequestStatusText(request.status)"
+                          :severity="getRequestStatusSeverity(request.status)"
+                        />
+                        <span v-if="request.isOwnRequest && !isMine" class="text-xs text-muted-color italic">
+                          Your request
+                        </span>
+                      </div>
+
+                      <div class="flex items-center gap-3 text-sm text-muted-color mt-1">
+                        <span v-if="request.externalLinkType" class="hidden md:flex items-center gap-1">
+                          <i class="pi pi-external-link text-xs" />
+                          {{ getLinkTypeText(request.externalLinkType) }}
+                        </span>
+                        <span v-if="request.commentCount > 0" class="flex items-center gap-1">
+                          <i class="pi pi-comments text-xs" />
+                          {{ request.commentCount }}
+                        </span>
+                        <span v-if="request.uploadCount > 0" class="flex items-center gap-1">
+                          <i class="pi pi-paperclip text-xs" />
+                          {{ request.uploadCount }}
+                        </span>
+                        <span>{{ formatTimeAgo(request.createdAt) }}</span>
+                        <span v-if="request.completedAt" class="hidden md:flex items-center gap-1">
+                          <i class="pi pi-check-circle text-xs" />
+                          completed {{ formatCompletedAt(request.completedAt) }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div class="shrink-0 hidden md:block" @click.prevent>
+                      <RequestSubscribeButton
+                        :is-subscribed="request.isSubscribed"
+                        compact
+                        @toggle="handleSubscribe(request)"
+                      />
                     </div>
                   </div>
-
-                  <div class="shrink-0" @click.stop>
-                    <RequestSubscribeButton
-                      :is-subscribed="request.isSubscribed"
-                      compact
-                      @toggle="handleSubscribe(request)"
-                    />
-                  </div>
-                </div>
-              </template>
-            </Card>
-          </div>
+                </template>
+              </Card>
+            </NuxtLink>
+          </TransitionGroup>
         </div>
       </template>
 
@@ -318,3 +372,21 @@ onMounted(() => loadRequests());
     </template>
   </div>
 </template>
+
+<style>
+.request-list-enter-active,
+.request-list-leave-active {
+  transition: opacity 0.2s ease;
+}
+.request-list-enter-from,
+.request-list-leave-to {
+  opacity: 0;
+}
+.request-list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+.request-list-move {
+  transition: transform 0.2s ease;
+}
+</style>

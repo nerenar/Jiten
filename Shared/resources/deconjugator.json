@@ -1422,6 +1422,22 @@
   },
   {
     "type": "stdrule",
+    "dec_end": ["てしまう"],
+    "con_end": ["てしもう"],
+    "dec_tag": ["v5u"],
+    "con_tag": ["v5u-s"],
+    "detail": "dialectal"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["でしまう"],
+    "con_end": ["でしもう"],
+    "dec_tag": ["v5u"],
+    "con_tag": ["v5u-s"],
+    "detail": "dialectal"
+  },
+  {
+    "type": "stdrule",
     "dec_end": ["ては"],
     "con_end": ["ちゃ"],
     "dec_tag": ["topic-condition"],

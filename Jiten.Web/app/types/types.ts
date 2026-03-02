@@ -20,6 +20,9 @@ export interface Deck {
   difficultyRaw: number;
   difficultyOverride: number;
   averageSentenceLength: number;
+  speechDuration: number;
+  speechMoraCount: number;
+  speechSpeed: number;
   parentDeckId: number;
   deckWords: DeckWord[];
   links: Link[];
@@ -581,7 +584,7 @@ export interface MediaRequestUploadDto {
 }
 
 export interface MediaRequestUploadAdminDto extends MediaRequestUploadDto {
-  uploaderEmail?: string;
+  uploaderName?: string;
   adminReviewed: boolean;
   adminNote?: string;
   fileDeleted: boolean;

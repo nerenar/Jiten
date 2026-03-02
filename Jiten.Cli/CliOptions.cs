@@ -192,4 +192,13 @@ public class CliOptions
 
     [Option(longName: "threshold", Required = false, Default = 15, HelpText = "Confidence margin threshold for --scan-confidence (default: 15).")]
     public int Threshold { get; set; } = 15;
+
+    [Option(longName: "backfill-speech-stats", Required = false, HelpText = "Backfill speech stats from subtitle files in a directory. Each subdirectory must have metadata.json. Requires --deck-type.")]
+    public string? BackfillSpeechStats { get; set; }
+
+    [Option(longName: "backfill-speech-stats-jimaku", Required = false, HelpText = "Backfill speech stats from Jimaku API. Requires --deck-type.")]
+    public bool BackfillSpeechStatsJimaku { get; set; }
+
+    [Option(longName: "resume", Required = false, HelpText = "Skip items that already have results (e.g. decks with speech stats already computed).")]
+    public bool Resume { get; set; }
 }

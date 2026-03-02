@@ -379,7 +379,8 @@ internal static class TransitionRuleEngine
                     ctx.CandidatePOS.Contains(PartOfSpeech.AdverbTo),
 
                 ScoringCondition.NextIsToParticle =>
-                    ctx.NextText == "と" && ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true,
+                    (ctx.NextText == "と" && ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true)
+                    || ctx.NextText == "という",
 
                 ScoringCondition.CandidateIsVerb =>
                     ctx.CandidatePOS.Contains(PartOfSpeech.Verb),
@@ -456,6 +457,9 @@ internal static class TransitionRuleEngine
                     !ctx.CandidatePOS.Any(p => p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                                                    or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
                                                    or PartOfSpeech.Name or PartOfSpeech.NominalAdjective),
+
+                ScoringCondition.CandidateIsNotAdverb =>
+                    !ctx.CandidatePOS.Any(p => p is PartOfSpeech.Adverb or PartOfSpeech.AdverbTo),
 
                 ScoringCondition.CandidateIsHonorific =>
                     TransitionRuleSets.HonorificSuffixes.Contains(ctx.CandidateText) &&

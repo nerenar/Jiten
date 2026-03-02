@@ -16,6 +16,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Split, SplitCompoundAuxiliaryVerbs),
         Stage(TokenStageGroup.Split, SplitTatteParticle),
         Stage(TokenStageGroup.Split, SplitTanSuffix),
+        Stage(TokenStageGroup.Repair, RepairHasaNoun),
         Stage(TokenStageGroup.Repair, RepairNTokenisation),
         Stage(TokenStageGroup.Repair, RepairVowelElongation),
         Stage(TokenStageGroup.Repair, ProcessSpecialCases),

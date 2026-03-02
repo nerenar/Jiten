@@ -8,6 +8,7 @@ export function useMediaRequests() {
   const totalCount = ref(0);
   const isLoading = ref(false);
   const error = ref<Error | null>(null);
+  let fetchVersion = 0;
 
   const fetchRequests = async (params: {
     mediaType?: MediaType;
@@ -16,8 +17,12 @@ export function useMediaRequests() {
     offset?: number;
     limit?: number;
     mine?: boolean;
+    search?: string;
+    attachments?: string;
   } = {}) => {
-    isLoading.value = true;
+    const version = ++fetchVersion;
+    const showLoading = requests.value.length === 0;
+    if (showLoading) isLoading.value = true;
     error.value = null;
     try {
       const result = await $api<PaginatedResponse<MediaRequestDto[]>>('requests', {
@@ -28,16 +33,20 @@ export function useMediaRequests() {
           offset: params.offset ?? 0,
           limit: params.limit ?? 20,
           mine: params.mine ?? false,
+          search: params.search || undefined,
+          attachments: params.attachments || undefined,
         },
       });
+      if (version !== fetchVersion) return;
       requests.value = result?.data ?? [];
       totalCount.value = result?.totalItems ?? 0;
     } catch (e) {
+      if (version !== fetchVersion) return;
       error.value = e as Error;
       requests.value = [];
       totalCount.value = 0;
     } finally {
-      isLoading.value = false;
+      if (version === fetchVersion) isLoading.value = false;
     }
   };
 

@@ -11,7 +11,7 @@ public class MediaRequestUploadDto
 
 public class MediaRequestUploadAdminDto : MediaRequestUploadDto
 {
-    public string? UploaderEmail { get; set; }
+    public string? UploaderName { get; set; }
     public bool AdminReviewed { get; set; }
     public string? AdminNote { get; set; }
     public bool FileDeleted { get; set; }

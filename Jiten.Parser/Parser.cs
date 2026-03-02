@@ -63,7 +63,8 @@ namespace Jiten.Parser
             (2394370, 4), (1203250, 2), (1537250, 2), (2783750, 1), (2654250, 0), (2609820, 1),
             (2080360, 3), (1333240, 2), (2035220, 2), (5616612, 5), (2249020, 1), (2783700, 1),
             (2411420, 0), (1604890, 2), (2602280, 1), (1407450, 1), (1595120, 1), (2083370, 1),
-            (2862482, 0), (2849996, 0), (1266970,2), (2574180,2), (2574180,1), (1550770,1)
+            (2862482, 0), (2849996, 0), (1266970,2), (2574180,2), (2574180,1), (1550770,1),
+            (5626489,28), (5045509,3), (2029780,0), (5430309,1), 
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -938,7 +939,8 @@ namespace Jiten.Parser
                             }
                             else if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Pronoun or PartOfSpeech.Conjunction
                                      or PartOfSpeech.Interjection or PartOfSpeech.Particle or PartOfSpeech.Adverb
-                                     or PartOfSpeech.NaAdjective or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix)
+                                     or PartOfSpeech.NaAdjective or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix
+                                     or PartOfSpeech.PrenounAdjectival)
                             {
                                 processedWord = nounResult.word;
                                 resolvedMargin = nounResult.margin;
@@ -1925,6 +1927,22 @@ namespace Jiten.Parser
 
                     for (int k = maxBackward; k >= 1; k--)
                     {
+                        // Don't merge across genuine particle tokens (e.g. の, に, と).
+                        // Particles are grammatical boundaries, not fragments of a misparsed word.
+                        // Only check tokens whose DictionaryForm == Text — reclassified auxiliaries
+                        // like な (DictForm=だ) should not block, since they may be word fragments.
+                        bool hasParticle = false;
+                        for (int j = i - k; j < i; j++)
+                        {
+                            var w = sentence.Words[j].word;
+                            if (w.PartOfSpeech == PartOfSpeech.Particle && w.DictionaryForm == w.Text)
+                            {
+                                hasParticle = true;
+                                break;
+                            }
+                        }
+                        if (hasParticle) continue;
+
                         var candidateParts = sentence.Words
                                                      .Skip(i - k).Take(k + 1)
                                                      .Select(w => w.word.Text);
@@ -2442,7 +2460,7 @@ namespace Jiten.Parser
             }
         }
 
-        private static readonly HashSet<string> NounCompoundExclusions = ["おつもり"];
+        private static readonly HashSet<string> NounCompoundExclusions = ["おつもり", "ものたち"];
 
         private static void CombineNounCompounds(List<SentenceInfo> sentences)
         {

@@ -26,6 +26,8 @@
   const subdeckCountMax = defineModel<number | null>('subdeckCountMax', { required: true });
   const extRatingMin = defineModel<number | null>('extRatingMin', { required: true });
   const extRatingMax = defineModel<number | null>('extRatingMax', { required: true });
+  const speechSpeedMin = defineModel<number | null>('speechSpeedMin', { required: true });
+  const speechSpeedMax = defineModel<number | null>('speechSpeedMax', { required: true });
   const includeGenres = defineModel<number[]>('includeGenres', { required: true });
   const excludeGenres = defineModel<number[]>('excludeGenres', { required: true });
   const includeTags = defineModel<number[]>('includeTags', { required: true });
@@ -139,6 +141,14 @@
     set: (val) => {
       extRatingMin.value = val[0];
       extRatingMax.value = val[1];
+    },
+  });
+
+  const subtitleRateRange = computed<[number, number]>({
+    get: () => [speechSpeedMin.value ?? 0, speechSpeedMax.value ?? 800],
+    set: (val) => {
+      speechSpeedMin.value = val[0];
+      speechSpeedMax.value = val[1];
     },
   });
 
@@ -416,6 +426,43 @@
                     show-buttons
                     size="small"
                     placeholder="Max"
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-2">
+                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Speech speed</div>
+                <div class="flex items-center gap-3">
+                  <InputNumber
+                    v-model="speechSpeedMin"
+                    :min="0"
+                    :max="800"
+                    :use-grouping="false"
+                    mode="decimal"
+                    :min-fraction-digits="0"
+                    :max-fraction-digits="1"
+                    fluid
+                    class="max-w-28 flex-shrink-0"
+                    show-buttons
+                    size="small"
+                    placeholder="Min"
+                    :step="10"
+                  />
+                  <Slider v-model="subtitleRateRange" range :min="0" :max="800" :step="10" class="flex-1" />
+                  <InputNumber
+                    v-model="speechSpeedMax"
+                    :min="0"
+                    :max="800"
+                    :use-grouping="false"
+                    mode="decimal"
+                    :min-fraction-digits="0"
+                    :max-fraction-digits="1"
+                    fluid
+                    class="max-w-28 flex-shrink-0"
+                    show-buttons
+                    size="small"
+                    placeholder="Max"
+                    :step="10"
                   />
                 </div>
               </div>

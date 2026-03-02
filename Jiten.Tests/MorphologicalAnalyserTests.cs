@@ -87,6 +87,9 @@ public class MorphologicalAnalyserTests
         yield return ["いつもどうり", new[] { "いつもどうり" }];
         yield return ["微笑みはまぶしすぎる", new[] { "微笑み", "は", "まぶしすぎる" }];
         yield return ["優しすぎそのうえカッコいいの", new[] { "優しすぎ", "そのうえ", "カッコいい", "の" }];
+        yield return ["内心ドキッとした", new[] { "内心", "ドキッと", "した" }];
+        yield return ["ドキっとしたからって", new[] { "ドキっと", "した", "からって" }];
+        yield return ["実はさっきチラッと見えたんだけど", new[] { "実は", "さっき", "チラッと", "見えた", "んだ", "けど" }];
         yield return ["この本は複雑すぎるから", new[] { "この", "本", "は", "複雑", "すぎる", "から" }];
         yield return ["かわいいです", new[] { "かわいい", "です" }];
         yield return ["なんだから", new[] { "なん", "だから" }];
@@ -223,6 +226,9 @@ public class MorphologicalAnalyserTests
         yield return ["はうまい", new[] { "は", "うまい" }];
         yield return ["弾け飛びました", new[] { "弾け飛びました" }];
         yield return ["ぶっこんでいるようで", new[] { "ぶっこんでいる", "よう", "で" }];
+        yield return ["であるようだ", new[] { "である", "ようだ" }];
+        yield return ["なかったようで安心した", new[] { "なかった", "よう", "で", "安心した" }];
+        yield return ["食べようか", new[] { "食べよう", "か" }];
         yield return ["じゃないけど下手に", new[] { "じゃない", "けど", "下手", "に" }];
         yield return ["的にそうではない", new[] { "的", "に", "そう", "ではない" }];
         yield return ["恋の終わりではなく", new[] { "恋", "の", "終わり", "ではなく" }];
@@ -627,6 +633,7 @@ public class MorphologicalAnalyserTests
         yield return ["行くっ", new[] { "行く" }];  // Verb + emphatic っ
         yield return ["止まらないっ！", new[] { "止まらない" }];  // With punctuation
         yield return ["だめっ、それは違う", new[] { "だめ", "それ", "は", "違う" }];  // Mid-sentence emphatic っ
+        yield return ["理解っ、しましたぁっ！", new[] { "理解", "しました" }];  // Kanji + emphatic っ — 理解 (rikai) not 理解る (wakaru)
         yield return ["しょうがないな", new[] { "しょうがない", "な" }];
         yield return ["この手紙を書いた", new[] { "この", "手紙", "を", "書いた" }];
         // Emphatic ぶっち → ぶち normalisation (colloquial gemination)
@@ -829,6 +836,30 @@ public class MorphologicalAnalyserTests
 
         // 少し must not be split into 少 + し after なら (Sudachi user_dic fix)
         yield return ["それにキャンプなら少しは", new[] { "それ", "に", "キャンプ", "なら", "少し", "は" }];
+
+        // Expressive internal ー in hiragana tokens should be stripped (なーい → ない)
+        yield return ["じゃなーい", new[] { "じゃない" }];
+        yield return ["聞こえなーい", new[] { "聞こえ", "ない" }];
+        yield return ["作ってなーい", new[] { "作ってない" }];
+
+        // Trailing ー must be preserved — colloquial forms (すげー, うるせー) are valid words
+        yield return ["すげー", new[] { "すげー" }];
+        yield return ["うるせー", new[] { "うるせー" }];
+
+        // おーい is a real JMDict entry (interjection), ー must not be stripped
+        yield return ["おーい", new[] { "おーい" }];
+
+        // Verb 連用形 + 合い compounds: should stay combined when compound verb exists in JMDict
+        yield return ["殺し合い", new[] { "殺し合い" }];
+        yield return ["掴み合い", new[] { "掴み合い" }];
+        yield return ["じゃれ合い", new[] { "じゃれ合い" }];
+        yield return ["引っ張り合い", new[] { "引っ張り合い" }];
+
+        // Expression tokens must not be resegmented — 気がついて is 気がつく in te-form
+        yield return ["気がついてしまう", new[] { "気がついて", "しまう" }];
+
+        // もの + たち must not be merged into 物断ち (abstinence)
+        yield return ["生き延びたものたちへの糧となる", new[] { "生き延びた", "もの", "たち", "へ", "の", "糧", "と", "なる" }];
     }
 
     [Theory]

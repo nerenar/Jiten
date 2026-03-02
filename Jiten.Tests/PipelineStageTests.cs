@@ -212,4 +212,83 @@ public class PipelineStageTests
         stage.StageName.Should().Be("CombineParticles");
         stage.StageGroup.Should().Be("Combine");
     }
+
+    [Fact]
+    public void RepairVowelElongation_StripsInternalChoonpu_WhenNormalizedHasKanji()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("なーい", PartOfSpeech.IAdjective, dictionaryForm: "なーい", normalizedForm: "無い", reading: "なーい")
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairVowelElongation", input);
+
+        output.Should().HaveCount(1);
+        output[0].Text.Should().Be("ない");
+        output[0].DictionaryForm.Should().Be("ない");
+        output[0].Reading.Should().Be("ない");
+    }
+
+    [Fact]
+    public void RepairVowelElongation_PreservesTrailingChoonpu()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("すげー", PartOfSpeech.IAdjective, dictionaryForm: "すごい", normalizedForm: "凄い", reading: "すげー")
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairVowelElongation", input);
+
+        output.Should().HaveCount(1);
+        output[0].Text.Should().Be("すげー", "trailing ー is a valid colloquial form marker");
+    }
+
+    [Fact]
+    public void RepairVowelElongation_PreservesKanaOnlyNormalized()
+    {
+        // おーい has NormalizedForm=おおい (kana-only) — it's a real JMDict interjection
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("おーい", PartOfSpeech.Interjection, dictionaryForm: "おーい", normalizedForm: "おおい", reading: "おーい")
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairVowelElongation", input);
+
+        output.Should().HaveCount(1);
+        output[0].Text.Should().Be("おーい", "kana-only NormalizedForm means it's a real word");
+    }
+
+    [Fact]
+    public void RepairVowelElongation_PreservesKatakanaTokens()
+    {
+        // Katakana tokens with ー are standard long vowel marks, not expressive
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("スーパー", PartOfSpeech.Noun, dictionaryForm: "スーパー", normalizedForm: "スーパー", reading: "スーパー")
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairVowelElongation", input);
+
+        output.Should().HaveCount(1);
+        output[0].Text.Should().Be("スーパー", "katakana ー is standard, not stripped");
+    }
+
+    [Fact]
+    public void RepairVowelElongation_StripsMultipleInternalChoonpu()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("なーーい", PartOfSpeech.IAdjective, dictionaryForm: "なーーい", normalizedForm: "無い", reading: "なーーい")
+        };
+
+        var output = analyser.ApplyStageForTesting("RepairVowelElongation", input);
+
+        output.Should().HaveCount(1);
+        output[0].Text.Should().Be("ない");
+    }
 }

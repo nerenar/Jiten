@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using SubtitlesParser.Classes.Parsers;
@@ -65,6 +67,29 @@ public partial class SubtitleExtractor
     }
 
     /// <summary>
+    /// Extract subtitle items with timing (milliseconds) and raw text.
+    /// </summary>
+    public async Task<List<SubtitleItem>> ExtractItems(string filePath)
+    {
+        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+
+        if (extension == ".ass")
+        {
+            filePath = await PreprocessAssFile(filePath);
+            extension = Path.GetExtension(filePath).ToLowerInvariant();
+        }
+
+        return extension switch
+        {
+            ".srt" => await ParseSrtItems(filePath),
+            ".ass" or ".ssa" => await ParseAssItems(filePath),
+            _ => []
+        } is { Count: > 0 } rawItems
+            ? MergeDuplicateItems(CleanItemText(rawItems), maxGapMs: 3000, minLengthForGap: 8)
+            : [];
+    }
+
+    /// <summary>
     /// Preprocess ASS file by removing comments and chinese lines, converting to SSA
     /// </summary>
     private async Task<string> PreprocessAssFile(string filePath)
@@ -82,6 +107,272 @@ public partial class SubtitleExtractor
         return ssaPath;
     }
 
+    private static async Task<List<SubtitleItem>> ParseSrtItems(string filePath)
+    {
+        var lines = await File.ReadAllLinesAsync(filePath);
+        var items = new List<SubtitleItem>();
+
+        int i = 0;
+        while (i < lines.Length)
+        {
+            while (i < lines.Length && string.IsNullOrWhiteSpace(lines[i]))
+                i++;
+
+            if (i >= lines.Length)
+                break;
+
+            var line = lines[i].Trim();
+
+            // Optional numeric index line
+            if (int.TryParse(line, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            {
+                i++;
+                if (i >= lines.Length)
+                    break;
+            }
+
+            if (i >= lines.Length)
+                break;
+
+            if (!TryParseSrtTimeRange(lines[i], out var startMs, out var endMs))
+            {
+                i++;
+                continue;
+            }
+
+            i++;
+            var textLines = new List<string>();
+            while (i < lines.Length && !string.IsNullOrWhiteSpace(lines[i]))
+            {
+                textLines.Add(lines[i]);
+                i++;
+            }
+
+            var text = string.Join("\n", textLines);
+            items.Add(new SubtitleItem(startMs, endMs, text));
+        }
+
+        return items;
+    }
+
+    private static List<SubtitleItem> CleanItemText(List<SubtitleItem> items)
+    {
+        for (int i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            var cleaned = SubtitleTextCleaner.CleanText(item.Text);
+            if (cleaned == item.Text)
+                continue;
+
+            items[i] = new SubtitleItem(item.StartMs, item.EndMs, cleaned);
+        }
+
+        return items;
+    }
+
+    private static List<SubtitleItem> MergeDuplicateItems(IEnumerable<SubtitleItem> items, int maxGapMs = 0, int minLengthForGap = 0)
+    {
+        var grouped = new Dictionary<string, List<(int start, int end)>>();
+        foreach (var item in items)
+        {
+            if (!grouped.TryGetValue(item.Text, out var spans))
+            {
+                spans = [];
+                grouped[item.Text] = spans;
+            }
+
+            spans.Add((item.StartMs, item.EndMs));
+        }
+
+        var mergedItems = new List<SubtitleItem>();
+        foreach (var (text, spans) in grouped)
+        {
+            spans.Sort((a, b) =>
+            {
+                var startCompare = a.start.CompareTo(b.start);
+                return startCompare != 0 ? startCompare : a.end.CompareTo(b.end);
+            });
+
+            if (spans.Count == 1)
+            {
+                mergedItems.Add(new SubtitleItem(spans[0].start, spans[0].end, text));
+                continue;
+            }
+
+            var gapLimit = GetTextLength(text) >= minLengthForGap ? maxGapMs : 0;
+            var currentStart = spans[0].start;
+            var currentEnd = spans[0].end;
+
+            for (int i = 1; i < spans.Count; i++)
+            {
+                var (start, end) = spans[i];
+                if (start <= currentEnd + gapLimit)
+                {
+                    currentEnd = Math.Max(currentEnd, end);
+                }
+                else
+                {
+                    mergedItems.Add(new SubtitleItem(currentStart, currentEnd, text));
+                    currentStart = start;
+                    currentEnd = end;
+                }
+            }
+
+            mergedItems.Add(new SubtitleItem(currentStart, currentEnd, text));
+        }
+
+        mergedItems.Sort((a, b) =>
+        {
+            var startCompare = a.StartMs.CompareTo(b.StartMs);
+            if (startCompare != 0)
+                return startCompare;
+            var endCompare = a.EndMs.CompareTo(b.EndMs);
+            if (endCompare != 0)
+                return endCompare;
+            return string.Compare(a.Text, b.Text, StringComparison.Ordinal);
+        });
+
+        return mergedItems;
+    }
+
+    private static int GetTextLength(string text)
+    {
+        var stripped = SubtitleTextCleaner.StripNonSpoken(text);
+        if (string.IsNullOrEmpty(stripped))
+            return 0;
+
+        return stripped.Replace("\n", "", StringComparison.Ordinal).Length;
+    }
+
+    private static bool TryParseSrtTimeRange(string line, out int startMs, out int endMs)
+    {
+        startMs = 0;
+        endMs = 0;
+
+        var parts = line.Split("-->", StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+            return false;
+
+        var startText = ExtractSrtTimestamp(parts[0]);
+        var endText = ExtractSrtTimestamp(parts[1]);
+        if (startText == null || endText == null)
+            return false;
+
+        startMs = ParseSrtTimestamp(startText);
+        endMs = ParseSrtTimestamp(endText);
+        return true;
+    }
+
+    private static string? ExtractSrtTimestamp(string text)
+    {
+        var match = Regex.Match(text, @"\d{1,2}:\d{2}:\d{2}[,\.]\d{1,3}");
+        return match.Success ? match.Value : null;
+    }
+
+    private static int ParseSrtTimestamp(string timestamp)
+    {
+        var normalized = timestamp.Replace('.', ',');
+        var parts = normalized.Split([':', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 4)
+            return 0;
+
+        var hours = int.Parse(parts[0], CultureInfo.InvariantCulture);
+        var minutes = int.Parse(parts[1], CultureInfo.InvariantCulture);
+        var seconds = int.Parse(parts[2], CultureInfo.InvariantCulture);
+        var milliseconds = int.Parse(parts[3], CultureInfo.InvariantCulture);
+        if (parts[3].Length == 1)
+            milliseconds *= 100;
+        else if (parts[3].Length == 2)
+            milliseconds *= 10;
+
+        return (int)((hours * 3600 + minutes * 60 + seconds) * 1000L + milliseconds);
+    }
+
+    private static async Task<List<SubtitleItem>> ParseAssItems(string filePath)
+    {
+        var items = new List<SubtitleItem>();
+        bool inEvents = false;
+        List<string>? format = null;
+        int idxStart = -1;
+        int idxEnd = -1;
+        int idxText = -1;
+
+        var lines = await File.ReadAllLinesAsync(filePath, Encoding.UTF8);
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("[Events]", StringComparison.OrdinalIgnoreCase))
+            {
+                inEvents = true;
+                format = null;
+                idxStart = idxEnd = idxText = -1;
+                continue;
+            }
+
+            if (trimmed.StartsWith("[") && !trimmed.StartsWith("[Events]", StringComparison.OrdinalIgnoreCase))
+            {
+                inEvents = false;
+                continue;
+            }
+
+            if (!inEvents)
+                continue;
+
+            if (trimmed.StartsWith("Format:", StringComparison.OrdinalIgnoreCase))
+            {
+                var colonIndex = line.IndexOf(':');
+                var rest = colonIndex >= 0 ? line[(colonIndex + 1)..] : string.Empty;
+                format = rest.Split(',')
+                             .Select(f => f.Trim())
+                             .ToList();
+
+                idxStart = format.FindIndex(f => f.Equals("Start", StringComparison.OrdinalIgnoreCase));
+                idxEnd = format.FindIndex(f => f.Equals("End", StringComparison.OrdinalIgnoreCase));
+                idxText = format.FindIndex(f => f.Equals("Text", StringComparison.OrdinalIgnoreCase));
+                continue;
+            }
+
+            if (!trimmed.StartsWith("Dialogue:", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (format == null || idxStart < 0 || idxEnd < 0 || idxText < 0)
+                continue;
+
+            var colon = line.IndexOf(':');
+            if (colon < 0)
+                continue;
+
+            var restLine = line[(colon + 1)..].TrimStart();
+            var fields = restLine.Split(',', format.Count);
+            if (fields.Length <= Math.Max(idxText, Math.Max(idxStart, idxEnd)))
+                continue;
+
+            var start = ParseAssTime(fields[idxStart]);
+            var end = ParseAssTime(fields[idxEnd]);
+            var text = fields[idxText];
+
+            items.Add(new SubtitleItem(start, end, text));
+        }
+
+        return items;
+    }
+
+    private static int ParseAssTime(string timestamp)
+    {
+        // ASS format: H:MM:SS.CS (centiseconds)
+        var parts = timestamp.Trim().Split(':');
+        if (parts.Length != 3)
+            return 0;
+
+        var hours = int.Parse(parts[0], CultureInfo.InvariantCulture);
+        var minutes = int.Parse(parts[1], CultureInfo.InvariantCulture);
+        var secondsParts = parts[2].Split('.');
+        var seconds = int.Parse(secondsParts[0], CultureInfo.InvariantCulture);
+        var centiseconds = secondsParts.Length > 1 ? int.Parse(secondsParts[1], CultureInfo.InvariantCulture) : 0;
+
+        return (int)((hours * 3600 + minutes * 60 + seconds) * 1000L + centiseconds * 10L);
+    }
+
     [GeneratedRegex(@"\((.*?)\)")]
     private static partial Regex RubyPattern();
 
@@ -91,3 +382,5 @@ public partial class SubtitleExtractor
     [GeneratedRegex(@"\[.*?\]")]
     private static partial Regex SquareBracketPattern();
 }
+
+public readonly record struct SubtitleItem(int StartMs, int EndMs, string Text);

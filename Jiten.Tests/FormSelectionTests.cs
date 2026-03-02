@@ -224,6 +224,15 @@ public class FormSelectionTests
         yield return ["俺だって仏じゃねぇからなあ！", "仏", 1501760, (byte)0];
         yield return ["神も仏も無いこの世界で", "仏", 1501760, (byte)0];
 
+        // 公 standalone → おおやけ/public (1273170), not こう/duke (1578630)
+        // User dic overrides Sudachi reading コウ→オオヤケ for standalone 公
+        yield return ["公の利益のために戦う", "公", 1273170, (byte)0];
+        yield return ["公と私の区別がつかない", "公", 1273170, (byte)0];
+        yield return ["彼は公だ", "公", 1273170, (byte)0];
+
+        // 公にする compound expression (2158500) should still resolve correctly
+        yield return ["彼は公にした", "公にした", 2158500, (byte)0];
+
         // 私 standalone → わたし/I (1311110), not し/private affairs (2728300)
         // FixReadingAmbiguity overrides Sudachi シ→ワタシ + reclassifies as Pronoun
         yield return ["この本には修行とあります私修行します", "私", 1311110, (byte)0];
@@ -231,6 +240,9 @@ public class FormSelectionTests
         // ことにする → 事にする/to decide to (2215340), not 異にする/to differ (1640290)
         // FindValidCompoundWordId picks higher-priority expression when multiple expressions match
         yield return ["ことにしないか", "ことにしない", 2215340, (byte)1];
+
+        // 立ち (godan masu-stem) → 立つ verb (1597040), not 立ち noun/departure (1551240)
+        yield return ["宗介のそばに立ち、マオがつぶやいた。", "立ち", 1597040, (byte)0];
 
         // たち after pronoun → 達/pluralising suffix (1416220), not 立ち/departure (1551240)
         // ReclassifyOrphanedSuffixes preserves Suffix POS after Pronoun; POS compatibility matches suf
@@ -300,6 +312,11 @@ public class FormSelectionTests
 
         // 如く stays separate (not merged by CombineAuxiliary) → 如く (1466920)
         yield return ["気附かぬ如くゆっくり", "如く", 1466920, (byte)0];
+
+        // ごとく (kana) → 如く aux-v (1466920, r1), not 五徳 noun (1268560)
+        // noun-no-noun-synergy was incorrectly boosting the noun candidate after の
+        yield return ["便器のごとく真っ白な歯", "ごとく", 1466920, (byte)1];
+        yield return ["間男のごとく割り込んで", "ごとく", 1466920, (byte)1];
 
         // Noun/verb stem disambiguation: when Sudachi tags an ichidan verb 連用形 as a noun,
         // the parser should prefer the verb if it has strictly higher priority than the noun.
@@ -373,6 +390,13 @@ public class FormSelectionTests
         // FixReadingAmbiguity overrides Sudachi ヒマ→スキ for standalone 隙
         yield return ["いなくなった隙に奪い取る", "隙", 1253780, (byte)0];
         yield return ["意識が幼獣に向いている隙に攻撃を加えれば", "隙", 1253780, (byte)0];
+
+        // 額 standalone → ひたい/forehead (1207510), not がく/amount (1207500)
+        // FixReadingAmbiguity overrides Sudachi ガク→ヒタイ; がく primarily in compounds (金額, 総額)
+        yield return ["渡は額に手をあてて、深いため息を吐く。", "額", 1207510, (byte)0];
+        yield return ["額に汗が浮かぶ", "額", 1207510, (byte)0];
+        yield return ["額を押さえる", "額", 1207510, (byte)0];
+        yield return ["額にキスをした", "額", 1207510, (byte)0];
 
         // クスクス → onomatopoeia "chuckle/giggle" (2007850), not couscous (2002980) or cuscus animal (2853576)
         // on-mim POS bonus breaks the three-way tie in favour of the mimetic word
@@ -551,6 +575,9 @@ public class FormSelectionTests
         yield return ["いかんせん頑張ってるだけで勝てるほど甘くはない", "いかんせん", 1919420, (byte)1];
         // セン in katakana → 線 (1391780, line), not 千 (1388740, thousand)
         yield return ["いいセンいってるとかいったじゃないか", "セン", 1391780, (byte)1];
+        // ノリ in katakana → 乗り (1354720, riding/enthusiasm), not 海苔 (1201620, seaweed)
+        yield return ["ノリを合わせて一度話し始めると", "ノリ", 1354720, (byte)2];
+        yield return ["ノリだけで応募するわけじゃありません", "ノリ", 1354720, (byte)2];
         // リッキー = Rickey/Ricky (5091164), not 六気 (2656100)
         yield return ["さすがだなリッキー", "リッキー", 5091164, (byte)0];
 
@@ -590,15 +617,86 @@ public class FormSelectionTests
         yield return ["例のプラスチック爆薬が主食になる、なんてことはないわよね", "ない", 1529520, (byte)1];
         yield return ["この子は悩みなんてないわよね", "ない", 1529520, (byte)1];
 
-        // よう after verb/aux should NOT resolve to interjection よう (2853599, "hey/yo").
-        // 陽 (1605845, n, ichi1+news1+nf06) wins by EntryPriority over 様 (1605840, n-suf, ichi1)
-        yield return ["彼女は彼女で、かなり今回のことについて、いろいろと考えているようだった。", "よう", 1605845, (byte)1];
-        yield return ["直哉の動揺には気付いていないようだった。", "よう", 1605845, (byte)1];
-        yield return ["捜しようがないし", "よう", 1605845, (byte)1];
-        yield return ["文句を垂れているようで、その場を歩きながらめちゃくちゃご機嫌そうな信田。", "よう", 1605845, (byte)1];
-        yield return ["側に浮いていた黒いキューブが変形していたようなので、おそらく装備品でしょう」", "よう", 1605845, (byte)1];
+        // よう after verb/aux should resolve to 様 (1605840, "seeming/manner"), not
+        // interjection よう (2853599) or 陽 (1605845, "positive/yang").
+        yield return ["彼女は彼女で、かなり今回のことについて、いろいろと考えているようだった。", "よう", 1605840, (byte)1];
+        yield return ["直哉の動揺には気付いていないようだった。", "よう", 1605840, (byte)1];
+        yield return ["捜しようがないし", "よう", 1605840, (byte)1];
+        yield return ["文句を垂れているようで、その場を歩きながらめちゃくちゃご機嫌そうな信田。", "よう", 1605840, (byte)1];
+        yield return ["側に浮いていた黒いキューブが変形していたようなので、おそらく装備品でしょう」", "よう", 1605840, (byte)1];
+        yield return ["なかったようで安心した", "よう", 1605840, (byte)1];
+        yield return ["嬉しいようで照れていた", "よう", 1605840, (byte)1];
+
+        // よし as interjection "alright" (2607690), not adverb 縦し "even if" (2607700)
+        yield return ["よし分かった", "よし", 2607690, (byte)0];
+        yield return ["よし起こすとするか", "よし", 2607690, (byte)0];
+
+        // 里 as さと/village (1550760) — Sudachi reading サト disambiguates vs り/unit of distance (1550770)
+        yield return ["鬼が出て『鬼の里』に連れて行かれるからな", "里", 1550760, (byte)0];
+        yield return ["虹の雨で獣人種の里が滅びた時に", "里", 1550760, (byte)0];
+        // 里 as り/unit of distance (1550770) — Sudachi reading リ after numeral
+        yield return ["十里も離れた場所", "里", 1550770, (byte)0];
+
+        // Internal ー stripped: じゃなーい → じゃない expression (2755350)
+        yield return ["じゃなーい", "じゃない", 2755350, (byte)2];
+        // Internal ー stripped: 作ってなーい → 作ってない → 作る (1597890)
+        yield return ["作ってなーい", "作ってない", 1597890, (byte)0];
+        // おーい preserved as-is — real JMDict interjection (2853873)
+        yield return ["おーい", "おーい", 2853873, (byte)1];
+
+        // ドキッと / ドキっと — being startled (1009040), not 土器 (1445310)
+        yield return ["俺は内心ドキッとしたが", "ドキッと", 1009040, (byte)0];
+        yield return ["ちょっとドキっとしたからって", "ドキっと", 1009040, (byte)1];
+
+        // いちゃ (contracted いては) should resolve to いる (1577980), not 射手 (1579670)
+        yield return ["いちゃ駄目", "いちゃ", 1577980, (byte)1];
+        yield return ["ここにいちゃまずいんじゃないか", "いちゃ", 1577980, (byte)1];
+
+        // 気がついて expression should resolve to 気がつく (1591050), not be split into 気+がつ+いて
+        yield return ["気がついてしまう", "気がついて", 1591050, (byte)0];
+        yield return ["まだ気がついていまい", "気がついて", 1591050, (byte)0];
+
+        // Verb 連用形 + 合い compounds: nominalized form should resolve to the compound verb
+        yield return ["殺し合いを始めようとしている", "殺し合い", 2640960, (byte)0];
+        yield return ["胸ぐらの掴み合いが始まりそう", "掴み合い", 1847870, (byte)1];
+        yield return ["じゃれ合いのような会話", "じゃれ合い", 2825730, (byte)0];
+        yield return ["引っ張り合いをして", "引っ張り合い", 2761310, (byte)0];
+
+        // ギリギリ disambiguation: "barely" (1003660) vs "grinding sound" (2832861)
+        // Before copula/verb → adverb "barely" sense
+        yield return ["ただでさえ去年ギリギリだったんだぞ", "ギリギリ", 1003660, (byte)2];
+        yield return ["ギリギリ保っていた形勢が大きく先手に傾いていく", "ギリギリ", 1003660, (byte)2];
+        yield return ["限界ギリギリの譲歩なのだろう", "ギリギリ", 1003660, (byte)2];
+        // Before という → onomatopoeia "grinding" sense (adv-to synergy)
+        yield return ["ギリギリという歯噛みの音が聞こえそうなくらい顔をゆがめ", "ギリギリ", 2832861, (byte)1];
+
+        // ないない → emphatic "no way, no chance" (2835362, uk adj-i), not 内内 "private" (1582450, adv)
+        // Sudachi classifies as 形容詞; POS-compatible tiebreaker prefers adj-i over POS-incompatible adv
+        yield return ["いまどき大学卒業したくらいじゃ就職ないない", "ないない", 2835362, (byte)1];
+        yield return ["ないない、なんにもないわよ！", "ないない", 2835362, (byte)1];
+        yield return ["あたしらに恩を感じることなんてないない", "ないない", 2835362, (byte)1];
+
+        // どの should resolve to adj-pn "which" (1920240), not suffix 殿 "Mr./Mrs." (1442500)
+        yield return ["どの本を買えばいいのやら", "どの", 1920240, (byte)1];
+
+        // 滲み出す should resolve to にじみだす (2859607), not しみだす (2158570)
+        // Sudachi reading ニジミダス disambiguates; compound kept intact so form scoring uses reading
+        yield return ["滲み出す", "滲み出す", 2859607, (byte)0];
+
+        // 拳 standalone → こぶし/fist (1257740), not けん/hand game (2255310)
+        // User dic overrides Sudachi 接尾辞→名詞 so the common noun reading wins
+        yield return ["色が変わるほどに力いっぱい拳を握り締め語り続ける水波に、思わず数歩後ずさる。", "拳", 1257740, (byte)0];
+        yield return ["それから揃えた膝の上で、きゅっと拳を形作る。", "拳", 1257740, (byte)0];
+        yield return ["少年は思わず拳を握りしめた。", "拳", 1257740, (byte)0];
+        yield return ["元気よく拳を突き上げ、空に向かって叫ぶ。", "拳", 1257740, (byte)0];
     }
     
+    public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
+    {
+        // Kana surface ざと should not match kanji 里 — ざと is not a valid standalone reading
+        yield return ["次第に周りからざわざと声が聞こえてくる。", "ざと"];
+    }
+
     [Theory]
     [MemberData(nameof(FormSelectionCases))]
     public async Task FormSelectionTest(string input, string expectedOriginalText, int expectedWordId, byte expectedReadingIndex)
@@ -609,5 +707,15 @@ public class FormSelectionTests
         match.Should().NotBeNull($"expected token '{expectedOriginalText}' in parse results for '{input}'");
         match!.WordId.Should().Be(expectedWordId, $"WordId for '{expectedOriginalText}'");
         match.ReadingIndex.Should().Be(expectedReadingIndex, $"ReadingIndex for '{expectedOriginalText}'");
+    }
+
+    [Theory]
+    [MemberData(nameof(FormSelectionShouldNotMatchCases))]
+    public async Task FormSelectionShouldNotMatchTest(string input, string tokenText)
+    {
+        var results = await Parse(input);
+
+        var match = results.FirstOrDefault(w => w.OriginalText == tokenText);
+        match.Should().BeNull($"token '{tokenText}' should not match any word in '{input}'");
     }
 }

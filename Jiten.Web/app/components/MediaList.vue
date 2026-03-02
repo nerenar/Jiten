@@ -49,7 +49,6 @@
   const sortByOptions = ref([
     { label: 'Title', value: 'title' },
     { label: 'Difficulty', value: 'difficulty' },
-    { label: 'Character Count', value: 'charCount' },
     { label: 'Subdeck Count', value: 'subdeckCount' },
     { label: 'External Rating', value: 'extRating' },
     { label: 'Unique Kanji', value: 'uKanji' },
@@ -60,15 +59,29 @@
     { label: 'Added Date', value: 'addedDate' },
   ]);
 
-  // Array used to reorder the sortByOptions when some options are added or removed to keep the order consistent'
+  const novelSortOptions = ref<{ label: string; value: string }[]>([]);
+  const speechSortOptions = ref<{ label: string; value: string }[]>([]);
+
+  const sortByGrouped = computed(() => {
+    const groups: { label: string; items: { label: string; value: string }[] }[] = [
+      { label: 'General', items: sortByOptions.value },
+    ];
+    if (novelSortOptions.value.length > 0) {
+      groups.push({ label: 'Novel', items: novelSortOptions.value });
+    }
+    if (speechSortOptions.value.length > 0) {
+      groups.push({ label: 'Audio-Video', items: speechSortOptions.value });
+    }
+    return groups;
+  });
+
+  // Array used to reorder the sortByOptions when some options are added or removed to keep the order consistent
   const sortByOrdering = [
     'title',
     'difficulty',
-    'charCount',
     'coverage',
     'uCoverage',
     'extRating',
-    'dialoguePercentage',
     'sentenceLength',
     'uKanji',
     'uWordCount',
@@ -112,6 +125,8 @@
   const subdeckCountMax = ref<number | null>(toNumOrNull(route.query.subdeckCountMax));
   const extRatingMin = ref<number | null>(toNumOrNull(route.query.extRatingMin));
   const extRatingMax = ref<number | null>(toNumOrNull(route.query.extRatingMax));
+  const speechSpeedMin = ref<number | null>(toNumOrNull(route.query.speechSpeedMin));
+  const speechSpeedMax = ref<number | null>(toNumOrNull(route.query.speechSpeedMax));
   const coverageMin = ref<number | null>(toNumOrNull(route.query.coverageMin));
   const coverageMax = ref<number | null>(toNumOrNull(route.query.coverageMax));
   const uniqueCoverageMin = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMin));
@@ -147,6 +162,7 @@
   watch([uniqueKanjiMin, uniqueKanjiMax], () => normalizePair(uniqueKanjiMin, uniqueKanjiMax, 0, 5000));
   watch([subdeckCountMin, subdeckCountMax], () => normalizePair(subdeckCountMin, subdeckCountMax, 0, 2000));
   watch([extRatingMin, extRatingMax], () => normalizePair(extRatingMin, extRatingMax, 0, 2000));
+  watch([speechSpeedMin, speechSpeedMax], () => normalizePair(speechSpeedMin, speechSpeedMax, 0, 800));
   watch([coverageMin, coverageMax], () => normalizePair(coverageMin, coverageMax, 0, 100));
   watch([uniqueCoverageMin, uniqueCoverageMax], () => normalizePair(uniqueCoverageMin, uniqueCoverageMax, 0, 100));
 
@@ -163,6 +179,8 @@
     subdeckCountMax: subdeckCountMax.value,
     extRatingMin: extRatingMin.value,
     extRatingMax: extRatingMax.value,
+    speechSpeedMin: speechSpeedMin.value,
+    speechSpeedMax: speechSpeedMax.value,
     coverageMin: coverageMin.value,
     coverageMax: coverageMax.value,
     uniqueCoverageMin: uniqueCoverageMin.value,
@@ -189,6 +207,8 @@
         subdeckCountMax: subdeckCountMax.value,
         extRatingMin: extRatingMin.value,
         extRatingMax: extRatingMax.value,
+        speechSpeedMin: speechSpeedMin.value,
+        speechSpeedMax: speechSpeedMax.value,
         coverageMin: coverageMin.value,
         coverageMax: coverageMax.value,
         uniqueCoverageMin: uniqueCoverageMin.value,
@@ -218,6 +238,8 @@
           subdeckCountMax: toUndef(subdeckCountMax.value) as any,
           extRatingMin: toUndef(extRatingMin.value) as any,
           extRatingMax: toUndef(extRatingMax.value) as any,
+          speechSpeedMin: toUndef(speechSpeedMin.value) as any,
+          speechSpeedMax: toUndef(speechSpeedMax.value) as any,
           coverageMin: toUndef(coverageMin.value) as any,
           coverageMax: toUndef(coverageMax.value) as any,
           uniqueCoverageMin: toUndef(uniqueCoverageMin.value) as any,
@@ -236,7 +258,7 @@
   );
 
   watch(
-    [charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
+    [charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
     () => {
       updateFiltersDebounced();
     }
@@ -258,17 +280,28 @@
   );
 
   const updateOptions = () => {
-    const showDialogueOptionMediaTypes = [MediaType.Novel, MediaType.VisualNovel, MediaType.WebNovel, MediaType.NonFiction];
+    const showspeechSpeedOptionMediaTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio];
 
-    if (mediaType.value == null || showDialogueOptionMediaTypes.includes(Number(mediaType.value))) {
-      if (!sortByOptions.value.some((o) => o.value === 'dialoguePercentage')) {
-        sortByOptions.value.push({ label: 'Dialogue Percentage', value: 'dialoguePercentage' });
-      }
+    if (mediaType.value == null || !showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
+      novelSortOptions.value = [
+        { label: 'Character Count', value: 'charCount' },
+        { label: 'Dialogue Percentage', value: 'dialoguePercentage' },
+      ];
     } else {
-      if (sortByOptions.value.some((o) => o.value === 'dialoguePercentage')) {
-        sortByOptions.value = sortByOptions.value.filter((o) => o.value !== 'dialoguePercentage');
+      novelSortOptions.value = [];
+      if (sortBy.value === 'charCount' || sortBy.value === 'dialoguePercentage') {
+        sortBy.value = 'title';
       }
-      if (sortBy.value === 'dialoguePercentage') {
+    }
+
+    if (mediaType.value == null || showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
+      speechSortOptions.value = [
+        { label: 'Speech Speed', value: 'speechSpeed' },
+        { label: 'Speech Duration', value: 'speechDuration' },
+      ];
+    } else {
+      speechSortOptions.value = [];
+      if (sortBy.value === 'speechSpeed' || sortBy.value === 'speechDuration') {
         sortBy.value = 'title';
       }
     }
@@ -316,6 +349,8 @@
     subdeckCountMax.value = null;
     extRatingMin.value = null;
     extRatingMax.value = null;
+    speechSpeedMin.value = null;
+    speechSpeedMax.value = null;
     coverageMin.value = null;
     coverageMax.value = null;
     uniqueCoverageMin.value = null;
@@ -348,6 +383,8 @@
         subdeckCountMax: undefined,
         extRatingMin: undefined,
         extRatingMax: undefined,
+        speechSpeedMin: undefined,
+        speechSpeedMax: undefined,
         coverageMin: undefined,
         coverageMax: undefined,
         uniqueCoverageMin: undefined,
@@ -460,6 +497,8 @@
       subdeckCountMax: computed(() => debouncedFilters.value.subdeckCountMax),
       extRatingMin: computed(() => debouncedFilters.value.extRatingMin),
       extRatingMax: computed(() => debouncedFilters.value.extRatingMax),
+      speechSpeedMin: computed(() => debouncedFilters.value.speechSpeedMin),
+      speechSpeedMax: computed(() => debouncedFilters.value.speechSpeedMax),
       coverageMin: computed(() => debouncedFilters.value.coverageMin),
       coverageMax: computed(() => debouncedFilters.value.coverageMax),
       uniqueCoverageMin: computed(() => debouncedFilters.value.uniqueCoverageMin),
@@ -532,14 +571,20 @@
         <FloatLabel variant="on" class="w-full">
           <Select
             v-model="sortBy"
-            :options="sortByOptions"
+            :options="sortByGrouped"
             option-label="label"
             option-value="value"
+            option-group-label="label"
+            option-group-children="items"
             placeholder="Sort by"
             input-id="sortBy"
             class="w-full md:w-56"
-            scroll-height="30vh"
-          />
+            scroll-height="50vh"
+          >
+            <template #optiongroup="{ option }">
+              <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
+            </template>
+          </Select>
           <label for="sortBy">Sort by</label>
         </FloatLabel>
         <Button class="w-12" @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending">
@@ -573,6 +618,8 @@
         v-model:subdeck-count-max="subdeckCountMax"
         v-model:ext-rating-min="extRatingMin"
         v-model:ext-rating-max="extRatingMax"
+        v-model:subtitle-rate-min="speechSpeedMin"
+        v-model:subtitle-rate-max="speechSpeedMax"
         v-model:coverage-min="coverageMin"
         v-model:coverage-max="coverageMax"
         v-model:unique-coverage-min="uniqueCoverageMin"

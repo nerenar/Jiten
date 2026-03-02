@@ -249,36 +249,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var wordsWithPositions = new List<(ParsedWordDto Word, int Position)>();
         int currentPosition = 0;
 
-        foreach (var word in parsedWords)
-        {
-            int position = text.IndexOf(word.OriginalText, currentPosition, StringComparison.Ordinal);
-            if (position >= 0)
-            {
-                wordsWithPositions.Add((new ParsedWordDto(word), position));
-                currentPosition = position + word.OriginalText.Length;
-            }
-        }
-
-        currentPosition = 0;
-        foreach (var (word, position) in wordsWithPositions)
-        {
-            // If there's a gap before this word, add it as an unparsed word
-            if (position > currentPosition)
-            {
-                string gap = text.Substring(currentPosition, position - currentPosition);
-                allWords.Add(new ParsedWordDto(gap));
-            }
-
-            allWords.Add(word);
-            currentPosition = position + word.OriginalText.Length;
-        }
-
-        if (currentPosition < text.Length)
-        {
-            string gap = text.Substring(currentPosition);
-            allWords.Add(new ParsedWordDto(gap));
-        }
-
+        BuildParseResult(text, parsedWords, wordsWithPositions, allWords);
         return Results.Ok(allWords);
     }
 
@@ -305,35 +276,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var wordsWithPositions = new List<(ParsedWordDto Word, int Position)>();
         int currentPosition = 0;
 
-        foreach (var word in parsedWords)
-        {
-            int position = normalisedText.IndexOf(word.OriginalText, currentPosition, StringComparison.Ordinal);
-            if (position >= 0)
-            {
-                wordsWithPositions.Add((new ParsedWordDto(word), position));
-                currentPosition = position + word.OriginalText.Length;
-            }
-        }
-
-        currentPosition = 0;
-        foreach (var (word, position) in wordsWithPositions)
-        {
-            if (position > currentPosition)
-            {
-                string gap = normalisedText.Substring(currentPosition, position - currentPosition);
-                allWords.Add(new ParsedWordDto(gap));
-            }
-
-            allWords.Add(word);
-            currentPosition = position + word.OriginalText.Length;
-        }
-
-        if (currentPosition < normalisedText.Length)
-        {
-            string gap = normalisedText.Substring(currentPosition);
-            allWords.Add(new ParsedWordDto(gap));
-        }
-
+        BuildParseResult(normalisedText, parsedWords, wordsWithPositions, allWords);
         return Results.Ok(new ParseNormalisedResultDto { NormalisedText = normalisedText, Words = allWords });
     }
 
@@ -737,4 +680,45 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     }
 
     #endregion
+
+    private static void BuildParseResult(
+        string sourceText,
+        List<DeckWord> parsedWords,
+        List<(ParsedWordDto Word, int Position)> wordsWithPositions,
+        List<ParsedWordDto> allWords)
+    {
+        int currentPosition = 0;
+
+        foreach (var word in parsedWords)
+        {
+            var (position, sourceLength) = TokenPositionHelper.FindTokenInSource(sourceText, word.OriginalText, currentPosition);
+            if (position >= 0)
+            {
+                var dto = new ParsedWordDto(word);
+                if (sourceLength != word.OriginalText.Length)
+                    dto.OriginalText = sourceText.Substring(position, sourceLength);
+                wordsWithPositions.Add((dto, position));
+                currentPosition = position + sourceLength;
+            }
+        }
+
+        currentPosition = 0;
+        foreach (var (word, position) in wordsWithPositions)
+        {
+            if (position > currentPosition)
+            {
+                string gap = sourceText.Substring(currentPosition, position - currentPosition);
+                allWords.Add(new ParsedWordDto(gap));
+            }
+
+            allWords.Add(word);
+            currentPosition = position + word.OriginalText.Length;
+        }
+
+        if (currentPosition < sourceText.Length)
+        {
+            string gap = sourceText.Substring(currentPosition);
+            allWords.Add(new ParsedWordDto(gap));
+        }
+    }
 }

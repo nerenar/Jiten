@@ -20,6 +20,10 @@ internal static class FormCandidateSelector
         ParserDiagnostics? diagnostics = null,
         int topN = 5)
     {
+        if (context.IsKanaSurface)
+            allCandidates.RemoveAll(c =>
+                KanaScoringHelpers.IsKanaSurfaceWithNoMatchingReading(context, c.Word, c.Form.Text));
+
         if (allCandidates.Count == 0)
             return new CandidateSelectionResult(null, [], null);
 
@@ -38,7 +42,9 @@ internal static class FormCandidateSelector
 
             int score = EffectiveScore(candidate);
             if (score > bestScore ||
-                (score == bestScore && best != null && candidate.Word.WordId < best.Word.WordId) ||
+                (score == bestScore && best != null && !candidate.IsPosIncompatibleDirectSurface && best.IsPosIncompatibleDirectSurface) ||
+                (score == bestScore && best != null && candidate.IsPosIncompatibleDirectSurface == best.IsPosIncompatibleDirectSurface
+                                   && candidate.Word.WordId < best.Word.WordId) ||
                 (score == bestScore && best != null && candidate.Word.WordId == best.Word.WordId
                                    && HasPreferredConjugation(candidate, best)))
             {
@@ -110,7 +116,10 @@ internal static class FormCandidateSelector
 
         foreach (var candidate in allCandidates)
         {
-            int adjusted = ScoringPolicy.EffectiveScore(candidate) + bonusFunc(candidate);
+            int bonus = bonusFunc(candidate);
+            if (candidate.IsPosIncompatibleDirectSurface && bonus > 0)
+                bonus = 0;
+            int adjusted = ScoringPolicy.EffectiveScore(candidate) + bonus;
             if (adjusted > bestAdjusted ||
                 (adjusted == bestAdjusted && best != null && candidate.Word.WordId < best.Word.WordId) ||
                 (adjusted == bestAdjusted && best != null && candidate.Word.WordId == best.Word.WordId

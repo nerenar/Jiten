@@ -10,7 +10,8 @@ internal static class UncertaintyDetector
         PartOfSpeech.SupplementarySymbol, PartOfSpeech.Symbol, PartOfSpeech.Conjunction,
         PartOfSpeech.Adnominal, PartOfSpeech.Prefix, PartOfSpeech.BlankSpace,
         PartOfSpeech.Name, PartOfSpeech.Suffix, PartOfSpeech.NounSuffix,
-        PartOfSpeech.Counter, PartOfSpeech.Numeral, PartOfSpeech.Filler
+        PartOfSpeech.Counter, PartOfSpeech.Numeral, PartOfSpeech.Filler,
+        PartOfSpeech.Expression
     ];
 
     public static List<UncertainSpan> FindSpans(SentenceInfo sentence, Dictionary<string, List<int>> lookups)
@@ -63,8 +64,17 @@ internal static class UncertaintyDetector
                     if (lookups.TryGetValue(strippedHira, out ids) && ids.Count > 0) return true;
                 }
             }
+
+            if (HasGodanDictFormMatch(text, lookups) || (hira != text && HasGodanDictFormMatch(hira, lookups)))
+                return true;
         }
         catch { }
         return false;
+    }
+
+    private static bool HasGodanDictFormMatch(string text, Dictionary<string, List<int>> lookups)
+    {
+        var dictForm = MorphologicalAnalyser.TryGodanDictForm(text);
+        return dictForm != null && lookups.TryGetValue(dictForm, out var ids) && ids.Count > 0;
     }
 }

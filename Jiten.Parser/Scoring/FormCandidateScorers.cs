@@ -26,7 +26,8 @@ internal static class FormCandidateScorer
 
         int scriptScore = ScriptScorer.Score(candidate, context);
         int readingMatchScore = ReadingScorer.Score(candidate, context,
-            conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied);
+            conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied,
+            archaicPosTypes);
 
         return new FormScoreTrace(
                                   wordScore,
@@ -163,6 +164,8 @@ internal static class FormPriorityScorer
         var nf = priorities.FirstOrDefault(p => p.StartsWith("nf"));
         if (nf is { Length: > 2 } && int.TryParse(nf[2..], out var nfRank))
             formPriorityScore += Math.Max(0, 3 - (int)Math.Round(nfRank / 10f));
+
+        if (priorities.Contains("jiten")) formPriorityScore += 25;
 
         if (formPriorityScore == 0)
         {
@@ -409,16 +412,16 @@ internal static class PenaltyScorer
                     // If the noun's kana reading exactly matches Sudachi's reading, it IS the right word
                     // for this surface — use a softer penalty so reading evidence still counts.
                     // E.g. 生き (noun いき, DictForm=生きる): reading match confirms the noun entry.
-                    if (!string.IsNullOrEmpty(context.SudachiReading) && !context.IsKanaSurface)
+                    // Only for ichidan verb stems (DictForm = Surface + る): these commonly stand alone
+                    // as nouns/prefixes (生き, 食べ). Godan masu-stems (立ち from 立つ, 持ち from 持つ)
+                    // are almost always verbal and should get the full penalty.
+                    if (!string.IsNullOrEmpty(context.SudachiReading) && !context.IsKanaSurface
+                        && context.DictionaryForm == context.Surface + "る")
                     {
                         var sudachiHira = KanaScoringHelpers.ToNormalizedHiragana(context.SudachiReading, convertLongVowelMark: false);
                         bool hasExactReadingMatch = candidate.Word.Forms
                             .Where(f => f.FormType == JmDictFormType.KanaForm)
                             .Any(f => KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false) == sudachiHira);
-                        // Only grant the soft penalty to prefix-tagged nouns (pref POS): these are
-                        // independent morphological units (e.g. 生き いき = liveliness, used in 生き物/生き方)
-                        // that stand on their own. Plain verb-stem nouns without pref (答え, 構え, etc.)
-                        // remain at full penalty because they more often appear as verb masu-stems.
                         if (hasExactReadingMatch && candidate.Word.PartsOfSpeech.Contains("pref"))
                         {
                             surfaceMatchScore -= 100;
@@ -529,7 +532,8 @@ internal static class ScriptScorer
 
 internal static class ReadingScorer
 {
-    public static int Score(FormCandidate candidate, FormScoringContext context, bool identityPenaltyApplied)
+    public static int Score(FormCandidate candidate, FormScoringContext context, bool identityPenaltyApplied,
+        IReadOnlySet<string>? archaicPosTypes = null)
     {
         int readingMatchScore = 0;
         if (!string.IsNullOrEmpty(context.SudachiReading) && !context.IsKanaSurface)
@@ -544,7 +548,7 @@ internal static class ReadingScorer
                                                                                             convertLongVowelMark: false) == sudachiHira);
             if (hasMatchingReading)
             {
-                readingMatchScore += 50;
+                readingMatchScore += 70;
             }
             // Prefix match — for ichidan conjugated stems.
             else if (sudachiHira.Length > 1
@@ -557,7 +561,7 @@ internal static class ReadingScorer
                                        && hiragana.StartsWith(sudachiHira, StringComparison.Ordinal);
                             }))
             {
-                readingMatchScore += 50;
+                readingMatchScore += 70;
             }
             // Reverse prefix match — conjugated reading starts with an ichidan verb's kana stem.
             // E.g., Sudachi reading "できません" starts with "でき" (stem of できる).
@@ -574,7 +578,7 @@ internal static class ReadingScorer
                                 return sudachiHira.StartsWith(formStem, StringComparison.Ordinal);
                             }))
             {
-                readingMatchScore += 50;
+                readingMatchScore += 70;
             }
             // Stem fallback — for godan conjugated stems.
             else if (sudachiHira.Length > 1)
@@ -605,8 +609,30 @@ internal static class ReadingScorer
                                       });
                 }
 
+                // っ-onbin fallback for godan タ行/ワ行 (e.g. 勝った reading かった vs form かつ)
+                if (!hasStemMatch && sudachiStem.Length > 1 && sudachiStem[^1] == 'っ')
+                {
+                    var rootStem = sudachiStem[..^1];
+                    hasStemMatch = word.Forms
+                                      .Where(f => f.FormType == JmDictFormType.KanaForm)
+                                      .Any(f =>
+                                      {
+                                          var hiragana = KanaScoringHelpers.ToNormalizedHiragana(
+                                              f.Text, convertLongVowelMark: false);
+                                          return hiragana.Length > 1 && hiragana[..^1] == rootStem;
+                                      });
+                }
+
                 if (hasStemMatch)
                     readingMatchScore += 25;
+            }
+
+            if (readingMatchScore > 0 && archaicPosTypes is { Count: > 0 })
+            {
+                var readingPos = ReadingPosHelper.GetPosForReading(word, candidate.ReadingIndex);
+                IEnumerable<string> posToCheck = readingPos.Count > 0 ? readingPos : word.PartsOfSpeech;
+                if (posToCheck.Any(archaicPosTypes.Contains))
+                    readingMatchScore /= 2;
             }
         }
 
@@ -664,6 +690,23 @@ internal static class KanaScoringHelpers
         }
 
         return match;
+    }
+
+    public static bool IsKanaSurfaceWithNoMatchingReading(
+        FormScoringContext context, JmDictWord word, string formText)
+    {
+        if (!context.IsKanaSurface || !ContainsKanji(formText)) return false;
+        if (!word.Forms.Any(f => !ContainsKanji(f.Text))) return false;
+
+        var surfaceFirstChar = context.SurfaceHiragana.Length > 0 ? context.SurfaceHiragana[0] : '\0';
+        foreach (var f in word.Forms)
+        {
+            if (ContainsKanji(f.Text)) continue;
+            var fHiragana = ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
+            if (fHiragana.Length > 0 && fHiragana[0] == surfaceFirstChar)
+                return false;
+        }
+        return true;
     }
 
     public static bool ContainsKanji(string text)

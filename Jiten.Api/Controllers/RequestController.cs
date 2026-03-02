@@ -32,7 +32,7 @@ public partial class RequestController(
     ILogger<RequestController> logger) : ControllerBase
 {
     private static readonly HashSet<string> AllowedExtensions =
-        [".srt", ".ass", ".ssa", ".epub", ".zip", ".rar", ".7z", ".txt"];
+        [".srt", ".ass", ".ssa", ".epub", ".zip", ".rar", ".7z", ".txt", ".mokuro"];
 
     private const long MaxUploadSize = 104_857_600; // 100MB
     private const long MaxUploadBytesPerDay = 500 * 1024 * 1024; // 500MB per 24h
@@ -51,7 +51,9 @@ public partial class RequestController(
         [FromQuery] string sort = "votes",
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 20,
-        [FromQuery] bool mine = false)
+        [FromQuery] bool mine = false,
+        [FromQuery] string? search = null,
+        [FromQuery] string? attachments = null)
     {
         var userId = currentUserService.UserId;
         if (string.IsNullOrEmpty(userId))
@@ -64,11 +66,22 @@ public partial class RequestController(
         if (mine)
             query = query.Where(r => r.RequesterId == userId);
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var escaped = search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+            query = query.Where(r => EF.Functions.ILike(r.Title, $"%{escaped}%", "\\"));
+        }
+
         if (mediaType.HasValue)
             query = query.Where(r => r.MediaType == mediaType.Value);
 
         if (status.HasValue)
             query = query.Where(r => r.Status == status.Value);
+
+        if (attachments == "yes")
+            query = query.Where(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted));
+        else if (attachments == "no")
+            query = query.Where(r => !context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted));
 
         var totalCount = await query.CountAsync();
 
@@ -720,8 +733,6 @@ public partial class RequestController(
             .OrderBy(c => c.CreatedAt)
             .ToListAsync();
 
-        // For admin view, look up uploader emails and usernames
-        Dictionary<string, string?> uploaderEmails = new();
         Dictionary<string, string?> userNames = new();
         if (isAdmin)
         {
@@ -732,10 +743,9 @@ public partial class RequestController(
                 var users = await userContext.Users
                     .AsNoTracking()
                     .Where(u => allUserIds.Contains(u.Id))
-                    .Select(u => new { u.Id, u.Email, u.UserName })
+                    .Select(u => new { u.Id, u.UserName })
                     .ToListAsync();
 
-                uploaderEmails = users.ToDictionary(u => u.Id, u => u.Email);
                 userNames = users.ToDictionary(u => u.Id, u => u.UserName);
             }
         }
@@ -757,7 +767,7 @@ public partial class RequestController(
                         FileSize = c.Upload.FileSize,
                         OriginalFileCount = c.Upload.OriginalFileCount,
                         CreatedAt = c.Upload.CreatedAt,
-                        UploaderEmail = uploaderEmails.GetValueOrDefault(c.UserId),
+                        UploaderName = userNames.GetValueOrDefault(c.UserId),
                         AdminReviewed = c.Upload.AdminReviewed,
                         AdminNote = c.Upload.AdminNote,
                         FileDeleted = c.Upload.FileDeleted

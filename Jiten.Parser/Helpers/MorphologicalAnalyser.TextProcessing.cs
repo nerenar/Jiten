@@ -25,7 +25,7 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(外|家)出(ない|なかった|なく)")]
     private static partial Regex DeNaiCompoundRegex();
 
-    [GeneratedRegex(@"(?<=.\p{IsHiragana})(?<!うわ)([っッ])(?=[！!？?。、,\s]|$)")]
+    [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?=[！!？?。、,\s]|$)")]
     private static partial Regex EmphaticTsuRegex();
 
     [GeneratedRegex(@"ホント(バカ|ダメ|マジ|クソ|アホ)")]

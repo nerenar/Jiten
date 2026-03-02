@@ -101,6 +101,22 @@ public class Deck
     public int SentenceCount { get; set; }
 
     /// <summary>
+    /// Total duration of the speech extracted from the subtitles milliseconds (merged intervals)
+    /// </summary>
+    public long SpeechDuration { get; set; }
+
+    /// <summary>
+    /// Total mora count for the speech extracted from the subtitles text (after reading conversion)
+    /// </summary>
+    public long SpeechMoraCount { get; set; }
+
+    /// <summary>
+    /// Mora per minute, computed from SpeechMoraCount and SpeechDuration
+    /// </summary>
+    [NotMapped]
+    public double SpeechSpeed => SpeechDuration > 0 ? SpeechMoraCount / (SpeechDuration / 60000.0) : 0;
+
+    /// <summary>
     /// Average sentence length with decimal precision
     /// </summary>
     public float AverageSentenceLength => SentenceCount is 0 or 1 ? 0 : (float)CharacterCount / SentenceCount;
@@ -240,6 +256,18 @@ public class Deck
         UniqueWordCount = DeckWords.Select(dw => new { dw.WordId, dw.ReadingIndex }).Distinct().Count();
         UniqueWordUsedOnceCount = DeckWords.Where(dw => dw.Occurrences == 1).Select(dw => new { dw.WordId, dw.ReadingIndex }).Distinct().Count();
         SentenceCount = Children.Sum(c => c.SentenceCount);
+        var childrenWithSpeech = Children.Where(c => c.SpeechDuration > 0).ToList();
+        if (childrenWithSpeech.Count > 0)
+        {
+            var avgSpeed = childrenWithSpeech.Average(c => c.SpeechSpeed);
+            SpeechDuration = childrenWithSpeech.Sum(c => c.SpeechDuration);
+            SpeechMoraCount = (long)(avgSpeed * (SpeechDuration / 60000.0));
+        }
+        else
+        {
+            SpeechDuration = 0;
+            SpeechMoraCount = 0;
+        }
         Difficulty = Children.Average(c => c.Difficulty);
         DialoguePercentage = Children.Sum(c => c.DialoguePercentage) / Children.Count;
 

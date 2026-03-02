@@ -383,6 +383,11 @@ public static class JitenHelper
         existingDeck.UniqueKanjiCount = deck.UniqueKanjiCount;
         existingDeck.UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
         existingDeck.SentenceCount = deck.SentenceCount;
+        if (deck.SpeechDuration > 0 || existingDeck.SpeechDuration == 0)
+        {
+            existingDeck.SpeechDuration = deck.SpeechDuration;
+            existingDeck.SpeechMoraCount = deck.SpeechMoraCount;
+        }
         existingDeck.Difficulty = deck.Difficulty;
         existingDeck.DialoguePercentage = deck.DialoguePercentage;
         existingDeck.RawText = deck.RawText;
@@ -464,6 +469,8 @@ public static class JitenHelper
                     UniqueWordCount = child.UniqueWordCount,
                     UniqueKanjiCount = child.UniqueKanjiCount,
                     SentenceCount = child.SentenceCount,
+                    SpeechDuration = child.SpeechDuration,
+                    SpeechMoraCount = child.SpeechMoraCount,
                     WordCount = child.WordCount,
                     Difficulty = child.Difficulty,
                     DialoguePercentage = child.DialoguePercentage,
