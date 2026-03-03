@@ -127,6 +127,8 @@
   const extRatingMax = ref<number | null>(toNumOrNull(route.query.extRatingMax));
   const speechSpeedMin = ref<number | null>(toNumOrNull(route.query.speechSpeedMin));
   const speechSpeedMax = ref<number | null>(toNumOrNull(route.query.speechSpeedMax));
+  const speechDurationMin = ref<number | null>(toNumOrNull(route.query.speechDurationMin));
+  const speechDurationMax = ref<number | null>(toNumOrNull(route.query.speechDurationMax));
   const coverageMin = ref<number | null>(toNumOrNull(route.query.coverageMin));
   const coverageMax = ref<number | null>(toNumOrNull(route.query.coverageMax));
   const uniqueCoverageMin = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMin));
@@ -163,6 +165,7 @@
   watch([subdeckCountMin, subdeckCountMax], () => normalizePair(subdeckCountMin, subdeckCountMax, 0, 2000));
   watch([extRatingMin, extRatingMax], () => normalizePair(extRatingMin, extRatingMax, 0, 2000));
   watch([speechSpeedMin, speechSpeedMax], () => normalizePair(speechSpeedMin, speechSpeedMax, 0, 800));
+  watch([speechDurationMin, speechDurationMax], () => normalizePair(speechDurationMin, speechDurationMax, 0, 300));
   watch([coverageMin, coverageMax], () => normalizePair(coverageMin, coverageMax, 0, 100));
   watch([uniqueCoverageMin, uniqueCoverageMax], () => normalizePair(uniqueCoverageMin, uniqueCoverageMax, 0, 100));
 
@@ -181,6 +184,8 @@
     extRatingMax: extRatingMax.value,
     speechSpeedMin: speechSpeedMin.value,
     speechSpeedMax: speechSpeedMax.value,
+    speechDurationMin: speechDurationMin.value,
+    speechDurationMax: speechDurationMax.value,
     coverageMin: coverageMin.value,
     coverageMax: coverageMax.value,
     uniqueCoverageMin: uniqueCoverageMin.value,
@@ -209,6 +214,8 @@
         extRatingMax: extRatingMax.value,
         speechSpeedMin: speechSpeedMin.value,
         speechSpeedMax: speechSpeedMax.value,
+        speechDurationMin: speechDurationMin.value,
+        speechDurationMax: speechDurationMax.value,
         coverageMin: coverageMin.value,
         coverageMax: coverageMax.value,
         uniqueCoverageMin: uniqueCoverageMin.value,
@@ -240,6 +247,8 @@
           extRatingMax: toUndef(extRatingMax.value) as any,
           speechSpeedMin: toUndef(speechSpeedMin.value) as any,
           speechSpeedMax: toUndef(speechSpeedMax.value) as any,
+          speechDurationMin: toUndef(speechDurationMin.value) as any,
+          speechDurationMax: toUndef(speechDurationMax.value) as any,
           coverageMin: toUndef(coverageMin.value) as any,
           coverageMax: toUndef(coverageMax.value) as any,
           uniqueCoverageMin: toUndef(uniqueCoverageMin.value) as any,
@@ -258,7 +267,7 @@
   );
 
   watch(
-    [charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
+    [charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax, speechDurationMin, speechDurationMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
     () => {
       updateFiltersDebounced();
     }
@@ -351,6 +360,8 @@
     extRatingMax.value = null;
     speechSpeedMin.value = null;
     speechSpeedMax.value = null;
+    speechDurationMin.value = null;
+    speechDurationMax.value = null;
     coverageMin.value = null;
     coverageMax.value = null;
     uniqueCoverageMin.value = null;
@@ -385,6 +396,8 @@
         extRatingMax: undefined,
         speechSpeedMin: undefined,
         speechSpeedMax: undefined,
+        speechDurationMin: undefined,
+        speechDurationMax: undefined,
         coverageMin: undefined,
         coverageMax: undefined,
         uniqueCoverageMin: undefined,
@@ -499,6 +512,8 @@
       extRatingMax: computed(() => debouncedFilters.value.extRatingMax),
       speechSpeedMin: computed(() => debouncedFilters.value.speechSpeedMin),
       speechSpeedMax: computed(() => debouncedFilters.value.speechSpeedMax),
+      speechDurationMin: computed(() => debouncedFilters.value.speechDurationMin),
+      speechDurationMax: computed(() => debouncedFilters.value.speechDurationMax),
       coverageMin: computed(() => debouncedFilters.value.coverageMin),
       coverageMax: computed(() => debouncedFilters.value.coverageMax),
       uniqueCoverageMin: computed(() => debouncedFilters.value.uniqueCoverageMin),
@@ -620,6 +635,8 @@
         v-model:ext-rating-max="extRatingMax"
         v-model:subtitle-rate-min="speechSpeedMin"
         v-model:subtitle-rate-max="speechSpeedMax"
+        v-model:speech-duration-min="speechDurationMin"
+        v-model:speech-duration-max="speechDurationMax"
         v-model:coverage-min="coverageMin"
         v-model:coverage-max="coverageMax"
         v-model:unique-coverage-min="uniqueCoverageMin"

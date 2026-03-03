@@ -22,13 +22,29 @@ public partial class SubtitleExtractor
         "花語製作通用",
         "CN",
         "CN2",
+        "Default-CN",
         "OPCN",
         "EDCN",
+        "EDJP",
+        "ED",
         "SCR",
         "STAFF",
         "CHI",
+        "NAME",
         "EDSC"
     ];
+    
+    [GeneratedRegex(@"\((.*?)\)")]
+    private static partial Regex RubyPattern();
+
+    [GeneratedRegex(@"（(.*?)）")]
+    private static partial Regex FullWidthRubyPattern();
+
+    [GeneratedRegex(@"\[.*?\]")]
+    private static partial Regex SquareBracketPattern();
+    
+    [GeneratedRegex(@"\{.*?}]")]
+    private static partial Regex CurlyBracesPattern();
 
     /// <summary>
     /// Extract plain text from a subtitle file (.ass, .srt, .ssa)
@@ -38,7 +54,7 @@ public partial class SubtitleExtractor
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
 
         // Preprocess ASS files (remove comments, cn lines)
-        if (extension == ".ass")
+        if (extension is ".ass" or ".ssa")
         {
             filePath = await PreprocessAssFile(filePath);
         }
@@ -56,6 +72,7 @@ public partial class SubtitleExtractor
             lines[i] = RubyPattern().Replace(lines[i], "");
             lines[i] = FullWidthRubyPattern().Replace(lines[i], "");
             lines[i] = SquareBracketPattern().Replace(lines[i], "");
+            lines[i] = CurlyBracesPattern().Replace(lines[i], "");
 
             if (string.IsNullOrWhiteSpace(lines[i]))
             {
@@ -101,7 +118,7 @@ public partial class SubtitleExtractor
             .Where(line =>
                 !line.TrimStart().StartsWith(';') &&
                 !line.StartsWith("Comment:", StringComparison.OrdinalIgnoreCase) &&
-                !ChineseLineMarkers.Any(marker => line.Contains(marker, StringComparison.Ordinal)))
+                !ChineseLineMarkers.Any(marker => line.Contains(marker, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         await File.WriteAllLinesAsync(ssaPath, filteredLines);
         return ssaPath;
@@ -372,15 +389,6 @@ public partial class SubtitleExtractor
 
         return (int)((hours * 3600 + minutes * 60 + seconds) * 1000L + centiseconds * 10L);
     }
-
-    [GeneratedRegex(@"\((.*?)\)")]
-    private static partial Regex RubyPattern();
-
-    [GeneratedRegex(@"（(.*?)）")]
-    private static partial Regex FullWidthRubyPattern();
-
-    [GeneratedRegex(@"\[.*?\]")]
-    private static partial Regex SquareBracketPattern();
 }
 
 public readonly record struct SubtitleItem(int StartMs, int EndMs, string Text);

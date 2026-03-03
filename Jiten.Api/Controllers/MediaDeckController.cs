@@ -268,6 +268,7 @@ public class MediaDeckController(
                                                                       float? coverageMin = null, float? coverageMax = null,
                                                                       float? uniqueCoverageMin = null, float? uniqueCoverageMax = null,
                                                                       float? speechSpeedMin = null, float? speechSpeedMax = null,
+                                                                      int? speechDurationMin = null, int? speechDurationMax = null,
                                                                       bool? excludeSequels = null)
     {
         // Disable response caching for authenticated users
@@ -417,6 +418,12 @@ public class MediaDeckController(
             if (speechSpeedMax != null)
                 query = query.Where(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0) <= speechSpeedMax);
         }
+
+        if (speechDurationMin != null)
+            query = query.Where(d => d.SpeechDuration >= (long)speechDurationMin * 3_600_000L);
+
+        if (speechDurationMax != null)
+            query = query.Where(d => d.SpeechDuration <= (long)speechDurationMax * 3_600_000L);
 
         // Genre filters
         if (!string.IsNullOrEmpty(genres))

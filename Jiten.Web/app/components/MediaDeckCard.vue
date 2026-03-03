@@ -248,7 +248,7 @@
                 <div class="flex flex-col gap-x-6 gap-y-2" :class="isCompact ? '' : 'md:flex-row md:flex-wrap'">
                   <div class="w-full md:w-64">
                     <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex justify-between flex-wrap stat-row">
-                      <Tooltip content="Total duration of speech, excluding silence.">
+                      <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + deck.characterCount.toLocaleString()">
                         <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Speech duration</span>
                       </Tooltip>
                       <span class="tabular-nums font-semibold">{{ formattedSpeechDuration }}</span>

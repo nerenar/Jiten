@@ -28,6 +28,8 @@
   const extRatingMax = defineModel<number | null>('extRatingMax', { required: true });
   const speechSpeedMin = defineModel<number | null>('speechSpeedMin', { required: true });
   const speechSpeedMax = defineModel<number | null>('speechSpeedMax', { required: true });
+  const speechDurationMin = defineModel<number | null>('speechDurationMin', { required: true });
+  const speechDurationMax = defineModel<number | null>('speechDurationMax', { required: true });
   const includeGenres = defineModel<number[]>('includeGenres', { required: true });
   const excludeGenres = defineModel<number[]>('excludeGenres', { required: true });
   const includeTags = defineModel<number[]>('includeTags', { required: true });
@@ -96,11 +98,26 @@
   const tagFilteredCount = computed(() => filteredTags.value.length);
   const tagTotalCount = computed(() => tags.value.length);
 
-  const charCountRange = computed<[number, number]>({
-    get: () => [charCountMin.value ?? 0, charCountMax.value ?? 20000000],
+  const CHAR_COUNT_STEPS: number[] = [];
+  for (let v = 0; v <= 10_000; v += 1_000) CHAR_COUNT_STEPS.push(v);
+  for (let v = 20_000; v <= 1_000_000; v += 10_000) CHAR_COUNT_STEPS.push(v);
+  for (let v = 1_100_000; v <= 3_000_000; v += 100_000) CHAR_COUNT_STEPS.push(v);
+  for (let v = 3_500_000; v <= 6_000_000; v += 500_000) CHAR_COUNT_STEPS.push(v);
+  for (let v = 7_000_000; v <= 20_000_000; v += 1_000_000) CHAR_COUNT_STEPS.push(v);
+
+  const charCountToPos = (val: number) => {
+    let best = 0;
+    for (let i = 1; i < CHAR_COUNT_STEPS.length; i++) {
+      if (Math.abs(CHAR_COUNT_STEPS[i] - val) < Math.abs(CHAR_COUNT_STEPS[best] - val)) best = i;
+    }
+    return best;
+  };
+
+  const charCountSliderRange = computed<[number, number]>({
+    get: () => [charCountToPos(charCountMin.value ?? 0), charCountToPos(charCountMax.value ?? 20_000_000)],
     set: (val) => {
-      charCountMin.value = val[0];
-      charCountMax.value = val[1];
+      charCountMin.value = CHAR_COUNT_STEPS[val[0]];
+      charCountMax.value = CHAR_COUNT_STEPS[val[1]];
     },
   });
 
@@ -149,6 +166,14 @@
     set: (val) => {
       speechSpeedMin.value = val[0];
       speechSpeedMax.value = val[1];
+    },
+  });
+
+  const speechDurationRange = computed<[number, number]>({
+    get: () => [speechDurationMin.value ?? 0, speechDurationMax.value ?? 300],
+    set: (val) => {
+      speechDurationMin.value = val[0];
+      speechDurationMax.value = val[1];
     },
   });
 
@@ -229,6 +254,7 @@
 
         <TabPanels>
           <TabPanel value="filters">
+            <div class="overflow-y-auto" style="max-height: 60vh">
             <div class="flex flex-col gap-4 pt-4">
               <FloatLabel v-if="isConnected" variant="on" class="w-full">
                 <Select
@@ -244,298 +270,359 @@
                 <label for="preferenceFilter">Status</label>
               </FloatLabel>
 
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Character count</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="charCountMin"
-                    :min="0"
-                    :max="20000000"
-                    :use-grouping="true"
-                    fluid
-                    class="max-w-34 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                    :step="10000"
-                  />
-                  <Slider v-model="charCountRange" range :min="0" :max="20000000" class="flex-1" />
-                  <InputNumber
-                    v-model="charCountMax"
-                    :min="0"
-                    :max="20000000"
-                    :use-grouping="true"
-                    fluid
-                    class="max-w-34 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                    :step="10000"
-                  />
-                </div>
-              </div>
+              <Accordion multiple>
+                <AccordionPanel value="content">
+                  <AccordionHeader>Content</AccordionHeader>
+                  <AccordionContent>
+                    <div class="flex flex-col gap-4 pt-2">
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Character count</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="charCountMin"
+                            :min="0"
+                            :max="20000000"
+                            :use-grouping="true"
+                            fluid
+                            class="max-w-34 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                            :step="10000"
+                          />
+                          <Slider v-model="charCountSliderRange" range :min="0" :max="CHAR_COUNT_STEPS.length - 1" class="flex-1" />
+                          <InputNumber
+                            v-model="charCountMax"
+                            :min="0"
+                            :max="20000000"
+                            :use-grouping="true"
+                            fluid
+                            class="max-w-34 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                            :step="10000"
+                          />
+                        </div>
+                      </div>
 
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Difficulty</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="difficultyMin"
-                    :min="0"
-                    :max="5"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="1"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                    :step="0.5"
-                  />
-                  <Slider v-model="difficultyRange" range :min="0" :max="5" :step="0.5" class="flex-1" />
-                  <InputNumber
-                    v-model="difficultyMax"
-                    :min="0"
-                    :max="5"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="1"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                    :step="0.5"
-                  />
-                </div>
-              </div>
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique kanji</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="uniqueKanjiMin"
+                            :min="0"
+                            :max="5000"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                            :step="10"
+                          />
+                          <Slider v-model="uniqueKanjiRange" range :min="0" :max="5000" class="flex-1" />
+                          <InputNumber
+                            v-model="uniqueKanjiMax"
+                            :min="0"
+                            :max="5000"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                            :step="10"
+                          />
+                        </div>
+                      </div>
 
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Release year</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="releaseYearMin"
-                    :min="1900"
-                    :max="currentYear"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                  />
-                  <Slider v-model="releaseYearRange" range :min="1900" :max="currentYear" class="flex-1" />
-                  <InputNumber
-                    v-model="releaseYearMax"
-                    :min="1900"
-                    :max="currentYear"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                  />
-                </div>
-              </div>
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Subdecks</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="subdeckCountMin"
+                            :min="0"
+                            :max="2000"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                          />
+                          <Slider v-model="subdeckCountRange" range :min="0" :max="2000" class="flex-1" />
+                          <InputNumber
+                            v-model="subdeckCountMax"
+                            :min="0"
+                            :max="2000"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionPanel>
 
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique kanji</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="uniqueKanjiMin"
-                    :min="0"
-                    :max="5000"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                    :step="10"
-                  />
-                  <Slider v-model="uniqueKanjiRange" range :min="0" :max="5000" class="flex-1" />
-                  <InputNumber
-                    v-model="uniqueKanjiMax"
-                    :min="0"
-                    :max="5000"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                    :step="10"
-                  />
-                </div>
-              </div>
+                <AccordionPanel value="difficulty">
+                  <AccordionHeader>Difficulty</AccordionHeader>
+                  <AccordionContent>
+                    <div class="flex flex-col gap-4 pt-2">
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Difficulty</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="difficultyMin"
+                            :min="0"
+                            :max="5"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="1"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                            :step="0.5"
+                          />
+                          <Slider v-model="difficultyRange" range :min="0" :max="5" :step="0.5" class="flex-1" />
+                          <InputNumber
+                            v-model="difficultyMax"
+                            :min="0"
+                            :max="5"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="1"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                            :step="0.5"
+                          />
+                        </div>
+                      </div>
 
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Subdecks</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="subdeckCountMin"
-                    :min="0"
-                    :max="2000"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                  />
-                  <Slider v-model="subdeckCountRange" range :min="0" :max="2000" class="flex-1" />
-                  <InputNumber
-                    v-model="subdeckCountMax"
-                    :min="0"
-                    :max="2000"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                  />
-                </div>
-              </div>
+                      <div v-if="isConnected" class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Coverage (%)</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="coverageMin"
+                            :min="0"
+                            :max="100"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="2"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                          />
+                          <Slider v-model="coverageRange" range :min="0" :max="100" class="flex-1" />
+                          <InputNumber
+                            v-model="coverageMax"
+                            :min="0"
+                            :max="100"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="2"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                          />
+                        </div>
+                      </div>
 
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">External Rating (0 = unknown rating)</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="extRatingMin"
-                    :min="0"
-                    :max="100"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                  />
-                  <Slider v-model="extRatingRange" range :min="0" :max="100" class="flex-1" />
-                  <InputNumber
-                    v-model="extRatingMax"
-                    :min="0"
-                    :max="100"
-                    :use-grouping="false"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                  />
-                </div>
-              </div>
+                      <div v-if="isConnected" class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique Coverage (%)</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="uniqueCoverageMin"
+                            :min="0"
+                            :max="100"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="2"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                          />
+                          <Slider v-model="uniqueCoverageRange" range :min="0" :max="100" class="flex-1" />
+                          <InputNumber
+                            v-model="uniqueCoverageMax"
+                            :min="0"
+                            :max="100"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="2"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionPanel>
 
-              <div class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Speech speed</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="speechSpeedMin"
-                    :min="0"
-                    :max="800"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="1"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                    :step="10"
-                  />
-                  <Slider v-model="subtitleRateRange" range :min="0" :max="800" :step="10" class="flex-1" />
-                  <InputNumber
-                    v-model="speechSpeedMax"
-                    :min="0"
-                    :max="800"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="1"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                    :step="10"
-                  />
-                </div>
-              </div>
+                <AccordionPanel value="media-properties">
+                  <AccordionHeader>Media Properties</AccordionHeader>
+                  <AccordionContent>
+                    <div class="flex flex-col gap-4 pt-2">
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Release year</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="releaseYearMin"
+                            :min="1900"
+                            :max="currentYear"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                          />
+                          <Slider v-model="releaseYearRange" range :min="1900" :max="currentYear" class="flex-1" />
+                          <InputNumber
+                            v-model="releaseYearMax"
+                            :min="1900"
+                            :max="currentYear"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                          />
+                        </div>
+                      </div>
 
-              <div v-if="isConnected" class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Coverage (%)</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="coverageMin"
-                    :min="0"
-                    :max="100"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="2"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                  />
-                  <Slider v-model="coverageRange" range :min="0" :max="100" class="flex-1" />
-                  <InputNumber
-                    v-model="coverageMax"
-                    :min="0"
-                    :max="100"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="2"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                  />
-                </div>
-              </div>
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">External Rating (0 = unknown rating)</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="extRatingMin"
+                            :min="0"
+                            :max="100"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                          />
+                          <Slider v-model="extRatingRange" range :min="0" :max="100" class="flex-1" />
+                          <InputNumber
+                            v-model="extRatingMax"
+                            :min="0"
+                            :max="100"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionPanel>
 
-              <div v-if="isConnected" class="flex flex-col gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique Coverage (%)</div>
-                <div class="flex items-center gap-3">
-                  <InputNumber
-                    v-model="uniqueCoverageMin"
-                    :min="0"
-                    :max="100"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="2"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Min"
-                  />
-                  <Slider v-model="uniqueCoverageRange" range :min="0" :max="100" class="flex-1" />
-                  <InputNumber
-                    v-model="uniqueCoverageMax"
-                    :min="0"
-                    :max="100"
-                    :use-grouping="false"
-                    mode="decimal"
-                    :min-fraction-digits="0"
-                    :max-fraction-digits="2"
-                    fluid
-                    class="max-w-28 flex-shrink-0"
-                    show-buttons
-                    size="small"
-                    placeholder="Max"
-                  />
-                </div>
-              </div>
+                <AccordionPanel value="audio">
+                  <AccordionHeader>Audio</AccordionHeader>
+                  <AccordionContent>
+                    <div class="flex flex-col gap-4 pt-2">
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Speech speed</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="speechSpeedMin"
+                            :min="0"
+                            :max="800"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="1"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                            :step="10"
+                          />
+                          <Slider v-model="subtitleRateRange" range :min="0" :max="800" :step="10" class="flex-1" />
+                          <InputNumber
+                            v-model="speechSpeedMax"
+                            :min="0"
+                            :max="800"
+                            :use-grouping="false"
+                            mode="decimal"
+                            :min-fraction-digits="0"
+                            :max-fraction-digits="1"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                            :step="10"
+                          />
+                        </div>
+                      </div>
+
+                      <div class="flex flex-col gap-2">
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Speech duration (hours)</div>
+                        <div class="flex items-center gap-3">
+                          <InputNumber
+                            v-model="speechDurationMin"
+                            :min="0"
+                            :max="300"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Min"
+                            :step="1"
+                          />
+                          <Slider v-model="speechDurationRange" range :min="0" :max="300" :step="1" class="flex-1" />
+                          <InputNumber
+                            v-model="speechDurationMax"
+                            :min="0"
+                            :max="300"
+                            :use-grouping="false"
+                            fluid
+                            class="max-w-28 flex-shrink-0"
+                            show-buttons
+                            size="small"
+                            placeholder="Max"
+                            :step="1"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionPanel>
+              </Accordion>
 
               <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-2">
@@ -547,6 +634,7 @@
                   <label for="excludeNotOriginallyJp" class="text-sm font-medium text-gray-600 dark:text-gray-300">Exclude not originally Japanese media</label>
                 </div>
               </div>
+            </div>
             </div>
           </TabPanel>
 
@@ -618,3 +706,11 @@
     </div>
   </Popover>
 </template>
+
+<style scoped>
+@media (max-width: 767px) {
+  :deep(.p-slider) {
+    display: none;
+  }
+}
+</style>
