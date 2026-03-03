@@ -90,7 +90,7 @@ public partial class SubtitleExtractor
     {
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
 
-        if (extension == ".ass")
+        if (extension is ".ass" or ".ssa")
         {
             filePath = await PreprocessAssFile(filePath);
             extension = Path.GetExtension(filePath).ToLowerInvariant();
@@ -113,15 +113,55 @@ public partial class SubtitleExtractor
     {
         var ssaPath = Path.ChangeExtension(filePath, ".ssa");
         var lines = await File.ReadAllLinesAsync(filePath);
-        // Drop comments and CN-marked lines
         var filteredLines = lines
             .Where(line =>
-                !line.TrimStart().StartsWith(';') &&
-                !line.StartsWith("Comment:", StringComparison.OrdinalIgnoreCase) &&
-                !ChineseLineMarkers.Any(marker => line.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (line.TrimStart().StartsWith(';'))
+                    return false;
+                if (line.StartsWith("Comment:", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                var styleName = GetAssStyleName(line);
+                if (styleName != null && ChineseLineMarkers.Any(marker =>
+                        styleName.Equals(marker, StringComparison.OrdinalIgnoreCase)))
+                    return false;
+
+                return true;
+            })
             .ToList();
         await File.WriteAllLinesAsync(ssaPath, filteredLines);
         return ssaPath;
+    }
+
+    private static string? GetAssStyleName(string line)
+    {
+        if (line.StartsWith("Style:", StringComparison.OrdinalIgnoreCase))
+        {
+            var afterColon = line.AsSpan(6).TrimStart();
+            var commaIdx = afterColon.IndexOf(',');
+            return commaIdx >= 0 ? afterColon[..commaIdx].Trim().ToString() : afterColon.Trim().ToString();
+        }
+
+        if (line.StartsWith("Dialogue:", StringComparison.OrdinalIgnoreCase))
+        {
+            var afterColon = line.AsSpan(9).TrimStart();
+            int commaCount = 0;
+            for (int i = 0; i < afterColon.Length; i++)
+            {
+                if (afterColon[i] == ',')
+                {
+                    commaCount++;
+                    if (commaCount == 3)
+                    {
+                        var rest = afterColon[(i + 1)..];
+                        var nextComma = rest.IndexOf(',');
+                        return nextComma >= 0 ? rest[..nextComma].Trim().ToString() : rest.Trim().ToString();
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     private static async Task<List<SubtitleItem>> ParseSrtItems(string filePath)
