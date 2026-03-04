@@ -4,6 +4,7 @@ using Jiten.Core.Data.Providers;
 using Microsoft.EntityFrameworkCore;
 using Hangfire;
 using Jiten.Cli;
+using Jiten.Parser;
 
 namespace Jiten.Api.Jobs;
 
@@ -47,11 +48,23 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
             }
             else if (new[] { ".ass", ".srt", ".ssa" }.Contains(Path.GetExtension(filePath).ToLower()))
             {
-                text = await new SubtitleExtractor().Extract(filePath);
+                var extractor = new SubtitleExtractor();
+                text = await extractor.Extract(filePath);
 
                 if (string.IsNullOrEmpty(text))
                 {
                     throw new Exception("No text found in the subtitle file.");
+                }
+
+                if (metadata.SpeechDuration is null or 0)
+                {
+                    var items = await extractor.ExtractItems(filePath);
+                    if (items.Count > 0)
+                    {
+                        var stats = await SubtitleMoraRateCalculator.ComputeAsync(items);
+                        metadata.SpeechDuration = stats.DurationMs;
+                        metadata.SpeechMoraCount = stats.MoraCount;
+                    }
                 }
             }
             else
@@ -139,11 +152,12 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
         var flatList = new List<(Metadata meta, string text, Metadata? parentMeta, int order)>();
         FlattenDescendants(children, null, flatList, startOrder: 1);
 
-        // Extract text for each (handles .epub, .mokuro, .txt)
+        // Extract text for each (handles .epub, .mokuro, .txt) and compute speech stats for subtitles
         for (int i = 0; i < flatList.Count; i++)
         {
             var (meta, _, parentMeta, order) = flatList[i];
             var text = await ExtractTextFromMetadata(meta);
+            await ComputeSpeechStatsIfNeeded(meta);
             flatList[i] = (meta, text, parentMeta, order);
         }
 
@@ -217,6 +231,24 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
             {
                 FlattenDescendants(child.Children, child, flatList, startOrder: 1);
             }
+        }
+    }
+
+    private static async Task ComputeSpeechStatsIfNeeded(Metadata metadata)
+    {
+        if (string.IsNullOrEmpty(metadata.FilePath) || metadata.SpeechDuration is not null and not 0)
+            return;
+
+        var ext = Path.GetExtension(metadata.FilePath).ToLower();
+        if (ext is not (".ass" or ".srt" or ".ssa"))
+            return;
+
+        var items = await new SubtitleExtractor().ExtractItems(metadata.FilePath);
+        if (items.Count > 0)
+        {
+            var stats = await SubtitleMoraRateCalculator.ComputeAsync(items);
+            metadata.SpeechDuration = stats.DurationMs;
+            metadata.SpeechMoraCount = stats.MoraCount;
         }
     }
 

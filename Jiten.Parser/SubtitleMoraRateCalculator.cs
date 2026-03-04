@@ -66,7 +66,8 @@ public static class SubtitleMoraRateCalculator
             return SubtitleStats.Empty;
 
         var totalMora = rateEntries.Sum(e => e.MoraCount);
-        var durationMsTotal = MergeIntervals(rateEntries.Select(e => (e.StartMs, e.EndMs)).ToList())
+        var intervals = OffsetTimestampResets(rateEntries.Select(e => (e.StartMs, e.EndMs)).ToList());
+        var durationMsTotal = MergeIntervals(intervals)
             .Sum(i => (long)i.end - i.start);
 
         return new SubtitleStats(totalMora, durationMsTotal);
@@ -173,6 +174,34 @@ public static class SubtitleMoraRateCalculator
         var end = start + range.Length - 1;
         var value = rune.Value;
         return value >= start && value <= end;
+    }
+
+    // When multiple subtitle files are concatenated, timestamps reset to 0.
+    // Detect these resets and apply cumulative offsets so intervals don't falsely overlap.
+    private static List<(int start, int end)> OffsetTimestampResets(List<(int start, int end)> intervals)
+    {
+        if (intervals.Count <= 1)
+            return intervals;
+
+        var result = new List<(int start, int end)>(intervals.Count);
+        int offset = 0;
+        int maxEnd = 0;
+        int prevStart = -1;
+
+        foreach (var (start, end) in intervals)
+        {
+            if (prevStart >= 0 && start < prevStart - 30_000)
+            {
+                offset += maxEnd;
+                maxEnd = 0;
+            }
+
+            result.Add((start + offset, end + offset));
+            maxEnd = Math.Max(maxEnd, end);
+            prevStart = start;
+        }
+
+        return result;
     }
 
     private static List<(int start, int end)> MergeIntervals(List<(int start, int end)> intervals)

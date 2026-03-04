@@ -31,7 +31,7 @@
 
   useHead(() => {
     return {
-      title: `${title.value} - Jiten`,
+      title: `${title.value}`,
       meta: [
         {
           name: 'description',

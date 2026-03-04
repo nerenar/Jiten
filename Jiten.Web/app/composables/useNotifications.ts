@@ -101,7 +101,7 @@ export function useNotifications() {
     pollRefCount++;
     if (sharedPollInterval) return;
     fetchUnreadCount();
-    sharedPollInterval = setInterval(fetchUnreadCount, 60_000);
+    sharedPollInterval = setInterval(fetchUnreadCount, 600_000);
   };
 
   const stopPolling = () => {
