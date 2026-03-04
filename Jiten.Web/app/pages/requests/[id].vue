@@ -368,7 +368,7 @@ onMounted(() => loadData());
             </a>
           </div>
 
-          <p v-if="request.description" class="mb-4 text-muted-color">{{ request.description }}</p>
+          <p v-if="request.description" class="mb-4 text-muted-color whitespace-pre-wrap">{{ request.description }}</p>
 
           <div v-if="request.adminNote && isTerminal" class="mb-4 p-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800">
             <p class="text-sm font-semibold mb-1">Admin note:</p>
