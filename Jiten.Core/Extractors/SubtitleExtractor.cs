@@ -170,6 +170,8 @@ public partial class SubtitleExtractor
         var items = new List<SubtitleItem>();
 
         int i = 0;
+        int track = 0;
+        int prevSeqNum = 0;
         while (i < lines.Length)
         {
             while (i < lines.Length && string.IsNullOrWhiteSpace(lines[i]))
@@ -180,9 +182,13 @@ public partial class SubtitleExtractor
 
             var line = lines[i].Trim();
 
-            // Optional numeric index line
-            if (int.TryParse(line, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            // Optional numeric index line — detect track boundary when sequence resets
+            if (int.TryParse(line, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seqNum))
             {
+                if (seqNum <= prevSeqNum && prevSeqNum > 1)
+                    track++;
+                prevSeqNum = seqNum;
+
                 i++;
                 if (i >= lines.Length)
                     break;
@@ -206,7 +212,7 @@ public partial class SubtitleExtractor
             }
 
             var text = string.Join("\n", textLines);
-            items.Add(new SubtitleItem(startMs, endMs, text));
+            items.Add(new SubtitleItem(startMs, endMs, text, track));
         }
 
         return items;
@@ -221,7 +227,7 @@ public partial class SubtitleExtractor
             if (cleaned == item.Text)
                 continue;
 
-            items[i] = new SubtitleItem(item.StartMs, item.EndMs, cleaned);
+            items[i] = new SubtitleItem(item.StartMs, item.EndMs, cleaned, item.TrackIndex);
         }
 
         return items;
@@ -229,20 +235,21 @@ public partial class SubtitleExtractor
 
     private static List<SubtitleItem> MergeDuplicateItems(IEnumerable<SubtitleItem> items, int maxGapMs = 0, int minLengthForGap = 0)
     {
-        var grouped = new Dictionary<string, List<(int start, int end)>>();
+        var grouped = new Dictionary<(string text, int track), List<(int start, int end)>>();
         foreach (var item in items)
         {
-            if (!grouped.TryGetValue(item.Text, out var spans))
+            var key = (item.Text, item.TrackIndex);
+            if (!grouped.TryGetValue(key, out var spans))
             {
                 spans = [];
-                grouped[item.Text] = spans;
+                grouped[key] = spans;
             }
 
             spans.Add((item.StartMs, item.EndMs));
         }
 
         var mergedItems = new List<SubtitleItem>();
-        foreach (var (text, spans) in grouped)
+        foreach (var ((text, track), spans) in grouped)
         {
             spans.Sort((a, b) =>
             {
@@ -252,7 +259,7 @@ public partial class SubtitleExtractor
 
             if (spans.Count == 1)
             {
-                mergedItems.Add(new SubtitleItem(spans[0].start, spans[0].end, text));
+                mergedItems.Add(new SubtitleItem(spans[0].start, spans[0].end, text, track));
                 continue;
             }
 
@@ -269,13 +276,13 @@ public partial class SubtitleExtractor
                 }
                 else
                 {
-                    mergedItems.Add(new SubtitleItem(currentStart, currentEnd, text));
+                    mergedItems.Add(new SubtitleItem(currentStart, currentEnd, text, track));
                     currentStart = start;
                     currentEnd = end;
                 }
             }
 
-            mergedItems.Add(new SubtitleItem(currentStart, currentEnd, text));
+            mergedItems.Add(new SubtitleItem(currentStart, currentEnd, text, track));
         }
 
         mergedItems.Sort((a, b) =>
@@ -431,4 +438,4 @@ public partial class SubtitleExtractor
     }
 }
 
-public readonly record struct SubtitleItem(int StartMs, int EndMs, string Text);
+public readonly record struct SubtitleItem(int StartMs, int EndMs, string Text, int TrackIndex = 0);

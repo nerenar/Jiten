@@ -32,7 +32,7 @@ public static class SubtitleMoraRateCalculator
             if (item.EndMs <= item.StartMs)
                 continue;
 
-            entries.Add(new SubtitleEntry(item.StartMs, item.EndMs, spoken));
+            entries.Add(new SubtitleEntry(item.StartMs, item.EndMs, spoken, item.TrackIndex));
         }
 
         if (entries.Count == 0)
@@ -55,7 +55,7 @@ public static class SubtitleMoraRateCalculator
                 continue;
 
             var rate = moraCount / (durationMs / 60000.0);
-            rateEntries.Add(new SubtitleRateEntry(entry.StartMs, entry.EndMs, moraCount, rate));
+            rateEntries.Add(new SubtitleRateEntry(entry.StartMs, entry.EndMs, moraCount, rate, entry.TrackIndex));
         }
 
         if (rateEntries.Count == 0)
@@ -66,9 +66,7 @@ public static class SubtitleMoraRateCalculator
             return SubtitleStats.Empty;
 
         var totalMora = rateEntries.Sum(e => e.MoraCount);
-        var intervals = OffsetTimestampResets(rateEntries.Select(e => (e.StartMs, e.EndMs)).ToList());
-        var durationMsTotal = MergeIntervals(intervals)
-            .Sum(i => (long)i.end - i.start);
+        var durationMsTotal = MergeIntervalsPerTrack(rateEntries);
 
         return new SubtitleStats(totalMora, durationMsTotal);
     }
@@ -176,56 +174,40 @@ public static class SubtitleMoraRateCalculator
         return value >= start && value <= end;
     }
 
-    // When multiple subtitle files are concatenated, timestamps reset to 0.
-    // Detect these resets and apply cumulative offsets so intervals don't falsely overlap.
-    private static List<(int start, int end)> OffsetTimestampResets(List<(int start, int end)> intervals)
+    private static long MergeIntervalsPerTrack(List<SubtitleRateEntry> entries)
     {
-        if (intervals.Count <= 1)
-            return intervals;
+        long total = 0;
 
-        var result = new List<(int start, int end)>(intervals.Count);
-        int offset = 0;
-        int maxEnd = 0;
-        int prevStart = -1;
-
-        foreach (var (start, end) in intervals)
+        foreach (var group in entries.GroupBy(e => e.TrackIndex))
         {
-            if (prevStart >= 0 && start < prevStart - 30_000)
+            var sorted = group
+                .Where(e => e.EndMs > e.StartMs)
+                .OrderBy(e => e.StartMs)
+                .ToList();
+
+            if (sorted.Count == 0)
+                continue;
+
+            int mergedStart = sorted[0].StartMs, mergedEnd = sorted[0].EndMs;
+
+            for (int i = 1; i < sorted.Count; i++)
             {
-                offset += maxEnd;
-                maxEnd = 0;
+                if (sorted[i].StartMs <= mergedEnd)
+                {
+                    mergedEnd = Math.Max(mergedEnd, sorted[i].EndMs);
+                }
+                else
+                {
+                    total += mergedEnd - mergedStart;
+                    mergedStart = sorted[i].StartMs;
+                    mergedEnd = sorted[i].EndMs;
+                }
             }
 
-            result.Add((start + offset, end + offset));
-            maxEnd = Math.Max(maxEnd, end);
-            prevStart = start;
+            total += mergedEnd - mergedStart;
         }
 
-        return result;
-    }
-
-    private static List<(int start, int end)> MergeIntervals(List<(int start, int end)> intervals)
-    {
-        var valid = intervals.Where(i => i.end > i.start).OrderBy(i => i.start).ToList();
-        if (valid.Count == 0)
-            return [];
-
-        var merged = new List<(int start, int end)> { valid[0] };
-        for (var i = 1; i < valid.Count; i++)
-        {
-            var current = valid[i];
-            var last = merged[^1];
-            if (current.start <= last.end)
-            {
-                merged[^1] = (last.start, Math.Max(last.end, current.end));
-            }
-            else
-            {
-                merged.Add(current);
-            }
-        }
-
-        return merged;
+        return total;
     }
 
     private static List<SubtitleRateEntry> TrimOutliers(List<SubtitleRateEntry> entries)
@@ -263,6 +245,6 @@ public static class SubtitleMoraRateCalculator
         return sortedValues[f] * (c - k) + sortedValues[c] * (k - f);
     }
 
-    private readonly record struct SubtitleEntry(int StartMs, int EndMs, string Text);
-    private readonly record struct SubtitleRateEntry(int StartMs, int EndMs, long MoraCount, double Rate);
+    private readonly record struct SubtitleEntry(int StartMs, int EndMs, string Text, int TrackIndex);
+    private readonly record struct SubtitleRateEntry(int StartMs, int EndMs, long MoraCount, double Rate, int TrackIndex);
 }
