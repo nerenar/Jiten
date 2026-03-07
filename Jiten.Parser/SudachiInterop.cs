@@ -108,6 +108,8 @@ static class SudachiInterop
         for (int c = 0xFF5B; c <= 0xFF60; c++) table[c] = true;
         // Halfwidth Katakana Punctuation
         for (int c = 0xFF62; c <= 0xFF65; c++) table[c] = true;
+        // Pipe (used as batch delimiter and stop token by MorphologicalAnalyser)
+        table['|'] = true;
         // Newline
         table['\n'] = true;
         // Horizontal Ellipsis (…)
