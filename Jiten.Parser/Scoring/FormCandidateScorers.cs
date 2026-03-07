@@ -429,7 +429,12 @@ internal static class PenaltyScorer
                         }
                     }
 
-                    surfaceMatchScore -= 200;
+                    // adj-pn/adj-t (無き, 堂々たる) and aux-v (如く) have archaic bases as
+                    // DictionaryForm; keep the softer penalty so they can still beat competitors.
+                    // Plain nouns (e.g. 支店 matching してん) get the full -300 to fully cancel
+                    // the coincidental surface-match bonus.
+                    bool isNonNounWithLegitimateForm = posToCheck.Any(p => p is "adj-pn" or "adj-t" or "aux-v");
+                    surfaceMatchScore -= isNonNounWithLegitimateForm ? 200 : 300;
                     return true;
                 }
                 return false;
@@ -440,7 +445,12 @@ internal static class PenaltyScorer
             if (posToCheck.Any(p => p is "adj-ix"))
                 return false;
 
-            surfaceMatchScore -= 200;
+            // Inflectable words whose forms include DictionaryForm (e.g. 食べ from 食べる)
+            // get a softer penalty; truly unrelated words (e.g. 一転 matching いってん when
+            // DictionaryForm=いう) get the full -300 to cancel the coincidental surface match.
+            bool inflectableHasDictForm = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
+                || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
+            surfaceMatchScore -= inflectableHasDictForm ? 200 : 300;
             return true;
         }
 
@@ -524,6 +534,18 @@ internal static class ScriptScorer
                 int stemLen = form.Text.Length - 1;
                 scriptScore += Math.Min(15, stemLen * 5);
             }
+        }
+
+        // When Sudachi identifies a DictionaryForm that doesn't belong to this word,
+        // the prefix overlap with the conjugated surface is coincidental
+        // (e.g. noun 気づかれ matching the passive form of verb 気づく). Cap the script score.
+        if (scriptScore > 15
+            && context.DictionaryForm is not null
+            && context.DictionaryForm != context.Surface
+            && !word.Forms.Any(f => f.Text == context.DictionaryForm
+                || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm)))
+        {
+            scriptScore = Math.Min(scriptScore, 15);
         }
 
         return scriptScore;
@@ -625,6 +647,24 @@ internal static class ReadingScorer
 
                 if (hasStemMatch)
                     readingMatchScore += 25;
+            }
+
+            // Suru-verb stem match — for suru-verb nouns combined with する conjugations.
+            // E.g., reading "しじする" should match noun 指示 (しじ) via suru stem stripping.
+            if (readingMatchScore == 0 && sudachiHira.Length > 2)
+            {
+                bool hasSuruStemMatch = word.Forms
+                    .Where(f => f.FormType == JmDictFormType.KanaForm)
+                    .Any(f =>
+                    {
+                        var hiragana = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
+                        if (hiragana.Length < 2 || hiragana.Length >= sudachiHira.Length) return false;
+                        if (!sudachiHira.StartsWith(hiragana, StringComparison.Ordinal)) return false;
+                        char nextChar = sudachiHira[hiragana.Length];
+                        return nextChar is 'し' or 'す' or 'さ' or 'せ';
+                    });
+                if (hasSuruStemMatch)
+                    readingMatchScore += 70;
             }
 
             if (readingMatchScore > 0 && archaicPosTypes is { Count: > 0 })

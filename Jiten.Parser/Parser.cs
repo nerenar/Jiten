@@ -29,6 +29,7 @@ namespace Jiten.Parser
         private static Dictionary<string, List<int>> _lookups = null!;
         private static Dictionary<int, int> _wordFrequencyRanks = null!;
         private static HashSet<int> _nameOnlyWordIds = null!;
+        private static HashSet<int> _expressionWordIds = null!;
 
         // Cache for compound expression lookups with bounded eviction
         private static readonly Dictionary<string, (bool validExpression, int? wordId)> CompoundExpressionCache = new();
@@ -64,7 +65,10 @@ namespace Jiten.Parser
             (2080360, 3), (1333240, 2), (2035220, 2), (5616612, 5), (2249020, 1), (2783700, 1),
             (2411420, 0), (1604890, 2), (2602280, 1), (1407450, 1), (1595120, 1), (2083370, 1),
             (2862482, 0), (2849996, 0), (1266970,2), (2574180,2), (2574180,1), (1550770,1),
-            (5626489,28), (5045509,3), (2029780,0), (5430309,1), 
+            (5626489,28), (5045509,3), (2029780,0), (5430309,1), (1496170,2), (2564800,1),
+            (2026870,1), (1585310,4), (1585310,5), (2252690,1), (2835861,0), (1223130,1), 
+            (1246880,1), (1246880,2), (1461140,8), (1461140,6), (2029700,0), (2594040,2),
+            (1324950,1), (1949190,1), (1344210,1), (2029730, 0), (5612068,1)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -81,6 +85,7 @@ namespace Jiten.Parser
             _lookups = runtime.Lookups;
             _wordFrequencyRanks = runtime.WordFrequencyRanks;
             _nameOnlyWordIds = runtime.NameOnlyWordIds;
+            _expressionWordIds = runtime.ExpressionWordIds;
         }
 
         private static async Task PreprocessSentences(List<SentenceInfo> sentences,
@@ -91,6 +96,7 @@ namespace Jiten.Parser
             SplitUnknownNounTokens(sentences);
             CombineNounCompounds(sentences);
             await CombineCompounds(sentences);
+            CombineExpressions(sentences);
             RepairLongVowelMisparses(sentences);
             RepairLongVowelTokens(sentences);
             FilterOrphanedMisparses(sentences);
@@ -1056,8 +1062,11 @@ namespace Jiten.Parser
                                         {
                                             // Verb only matches as a stem (e.g. できる's stem でき matches 出来).
                                             // Require a clear priority margin before overriding Sudachi's noun tag.
+                                            // When form scoring already resolved the noun with high confidence (e.g. うえ → 上),
+                                            // demand a much larger verb advantage to prevent spurious overrides (e.g. 飢える).
+                                            int stemThreshold = nounResult.margin >= ScoringPolicy.HighConfidenceThreshold ? 30 : 15;
                                             if (NounVerbScore(verbEntry, verbFallback.word.ReadingIndex) -
-                                                NounVerbScore(nounEntry, nounResult.word.ReadingIndex) > 15)
+                                                NounVerbScore(nounEntry, nounResult.word.ReadingIndex) > stemThreshold)
                                             {
                                                 processedWord = verbFallback.word;
                                                 resolvedMargin = verbFallback.margin;
@@ -2605,6 +2614,109 @@ namespace Jiten.Parser
                                            };
 
                         result.Add((combinedWord, position, combinedLength));
+                        i += bestMatch;
+                    }
+                    else
+                    {
+                        result.Add(sentence.Words[i]);
+                        i++;
+                    }
+                }
+
+                sentence.Words = result;
+            }
+        }
+
+        private static readonly HashSet<string> ExpressionExclusions = [];
+
+        private static void CombineExpressions(List<SentenceInfo> sentences)
+        {
+            foreach (var sentence in sentences)
+            {
+                if (sentence.Words.Count < 3)
+                    continue;
+
+                var result = new List<(WordInfo word, int position, int length)>(sentence.Words.Count);
+                int i = 0;
+
+                while (i < sentence.Words.Count)
+                {
+                    int bestMatch = 1;
+                    string? matchedText = null;
+
+                    int maxWindow = Math.Min(8, sentence.Words.Count - i);
+                    for (int windowSize = maxWindow; windowSize >= 3; windowSize--)
+                    {
+                        bool hasParticle = false;
+                        bool hasSupplementarySymbol = false;
+
+                        for (int j = 0; j < windowSize; j++)
+                        {
+                            var w = sentence.Words[i + j].word;
+                            if (w.PartOfSpeech == PartOfSpeech.SupplementarySymbol)
+                            {
+                                hasSupplementarySymbol = true;
+                                break;
+                            }
+                            if (w.PartOfSpeech == PartOfSpeech.Particle)
+                                hasParticle = true;
+                        }
+
+                        if (hasSupplementarySymbol || !hasParticle)
+                            continue;
+
+                        var combinedText = string.Concat(
+                            sentence.Words.Skip(i).Take(windowSize).Select(w => w.word.Text));
+
+                        if (ExpressionExclusions.Contains(combinedText))
+                            continue;
+
+                        bool matched = false;
+                        if (_lookups.TryGetValue(combinedText, out var wordIds) && wordIds.Count > 0 &&
+                            wordIds.Any(id => _expressionWordIds.Contains(id)))
+                        {
+                            matched = true;
+                        }
+
+                        if (!matched)
+                        {
+                            var hiraganaText = KanaConverter.ToHiragana(combinedText, convertLongVowelMark: false);
+                            if (hiraganaText != combinedText &&
+                                _lookups.TryGetValue(hiraganaText, out wordIds) && wordIds.Count > 0 &&
+                                wordIds.Any(id => _expressionWordIds.Contains(id)))
+                            {
+                                matched = true;
+                            }
+                        }
+
+                        if (matched)
+                        {
+                            bestMatch = windowSize;
+                            matchedText = combinedText;
+                            break;
+                        }
+                    }
+
+                    if (bestMatch > 1)
+                    {
+                        var combinedText = matchedText!;
+                        var combinedReading = string.Concat(
+                            sentence.Words.Skip(i).Take(bestMatch).Select(w => w.word.Reading));
+                        int combinedLength = 0;
+                        for (int j = 0; j < bestMatch; j++)
+                            combinedLength += sentence.Words[i + j].length;
+
+                        var combinedWord = new WordInfo
+                        {
+                            Text = combinedText,
+                            DictionaryForm = combinedText,
+                            PartOfSpeech = PartOfSpeech.Expression,
+                            NormalizedForm = combinedText,
+                            Reading = KanaConverter.ToHiragana(combinedReading, convertLongVowelMark: false),
+                            PreMatchedWordId = null
+                        };
+
+                        result.Add((combinedWord, sentence.Words[i].position, combinedLength));
                         i += bestMatch;
                     }
                     else

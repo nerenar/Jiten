@@ -38,7 +38,7 @@ internal static class TransitionRuleSets
 
     internal static readonly HashSet<string> Interjections =
     [
-        "ああ", "ええ", "まあ", "ほら", "よう"
+        "ああ", "ええ", "まあ", "ほら", "よう", "そうそう"
     ];
 
     internal static readonly HashSet<string> SuruForms =
@@ -213,6 +213,11 @@ internal static class TransitionRuleSets
             [ScoringCondition.NextIsNounLike],
             -15),
 
+        new("interjection-adverb-noun-exempt",
+            [ScoringCondition.CandidateIsInterjection],
+            [ScoringCondition.NextIsNounLike],
+            15),
+
         new("suffix-after-noun-synergy",
             [ScoringCondition.CandidateIsNounSuffix],
             [ScoringCondition.PrevIsNounLike],
@@ -222,6 +227,16 @@ internal static class TransitionRuleSets
             [ScoringCondition.CandidateIsHonorific],
             [ScoringCondition.PrevIsName],
             30),
+
+        new("noun-after-aux-penalty",
+            [ScoringCondition.CandidateIsNounLike],
+            [ScoringCondition.PrevIsAuxiliary],
+            -45),
+
+        new("particle-after-noun-synergy",
+            [ScoringCondition.CandidateIsParticle, ScoringCondition.CandidateIsNotNounLike],
+            [ScoringCondition.PrevIsNounLike],
+            20),
     ];
 
     // Parity rules encoding current ValidateGrammaticalSequences behavior (phases 1–3)

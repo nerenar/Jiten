@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Parser.Data.Redis;
@@ -35,7 +36,7 @@ internal static class ResegmentationEngine
                     continue;
                 // Pre-filter: paths with negative freqScore have no chance even with maximum posScore bonus.
                 // Paths with freqScore between 0 and MinAcceptScore may still be saved by POS context.
-                if (ResegmentationScorer.ScorePath(path, frequencyRanks) < 0)
+                if (ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0)
                     continue;
 
                 var prevPos = span.WordIndex > 0 ? sentence.Words[span.WordIndex - 1].word.PartOfSpeech : (PartOfSpeech?)null;
@@ -59,7 +60,7 @@ internal static class ResegmentationEngine
         // Phase 3: apply replacements (already in reverse word-index order per sentence from the loop above)
         foreach (var (sentence, span, path, prevPos, nextPos) in pending)
         {
-            var freqScore = ResegmentationScorer.ScorePath(path, frequencyRanks);
+            var freqScore = ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text);
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScore)
                 continue;
@@ -103,7 +104,7 @@ internal static class ResegmentationEngine
                     continue;
                 if (path.Segments.Any(s => s.Length == 1 && IsHiragana(word.Text[s.StartChar])))
                     continue;
-                if (ResegmentationScorer.ScorePath(path, frequencyRanks) < MinAcceptScoreConfidence)
+                if (ResegmentationScorer.ScorePath(path, frequencyRanks, word.Text) < MinAcceptScoreConfidence)
                     continue;
 
                 var prevPos = wi > 0 ? sentence.Words[wi - 1].word.PartOfSpeech : (PartOfSpeech?)null;
@@ -134,7 +135,7 @@ internal static class ResegmentationEngine
         bool anyApplied = false;
         foreach (var (sentence, span, path, prevPos, nextPos) in pending)
         {
-            var freqScore = ResegmentationScorer.ScorePath(path, frequencyRanks);
+            var freqScore = ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text);
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScoreConfidence)
                 continue;
@@ -145,11 +146,9 @@ internal static class ResegmentationEngine
         return anyApplied;
     }
 
-    private static bool IsKana(char c) =>
-        c is (>= '\u3040' and <= '\u309F') or (>= '\u30A0' and <= '\u30FF');
+    private static bool IsKana(char c) => JapaneseTextHelper.IsKana(c);
 
-    private static bool IsHiragana(char c) =>
-        c is >= '\u3040' and <= '\u309F';
+    private static bool IsHiragana(char c) => JapaneseTextHelper.IsHiragana(c);
 
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
         Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWord> wordCache)

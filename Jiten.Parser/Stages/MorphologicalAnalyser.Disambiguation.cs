@@ -172,6 +172,14 @@ public partial class MorphologicalAnalyser
             if (word is { Text: "隙", Reading: "ヒマ" })
                 word.Reading = "スキ";
 
+            // 弄* (イラ*) → イジ* — いらう is archaic; modern 弄る is always いじる
+            if (word.DictionaryForm == "弄う")
+            {
+                word.DictionaryForm = "弄る";
+                word.NormalizedForm = "弄る";
+                word.Reading = word.Reading!.Replace("イラ", "イジ");
+            }
+
             // 角 (カド) — Sudachi always gives カド but standalone 角 has three common readings:
             //   かど (corner): 角を曲がる, 建物の角
             //   つの (horn):   鬼の角, 角が生えている

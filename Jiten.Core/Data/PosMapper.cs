@@ -343,6 +343,12 @@ public static class PosMapper
             convertedPosList.Contains(PartOfSpeech.Expression))
             return true;
 
+        // Sudachi 助動詞 (Auxiliary) should match JMDict prt (Particle) for copulas.
+        // Japanese copulas (だ, です, や Kansai-ben) are classified as 助動詞 by Sudachi
+        // but tagged as prt/cop in JMDict.
+        if (sudachiPos == PartOfSpeech.Auxiliary && convertedPosList.Contains(PartOfSpeech.Particle))
+            return true;
+
         return false;
     }
 

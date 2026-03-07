@@ -25,7 +25,7 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(外|家)出(ない|なかった|なく)")]
     private static partial Regex DeNaiCompoundRegex();
 
-    [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?=[！!？?。、,\s]|$)")]
+    [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?![かきくけこさしすせそたちつてとぱぴぷぺぽカキクケコサシスセソタチツテトパピプペポ])")]
     private static partial Regex EmphaticTsuRegex();
 
     [GeneratedRegex(@"ホント(バカ|ダメ|マジ|クソ|アホ)")]
@@ -42,6 +42,9 @@ public partial class MorphologicalAnalyser
 
     [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]{2})…+(?=[^\r\n…])")]
     private static partial Regex MidSentenceEllipsisRegex();
+
+    [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
+    private static partial Regex KatakanaInterjectionTsuRegex();
 
     private void PreprocessText(ref string text, bool preserveStopToken)
     {
@@ -98,13 +101,15 @@ public partial class MorphologicalAnalyser
             .Replace("首落と", $"首{_stopToken}落と");
 
         text = HontoKatakanaRegex().Replace(text, $"ホント{_stopToken}$1");
+        text = KatakanaInterjectionTsuRegex().Replace(text, $"$1{_stopToken}");
 
         text = text
             .Replace("バカバカ", $"バカ{_stopToken}バカ")
             .Replace("事大", $"事{_stopToken}大")
             .Replace("日間", $"日{_stopToken}間")
             .Replace("何本", $"何{_stopToken}本")
-            .Replace("年未公開", $"年{_stopToken}未公開");
+            .Replace("年未公開", $"年{_stopToken}未公開")
+            .Replace("足元気", $"足元{_stopToken}気");
 
         text = KatakanaInHiraganaRegex().Replace(text,
             m => ((char)(m.Value[0] - 0x60)).ToString());

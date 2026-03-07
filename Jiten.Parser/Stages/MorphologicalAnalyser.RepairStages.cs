@@ -233,6 +233,51 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
+    /// <summary>
+    /// Merges colloquial らん + negative (ない/ねえ/ねぇ/ねー) into a single auxiliary token
+    /// when preceded by a te/de-form. Sudachi tokenizes らん as adverb, which prevents
+    /// CombineInflections from merging it with the preceding verb. The deconjugator already
+    /// has the rule らんない → られない (n-slang), so this just needs to produce a mergeable token.
+    /// e.g., 付き合っ + て + らん + ない → 付き合っ + て + らんない (auxiliary)
+    /// </summary>
+    private List<WordInfo> RepairColloquialRanNai(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 3) return wordInfos;
+
+        var result = new List<WordInfo>(wordInfos.Count);
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var current = wordInfos[i];
+
+            if (current.Text == "らん" &&
+                i + 1 < wordInfos.Count &&
+                wordInfos[i + 1].Text is "ない" or "ねえ" or "ねぇ" or "ねー" &&
+                result.Count >= 1 &&
+                (result[^1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" } ||
+                 (result[^1].Text.EndsWith("て") || result[^1].Text.EndsWith("で"))))
+            {
+                var next = wordInfos[i + 1];
+                result.Add(new WordInfo
+                {
+                    Text = "らん" + next.Text,
+                    StartOffset = current.StartOffset,
+                    EndOffset = next.EndOffset,
+                    PartOfSpeech = PartOfSpeech.Auxiliary,
+                    DictionaryForm = "られない",
+                    NormalizedForm = "られない",
+                    Reading = "ラン" + next.Reading
+                });
+                i++;
+                continue;
+            }
+
+            result.Add(current);
+        }
+
+        return result;
+    }
+
     private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
     {
         // Strip expressive internal ー from hiragana tokens when Sudachi's NormalizedForm contains kanji
@@ -719,6 +764,16 @@ public partial class MorphologicalAnalyser
             {
                 newList[^1].Text += w1.Text;
                 newList[^1].EndOffset = w1.EndOffset;
+                i++;
+                continue;
+            }
+
+            // のでは is always の+では (contrastive), never ので+は (causal+topic)
+            // Emit の separately so CombineParticles can form で+は → では → ではない(か)
+            if (w1.Text == "の" && i + 2 < wordInfos.Count
+                && wordInfos[i + 1].Text == "で" && wordInfos[i + 2].Text == "は")
+            {
+                newList.Add(w1);
                 i++;
                 continue;
             }

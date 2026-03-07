@@ -460,6 +460,31 @@ public static class JmDictHelper
         }
     }
 
+    public static async Task<HashSet<int>> LoadExpressionWordIds(JitenDbContext context)
+    {
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = conn.State == ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
+        {
+            await using var cmd = new NpgsqlCommand("""
+                SELECT "WordId"
+                FROM jmdict."Words"
+                WHERE "PartsOfSpeech" = ARRAY['exp']::text[]
+                """, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var result = new HashSet<int>();
+            while (await reader.ReadAsync())
+                result.Add(reader.GetInt32(0));
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
+    }
+
     public static List<string> ToHumanReadablePartsOfSpeech(this List<string> pos)
     {
         List<string> humanReadablePos = new();
@@ -576,7 +601,7 @@ public static class JmDictHelper
             1191730, 2844190, 2207630, 1442490, 1423310, 1502390, 1343100, 1610040,
             2059630, 1495580, 1288850, 1392580, 1511350, 1648450, 1534790, 2105530,
             1223615, 1421850, 1020650, 1310640, 1495770, 1375610, 1605840, 1334590,
-            1609980, 1579260, 1351580, 2820490, 1983760, 1207510, 1577980, 1266890,
+            1609980, 1579260, 1351580, 2820490, 1983760, 1207510, 1266890,
             1163940, 1625330, 1416220, 1356690, 2020520, 2084840, 1578630, 2603500,
             1522150, 1591970, 1920245, 1177490, 1582430, 1310670, 1577120, 1352570,
             1604800, 1581310, 2720360, 1318950, 2541230, 1288500, 1121740, 1074630,
@@ -2202,7 +2227,7 @@ public static class JmDictHelper
                 1191730, 2844190, 2207630, 1442490, 1423310, 1502390, 1343100, 1610040,
                 2059630, 1495580, 1288850, 1392580, 1511350, 1648450, 1534790, 2105530,
                 1223615, 1421850, 1020650, 1310640, 1495770, 1375610, 1605840, 1334590,
-                1609980, 1579260, 1351580, 2820490, 1983760, 1207510, 1577980, 1266890,
+                1609980, 1579260, 1351580, 2820490, 1983760, 1207510, 1266890,
                 1163940, 1625330, 1416220, 1356690, 2020520, 2084840, 1578630, 2603500,
                 1522150, 1591970, 1920245, 1177490, 1582430, 1310670, 1577120, 1352570,
                 1604800, 1581310, 2720360, 1318950, 2541230, 1288500, 1121740, 1074630,

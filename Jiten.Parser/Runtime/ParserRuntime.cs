@@ -58,7 +58,7 @@ internal sealed class ParserRuntime
             await new MorphologicalAnalyser().Parse("食べた");
         });
 
-        var (lookups, wordFrequencyRanks, nameOnlyWordIds, lookupsMs, freqMs, nameOnlyMs) =
+        var (lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, lookupsMs, freqMs, nameOnlyMs) =
             await LoadPreloadDataAsync(contextFactory);
         var dbWallMs = overallSw.ElapsedMilliseconds;
 
@@ -75,16 +75,17 @@ internal sealed class ParserRuntime
         // works correctly even while the cache is still being populated on a cold start.
         _ = Task.Run(() => PrefillRedisCacheAsync(jmDictCache, contextFactory));
 
-        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds);
+        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds);
     }
 
     private static async Task<(Dictionary<string, List<int>> lookups, Dictionary<int, int> wordFrequencyRanks,
-        HashSet<int> nameOnlyWordIds, long lookupsMs, long freqMs, long nameOnlyMs)>
+        HashSet<int> nameOnlyWordIds, HashSet<int> expressionWordIds, long lookupsMs, long freqMs, long nameOnlyMs)>
         LoadPreloadDataAsync(IDbContextFactory<JitenDbContext> contextFactory)
     {
         await using var ctx1 = await contextFactory.CreateDbContextAsync();
         await using var ctx2 = await contextFactory.CreateDbContextAsync();
         await using var ctx3 = await contextFactory.CreateDbContextAsync();
+        await using var ctx4 = await contextFactory.CreateDbContextAsync();
 
         // ContinueWith captures elapsed time at the moment each individual task completes,
         // giving the per-task duration even though all three run concurrently.
@@ -100,10 +101,11 @@ internal sealed class ParserRuntime
         var t3 = JmDictHelper.LoadNameOnlyWordIds(ctx3)
             .ContinueWith(t => { nameOnlyMs = sw.ElapsedMilliseconds; return t.Result; },
                 TaskContinuationOptions.ExecuteSynchronously);
+        var t4 = JmDictHelper.LoadExpressionWordIds(ctx4);
 
-        await Task.WhenAll(t1, t2, t3);
+        await Task.WhenAll(t1, t2, t3, t4);
 
-        return (t1.Result, t2.Result, t3.Result, lookupsMs, freqMs, nameOnlyMs);
+        return (t1.Result, t2.Result, t3.Result, t4.Result, lookupsMs, freqMs, nameOnlyMs);
     }
 
     private static async Task PrefillRedisCacheAsync(IJmDictCache jmDictCache, IDbContextFactory<JitenDbContext> contextFactory)
@@ -143,11 +145,13 @@ internal sealed class ParserRuntimeSnapshot(
     IJmDictCache jmDictCache,
     Dictionary<string, List<int>> lookups,
     Dictionary<int, int> wordFrequencyRanks,
-    HashSet<int> nameOnlyWordIds)
+    HashSet<int> nameOnlyWordIds,
+    HashSet<int> expressionWordIds)
 {
     public IDeckWordCache DeckWordCache { get; } = deckWordCache;
     public IJmDictCache JmDictCache { get; } = jmDictCache;
     public Dictionary<string, List<int>> Lookups { get; } = lookups;
     public Dictionary<int, int> WordFrequencyRanks { get; } = wordFrequencyRanks;
     public HashSet<int> NameOnlyWordIds { get; } = nameOnlyWordIds;
+    public HashSet<int> ExpressionWordIds { get; } = expressionWordIds;
 }

@@ -108,6 +108,7 @@ internal enum ScoringCondition
     NextIsNotNounLike,
     CandidateIsHonorific,
     PrevIsName,
+    PrevIsAuxiliary,
 }
 
 internal sealed record ScoringRule(

@@ -21,6 +21,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairVowelElongation),
         Stage(TokenStageGroup.Repair, ProcessSpecialCases),
         Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee),
+        Stage(TokenStageGroup.Repair, RepairColloquialRanNai),
         Stage(TokenStageGroup.Combine, CombinePrefixes),
         Stage(TokenStageGroup.Combine, CombineInflections),
         Stage(TokenStageGroup.Combine, CombineAmounts),

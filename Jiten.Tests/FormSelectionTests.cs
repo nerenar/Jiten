@@ -307,6 +307,9 @@ public class FormSelectionTests
         // User dic overrides Sudachi 動詞→代名詞 for the common archaic pronoun reading
         yield return ["なんじもし私の信者ならば", "なんじ", 2015140, (byte)2];
 
+        // 気づかれずに → 気づく (1591330), not 気づかれ/気疲れ (1222530)
+        yield return ["麦をかき分ける音に気づかれずに接近できるからだ。", "気づかれずに", 1591330, (byte)0];
+
         // 気附かぬ → 気付く (1591330) — user dic adds 気附く as verb, ぬ reclassified to auxiliary
         yield return ["気附かぬ如くゆっくり", "気附かぬ", 1591330, (byte)1];
 
@@ -546,6 +549,13 @@ public class FormSelectionTests
         // CombineParticles merges で+は+なく into ではなく expression
         yield return ["気配といっても曖昧な何かではなく、単に落ち葉がかすれる微かな音が聞こえただけだ。", "ではなく", 2823770, (byte)1];
 
+        // のではないか → ではないか expression (2027020), not ないか as 内科 noun
+        yield return ["再生しているのではないかという兆候もある。", "ではないか", 2027020, (byte)1];
+        yield return ["会長になるのではないかという呼び声も高いのだ。", "ではないか", 2027020, (byte)1];
+
+        // standalone ないか after auxiliary → expression "won't/isn't" (2210280), not 内科 noun (1457830)
+        yield return ["無駄じゃ、ないかお前も生きたくて必死なんだな。", "ないか", 2210280, (byte)0];
+
         // チックショー (colloquial geminated form of ちくしょう) → 畜生 (1422200)
         // Sudachi splits into チック(suffix)+ショー(noun); user_dic + NormalizedForm lookup fix recombines
         yield return ["チックショー", "チックショー", 1422200, (byte)1];
@@ -631,6 +641,10 @@ public class FormSelectionTests
         yield return ["よし分かった", "よし", 2607690, (byte)0];
         yield return ["よし起こすとするか", "よし", 2607690, (byte)0];
 
+        // 米 standalone → こめ/rice (1508750), not べい/America (2150610)
+        // User dic overrides Sudachi reading ベイ→コメ for the common standalone reading
+        yield return ["米とか醤油とかは、馴染みの店が配達してくれるけどさ。", "米", 1508750, (byte)0];
+
         // 里 as さと/village (1550760) — Sudachi reading サト disambiguates vs り/unit of distance (1550770)
         yield return ["鬼が出て『鬼の里』に連れて行かれるからな", "里", 1550760, (byte)0];
         yield return ["虹の雨で獣人種の里が滅びた時に", "里", 1550760, (byte)0];
@@ -689,6 +703,47 @@ public class FormSelectionTests
         yield return ["それから揃えた膝の上で、きゅっと拳を形作る。", "拳", 1257740, (byte)0];
         yield return ["少年は思わず拳を握りしめた。", "拳", 1257740, (byte)0];
         yield return ["元気よく拳を突き上げ、空に向かって叫ぶ。", "拳", 1257740, (byte)0];
+
+        // うえ → 上 "above/on top of" (1352130), not 飢える "to starve" (1224080)
+        // Ichidan stem fallback should not override high-confidence noun match
+        yield return ["知ったうえで行動していた", "うえ", 1352130, (byte)1];
+        yield return ["理解したうえで同意したのだ", "うえ", 1352130, (byte)1];
+        yield return ["何ボーッとしたうえフラフラしてんのよ", "うえ", 1352130, (byte)1];
+
+        // そうそう → interjection "oh yes!/that's right" (1006640), not 匆匆 "busy/hurried" (2435210)
+        // adverb-before-noun-penalty was tipping the balance during rederivation;
+        // interjection-adverb-noun-exempt rule offsets the penalty for recognized interjections
+        yield return ["そうそう、俺たちがその本屋を知ったのも冒険者ギルドからの依頼。", "そうそう", 1006640, (byte)1];
+        yield return ["なんて言えばいいのかなそうそう、役の気持ちを考えるの", "そうそう", 1006640, (byte)1];
+
+        // Verb-like suffix かねる — must resolve to かねる/かねない, not 鐘 (bell, 1352030)
+        yield return ["壊してしまいかねない", "かねない", 1922120, (byte)1];
+        yield return ["決めかねている", "かねている", 1256520, (byte)1];
+
+        // してん (colloquial してる→してん) should resolve to する (1157170), not noun 支店 (1310230)
+        // ConjugatedIdentityPenalty -300 for plain nouns fully cancels the coincidental surface-match
+        yield return ["何してんの", "してん", 1157170, (byte)1];
+        yield return ["あんた何してんのよ", "してん", 1157170, (byte)1];
+        yield return ["なに抜け駆けしてんのよっ", "してん", 1157170, (byte)1];
+
+        // や (Kansai copula) should resolve to particle/copula (2028960), not 矢 arrow (1537760)
+        yield return ["ウソやで", "や", 2028960, (byte)0];
+
+        // Orphaned suffix 店 (テン) should resolve to standalone noun みせ (1582120), not suffix てん (1582125)
+        yield return ["昔こういう店でバイトしようとしたことがあって", "店", 1582120, (byte)0];
+
+        // うかつすぎる → 迂闊/careless (1171890), not split into う+かつ+すぎる
+        // User dic adds うかつ as 形状詞 so Sudachi recognizes it as a single token
+        yield return ["うかつすぎる", "うかつすぎる", 1171890, (byte)2];
+
+        // いってん (colloquial 言ってる→言ってん) should resolve to 言う (1587040), not いる (1577980) or 一転 (1165070)
+        // Sudachi correctly identifies DictForm=いう; DictForm conflict penalty suppresses いる and 一転
+        yield return ["どんな姿で買いにいってんの？", "いってん", 1587040, (byte)3];
+        yield return ["今更ナニいってんの！", "いってん", 1587040, (byte)3];
+
+        // 弄る should be いじる (1560700), not いらう (2849632) — いらう is archaic
+        yield return ["シリルさんが弄ったというのは本当のようだ", "弄った", 1560700, (byte)0];
+        yield return ["そこを無数の腕が乱暴に弄っていた", "弄っていた", 1560700, (byte)0];
     }
     
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

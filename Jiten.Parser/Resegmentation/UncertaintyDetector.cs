@@ -9,7 +9,7 @@ internal static class UncertaintyDetector
         PartOfSpeech.Particle, PartOfSpeech.Auxiliary, PartOfSpeech.Verb, PartOfSpeech.IAdjective,
         PartOfSpeech.SupplementarySymbol, PartOfSpeech.Symbol, PartOfSpeech.Conjunction,
         PartOfSpeech.Adnominal, PartOfSpeech.Prefix, PartOfSpeech.BlankSpace,
-        PartOfSpeech.Name, PartOfSpeech.Suffix, PartOfSpeech.NounSuffix,
+        PartOfSpeech.Suffix, PartOfSpeech.NounSuffix,
         PartOfSpeech.Counter, PartOfSpeech.Numeral, PartOfSpeech.Filler,
         PartOfSpeech.Expression
     ];

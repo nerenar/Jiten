@@ -86,6 +86,7 @@ public class MorphologicalAnalyserTests
         yield return ["体に悪いと知りながらタバコをやめることはできない", new[] { "体に悪い", "と", "知りながら", "タバコをやめる", "こと", "は", "できない" }];
         yield return ["いつもどうり", new[] { "いつもどうり" }];
         yield return ["微笑みはまぶしすぎる", new[] { "微笑み", "は", "まぶしすぎる" }];
+        yield return ["うかつすぎる", new[] { "うかつすぎる" }];
         yield return ["優しすぎそのうえカッコいいの", new[] { "優しすぎ", "そのうえ", "カッコいい", "の" }];
         yield return ["内心ドキッとした", new[] { "内心", "ドキッと", "した" }];
         yield return ["ドキっとしたからって", new[] { "ドキっと", "した", "からって" }];
@@ -419,6 +420,8 @@ public class MorphologicalAnalyserTests
         yield return ["再開通", new[] { "再", "開通" }];
         yield return ["謝罪はあったにせよ", new[] { "謝罪", "は", "あった", "にせよ" }];
         yield return ["うそではないにしろ", new[] { "うそ", "ではない", "にしろ" }];
+        yield return ["再生しているのではないかという兆候もある", new[] { "再生している", "の", "ではないか", "という", "兆候", "も", "ある" }];
+        yield return ["会長になるのではないかという呼び声も高い", new[] { "会長", "に", "なる", "の", "ではないか", "という", "呼び声", "も", "高い" }];
         yield return ["普段着てる服", new[] { "普段", "着てる", "服" }];
         yield return ["エレガントなお洋服", new[] { "エレガントな", "お", "洋服" }];
         yield return ["老いてなお元気なこと", new[] { "老いて", "なお", "元気な", "こと" }];
@@ -633,7 +636,10 @@ public class MorphologicalAnalyserTests
         yield return ["行くっ", new[] { "行く" }];  // Verb + emphatic っ
         yield return ["止まらないっ！", new[] { "止まらない" }];  // With punctuation
         yield return ["だめっ、それは違う", new[] { "だめ", "それ", "は", "違う" }];  // Mid-sentence emphatic っ
-        yield return ["理解っ、しましたぁっ！", new[] { "理解", "しました" }];  // Kanji + emphatic っ — 理解 (rikai) not 理解る (wakaru)
+        yield return ["理解っ、しましたぁっ！", new[] { "理解", "しましたぁ" }];  // Kanji + emphatic っ — 理解 (rikai) not 理解る (wakaru)
+        yield return ["ごめんなさいっごめんなさいっ次は我慢する", new[] { "ごめんなさい", "ごめんなさい", "次", "は", "我慢する" }];  // Emphatic っ before voiced kana (ご) and kanji (次)
+        yield return ["するからっ", new[] { "する", "から" }];  // Emphatic っ at EOS after particle
+        yield return ["我慢っ、する", new[] { "我慢", "する" }];  // Emphatic っ before punctuation (existing behavior)
         yield return ["しょうがないな", new[] { "しょうがない", "な" }];
         yield return ["この手紙を書いた", new[] { "この", "手紙", "を", "書いた" }];
         // Emphatic ぶっち → ぶち normalisation (colloquial gemination)
@@ -818,7 +824,7 @@ public class MorphologicalAnalyserTests
         yield return ["箱庭の外に行き場なんてないなかったんだ", new[] { "箱庭", "の", "外", "に", "行き場", "なんて", "ない", "なかった", "んだ" }];
 
         // は+ね should separate as topic particle + emphatic particle, not merge into はね (feather)
-        yield return ["僕はねこう見えても式部卿なんだよ", new[] { "僕", "は", "ね", "こう", "見えて", "も", "式部", "卿", "なんだ", "よ" }];
+        yield return ["僕はねこう見えても式部卿なんだよ", new[] { "僕", "は", "ね", "こう見えても", "式部", "卿", "なんだ", "よ" }];
         yield return ["俺はね同じ気持ちなのにそれを伝えないなんて", new[] { "俺", "は", "ね", "同じ", "気持ち", "なのに", "それ", "を", "伝えない", "なんて" }];
         yield return ["私はねここに存在していることが酷く恥ずかしい", new[] { "私", "は", "ね", "ここ", "に", "存在している", "こと", "が", "酷く", "恥ずかしい" }];
         yield return ["南アルプス市", new[] { "南アルプス", "市" }];
@@ -860,6 +866,37 @@ public class MorphologicalAnalyserTests
 
         // もの + たち must not be merged into 物断ち (abstinence)
         yield return ["生き延びたものたちへの糧となる", new[] { "生き延びた", "もの", "たち", "へ", "の", "糧", "と", "なる" }];
+
+        // Verb-like suffix かねる must merge with its conjugations, not stay as orphaned 鐘 (bell)
+        yield return ["壊してしまいかねない", new[] { "壊してしまい", "かねない" }];
+        yield return ["決めかねている", new[] { "決め", "かねている" }];
+        yield return ["耐えかねて", new[] { "耐え", "かねて" }];
+
+        // Colloquial てらん (contraction of ていられ) — repair stage merges らん+ない, deconjugator handles n-slang
+        yield return ["やってらんないだろ", new[] { "やってらんない", "だろ" }];
+        yield return ["やってらんねえ", new[] { "やってらんねえ" }];
+        yield return ["負けてらんねぇぞー", new[] { "負けてらんねぇ", "ぞー" }];
+        yield return ["飲んでらんねえ", new[] { "飲んでらんねえ" }];
+
+        // Unknown compound split via resegmentation — single kanji + suffix
+        yield return ["春擬き", new[] { "春", "擬き" }];
+
+        // とぼける / ねぼける mis-segmented by Sudachi (と/ね split as particles)
+        yield return ["惚とぼけている様子は無かったし", new[] { "惚とぼけている", "様子", "は", "無かった", "し" }];
+        yield return ["素でとぼけた行動をとる", new[] { "素で", "とぼけた", "行動をとる" }];
+        yield return ["この期に及んでとぼける俺である", new[] { "この期に及んで", "とぼける", "俺", "である" }];
+        yield return ["何ねぼけてんのよ", new[] { "何", "ねぼけてん", "の", "よ" }];
+        yield return ["何ねぼけた事言ってんだ", new[] { "何", "ねぼけた", "事", "言ってん", "だ" }];
+
+        // 第一次/一次/第二次/二次 — ordinal counters should not be split
+        yield return ["第一次魔王討伐", new[] { "第一次", "魔王", "討伐" }];
+        yield return ["立つ鳥の声一次の日の朝まだき", new[] { "立つ", "鳥", "の", "声", "一次", "の", "日", "の", "朝まだき" }];
+        yield return ["余のせいで第二次神魔大戦まであるんだけどーっ", new[] { "余", "の", "せい", "で", "、", "第二次", "神魔", "大戦", "まで", "ある", "ん", "だ", "けどー", "っ"}];
+        yield return ["しかも何で二次性徴の部分", new[] { "しかも", "何で", "二次", "性徴", "の", "部分"}];
+        yield return ["足元気をつけろ！", new[] { "足元", "気をつけろ" }];
+
+        // Katakana interjection + ッ should not fuse with following word
+        yield return ["フンッバカバカしい先に帰るぞ", new[] { "フンッ", "バカバカしい", "先に", "帰る", "ぞ" }];
     }
 
     [Theory]

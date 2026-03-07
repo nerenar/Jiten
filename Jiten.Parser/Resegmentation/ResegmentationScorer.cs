@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 
 namespace Jiten.Parser.Resegmentation;
@@ -151,7 +152,7 @@ internal static class ResegmentationScorer
             // Use full ScorePath for final selection — adds structural bonuses not tracked in partial score
             return validStates
                 .Select(s => new SpanPath(s.segs))
-                .MaxBy(p => ScorePath(p, frequencyRanks));
+                .MaxBy(p => ScorePath(p, frequencyRanks, spanText));
         }
 
         validStates.Sort((a, b) =>
@@ -163,18 +164,22 @@ internal static class ResegmentationScorer
         return new SpanPath(validStates[0].segs);
     }
 
-    internal static int ScorePath(SpanPath path, Dictionary<int, int> frequencyRanks)
+    internal static int ScorePath(SpanPath path, Dictionary<int, int> frequencyRanks, string? spanText = null)
     {
         int score = 0;
         int totalLength = 0;
 
         score -= 15 * path.Segments.Count;
 
-        bool allSegmentsAtLeast2 = true;
+        bool noWeakSingleCharSegments = true;
         foreach (var seg in path.Segments)
         {
             totalLength += seg.Length;
-            if (seg.Length < 2) allSegmentsAtLeast2 = false;
+            if (seg.Length < 2)
+            {
+                if (spanText == null || JapaneseTextHelper.IsKana(spanText[seg.StartChar]))
+                    noWeakSingleCharSegments = false;
+            }
 
             int bestRank = int.MaxValue;
             foreach (int wordId in seg.WordIds)
@@ -194,7 +199,7 @@ internal static class ResegmentationScorer
             score += seg.Length switch { >= 5 => 40, >= 4 => 25, >= 3 => 10, _ => 0 };
         }
 
-        if (allSegmentsAtLeast2)
+        if (noWeakSingleCharSegments)
             score += 50;
 
         if (path.Segments.Count > 0 && totalLength / path.Segments.Count >= 3)

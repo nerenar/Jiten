@@ -32,7 +32,9 @@ public partial class MorphologicalAnalyser
             // Check if potential base for inflection
             // Exclude AuxiliaryVerbStem words (みたい, そう, etc.) as they are grammatical suffixes, not standalone inflectable words
             bool isBase = (PosMapper.IsInflectableBase(currentWord.PartOfSpeech) ||
-                           currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru))
+                           currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
+                           (currentWord.PartOfSpeech == PartOfSpeech.Suffix &&
+                            currentWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike)))
                           && currentWord.NormalizedForm != "物"
                           && !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
 
@@ -774,6 +776,7 @@ public partial class MorphologicalAnalyser
 
             wordInfos[i].PartOfSpeech = PartOfSpeech.CommonNoun;
             wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
+            wordInfos[i].Reading = string.Empty;
             wordInfos[i].WasReclassifiedFromSuffix = true;
         }
 
@@ -824,7 +827,7 @@ public partial class MorphologicalAnalyser
                     combinedWord.EndOffset = nextWord.EndOffset;
                     combinedWord.Reading = currentWord.Reading + nextWord.Reading;
 
-                    // では + conjugated form of ない → ではない expression
+                    // では + conjugated form of ない (+ optional か) → ではない(か) expression
                     if (combinedText == "では" && i + 2 < wordInfos.Count)
                     {
                         var lookAhead = wordInfos[i + 2];
@@ -835,8 +838,19 @@ public partial class MorphologicalAnalyser
                             combinedWord.Reading += lookAhead.Reading;
                             combinedWord.DictionaryForm = "ではない";
                             combinedWord.PartOfSpeech = PartOfSpeech.Expression;
+                            int consumed = 3;
+
+                            if (i + 3 < wordInfos.Count && wordInfos[i + 3].Text == "か")
+                            {
+                                combinedWord.Text += "か";
+                                combinedWord.EndOffset = wordInfos[i + 3].EndOffset;
+                                combinedWord.Reading += wordInfos[i + 3].Reading;
+                                combinedWord.DictionaryForm = "ではないか";
+                                consumed = 4;
+                            }
+
                             newList.Add(combinedWord);
-                            i += 3;
+                            i += consumed;
                             continue;
                         }
                     }

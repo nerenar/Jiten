@@ -106,4 +106,45 @@ public class TokenPositionHelperTests
         pos.Should().Be(5);
         len.Should().Be(3);
     }
+
+    [Fact]
+    public void ReversePreprocessing_TondemoNee()
+    {
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("とんでもねえ", "とんでもない", 0);
+        pos.Should().Be(0);
+        len.Should().Be(6);
+    }
+
+    [Fact]
+    public void ReversePreprocessing_ShougaNee()
+    {
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("しょうがねえ", "しょうがない", 0);
+        pos.Should().Be(0);
+        len.Should().Be(6);
+    }
+
+    [Fact]
+    public void ReversePreprocessing_KoiKatakana()
+    {
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("来イ", "来い", 0);
+        pos.Should().Be(0);
+        len.Should().Be(2);
+    }
+
+    [Fact]
+    public void ReversePreprocessing_See()
+    {
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("見せぇ", "見さい", 0);
+        pos.Should().Be(0);
+        len.Should().Be(3);
+    }
+
+    [Fact]
+    public void ReversePreprocessing_StandardFormStillWorks()
+    {
+        // If source has the standard form, exact match should find it
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("付き合っていられない", "付き合っていられない", 0);
+        pos.Should().Be(0);
+        len.Should().Be(10);
+    }
 }

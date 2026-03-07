@@ -8,6 +8,12 @@ public static class JapaneseTextHelper
     /// Determines whether the specified Unicode rune is a CJK kanji character.
     /// Covers main CJK Unified Ideographs block and extensions A-E, plus compatibility ranges.
     /// </summary>
+    public static bool IsKana(char c) =>
+        c is (>= '\u3040' and <= '\u309F') or (>= '\u30A0' and <= '\u30FF');
+
+    public static bool IsHiragana(char c) =>
+        c is >= '\u3040' and <= '\u309F';
+
     public static bool IsKanji(Rune r)
     {
         int value = r.Value;

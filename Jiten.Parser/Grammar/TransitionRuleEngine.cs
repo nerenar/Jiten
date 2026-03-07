@@ -468,6 +468,9 @@ internal static class TransitionRuleEngine
                 ScoringCondition.PrevIsName =>
                     ctx.PrevPOS?.Contains(PartOfSpeech.Name) == true,
 
+                ScoringCondition.PrevIsAuxiliary =>
+                    ctx.PrevPOS?.Contains(PartOfSpeech.Auxiliary) == true,
+
                 _ => false
             };
             if (!ok) return false;
