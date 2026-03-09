@@ -354,23 +354,23 @@
                       <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Average sentence length</span>
                       <span class="tabular-nums font-semibold">{{ deck.averageSentenceLength.toFixed(1) }}</span>
                     </div>
+                    <div v-if="speechSpeed > 0" class="flex justify-between flex-wrap stat-row">
+                      <Tooltip content="Average speed of speech in mora per minute.">
+                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Speech speed</span>
+                      </Tooltip>
+                      <span class="tabular-nums font-semibold">{{ speechSpeed.toFixed(0) }}</span>
+                    </div>
+
                     <div v-if="deck.difficulty != -1" class="stat-row cursor-help">
                       <Tooltip :content="difficultyRef?.tooltip ?? ''" block>
-                        <div class="flex justify-between flex-wrap">
-                          <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">
+                        <div class="flex justify-between">
+                          <span class="text-gray-600 dark:text-gray-300 pr-2 font-medium shrink-0">
                             Difficulty
                             <i class="pi pi-info-circle text-primary-400 text-xs ml-0.5" />
                           </span>
                           <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" />
                         </div>
                       </Tooltip>
-                    </div>
-
-                    <div v-if="speechSpeed > 0" class="flex justify-between flex-wrap stat-row">
-                      <Tooltip content="Average speed of speech in mora per minute.">
-                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Speech speed</span>
-                      </Tooltip>
-                      <span class="tabular-nums font-semibold">{{ speechSpeed.toFixed(0) }}</span>
                     </div>
                   </div>
 

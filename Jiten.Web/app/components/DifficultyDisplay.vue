@@ -58,19 +58,19 @@
     }
   });
 
-  const hasAdjustment = computed(() => Math.abs(props.userAdjustment ?? 0) >= 0.05);
+  const hasAdjustment = computed(() => Math.abs(props.userAdjustment ?? 0) >= 0.1);
 
   const arrowIndicator = computed(() => {
     const adj = props.userAdjustment ?? 0;
-    if (Math.abs(adj) < 0.05) return '';
-    const isLarge = Math.abs(adj) >= 0.3;
+    if (Math.abs(adj) <= 0.1) return '';
+    const isLarge = Math.abs(adj) >= 0.5;
     return adj > 0 ? (isLarge ? '▲▲' : '▲') : (isLarge ? '▼▼' : '▼');
   });
 
   const arrowClass = computed(() => {
     const adj = props.userAdjustment ?? 0;
-    if (adj > 0.05) return 'text-amber-500 dark:text-amber-400';
-    if (adj < -0.05) return 'text-sky-500 dark:text-sky-400';
+    if (adj >= 0.1) return 'text-amber-500 dark:text-amber-400';
+    if (adj <= -0.1) return 'text-sky-500 dark:text-sky-400';
     return '';
   });
 

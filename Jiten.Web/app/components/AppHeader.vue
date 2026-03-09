@@ -20,6 +20,7 @@
     hideTags,
     hideRelations,
     hideDescriptions,
+    quickMasterVocabulary,
     displayAdminFunctions,
     readingSpeed,
     difficultyDisplayStyle,
@@ -277,6 +278,11 @@
       <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="hideVocabularyDefinitions" input-id="hideVocabularyDefinitions" name="hideVocabularyDefinitions" :binary="true" />
         <label for="hideVocabularyDefinitions" class="text-sm cursor-pointer">Hide Vocabulary Definitions</label>
+      </div>
+
+      <div v-if="auth.isAuthenticated" class="flex items-center gap-2 py-1">
+        <Checkbox v-model="quickMasterVocabulary" input-id="quickMasterVocabulary" name="quickMasterVocabulary" :binary="true" />
+        <label for="quickMasterVocabulary" class="text-sm cursor-pointer">Master in 1 click</label>
       </div>
 
       <div class="flex items-center gap-2 py-1">

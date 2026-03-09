@@ -3,9 +3,12 @@
   import Popover from 'primevue/popover';
   import { KnownState, type Word } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
+  import { useJitenStore } from '~/stores/jitenStore';
+  import { storeToRefs } from 'pinia';
 
   const { $api } = useNuxtApp();
   const auth = useAuthStore();
+  const { quickMasterVocabulary } = storeToRefs(useJitenStore());
 
   const props = defineProps<{
     word: Word;
@@ -36,8 +39,8 @@
   };
 
   const onPlusClick = (e: MouseEvent) => {
-    if (e.shiftKey) masterWord();
-    else if (e.ctrlKey) blacklistWord();
+    if (e.ctrlKey) blacklistWord();
+    else if (e.shiftKey || quickMasterVocabulary.value) masterWord();
     else op.value?.toggle(e);
   };
 
@@ -72,7 +75,7 @@
           <span aria-hidden="true">|</span>
         </template>
         <template v-else>
-          <Tooltip content="Shift+Click: Master&#10;Ctrl+Click: Blacklist">
+          <Tooltip :content="(quickMasterVocabulary ? 'Click: Master\nCtrl+Click: Blacklist' : 'Shift+Click: Master\nCtrl+Click: Blacklist') + '\n(Change in the quick cog settings with the Master in 1 click option)'">
             <Button icon="pi pi-plus" size="small" text severity="success" @click="onPlusClick" />
           </Tooltip>
           <span aria-hidden="true">|</span>

@@ -35,6 +35,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const hideTags = createCookieState<boolean>('hide-tags', false);
   const hideRelations = createCookieState<boolean>('hide-relations', false);
   const hideDescriptions = createCookieState<boolean>('hide-descriptions', false);
+  const quickMasterVocabulary = createCookieState<boolean>('quick-master-vocabulary', false);
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
@@ -100,6 +101,7 @@ export const useJitenStore = defineStore('jiten', () => {
     hideTags,
     hideRelations,
     hideDescriptions,
+    quickMasterVocabulary,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle
   };
