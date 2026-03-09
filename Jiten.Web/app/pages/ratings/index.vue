@@ -19,7 +19,21 @@ const currentIndex = ref(0);
 const stats = ref<VotingStatsDto | null>(null);
 const isLoading = ref(true);
 const voteTimestamps = reactive<number[]>([]);
+const sessionVotedKeys = new Set<string>();
+const sessionSkippedKeys = new Set<string>();
 let nextBatchPromise: Promise<ComparisonSuggestionDto[]> | null = null;
+
+function pairKey(a: number, b: number): string {
+  return `${Math.min(a, b)}-${Math.max(a, b)}`;
+}
+
+function isSeenPair(key: string): boolean {
+  return sessionVotedKeys.has(key) || sessionSkippedKeys.has(key);
+}
+
+function filterSeen(pairs: ComparisonSuggestionDto[]): ComparisonSuggestionDto[] {
+  return pairs.filter(p => !isSeenPair(pairKey(p.deckA.id, p.deckB.id)));
+}
 
 const currentPair = computed(() => {
   if (currentIndex.value < suggestions.value.length) {
@@ -32,7 +46,7 @@ const hasMore = computed(() => currentIndex.value < suggestions.value.length);
 
 async function loadSuggestions(showSpinner = true) {
   if (showSpinner) isLoading.value = true;
-  suggestions.value = await fetchSuggestions();
+  suggestions.value = filterSeen(await fetchSuggestions());
   currentIndex.value = 0;
   isLoading.value = false;
 }
@@ -49,28 +63,40 @@ function prefetchIfNeeded() {
 }
 
 async function advance() {
-  const nextIndex = currentIndex.value + 1;
+  let nextIndex = currentIndex.value + 1;
+  while (nextIndex < suggestions.value.length) {
+    if (!isSeenPair(pairKey(suggestions.value[nextIndex].deckA.id, suggestions.value[nextIndex].deckB.id))) break;
+    nextIndex++;
+  }
+
   if (nextIndex < suggestions.value.length) {
     currentIndex.value = nextIndex;
     prefetchIfNeeded();
   } else {
     const batch = nextBatchPromise ?? fetchSuggestions();
     nextBatchPromise = null;
-    const newSuggestions = await batch;
+    const newSuggestions = filterSeen(await batch);
     if (newSuggestions.length > 0) {
       suggestions.value = newSuggestions;
       currentIndex.value = 0;
       prefetchIfNeeded();
+    } else {
+      suggestions.value = [];
+      currentIndex.value = 0;
     }
-    loadStats();
   }
 }
 
 function onVoted() {
+  const pair = currentPair.value;
+  if (pair) sessionVotedKeys.add(pairKey(pair.deckA.id, pair.deckB.id));
+  if (stats.value) stats.value.totalComparisons++;
   advance();
 }
 
 function onSkipped(_permanent: boolean) {
+  const pair = currentPair.value;
+  if (pair) sessionSkippedKeys.add(pairKey(pair.deckA.id, pair.deckB.id));
   advance();
   loadSkipped();
 }
@@ -125,7 +151,9 @@ async function undoRating() {
   }
 }
 
-onUnmounted(() => clearTimeout(undoTimer));
+let statsInterval: ReturnType<typeof setInterval> | undefined;
+onMounted(() => { statsInterval = setInterval(loadStats, 60_000); });
+onUnmounted(() => { clearTimeout(undoTimer); clearInterval(statsInterval); });
 
 // Skipped pairs
 const skippedPairs = ref<DifficultyVoteDto[]>([]);
@@ -134,6 +162,9 @@ const expandedSkipId = ref<number | null>(null);
 async function loadSkipped() {
   const result = await fetchMySkipped({ limit: 50 });
   skippedPairs.value = result?.data ?? [];
+  for (const s of skippedPairs.value) {
+    sessionSkippedKeys.add(pairKey(s.deckA.id, s.deckB.id));
+  }
 }
 
 function removeSkip(id: number) {
@@ -153,9 +184,11 @@ function removeSkip(id: number) {
 }
 
 function onSkippedVoted(id: number) {
+  const skip = skippedPairs.value.find(s => s.id === id);
+  if (skip) sessionVotedKeys.add(pairKey(skip.deckA.id, skip.deckB.id));
+  if (stats.value) stats.value.totalComparisons++;
   skippedPairs.value = skippedPairs.value.filter(s => s.id !== id);
   expandedSkipId.value = null;
-  loadStats();
 }
 
 // Manual comparison
@@ -166,10 +199,6 @@ const manualDeckA = ref<DeckSummaryDto | null>(null);
 const manualDeckB = ref<DeckSummaryDto | null>(null);
 const filteredDecksA = ref<DeckSummaryDto[]>([]);
 const filteredDecksB = ref<DeckSummaryDto[]>([]);
-
-function votedPairKey(a: number, b: number): string {
-  return `${Math.min(a, b)}-${Math.max(a, b)}`;
-}
 
 function getDeckDisplayTitle(deck: DeckSummaryDto): string {
   if (jitenStore.titleLanguage === TitleLanguage.English)
@@ -198,7 +227,7 @@ function searchDeckB(event: AutoCompleteCompleteEvent) {
   filteredDecksB.value = completedDecks.value.filter(d =>
     d.id !== manualDeckA.value!.id
     && areComparable(manualDeckA.value!.mediaType, d.mediaType)
-    && !votedPairSet.value.has(votedPairKey(manualDeckA.value!.id, d.id))
+    && !votedPairSet.value.has(pairKey(manualDeckA.value!.id, d.id))
     && matchesDeck(d, event.query),
   );
 }
@@ -208,11 +237,14 @@ function onManualDeckAChange() {
 }
 
 function onManualVoted() {
-  if (manualDeckA.value && manualDeckB.value)
-    votedPairSet.value.add(votedPairKey(manualDeckA.value.id, manualDeckB.value.id));
+  if (manualDeckA.value && manualDeckB.value) {
+    const key = pairKey(manualDeckA.value.id, manualDeckB.value.id);
+    votedPairSet.value.add(key);
+    sessionVotedKeys.add(key);
+  }
+  if (stats.value) stats.value.totalComparisons++;
   manualDeckA.value = null;
   manualDeckB.value = null;
-  loadStats();
 }
 
 function onManualSkipped() {
@@ -226,6 +258,7 @@ onMounted(async () => {
       completedDecks.value = r.decks;
       votedPairSet.value = new Set(r.votedPairs.map(p => `${p[0]}-${p[1]}`));
     })]);
+  suggestions.value = filterSeen(suggestions.value);
 });
 </script>
 
@@ -312,7 +345,7 @@ onMounted(async () => {
                 <div class="flex items-center gap-2">
                   <img
                     :src="option.coverUrl || '/img/nocover.jpg'"
-                    :alt="option.title"
+                    :alt="getDeckDisplayTitle(option)"
                     class="h-10 w-7 object-cover rounded shrink-0"
                   />
                   <span class="truncate">{{ getDeckDisplayTitle(option) }}</span>
@@ -337,7 +370,7 @@ onMounted(async () => {
                 <div class="flex items-center gap-2">
                   <img
                     :src="option.coverUrl || '/img/nocover.jpg'"
-                    :alt="option.title"
+                    :alt="getDeckDisplayTitle(option)"
                     class="h-10 w-7 object-cover rounded shrink-0"
                   />
                   <span class="truncate">{{ getDeckDisplayTitle(option) }}</span>
@@ -376,7 +409,7 @@ onMounted(async () => {
         <div v-for="deck in unratedDecks" :key="deck.id" class="unrated-item border border-surface-200 dark:border-surface-700 rounded-lg p-3 overflow-hidden min-w-0">
           <Transition name="unrated-swap" mode="out-in">
             <div v-if="deck.id === ratedUndoId" key="undo" class="flex items-center justify-between gap-2 flex-wrap min-w-0">
-              <span class="text-muted-color text-sm min-w-0 break-words">Rated <strong>{{ deck.title }}</strong> as {{ ratedUndoLabel }}</span>
+              <span class="text-muted-color text-sm min-w-0 break-words">Rated <strong>{{ getDeckDisplayTitle(deck) }}</strong> as {{ ratedUndoLabel }}</span>
               <Button label="Undo" icon="pi pi-undo" size="small" text @click="undoRating" />
             </div>
             <div v-else key="card" class="flex flex-col gap-3 min-w-0">
@@ -384,13 +417,13 @@ onMounted(async () => {
                 <NuxtLink :to="`/decks/media/${deck.id}/detail`" class="shrink-0 hidden sm:block">
                   <img
                     :src="deck.coverUrl || '/img/nocover.jpg'"
-                    :alt="deck.title"
+                    :alt="getDeckDisplayTitle(deck)"
                     class="h-16 w-11 object-cover rounded"
                   />
                 </NuxtLink>
                 <div class="flex items-center gap-2 min-w-0">
                   <NuxtLink :to="`/decks/media/${deck.id}/detail`" class="font-medium hover:text-primary-500 truncate">
-                    {{ deck.title }}
+                    {{ getDeckDisplayTitle(deck) }}
                   </NuxtLink>
                   <Tag :value="getMediaTypeText(deck.mediaType)" severity="secondary" class="shrink-0" />
                 </div>
@@ -421,9 +454,9 @@ onMounted(async () => {
         <div v-for="skip in skippedPairs" :key="skip.id" class="border border-surface-200 dark:border-surface-700 rounded-lg p-3">
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <span class="text-sm">
-              <strong>{{ skip.deckA.title }}</strong>
+              <strong>{{ getDeckDisplayTitle(skip.deckA) }}</strong>
               <span class="text-muted-color mx-1">vs</span>
-              <strong>{{ skip.deckB.title }}</strong>
+              <strong>{{ getDeckDisplayTitle(skip.deckB) }}</strong>
             </span>
             <div class="flex gap-2">
               <Button

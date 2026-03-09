@@ -16,6 +16,8 @@ public class DifficultyRatingDto
     public int Id { get; set; }
     public int DeckId { get; set; }
     public string DeckTitle { get; set; } = null!;
+    public string? RomajiTitle { get; set; }
+    public string? EnglishTitle { get; set; }
     public string? CoverUrl { get; set; }
     public MediaType MediaType { get; set; }
     public int Rating { get; set; }
@@ -76,6 +78,8 @@ public class BlacklistedDeckDto
 {
     public int DeckId { get; set; }
     public string Title { get; set; } = null!;
+    public string? RomajiTitle { get; set; }
+    public string? EnglishTitle { get; set; }
     public string? CoverUrl { get; set; }
     public MediaType MediaType { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

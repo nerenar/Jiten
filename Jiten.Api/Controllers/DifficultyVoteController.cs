@@ -372,6 +372,8 @@ public class DifficultyVoteController(
                     Id = r.Id,
                     DeckId = r.DeckId,
                     DeckTitle = r.Deck.OriginalTitle,
+                    RomajiTitle = r.Deck.RomajiTitle,
+                    EnglishTitle = r.Deck.EnglishTitle,
                     CoverUrl = r.Deck.CoverName,
                     MediaType = r.Deck.MediaType,
                     Rating = r.Rating,
@@ -688,6 +690,8 @@ public class DifficultyVoteController(
         {
             DeckId = b.DeckId,
             Title = b.Deck.OriginalTitle,
+            RomajiTitle = b.Deck.RomajiTitle,
+            EnglishTitle = b.Deck.EnglishTitle,
             CoverUrl = b.Deck.CoverName,
             MediaType = b.Deck.MediaType,
             CreatedAt = b.CreatedAt

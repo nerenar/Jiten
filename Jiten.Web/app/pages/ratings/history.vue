@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
-import type { DifficultyVoteDto, DifficultyRatingDto, BlacklistedDeckDto } from '~/types/types';
-import { ComparisonOutcome } from '~/types';
+import type { DifficultyVoteDto, DifficultyRatingDto, BlacklistedDeckDto, DeckSummaryDto } from '~/types/types';
+import { ComparisonOutcome, TitleLanguage } from '~/types';
 
 definePageMeta({
   middleware: ['auth'],
@@ -13,6 +13,20 @@ useHead({ title: 'My Votes - Jiten' });
 const toast = useToast();
 const confirm = useConfirm();
 const { fetchMyVotes, deleteVote, deleteSkip, submitRating, fetchBlockedDecks, unblockDeck } = useDifficultyVotes();
+const jitenStore = useJitenStore();
+
+function localizedTitle(item: { title?: string; deckTitle?: string; romajiTitle?: string; englishTitle?: string }): string {
+  const title = item.title ?? item.deckTitle ?? '';
+  if (jitenStore.titleLanguage === TitleLanguage.English)
+    return item.englishTitle ?? item.romajiTitle ?? title;
+  if (jitenStore.titleLanguage === TitleLanguage.Romaji)
+    return item.romajiTitle ?? title;
+  return title;
+}
+
+function deckTitle(deck: DeckSummaryDto): string {
+  return localizedTitle(deck);
+}
 
 const activeTab = ref(0);
 const limit = 20;
@@ -228,20 +242,20 @@ onMounted(() => loadComparisons());
               <div class="flex-1 min-w-0">
                 <div v-if="getVoteDisplay(vote).isSame" class="flex items-center gap-2 flex-wrap">
                   <NuxtLink :to="`/decks/media/${vote.deckA.id}/detail`" class="font-semibold hover:text-primary-500">
-                    {{ vote.deckA.title }}
+                    {{ deckTitle(vote.deckA) }}
                   </NuxtLink>
                   <span class="text-muted-color">≈ similar to</span>
                   <NuxtLink :to="`/decks/media/${vote.deckB.id}/detail`" class="font-semibold hover:text-primary-500">
-                    {{ vote.deckB.title }}
+                    {{ deckTitle(vote.deckB) }}
                   </NuxtLink>
                 </div>
                 <div v-else class="flex items-center gap-2 flex-wrap">
                   <NuxtLink :to="`/decks/media/${getVoteDisplay(vote).harderDeck!.id}/detail`" class="font-bold vote-harder hover:text-orange-400">
-                    {{ getVoteDisplay(vote).harderDeck!.title }}
+                    {{ deckTitle(getVoteDisplay(vote).harderDeck!) }}
                   </NuxtLink>
                   <span class="text-muted-color">◄ {{ getVoteDisplay(vote).intensity }} than</span>
                   <NuxtLink :to="`/decks/media/${getVoteDisplay(vote).easierDeck!.id}/detail`" class="font-semibold hover:text-primary-500">
-                    {{ getVoteDisplay(vote).easierDeck!.title }}
+                    {{ deckTitle(getVoteDisplay(vote).easierDeck!) }}
                   </NuxtLink>
                 </div>
                 <div class="text-sm text-muted-color mt-1">{{ formatDate(vote.createdAt) }}</div>
@@ -281,7 +295,7 @@ onMounted(() => loadComparisons());
               <NuxtLink :to="`/decks/media/${rating.deckId}/detail`" class="shrink-0">
                 <img
                   :src="rating.coverUrl || '/img/nocover.jpg'"
-                  :alt="rating.deckTitle"
+                  :alt="localizedTitle(rating)"
                   class="h-16 w-11 object-cover rounded"
                 />
               </NuxtLink>
@@ -289,7 +303,7 @@ onMounted(() => loadComparisons());
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 min-w-0">
                     <NuxtLink :to="`/decks/media/${rating.deckId}/detail`" class="font-semibold hover:text-primary-500 truncate">
-                      {{ rating.deckTitle }}
+                      {{ localizedTitle(rating) }}
                     </NuxtLink>
                     <Tag :value="getMediaTypeText(rating.mediaType)" severity="secondary" class="shrink-0" />
                   </div>
@@ -335,11 +349,11 @@ onMounted(() => loadComparisons());
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                   <NuxtLink :to="`/decks/media/${item.deckA.id}/detail`" class="font-semibold hover:text-primary-500">
-                    {{ item.deckA.title }}
+                    {{ deckTitle(item.deckA) }}
                   </NuxtLink>
                   <span class="text-muted-color">vs</span>
                   <NuxtLink :to="`/decks/media/${item.deckB.id}/detail`" class="font-semibold hover:text-primary-500">
-                    {{ item.deckB.title }}
+                    {{ deckTitle(item.deckB) }}
                   </NuxtLink>
                 </div>
                 <div class="text-sm text-muted-color mt-1">{{ formatDate(item.createdAt) }}</div>
@@ -389,14 +403,14 @@ onMounted(() => loadComparisons());
               <NuxtLink :to="`/decks/media/${item.deckId}/detail`" class="shrink-0">
                 <img
                   :src="item.coverUrl || '/img/nocover.jpg'"
-                  :alt="item.title"
+                  :alt="localizedTitle(item)"
                   class="h-16 w-11 object-cover rounded"
                 />
               </NuxtLink>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 min-w-0">
                   <NuxtLink :to="`/decks/media/${item.deckId}/detail`" class="font-semibold hover:text-primary-500 truncate">
-                    {{ item.title }}
+                    {{ localizedTitle(item) }}
                   </NuxtLink>
                   <Tag :value="getMediaTypeText(item.mediaType)" severity="secondary" class="shrink-0" />
                 </div>
@@ -408,7 +422,7 @@ onMounted(() => loadComparisons());
                 text
                 size="small"
                 v-tooltip.left="'Unblock'"
-                @click="handleUnblock(item.deckId, item.title)"
+                @click="handleUnblock(item.deckId, localizedTitle(item))"
               />
             </div>
           </template>

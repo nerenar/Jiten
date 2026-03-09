@@ -2,15 +2,24 @@
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
 import type { DeckSummaryDto } from '~/types/types';
-import { ComparisonOutcome } from '~/types';
+import { ComparisonOutcome, TitleLanguage } from '~/types';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-
 
 const props = defineProps<{
   deckA: DeckSummaryDto;
   deckB: DeckSummaryDto;
   voteTimestamps: number[];
 }>();
+
+const jitenStore = useJitenStore();
+
+function deckTitle(deck: DeckSummaryDto): string {
+  if (jitenStore.titleLanguage === TitleLanguage.English)
+    return deck.englishTitle ?? deck.romajiTitle ?? deck.title;
+  if (jitenStore.titleLanguage === TitleLanguage.Romaji)
+    return deck.romajiTitle ?? deck.title;
+  return deck.title;
+}
 
 const emit = defineEmits<{
   voted: [];
@@ -86,13 +95,13 @@ function confirmBlock(event: Event, deck: DeckSummaryDto) {
   confirm.require({
     target: event.currentTarget as HTMLElement,
     group: 'blockDeck',
-    message: `Stop showing "${deck.title}" in comparisons?`,
+    message: `Stop showing "${deckTitle(deck)}" in comparisons?`,
     acceptProps: { label: 'Block', severity: 'danger', size: 'small' },
     rejectProps: { label: 'Cancel', severity: 'secondary', outlined: true, size: 'small' },
     accept: async () => {
       const success = await blockDeck(deck.id);
       if (success) {
-        toast.add({ severity: 'info', summary: `${deck.title} blocked from comparisons`, life: 3000 });
+        toast.add({ severity: 'info', summary: `${deckTitle(deck)} blocked from comparisons`, life: 3000 });
         emit('blocked', deck.id);
       }
     },
@@ -140,10 +149,10 @@ function getOutcomeLabel(outcome: ComparisonOutcome): string {
             <div class="flex flex-col items-center text-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
               <img
                 :src="deckA.coverUrl || '/img/nocover.jpg'"
-                :alt="deckA.title"
+                :alt="deckTitle(deckA)"
                 class="h-40 w-28 object-cover rounded"
               />
-              <div class="font-semibold text-sm leading-tight">{{ deckA.title }}</div>
+              <div class="font-semibold text-sm leading-tight">{{ deckTitle(deckA) }}</div>
               <Tag :value="getMediaTypeText(deckA.mediaType)" severity="secondary" />
             </div>
           </NuxtLink>
@@ -190,10 +199,10 @@ function getOutcomeLabel(outcome: ComparisonOutcome): string {
             <div class="flex flex-col items-center text-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
               <img
                 :src="deckB.coverUrl || '/img/nocover.jpg'"
-                :alt="deckB.title"
+                :alt="deckTitle(deckB)"
                 class="h-40 w-28 object-cover rounded"
               />
-              <div class="font-semibold text-sm leading-tight">{{ deckB.title }}</div>
+              <div class="font-semibold text-sm leading-tight">{{ deckTitle(deckB) }}</div>
               <Tag :value="getMediaTypeText(deckB.mediaType)" severity="secondary" />
             </div>
           </NuxtLink>

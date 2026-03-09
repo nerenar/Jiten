@@ -658,6 +658,8 @@ export interface DifficultyRatingDto {
   id: number
   deckId: number
   deckTitle: string
+  romajiTitle?: string
+  englishTitle?: string
   coverUrl: string | null
   mediaType: MediaType
   rating: number
@@ -693,6 +695,8 @@ export interface CompletedDecksResponse {
 export interface BlacklistedDeckDto {
   deckId: number
   title: string
+  romajiTitle?: string
+  englishTitle?: string
   coverUrl: string | null
   mediaType: MediaType
   createdAt: string
