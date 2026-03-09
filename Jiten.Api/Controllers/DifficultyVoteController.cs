@@ -20,9 +20,7 @@ public class DifficultyVoteController(
     ICurrentUserService currentUserService,
     ILogger<DifficultyVoteController> logger) : ControllerBase
 {
-    private const int VotesPerMinuteLimit = 20;
-    private const int AccountAgeRequiredDays = 7;
-
+    private const int VotesPerMinuteLimit = 35;
     [HttpPost]
     public async Task<IResult> SubmitVote([FromBody] SubmitVoteRequest request)
     {
@@ -33,13 +31,6 @@ public class DifficultyVoteController(
         if (!Enum.IsDefined(typeof(ComparisonOutcome), request.Outcome))
             return Results.BadRequest("Invalid outcome. Must be -2, -1, 0, 1, or 2.");
 
-        var user = await userContext.Users.FindAsync(userId);
-        if (user == null)
-            return Results.Unauthorized();
-
-        if ((DateTime.UtcNow - user.CreatedAt).TotalDays < AccountAgeRequiredDays)
-            return Results.Problem("Account must be at least 7 days old to vote.", statusCode: 403);
-
         var oneMinuteAgo = DateTimeOffset.UtcNow.AddMinutes(-1);
         var recentTimestamps = await context.DifficultyVotes
             .Where(v => v.UserId == userId)
@@ -48,7 +39,7 @@ public class DifficultyVoteController(
             .Select(v => v.CreatedAt)
             .ToListAsync();
         if (recentTimestamps.Count(t => t > oneMinuteAgo) >= VotesPerMinuteLimit)
-            return Results.Problem("Rate limit exceeded. Maximum 20 votes per minute.", statusCode: 429);
+            return Results.Problem("Rate limit exceeded. Maximum 35 votes per minute.", statusCode: 429);
 
         if (request.DeckAId == request.DeckBId)
             return Results.BadRequest("Cannot compare a deck with itself.");
@@ -121,13 +112,6 @@ public class DifficultyVoteController(
 
         if (request.Rating is < 0 or > 4)
             return Results.BadRequest("Rating must be between 0 and 4.");
-
-        var user = await userContext.Users.FindAsync(userId);
-        if (user == null)
-            return Results.Unauthorized();
-
-        if ((DateTime.UtcNow - user.CreatedAt).TotalDays < AccountAgeRequiredDays)
-            return Results.Problem("Account must be at least 7 days old to rate.", statusCode: 403);
 
         var deckExists = await context.Decks.AnyAsync(d => d.DeckId == request.DeckId && d.ParentDeckId == null);
         if (!deckExists)

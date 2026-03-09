@@ -32,8 +32,8 @@ function checkRateLimit(): boolean {
   const now = Date.now();
   const oneMinuteAgo = now - 60_000;
   const recent = props.voteTimestamps.filter(t => t > oneMinuteAgo).sort((a, b) => a - b);
-  if (recent.length >= 18) {
-    const oldestRelevant = recent[recent.length - 18];
+  if (recent.length >= 33) {
+    const oldestRelevant = recent[recent.length - 33];
     const waitMs = oldestRelevant + 60_000 - now;
     const waitSeconds = Math.ceil(waitMs / 1000);
 
