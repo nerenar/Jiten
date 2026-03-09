@@ -379,10 +379,12 @@ public class MediaDeckController(
             query = query.Where(d => d.CharacterCount <= charCountMax);
 
         if (difficultyMin != null)
-            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty) >= difficultyMin);
+            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0) >= difficultyMin);
 
         if (difficultyMax != null)
-            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty) <= difficultyMax);
+            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0) <= difficultyMax);
 
         if (releaseYearMin != null)
             query = query.Where(d => d.ReleaseDate.Year >= releaseYearMin);
@@ -844,9 +846,11 @@ public class MediaDeckController(
         {
             "difficulty" => sortOrder == SortOrder.Ascending
                 ? query.Where(d => d.Difficulty > -1)
-                       .OrderBy(d => d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                       .OrderBy(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                           + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0))
                 : query.Where(d => d.Difficulty > -1)
-                       .OrderByDescending(d => d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty),
+                       .OrderByDescending(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                           + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0)),
             "charCount" => sortOrder == SortOrder.Ascending
                 ? query.Where(d => d.MediaType != MediaType.Anime && d.MediaType != MediaType.Drama && d.MediaType != MediaType.Movie && d.MediaType != MediaType.Audio)
                        .OrderBy(d => d.CharacterCount)
@@ -912,9 +916,11 @@ public class MediaDeckController(
                 : query.OrderByDescending(p => p.Occurrences),
             "difficulty" => sortOrder == SortOrder.Ascending
                 ? query.Where(p => p.Deck.Difficulty > -1)
-                       .OrderBy(p => p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty)
+                       .OrderBy(p => (p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty)
+                           + (float)(p.Deck.DeckDifficulty != null ? p.Deck.DeckDifficulty.UserAdjustment : 0))
                 : query.Where(p => p.Deck.Difficulty > -1)
-                       .OrderByDescending(p => p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty),
+                       .OrderByDescending(p => (p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty)
+                           + (float)(p.Deck.DeckDifficulty != null ? p.Deck.DeckDifficulty.UserAdjustment : 0)),
             "charCount" => sortOrder == SortOrder.Ascending
                 ? query.Where(p => p.Deck.MediaType != MediaType.Anime && p.Deck.MediaType != MediaType.Drama && p.Deck.MediaType != MediaType.Movie && p.Deck.MediaType != MediaType.Audio)
                        .OrderBy(p => p.Deck.CharacterCount)
