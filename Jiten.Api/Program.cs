@@ -460,6 +460,7 @@ builder.Services.AddScoped<ParseJob>();
 builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
+builder.Services.AddScoped<DifficultyAdjustmentJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -564,6 +565,11 @@ if (!app.Environment.IsEnvironment("Testing"))
                                               "updateCoverage",
                                               job => job.DailyUserCoverage(),
                                               Cron.Daily());
+
+    recurringJobs.AddOrUpdate<DifficultyAdjustmentJob>(
+        "difficulty-adjustment",
+        job => job.ComputeAllAdjustments(),
+        "0 */6 * * *");
 }
 
 app.UseResponseCompression();

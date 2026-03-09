@@ -238,4 +238,52 @@ public partial class MorphologicalAnalyser
 
         return result;
     }
+
+    /// <summary>
+    /// Splits たわけ (misanalysed as 戯け noun or たわける verb) into た (past auxiliary) + わけ (noun)
+    /// when preceded by a verb stem, auxiliary, or っ (geminate mark).
+    /// Sudachi frequently fuses た+わけ into たわけ after verb stems,
+    /// e.g., してたわけ → してた+わけ, あるったわけ → あった+わけ.
+    /// Legitimate uses of たわけ (戯け "fool") follow nouns, prefixes, or adnominals and are left intact.
+    /// </summary>
+    private static List<WordInfo> SplitTawakeNoun(List<WordInfo> wordInfos)
+    {
+        var result = new List<WordInfo>(wordInfos.Count + 2);
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (word.Text == "たわけ" && word.DictionaryForm is "たわけ" or "たわける" && i > 0)
+            {
+                var prev = wordInfos[i - 1];
+                bool afterVerbContext = prev.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary or PartOfSpeech.IAdjective or PartOfSpeech.Particle
+                    || (prev.PartOfSpeech == PartOfSpeech.SupplementarySymbol && prev.Text == "っ")
+                    || prev.PartOfSpeech == PartOfSpeech.Adverb;
+
+                if (afterVerbContext)
+                {
+                    result.Add(new WordInfo
+                    {
+                        Text = "た", DictionaryForm = "た", NormalizedForm = "た",
+                        PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "た",
+                        StartOffset = word.StartOffset,
+                        EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
+                    });
+                    result.Add(new WordInfo
+                    {
+                        Text = "わけ", DictionaryForm = "わけ", NormalizedForm = "わけ",
+                        PartOfSpeech = PartOfSpeech.Noun, Reading = "わけ",
+                        StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                        EndOffset = word.EndOffset
+                    });
+                    continue;
+                }
+            }
+
+            result.Add(word);
+        }
+
+        return result;
+    }
 }

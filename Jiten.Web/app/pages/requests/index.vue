@@ -54,6 +54,7 @@ const statusOptions = [
 const sortOptions = [
   { label: 'Most Voted', value: 'votes' },
   { label: 'Newest', value: 'recent' },
+  { label: 'Last Completed', value: 'completed' },
 ];
 
 const attachmentOptions = [
@@ -114,6 +115,11 @@ watch(activeTab, () => {
   searchQuery.value = '';
   debouncedSearch.value = '';
   selectedStatus.value = activeTab.value === 0 ? RequestStatus.Open : undefined;
+});
+
+watch(selectedStatus, (status) => {
+  if (status === RequestStatus.Completed) sortBy.value = 'completed';
+  else if (sortBy.value === 'completed') sortBy.value = 'votes';
 });
 
 watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, selectedAttachments], () => {

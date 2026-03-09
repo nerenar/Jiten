@@ -56,7 +56,7 @@ public class KanjiController(JitenDbContext context) : ControllerBase
         var topWordIds = topWordData.Select(x => x.WordId).Distinct().ToList();
         var words = await context.JMDictWords
                                  .AsNoTracking()
-                                 .Include(w => w.Definitions)
+                                 .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                                  .Where(w => topWordIds.Contains(w.WordId))
                                  .ToDictionaryAsync(w => w.WordId);
 
@@ -133,7 +133,7 @@ public class KanjiController(JitenDbContext context) : ControllerBase
         var pageWordIds = pageData.Select(x => x.WordId).Distinct().ToList();
         var words = await context.JMDictWords
                                  .AsNoTracking()
-                                 .Include(w => w.Definitions)
+                                 .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                                  .Where(w => pageWordIds.Contains(w.WordId))
                                  .ToDictionaryAsync(w => w.WordId);
 

@@ -116,6 +116,7 @@ public partial class MorphologicalAnalyser
         ("急", "に", PartOfSpeech.Adverb),
         ("と", "ても", PartOfSpeech.Adverb),
         ("で", "も", PartOfSpeech.Conjunction),
+        ("として", "も", PartOfSpeech.Expression),
         ("多", "き", PartOfSpeech.IAdjective),
         ("ぶっ", "た", PartOfSpeech.Suffix),
         ("に", "よる", PartOfSpeech.Expression),

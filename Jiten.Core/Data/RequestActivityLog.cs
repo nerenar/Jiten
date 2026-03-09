@@ -24,6 +24,7 @@ public enum RequestAction
     Unsubscribed = 13,
 
     CommentAdded = 20,
+    CommentEdited = 21,
 
     FileUploaded = 30,
     FileDeletedByAdmin = 31,
@@ -34,6 +35,7 @@ public enum RequestAction
     StatusChangedToOpen = 43,
 
     RequestEditedByAdmin = 50,
+    RequestEditedByRequester = 51,
 
     ContributionValidated = 60,
     ContributionRevoked = 61,

@@ -20,9 +20,9 @@ const jitenStore = useJitenStore();
 
 const requestId = computed(() => Number(route.params.id));
 const {
-  fetchRequest, toggleUpvote, subscribe, unsubscribe, fetchComments, addComment,
-  deleteRequest, updateStatus, editRequest, deleteUpload, reviewUpload, getUploadDownloadUrl,
-  error: apiError,
+  fetchRequest, toggleUpvote, subscribe, unsubscribe, fetchComments, addComment, editComment,
+  editRequestDescription, deleteRequest, updateStatus, editRequest, deleteUpload, reviewUpload,
+  getUploadDownloadUrl, error: apiError,
 } = useMediaRequests();
 
 const request = ref<MediaRequestDto | null>(null);
@@ -57,6 +57,17 @@ const isSavingEdit = ref(false);
 const mediaTypeOptions = Object.entries(MediaType)
   .filter(([key]) => isNaN(Number(key)))
   .map(([key, value]) => ({ label: key, value: value as MediaType }));
+
+// Comment editing
+const editingCommentId = ref<number | null>(null);
+const editCommentText = ref('');
+const isSavingComment = ref(false);
+
+// Description editing (by requester)
+const isEditingDescription = ref(false);
+const editOwnDescription = ref('');
+const editOwnExternalUrl = ref('');
+const isSavingDescription = ref(false);
 
 // Delete upload confirmation
 const showDeleteUploadDialog = ref(false);
@@ -282,6 +293,64 @@ async function handleAdminReviewUpload(uploadId: number, reviewed: boolean) {
   reviewingUploadId.value = null;
 }
 
+function startEditComment(comment: MediaRequestCommentDto) {
+  editingCommentId.value = comment.id;
+  editCommentText.value = comment.text || '';
+}
+
+function cancelEditComment() {
+  editingCommentId.value = null;
+  editCommentText.value = '';
+}
+
+async function handleSaveComment() {
+  if (!request.value || editingCommentId.value === null) return;
+  const trimmed = editCommentText.value.trim();
+  if (!trimmed) return;
+  isSavingComment.value = true;
+  const success = await editComment(request.value.id, editingCommentId.value, trimmed);
+  isSavingComment.value = false;
+  if (success) {
+    editingCommentId.value = null;
+    editCommentText.value = '';
+    comments.value = await fetchComments(request.value.id);
+    toast.add({ severity: 'success', summary: 'Comment updated', life: 3000 });
+  } else {
+    const detail = extractApiError(apiError.value, 'Failed to update comment.');
+    toast.add({ severity: 'error', summary: 'Failed to update comment', detail, life: 6000 });
+  }
+}
+
+function startEditDescription() {
+  if (!request.value) return;
+  editOwnDescription.value = request.value.description || '';
+  editOwnExternalUrl.value = request.value.externalUrl || '';
+  isEditingDescription.value = true;
+}
+
+function cancelEditDescription() {
+  isEditingDescription.value = false;
+}
+
+async function handleSaveDescription() {
+  if (!request.value) return;
+  isSavingDescription.value = true;
+  const success = await editRequestDescription(
+    request.value.id,
+    editOwnDescription.value.trim() || undefined,
+    editOwnExternalUrl.value.trim() || undefined,
+  );
+  isSavingDescription.value = false;
+  if (success) {
+    isEditingDescription.value = false;
+    toast.add({ severity: 'success', summary: 'Request updated', life: 3000 });
+    await loadData();
+  } else {
+    const detail = extractApiError(apiError.value, 'Failed to update request.');
+    toast.add({ severity: 'error', summary: 'Failed to update request', detail, life: 6000 });
+  }
+}
+
 const commentsWithUploads = computed(() =>
   comments.value.filter(c => c.upload)
 );
@@ -360,15 +429,45 @@ onMounted(() => loadData());
             </div>
           </div>
 
-          <div v-if="request.externalUrl" class="mb-4">
-            <a :href="request.externalUrl" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline flex items-center gap-1">
-              <i class="pi pi-external-link" />
-              <span v-if="request.externalLinkType">{{ getLinkTypeText(request.externalLinkType) }}</span>
-              <span v-else>External link</span>
-            </a>
-          </div>
+          <template v-if="!isEditingDescription">
+            <div v-if="request.externalUrl" class="mb-4">
+              <a :href="request.externalUrl" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline flex items-center gap-1">
+                <i class="pi pi-external-link" />
+                <span v-if="request.externalLinkType">{{ getLinkTypeText(request.externalLinkType) }}</span>
+                <span v-else>External link</span>
+              </a>
+            </div>
 
-          <p v-if="request.description" class="mb-4 text-muted-color whitespace-pre-wrap">{{ request.description }}</p>
+            <div v-if="request.description" class="mb-4 flex items-start gap-2">
+              <p class="text-muted-color whitespace-pre-wrap flex-1">{{ request.description }}</p>
+            </div>
+
+            <div v-if="request.isOwnRequest && canComment" class="mb-4">
+              <Button
+                icon="pi pi-pencil"
+                label="Edit Description"
+                severity="secondary"
+                text
+                size="small"
+                @click="startEditDescription"
+              />
+            </div>
+          </template>
+          <div v-else class="mb-4 flex flex-col gap-2">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-semibold">Description</label>
+              <Textarea v-model="editOwnDescription" rows="3" class="w-full" :maxlength="1000" />
+              <small class="text-muted-color text-right">{{ editOwnDescription.length }}/1000</small>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-semibold">External URL</label>
+              <InputText v-model="editOwnExternalUrl" class="w-full" placeholder="https://..." />
+            </div>
+            <div class="flex gap-2">
+              <Button label="Save" icon="pi pi-check" size="small" :loading="isSavingDescription" @click="handleSaveDescription" />
+              <Button label="Cancel" severity="secondary" size="small" @click="cancelEditDescription" />
+            </div>
+          </div>
 
           <div v-if="request.adminNote && isTerminal" class="mb-4 p-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800">
             <p class="text-sm font-semibold mb-1">Admin note:</p>
@@ -606,9 +705,30 @@ onMounted(() => loadData());
                 />
                 <span v-if="comment.userName && authStore.isAdmin" class="text-xs font-medium">{{ comment.userName }}</span>
                 <span v-if="comment.isOwnComment" class="text-xs text-muted-color italic">You</span>
-                <span class="text-xs text-muted-color ml-auto">{{ formatTimeAgo(comment.createdAt) }}</span>
+                <span class="text-xs text-muted-color ml-auto">
+                  <span v-if="comment.updatedAt" class="italic mr-1">(edited)</span>
+                  {{ formatTimeAgo(comment.createdAt) }}
+                </span>
+                <Button
+                  v-if="comment.isOwnComment && comment.text && canComment && editingCommentId !== comment.id"
+                  icon="pi pi-pencil"
+                  severity="secondary"
+                  text
+                  size="small"
+                  rounded
+                  class="!p-1"
+                  @click="startEditComment(comment)"
+                />
               </div>
-              <p v-if="comment.text" class="text-sm whitespace-pre-wrap">{{ comment.text }}</p>
+              <template v-if="editingCommentId === comment.id">
+                <Textarea v-model="editCommentText" rows="2" class="w-full text-sm" :maxlength="500" />
+                <div class="flex items-center gap-2 mt-1">
+                  <small class="text-muted-color">{{ editCommentText.length }}/500</small>
+                  <Button label="Save" icon="pi pi-check" size="small" :loading="isSavingComment" :disabled="!editCommentText.trim()" @click="handleSaveComment" />
+                  <Button label="Cancel" severity="secondary" size="small" @click="cancelEditComment" />
+                </div>
+              </template>
+              <p v-else-if="comment.text" class="text-sm whitespace-pre-wrap">{{ comment.text }}</p>
               <div v-if="comment.upload" class="mt-2 flex items-center gap-1 text-sm text-muted-color">
                 <template v-if="(comment.upload as any)?.fileDeleted">
                   <i class="pi pi-ban text-xs" />
@@ -637,6 +757,7 @@ onMounted(() => loadData());
               :maxlength="500"
               class="w-full"
             />
+            <small class="text-muted-color">{{ commentText.length }}/500</small>
 
             <div class="flex flex-col gap-2">
               <Message severity="warn" :closable="false" class="text-sm">
@@ -721,8 +842,7 @@ onMounted(() => loadData());
               </div>
             </div>
 
-            <div class="flex items-center justify-between">
-              <small class="text-muted-color">{{ commentText.length }}/500</small>
+            <div class="flex justify-end">
               <Button
                 :label="selectedFiles.length > 0 ? 'Post Comment & Upload' : 'Post Comment'"
                 icon="pi pi-send"

@@ -144,7 +144,7 @@ public class ReaderController(
         }
 
         var wordIds = parsedParagraphs.SelectMany(p => p).Select(w => w.WordId).Distinct().ToList();
-        var jmdictWords = await context.JMDictWords.Where(w => wordIds.Contains(w.WordId)).Include(w => w.Definitions).ToDictionaryAsync(w => w.WordId);
+        var jmdictWords = await context.JMDictWords.Where(w => wordIds.Contains(w.WordId)).Include(w => w.Definitions.OrderBy(d => d.SenseIndex)).ToDictionaryAsync(w => w.WordId);
         var readerForms = await WordFormHelper.LoadWordForms(context, wordIds);
         var readerFormFreqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
 

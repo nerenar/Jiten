@@ -6,12 +6,14 @@
     displayFilter: string;
     showDisplayFilter?: boolean;
     sortByWidth?: string;
+    search?: string;
   }>();
 
   const emit = defineEmits<{
     'update:sortBy': [value: string];
     'update:sortDescending': [value: boolean];
     'update:displayFilter': [value: string];
+    'update:search': [value: string];
   }>();
 
   const displayOptions = [
@@ -57,6 +59,15 @@
         <Icon v-else name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
       </Button>
     </div>
+    <IconField v-if="search !== undefined" class="flex-1 min-w-48">
+      <InputIcon>
+        <Icon name="material-symbols:search-rounded" />
+      </InputIcon>
+      <InputText :model-value="search" @update:model-value="$emit('update:search', $event)" placeholder="Search words or definitions..." class="w-full" />
+      <InputIcon v-if="search" class="cursor-pointer" @click="$emit('update:search', '')">
+        <Icon name="material-symbols:close" />
+      </InputIcon>
+    </IconField>
     <slot />
     <div v-if="showDisplayFilter">
       <FloatLabel variant="on">

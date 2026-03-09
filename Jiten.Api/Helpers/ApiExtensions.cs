@@ -9,7 +9,7 @@ public static class ApiExtensions
     {
         int i = 1;
         List<DefinitionDto> definitionDtos = new();
-        foreach (var definition in definitions.OrderBy(d => d.DefinitionId))
+        foreach (var definition in definitions.OrderBy(d => d.SenseIndex))
         {
             if (definition.EnglishMeanings.Count == 0)
                 continue;

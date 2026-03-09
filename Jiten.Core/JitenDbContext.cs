@@ -41,6 +41,11 @@ public class JitenDbContext : DbContext
     public DbSet<WordSet> WordSets { get; set; }
     public DbSet<WordSetMember> WordSetMembers { get; set; }
 
+    public DbSet<DifficultyVote> DifficultyVotes { get; set; }
+    public DbSet<DifficultyRating> DifficultyRatings { get; set; }
+    public DbSet<SkippedComparison> SkippedComparisons { get; set; }
+    public DbSet<BlacklistedComparisonDeck> BlacklistedComparisonDecks { get; set; }
+
     public DbSet<MediaRequest> MediaRequests { get; set; }
     public DbSet<MediaRequestUpvote> MediaRequestUpvotes { get; set; }
     public DbSet<MediaRequestSubscription> MediaRequestSubscriptions { get; set; }
@@ -212,6 +217,12 @@ public class JitenDbContext : DbContext
 
             entity.Property(dd => dd.LastUpdated)
                   .IsRequired();
+
+            entity.Property(dd => dd.EasierVoteCount).HasDefaultValue(0);
+            entity.Property(dd => dd.HarderVoteCount).HasDefaultValue(0);
+            entity.Property(dd => dd.DistinctVoterCount).HasDefaultValue(0);
+            entity.Property(dd => dd.UserAdjustment).HasPrecision(4, 2).HasDefaultValue(0m);
+            entity.Property(dd => dd.NEffective).HasPrecision(6, 2).HasDefaultValue(0m);
 
             entity.HasOne(dd => dd.Deck)
                   .WithOne(d => d.DeckDifficulty)
@@ -668,6 +679,7 @@ public class JitenDbContext : DbContext
             entity.Property(c => c.UserId).IsRequired().HasMaxLength(36);
             entity.Property(c => c.Text).HasMaxLength(500);
             entity.Property(c => c.CreatedAt).IsRequired();
+            entity.Property(c => c.UpdatedAt);
 
             entity.HasOne(c => c.MediaRequest)
                   .WithMany(mr => mr.Comments)
@@ -757,6 +769,84 @@ public class JitenDbContext : DbContext
             }
             entity.HasIndex(n => n.CreatedAt)
                   .HasDatabaseName("IX_Notification_CreatedAt");
+        });
+
+        modelBuilder.Entity<DifficultyVote>(entity =>
+        {
+            entity.ToTable("DifficultyVotes", "jiten");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.IsValid).HasDefaultValue(true);
+
+            entity.HasOne(e => e.DeckLow)
+                .WithMany().HasForeignKey(e => e.DeckLowId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.DeckHigh)
+                .WithMany().HasForeignKey(e => e.DeckHighId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.UserId).HasDatabaseName("IX_DifficultyVotes_UserId");
+            entity.HasIndex(e => e.DeckLowId).HasDatabaseName("IX_DifficultyVotes_DeckLowId");
+            entity.HasIndex(e => e.DeckHighId).HasDatabaseName("IX_DifficultyVotes_DeckHighId");
+
+            if (isNpgsql)
+            {
+                entity.HasIndex(e => new { e.UserId, e.DeckLowId, e.DeckHighId })
+                    .IsUnique()
+                    .HasFilter("\"IsValid\" = true")
+                    .HasDatabaseName("IX_DifficultyVotes_Unique");
+            }
+            else
+            {
+                entity.HasIndex(e => new { e.UserId, e.DeckLowId, e.DeckHighId })
+                    .IsUnique()
+                    .HasDatabaseName("IX_DifficultyVotes_Unique");
+            }
+        });
+
+        modelBuilder.Entity<DifficultyRating>(entity =>
+        {
+            entity.ToTable("DifficultyRatings", "jiten");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasOne(e => e.Deck)
+                .WithMany().HasForeignKey(e => e.DeckId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.DeckId })
+                .IsUnique()
+                .HasDatabaseName("IX_DifficultyRatings_UserDeck");
+        });
+
+        modelBuilder.Entity<SkippedComparison>(entity =>
+        {
+            entity.ToTable("SkippedComparisons", "jiten");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(e => new { e.UserId, e.DeckLowId, e.DeckHighId })
+                .IsUnique()
+                .HasDatabaseName("IX_SkippedComparisons_UserPair");
+        });
+
+        modelBuilder.Entity<BlacklistedComparisonDeck>(entity =>
+        {
+            entity.ToTable("BlacklistedComparisonDecks", "jiten");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasOne(e => e.Deck)
+                .WithMany().HasForeignKey(e => e.DeckId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.DeckId })
+                .IsUnique()
+                .HasDatabaseName("IX_BlacklistedComparisonDecks_UserDeck");
         });
 
         base.OnModelCreating(modelBuilder);

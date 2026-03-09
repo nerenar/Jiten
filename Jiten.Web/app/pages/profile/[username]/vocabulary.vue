@@ -2,6 +2,7 @@
   import { type AccomplishmentVocabularyDto, type UserProfile, MediaType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { debounce } from 'perfect-debounce';
 
   const route = useRoute();
   const router = useRouter();
@@ -32,6 +33,8 @@
   const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
   const mediaTypeFilter = ref(route.query.mediaType?.toString() || '');
   const display = ref(route.query.display?.toString() || 'all');
+  const search = ref(route.query.search?.toString() || '');
+  const debouncedSearch = ref(search.value);
 
   watch(sortDescending, (newValue) => {
     router.replace({
@@ -57,6 +60,12 @@
     });
   });
 
+  const updateSearch = debounce((val: string) => {
+    debouncedSearch.value = val;
+    router.replace({ query: { ...route.query, search: val || undefined, offset: undefined } });
+  }, 300);
+  watch(search, updateSearch);
+
   const userNotFound = ref(false);
 
   const { data: profileData, error: profileError } = await useApiFetch<UserProfile>(`user/profile/${targetUsername.value}`);
@@ -75,6 +84,7 @@
       sortBy: sortBy.value,
       descending: sortDescending.value,
       displayFilter: display.value,
+      search: debouncedSearch.value || undefined,
     };
     if (mediaTypeFilter.value) {
       params.mediaType = parseInt(mediaTypeFilter.value);
@@ -88,7 +98,7 @@
     error,
   } = await useApiFetchPaginated<AccomplishmentVocabularyDto>(`user/profile/${targetUsername.value}/accomplishments/vocabulary`, {
     query: queryParams,
-    watch: [offset, sortBy, sortDescending, mediaTypeFilter, display],
+    watch: [offset, sortBy, sortDescending, mediaTypeFilter, display, debouncedSearch],
   });
 
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
@@ -145,6 +155,7 @@
         v-model:sort-by="sortBy"
         v-model:sort-descending="sortDescending"
         v-model:display-filter="display"
+        v-model:search="search"
         :sort-by-options="sortByOptions"
         :show-display-filter="auth.isAuthenticated"
         sort-by-width="md:w-44"

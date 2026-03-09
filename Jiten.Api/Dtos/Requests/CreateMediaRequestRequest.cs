@@ -44,6 +44,15 @@ public class AdminReviewUploadRequest
     public string? AdminNote { get; set; }
 }
 
+public class EditRequestDescriptionRequest
+{
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+
+    [MaxLength(500)]
+    public string? ExternalUrl { get; set; }
+}
+
 public class AdminEditMediaRequestRequest
 {
     [Required, MaxLength(300)]

@@ -291,4 +291,114 @@ public class PipelineStageTests
         output.Should().HaveCount(1);
         output[0].Text.Should().Be("ない");
     }
+
+    [Fact]
+    public void SplitStage_SplitsTawake_AfterVerbStem()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("し", PartOfSpeech.Verb, dictionaryForm: "する"),
+            Token("て", PartOfSpeech.Particle),
+            Token("たわけ", PartOfSpeech.Noun, dictionaryForm: "たわけ")
+        };
+
+        var output = analyser.ApplyStageForTesting("SplitTawakeNoun", input);
+
+        output.Select(t => t.Text).Should().Equal("し", "て", "た", "わけ");
+        output[2].PartOfSpeech.Should().Be(PartOfSpeech.Auxiliary);
+        output[3].PartOfSpeech.Should().Be(PartOfSpeech.Noun);
+    }
+
+    [Fact]
+    public void SplitStage_SplitsTawake_AfterSupplementaryTsu()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("ある", PartOfSpeech.Verb, dictionaryForm: "ある"),
+            Token("っ", PartOfSpeech.SupplementarySymbol),
+            Token("たわけ", PartOfSpeech.Noun, dictionaryForm: "たわけ")
+        };
+
+        var output = analyser.ApplyStageForTesting("SplitTawakeNoun", input);
+
+        output.Select(t => t.Text).Should().Equal("ある", "っ", "た", "わけ");
+        output[2].PartOfSpeech.Should().Be(PartOfSpeech.Auxiliary);
+        output[3].PartOfSpeech.Should().Be(PartOfSpeech.Noun);
+    }
+
+    [Fact]
+    public void SplitStage_SplitsTawake_AfterAdverb()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("どうして", PartOfSpeech.Adverb),
+            Token("たわけ", PartOfSpeech.Noun, dictionaryForm: "たわけ")
+        };
+
+        var output = analyser.ApplyStageForTesting("SplitTawakeNoun", input);
+
+        output.Select(t => t.Text).Should().Equal("どうして", "た", "わけ");
+    }
+
+    [Fact]
+    public void SplitStage_SplitsTawakeru_AfterAdverb()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("チクッ", PartOfSpeech.Adverb),
+            Token("たわけ", PartOfSpeech.Verb, dictionaryForm: "たわける")
+        };
+
+        var output = analyser.ApplyStageForTesting("SplitTawakeNoun", input);
+
+        output.Select(t => t.Text).Should().Equal("チクッ", "た", "わけ");
+    }
+
+    [Fact]
+    public void SplitStage_PreservesTawake_AfterPrefix()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("大", PartOfSpeech.Prefix),
+            Token("たわけ", PartOfSpeech.Noun, dictionaryForm: "たわけ")
+        };
+
+        var output = analyser.ApplyStageForTesting("SplitTawakeNoun", input);
+
+        output.Select(t => t.Text).Should().Equal("大", "たわけ");
+    }
+
+    [Fact]
+    public void SplitStage_PreservesTawake_AfterAdnominal()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("この", PartOfSpeech.Adnominal),
+            Token("たわけ", PartOfSpeech.Noun, dictionaryForm: "たわけ")
+        };
+
+        var output = analyser.ApplyStageForTesting("SplitTawakeNoun", input);
+
+        output.Select(t => t.Text).Should().Equal("この", "たわけ");
+    }
+
+    [Fact]
+    public void SplitStage_PreservesTawake_AtStartOfSentence()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("たわけ", PartOfSpeech.Noun, dictionaryForm: "たわけ")
+        };
+
+        var output = analyser.ApplyStageForTesting("SplitTawakeNoun", input);
+
+        output.Select(t => t.Text).Should().Equal("たわけ");
+    }
 }

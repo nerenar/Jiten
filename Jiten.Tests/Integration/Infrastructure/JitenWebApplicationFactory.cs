@@ -1,4 +1,6 @@
+using Hangfire;
 using Jiten.Core;
+using Jiten.Core.Data.Authentication;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -37,13 +39,14 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
         builder.ConfigureTestServices(services =>
         {
-            // Remove Hangfire registrations
+            // Remove Hangfire registrations and add mock
             var hangfireDescriptors = services
                 .Where(d => d.ServiceType.FullName?.Contains("Hangfire") == true
                           || d.ImplementationType?.FullName?.Contains("Hangfire") == true)
                 .ToList();
             foreach (var d in hangfireDescriptors)
                 services.Remove(d);
+            services.AddSingleton(Mock.Of<IBackgroundJobClient>());
 
             // Remove hosted services (ParserWarmupService etc.)
             var hostedServices = services
@@ -103,6 +106,13 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         await userDb.Database.EnsureCreatedAsync();
+
+        foreach (var id in new[] { TestUsers.UserA, TestUsers.UserB, TestUsers.Admin })
+        {
+            if (!await userDb.Users.AnyAsync(u => u.Id == id))
+                userDb.Users.Add(new User { Id = id, UserName = id, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        }
+        await userDb.SaveChangesAsync();
     }
 
     public new async Task DisposeAsync()
@@ -124,6 +134,11 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         db.MediaRequestSubscriptions.RemoveRange(db.MediaRequestSubscriptions);
         db.MediaRequestUpvotes.RemoveRange(db.MediaRequestUpvotes);
         db.MediaRequests.RemoveRange(db.MediaRequests);
+        db.Decks.RemoveRange(db.Decks);
         await db.SaveChangesAsync();
+
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        userDb.UserDeckPreferences.RemoveRange(userDb.UserDeckPreferences);
+        await userDb.SaveChangesAsync();
     }
 }

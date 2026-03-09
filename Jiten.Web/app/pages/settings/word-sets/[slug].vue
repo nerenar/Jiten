@@ -2,6 +2,7 @@
 import type { WordSetDto, Word } from '~/types/types';
 import { WordSetStateType } from '~/types';
 import { autoLinkUrls } from '~/utils/autoLinkUrls';
+import { debounce } from 'perfect-debounce';
 
 definePageMeta({
   middleware: ['auth'],
@@ -32,6 +33,8 @@ const offset = computed(() => (route.query.offset ? Number(route.query.offset) :
 const sortDescending = ref(route.query.sortOrder === '1');
 const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
 const display = ref(route.query.display?.toString() || 'all');
+const search = ref(route.query.search?.toString() || '');
+const debouncedSearch = ref(search.value);
 
 watch(sortDescending, (newValue) => {
   router.replace({
@@ -51,6 +54,12 @@ watch(display, (newValue) => {
   });
 });
 
+const updateSearch = debounce((val: string) => {
+  debouncedSearch.value = val;
+  router.replace({ query: { ...route.query, search: val || undefined, offset: undefined } });
+}, 300);
+watch(search, updateSearch);
+
 const { data: wordSet, status: wordSetStatus, error: wordSetError } = await useApiFetch<WordSetDto>(`word-sets/${slug}`);
 
 const {
@@ -63,8 +72,9 @@ const {
     sortBy: sortBy,
     sortOrder: computed(() => sortDescending.value ? 1 : 0),
     displayFilter: display,
+    search: debouncedSearch,
   },
-  watch: [offset, sortBy, sortDescending, display],
+  watch: [offset, sortBy, sortDescending, display, debouncedSearch],
 });
 
 const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
@@ -227,6 +237,7 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           v-model:sort-by="sortBy"
           v-model:sort-descending="sortDescending"
           v-model:display-filter="display"
+          v-model:search="search"
           :sort-by-options="sortByOptions"
           :show-display-filter="authStore.isAuthenticated"
         />

@@ -9,4 +9,5 @@ public class MediaRequestCommentDto
     public string? UserName { get; set; }
     public object? Upload { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }

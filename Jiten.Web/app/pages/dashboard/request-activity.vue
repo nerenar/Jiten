@@ -69,6 +69,47 @@ async function lookUpUser() {
   summaryLoading.value = false;
 }
 
+function formatDetail(action: RequestAction, detail: string | null): string {
+  if (!detail) return '';
+  try {
+    const d = JSON.parse(detail);
+    switch (action) {
+      case RequestAction.RequestCreated:
+        return [d.Title, d.mediaType, d.ExternalUrl].filter(Boolean).join(' | ');
+      case RequestAction.RequestDeleted:
+        return d.Title ?? '';
+      case RequestAction.CommentAdded:
+      case RequestAction.CommentEdited:
+        return d.textPreview ?? '';
+      case RequestAction.FileUploaded:
+        return d.fileName ? `${d.fileName} (${formatFileSize(d.fileSize)})` : '';
+      case RequestAction.FileDeletedByAdmin:
+      case RequestAction.ContributionValidated:
+      case RequestAction.ContributionRevoked:
+        return d.FileName ?? '';
+      case RequestAction.StatusChangedToCompleted:
+        return [d.deckId ? `Deck #${d.deckId}` : null, d.AdminNote].filter(Boolean).join(' - ');
+      case RequestAction.StatusChangedToRejected:
+        return d.AdminNote ?? '';
+      case RequestAction.RequestEditedByAdmin:
+        return d.oldTitle && d.newTitle && d.oldTitle !== d.newTitle
+          ? `"${d.oldTitle}" → "${d.newTitle}"`
+          : '';
+      default:
+        return detail;
+    }
+  } catch {
+    return detail;
+  }
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
 function formatTimeAgo(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
@@ -165,9 +206,11 @@ onMounted(() => loadActivityLog());
                 </div>
               </template>
             </Column>
-            <Column header="Detail" style="min-width: 150px">
+            <Column header="Detail" style="min-width: 200px">
               <template #body="{ data }">
-                <span v-if="data.detail" class="text-sm text-muted-color truncate block max-w-xs">{{ data.detail }}</span>
+                <span v-if="data.detail" class="text-sm text-muted-color block max-w-md" :title="data.detail">
+                  {{ formatDetail(data.action, data.detail) }}
+                </span>
               </template>
             </Column>
           </DataTable>

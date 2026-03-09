@@ -41,6 +41,12 @@
     }
   };
 
+  const updateParentStatus = (parentDeckId: number, status: import('~/types').DeckStatus) => {
+    if (response.value?.data?.mainDeck && response.value.data.mainDeck.deckId === parentDeckId) {
+      response.value = { ...response.value, data: { ...response.value.data, mainDeck: { ...response.value.data.mainDeck, status } } };
+    }
+  };
+
   const title = computed(() => {
     if (!response.value?.data) {
       return '';
@@ -105,7 +111,7 @@
           </div>
         </div>
         <div class="flex flex-row flex-wrap gap-2 justify-center pt-4">
-          <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" :is-compact="true" @update:deck="updateSubDeck" />
+          <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" :is-compact="true" @update:deck="updateSubDeck" @parent-status-changed="updateParentStatus" />
         </div>
       </div>
       <!--      <div v-else class="pt-4">This deck has no subdecks</div>-->

@@ -1,4 +1,4 @@
-import { type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
+import { type ComparisonOutcome, type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -19,6 +19,7 @@ export interface Deck {
   difficulty: number;
   difficultyRaw: number;
   difficultyOverride: number;
+  difficultyAlgorithmic: number;
   averageSentenceLength: number;
   speechDuration: number;
   speechMoraCount: number;
@@ -43,6 +44,8 @@ export interface Deck {
   status?: DeckStatus;
   isFavourite?: boolean;
   isIgnored?: boolean;
+  distinctVoterCount: number;
+  userAdjustment: number;
 }
 
 export interface DeckDetail {
@@ -496,6 +499,8 @@ export interface DeckDifficultyDto {
   deciles: Record<string, number>;
   progression: ProgressionSegmentDto[];
   lastUpdated: Date;
+  distinctVoterCount: number;
+  userAdjustment: number;
 }
 
 // WordSet types
@@ -573,6 +578,7 @@ export interface MediaRequestCommentDto {
   userName?: string;
   upload?: MediaRequestUploadDto;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface MediaRequestUploadDto {
@@ -638,4 +644,56 @@ export interface NotificationDto {
   isRead: boolean;
   readAt?: string;
   createdAt: string;
+}
+
+export interface DifficultyVoteDto {
+  id: number
+  deckA: DeckSummaryDto
+  deckB: DeckSummaryDto
+  outcome: ComparisonOutcome
+  createdAt: string
+}
+
+export interface DifficultyRatingDto {
+  id: number
+  deckId: number
+  deckTitle: string
+  coverUrl: string | null
+  mediaType: MediaType
+  rating: number
+  createdAt: string
+}
+
+export interface DeckSummaryDto {
+  id: number
+  title: string
+  romajiTitle?: string
+  englishTitle?: string
+  coverUrl: string
+  difficulty: number
+  mediaType: MediaType
+}
+
+export interface ComparisonSuggestionDto {
+  deckA: DeckSummaryDto
+  deckB: DeckSummaryDto
+}
+
+export interface VotingStatsDto {
+  totalComparisons: number
+  totalRatings: number
+  percentile: number | null
+}
+
+export interface CompletedDecksResponse {
+  decks: DeckSummaryDto[]
+  votedPairs: number[][]
+}
+
+export interface BlacklistedDeckDto {
+  deckId: number
+  title: string
+  coverUrl: string | null
+  mediaType: MediaType
+  createdAt: string
 }

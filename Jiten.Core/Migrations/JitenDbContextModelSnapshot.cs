@@ -25,6 +25,38 @@ namespace Jiten.Core.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "fuzzystrmatch");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Jiten.Core.Data.BlacklistedComparisonDeck", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeckId");
+
+                    b.HasIndex("UserId", "DeckId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_BlacklistedComparisonDecks_UserDeck");
+
+                    b.ToTable("BlacklistedComparisonDecks", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
                 {
                     b.Property<int>("DeckId")
@@ -162,8 +194,29 @@ namespace Jiten.Core.Migrations
                         .HasPrecision(4, 2)
                         .HasColumnType("numeric(4,2)");
 
+                    b.Property<int>("DistinctVoterCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("EasierVoteCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("HarderVoteCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<DateTimeOffset>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("NEffective")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<decimal>("Peak")
                         .HasPrecision(4, 2)
@@ -172,6 +225,12 @@ namespace Jiten.Core.Migrations
                     b.Property<string>("ProgressionJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<decimal>("UserAdjustment")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasDefaultValue(0m);
 
                     b.HasKey("DeckId");
 
@@ -353,6 +412,98 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_DeckWords_DeckId_WordId_ReadingIndex");
 
                     b.ToTable("DeckWords", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DifficultyRating", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeckId");
+
+                    b.HasIndex("UserId", "DeckId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DifficultyRatings_UserDeck");
+
+                    b.ToTable("DifficultyRatings", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DifficultyVote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("DeckHighId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DeckLowId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsValid")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeckHighId")
+                        .HasDatabaseName("IX_DifficultyVotes_DeckHighId");
+
+                    b.HasIndex("DeckLowId")
+                        .HasDatabaseName("IX_DifficultyVotes_DeckLowId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_DifficultyVotes_UserId");
+
+                    b.HasIndex("UserId", "DeckLowId", "DeckHighId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DifficultyVotes_Unique")
+                        .HasFilter("\"IsValid\" = true");
+
+                    b.ToTable("DifficultyVotes", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>
@@ -893,6 +1044,9 @@ namespace Jiten.Core.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(36)
@@ -1127,6 +1281,42 @@ namespace Jiten.Core.Migrations
                     b.ToTable("RequestActivityLogs", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.SkippedComparison", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("DeckHighId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DeckLowId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Permanent")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DeckLowId", "DeckHighId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SkippedComparisons_UserPair");
+
+                    b.ToTable("SkippedComparisons", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Tag", b =>
                 {
                     b.Property<int>("TagId")
@@ -1205,6 +1395,17 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_WordSetMember_WordId_ReadingIndex");
 
                     b.ToTable("WordSetMembers", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.BlacklistedComparisonDeck", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithMany()
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
@@ -1321,6 +1522,36 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("Deck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DifficultyRating", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithMany()
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DifficultyVote", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "DeckHigh")
+                        .WithMany()
+                        .HasForeignKey("DeckHighId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.Deck", "DeckLow")
+                        .WithMany()
+                        .HasForeignKey("DeckLowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DeckHigh");
+
+                    b.Navigation("DeckLow");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>

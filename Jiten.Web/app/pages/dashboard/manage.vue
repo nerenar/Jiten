@@ -69,6 +69,7 @@
     accomplishments: false,
     kanjiGrids: false,
     difficulties: false,
+    difficultyVotes: false,
     speechSpeed: false,
     wordReplacementPreview: false,
     wordReplacementExecute: false,
@@ -566,6 +567,32 @@
       console.error('Error reaggregating difficulties:', error);
     } finally {
       isLoading.value.difficulties = false;
+    }
+  };
+
+  const recomputeDifficultyVotes = async () => {
+    try {
+      isLoading.value.difficultyVotes = true;
+      await $api('/admin/difficulty-votes/recompute', {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Queued difficulty vote recomputation',
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to queue difficulty vote recomputation',
+        life: 5000,
+      });
+      console.error('Error recomputing difficulty votes:', error);
+    } finally {
+      isLoading.value.difficultyVotes = false;
     }
   };
 
@@ -1124,6 +1151,24 @@
               :disabled="isLoading.difficulties"
               :loading="isLoading.difficulties"
               @click="confirmReaggregateParentDifficulties"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Recompute Difficulty Votes</template>
+        <template #content>
+          <p class="mb-4">Recompute all user difficulty vote adjustments (Bradley-Terry model).</p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Recompute Difficulty Votes"
+              icon="pi pi-chart-bar"
+              class="p-button-warning"
+              :disabled="isLoading.difficultyVotes"
+              :loading="isLoading.difficultyVotes"
+              @click="recomputeDifficultyVotes"
             />
           </div>
         </template>

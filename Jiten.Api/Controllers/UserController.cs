@@ -665,6 +665,16 @@ public class UserController(
         return Results.Ok();
     }
 
+    [HttpPost("vocabulary/blacklist/{wordId}/{readingIndex}")]
+    public async Task<IResult> BlacklistWord(int wordId, byte readingIndex)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        await userService.BlacklistWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }]);
+        return Results.Ok();
+    }
+
     /// <summary>
     /// Add known words for the current user by frequency rank range (inclusive).
     /// Only readings whose per-reading frequency rank falls within the range are imported.
@@ -901,7 +911,72 @@ public class UserController(
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
         }
 
-        return Results.Ok(new { preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored });
+        // Auto-cascade status to parent deck
+        int? parentDeckId = null;
+        DeckStatus? parentStatus = null;
+        var deck = await jitenContext.Decks.AsNoTracking()
+                                     .Where(d => d.DeckId == deckId)
+                                     .Select(d => new { d.ParentDeckId })
+                                     .FirstOrDefaultAsync();
+
+        if (deck?.ParentDeckId != null)
+        {
+            (parentDeckId, parentStatus) = await UpdateParentDeckStatus(userId, deck.ParentDeckId.Value, request.Status);
+        }
+
+        return Results.Ok(new { preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored, parentDeckId, parentStatus });
+    }
+
+    private async Task<(int? ParentDeckId, DeckStatus? ParentStatus)> UpdateParentDeckStatus(string userId, int parentDeckId, DeckStatus childNewStatus)
+    {
+        var siblingIds = await jitenContext.Decks.AsNoTracking()
+                                           .Where(d => d.ParentDeckId == parentDeckId)
+                                           .Select(d => d.DeckId)
+                                           .ToListAsync();
+
+        var siblingStatuses = await userContext.UserDeckPreferences
+                                               .Where(p => p.UserId == userId && siblingIds.Contains(p.DeckId))
+                                               .ToDictionaryAsync(p => p.DeckId, p => p.Status);
+
+        var parentPref = await userContext.UserDeckPreferences
+                                          .FirstOrDefaultAsync(p => p.UserId == userId && p.DeckId == parentDeckId);
+
+        var previousParentStatus = parentPref?.Status ?? DeckStatus.None;
+
+        var allCompleted = siblingIds.All(id =>
+            siblingStatuses.TryGetValue(id, out var status) && status == DeckStatus.Completed);
+
+        DeckStatus? newParentStatus = null;
+
+        if (allCompleted)
+        {
+            if (previousParentStatus is DeckStatus.None or DeckStatus.Planning or DeckStatus.Ongoing)
+                newParentStatus = DeckStatus.Completed;
+        }
+        else if (childNewStatus is DeckStatus.Completed or DeckStatus.Ongoing or DeckStatus.Dropped)
+        {
+            if (previousParentStatus is DeckStatus.None or DeckStatus.Planning)
+                newParentStatus = DeckStatus.Ongoing;
+        }
+
+        if (newParentStatus == null || newParentStatus == previousParentStatus)
+            return (null, null);
+
+        if (parentPref == null)
+        {
+            parentPref = new UserDeckPreference { UserId = userId, DeckId = parentDeckId };
+            userContext.UserDeckPreferences.Add(parentPref);
+        }
+
+        parentPref.Status = newParentStatus.Value;
+        await userContext.SaveChangesAsync();
+
+        if (previousParentStatus == DeckStatus.Completed || newParentStatus == DeckStatus.Completed)
+        {
+            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
+        }
+
+        return (parentDeckId, newParentStatus);
     }
 
     /// <summary>
@@ -1479,7 +1554,7 @@ public class UserController(
         var jmdictWords = await jitenContext.JMDictWords
                                             .AsNoTracking()
                                             .Where(w => wordIds.Contains(w.WordId))
-                                            .Include(w => w.Definitions)
+                                            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                                             .ToListAsync();
 
         var jmdictLookup = jmdictWords.ToDictionary(w => w.WordId);
@@ -1706,7 +1781,8 @@ public class UserController(
         [FromQuery] int pageSize = 100,
         [FromQuery] string sortBy = "occurrences",
         [FromQuery] bool descending = true,
-        [FromQuery] string displayFilter = "all")
+        [FromQuery] string displayFilter = "all",
+        [FromQuery] string? search = null)
     {
         var user = await userContext.Users
                                     .AsNoTracking()
@@ -1784,6 +1860,12 @@ public class UserController(
         // Materialise the aggregated words for filtering and sorting
         var allAggregatedWords = await aggregatedWordsQuery.ToListAsync();
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var matchingWordIds = await SearchHelper.ResolveSearchWordIds(jitenContext, search);
+            allAggregatedWords = allAggregatedWords.Where(aw => matchingWordIds.Contains(aw.WordId)).ToList();
+        }
+
         // Apply displayFilter if authenticated and filter is not "all"
         if (userService.IsAuthenticated && !string.IsNullOrEmpty(displayFilter) && displayFilter != "all")
         {
@@ -1851,7 +1933,7 @@ public class UserController(
         var jmdictWords = await jitenContext.JMDictWords
                                             .AsNoTracking()
                                             .Where(w => wordIds.Contains(w.WordId))
-                                            .Include(w => w.Definitions)
+                                            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                                             .ToListAsync();
 
         var jmdictLookup = jmdictWords.ToDictionary(w => w.WordId);

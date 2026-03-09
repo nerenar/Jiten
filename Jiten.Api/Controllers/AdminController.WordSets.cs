@@ -179,7 +179,7 @@ public partial class AdminController
 
         var words = await dbContext.JMDictWords
             .AsNoTracking()
-            .Include(w => w.Definitions)
+            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
             .Where(w => pagedWordIds.Contains(w.WordId))
             .ToDictionaryAsync(w => w.WordId);
 
@@ -331,7 +331,7 @@ public partial class AdminController
 
         var word = await dbContext.JMDictWords
             .AsNoTracking()
-            .Include(w => w.Definitions)
+            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
             .FirstOrDefaultAsync(w => w.WordId == wordId);
 
         if (word == null)

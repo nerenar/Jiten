@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { type DeckVocabularyList, SortOrder } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
+  import { debounce } from 'perfect-debounce';
 
   const route = useRoute();
   const router = useRouter();
@@ -22,6 +23,8 @@
   const sortDescending = ref(route.query.sortOrder === String(SortOrder.Descending));
   const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
   const display = ref(route.query.display?.toString() || 'all');
+  const search = ref(route.query.search?.toString() || '');
+  const debouncedSearch = ref(search.value);
 
   const sortOrder = computed(() => sortDescending.value ? SortOrder.Descending : SortOrder.Ascending);
 
@@ -43,6 +46,12 @@
     });
   });
 
+  const updateSearch = debounce((val: string) => {
+    debouncedSearch.value = val;
+    router.replace({ query: { ...route.query, search: val || undefined, offset: undefined } });
+  }, 300);
+  watch(search, updateSearch);
+
   const {
     data: response,
     status,
@@ -53,8 +62,9 @@
       sortBy: sortBy,
       sortOrder: sortOrder,
       displayFilter: display,
+      search: debouncedSearch,
     },
-    watch: [offset],
+    watch: [offset, debouncedSearch],
   });
 
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
@@ -102,6 +112,7 @@
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"
       v-model:display-filter="display"
+      v-model:search="search"
       :sort-by-options="sortByOptions"
       :show-display-filter="auth.isAuthenticated"
     />

@@ -83,7 +83,8 @@ public class WordSetController(
         [FromQuery] int limit = 50,
         [FromQuery] string sortBy = "",
         [FromQuery] SortOrder sortOrder = SortOrder.Ascending,
-        [FromQuery] string displayFilter = "all")
+        [FromQuery] string displayFilter = "all",
+        [FromQuery] string? search = null)
     {
         limit = Math.Clamp(limit, 1, 100);
 
@@ -98,6 +99,13 @@ public class WordSetController(
             .AsNoTracking()
             .Where(wsm => wsm.SetId == set.SetId);
 
+        HashSet<int>? searchWordIds = null;
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            searchWordIds = await SearchHelper.ResolveSearchWordIds(jitenContext, search);
+            baseQuery = baseQuery.Where(wsm => searchWordIds.Contains(wsm.WordId));
+        }
+
         bool needsKnownFilter = currentUserService.IsAuthenticated
             && !string.IsNullOrEmpty(displayFilter)
             && displayFilter != "all";
@@ -108,7 +116,7 @@ public class WordSetController(
         if (needsKnownFilter)
         {
             (pagedItems, totalCount) = await ExecuteFilteredVocabularyQuery(
-                set.SetId, currentUserService.UserId!, displayFilter, sortBy, sortOrder, offset, limit);
+                set.SetId, currentUserService.UserId!, displayFilter, sortBy, sortOrder, offset, limit, searchWordIds);
         }
         else if (sortBy == "globalFreq")
         {
@@ -144,7 +152,7 @@ public class WordSetController(
 
         var words = await jitenContext.JMDictWords
             .AsNoTracking()
-            .Include(w => w.Definitions)
+            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
             .Where(w => pagedWordIds.Contains(w.WordId))
             .ToDictionaryAsync(w => w.WordId);
 
@@ -319,7 +327,8 @@ public class WordSetController(
     }
 
     private async Task<(List<WordSetMember> Items, int TotalCount)> ExecuteFilteredVocabularyQuery(
-        int setId, string userId, string displayFilter, string sortBy, SortOrder sortOrder, int offset, int limit)
+        int setId, string userId, string displayFilter, string sortBy, SortOrder sortOrder, int offset, int limit,
+        HashSet<int>? searchWordIds = null)
     {
         var userIdGuid = Guid.Parse(userId);
 
@@ -360,6 +369,10 @@ public class WordSetController(
             _ => @"m.""Position"" DESC"
         };
 
+        string searchClause = searchWordIds != null
+            ? @" AND m.""WordId"" = ANY({4})"
+            : "";
+
         string sql =
             @"WITH user_fsrs AS (
                 SELECT ""WordId"", ""ReadingIndex"", ""State"", ""Due"", ""LastReview""
@@ -382,12 +395,16 @@ public class WordSetController(
             LEFT JOIN user_fsrs f ON m.""WordId"" = f.""WordId"" AND m.""ReadingIndex"" = f.""ReadingIndex""
             LEFT JOIN user_set_effective use_s ON m.""WordId"" = use_s.""WordId"" AND m.""ReadingIndex"" = use_s.""ReadingIndex""
             " + freqJoin + @"
-            WHERE m.""SetId"" = {1} AND (" + filterClause + @")
+            WHERE m.""SetId"" = {1} AND (" + filterClause + @")" + searchClause + @"
             ORDER BY " + orderByClause + @"
             OFFSET {2} LIMIT {3}";
 
+        var sqlParams = searchWordIds != null
+            ? new object[] { userIdGuid, setId, offset, limit, searchWordIds.ToArray() }
+            : new object[] { userIdGuid, setId, offset, limit };
+
         var results = await jitenContext.Database
-            .SqlQueryRaw<FilteredMemberResult>(sql, userIdGuid, setId, offset, limit)
+            .SqlQueryRaw<FilteredMemberResult>(sql, sqlParams)
             .ToListAsync();
 
         int totalCount = (int)(results.FirstOrDefault()?.TotalCount ?? 0);

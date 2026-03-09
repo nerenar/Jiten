@@ -67,10 +67,10 @@
       link: '/other',
     },
     {
-      icon: 'material-symbols-light:extension',
-      title: 'Jiten Reader',
-      description: 'Parse Japanese text anywhere on the web with our free browser extension.',
-      link: '/reader',
+      icon: 'material-symbols-light:thumbs-up-down',
+      title: 'Difficulty Ratings',
+      description: 'AI-powered difficulty scores refined by community votes. Find content that matches your level.',
+      link: '/ratings',
       isNew: true,
     },
   ];

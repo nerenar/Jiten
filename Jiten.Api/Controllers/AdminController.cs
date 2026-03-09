@@ -1448,4 +1448,35 @@ public partial class AdminController(
 
         return true;
     }
+
+    [HttpPost("difficulty-votes/recompute")]
+    public IResult RecomputeDifficultyAdjustments()
+    {
+        backgroundJobs.Enqueue<DifficultyAdjustmentJob>(j => j.ComputeAllAdjustments());
+        return Results.Ok(new { message = "Recompute job enqueued" });
+    }
+
+    [HttpPost("difficulty-votes/invalidate")]
+    public async Task<IResult> InvalidateDifficultyVotes([FromBody] InvalidateVotesRequest request)
+    {
+        var query = dbContext.DifficultyVotes.Where(v => v.IsValid);
+
+        if (request.VoteIds is { Length: > 0 })
+            query = query.Where(v => request.VoteIds.Contains(v.Id));
+
+        if (!string.IsNullOrEmpty(request.UserId))
+            query = query.Where(v => v.UserId == request.UserId);
+
+        if (request.VoteIds is not { Length: > 0 } && string.IsNullOrEmpty(request.UserId))
+            return Results.BadRequest("Must specify voteIds or userId.");
+
+        var invalidatedCount = await query.ExecuteUpdateAsync(s => s.SetProperty(v => v.IsValid, false));
+        return Results.Ok(new { invalidatedCount });
+    }
+
+    public class InvalidateVotesRequest
+    {
+        public int[]? VoteIds { get; set; }
+        public string? UserId { get; set; }
+    }
 }

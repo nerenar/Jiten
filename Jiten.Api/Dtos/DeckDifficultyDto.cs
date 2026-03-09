@@ -7,6 +7,8 @@ public class DeckDifficultyDto
     public Dictionary<string, decimal> Deciles { get; set; } = new();
     public List<ProgressionSegmentDto> Progression { get; set; } = [];
     public DateTimeOffset LastUpdated { get; set; }
+    public int DistinctVoterCount { get; set; }
+    public decimal UserAdjustment { get; set; }
 }
 
 public class ProgressionSegmentDto

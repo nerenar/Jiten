@@ -85,9 +85,11 @@ public partial class RequestController(
 
         var totalCount = await query.CountAsync();
 
-        query = sort == "recent"
-            ? query.OrderByDescending(r => r.CreatedAt)
-            : query.OrderByDescending(r => r.UpvoteCount).ThenByDescending(r => r.CreatedAt);
+        query = sort switch {
+            "recent" => query.OrderByDescending(r => r.CreatedAt),
+            "completed" => query.OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.CreatedAt),
+            _ => query.OrderByDescending(r => r.UpvoteCount).ThenByDescending(r => r.CreatedAt),
+        };
 
         var requests = await query.Skip(offset).Take(limit).ToListAsync();
         var requestIds = requests.Select(r => r.Id).ToList();
@@ -712,6 +714,93 @@ public partial class RequestController(
         return Results.Ok(new { id = comment.Id });
     }
 
+    [HttpPut("{id:int}/comments/{commentId:int}")]
+    public async Task<IResult> EditComment(int id, int commentId, [FromBody] AddMediaRequestCommentRequest model)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var trimmedText = model.Text?.Trim();
+        if (string.IsNullOrEmpty(trimmedText))
+            return Results.BadRequest("Comment text must not be empty.");
+        if (trimmedText.Length > MaxCommentLength)
+            return Results.BadRequest($"Comment text must not exceed {MaxCommentLength} characters.");
+
+        var request = await context.MediaRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null)
+            return Results.NotFound("Request not found");
+
+        if (request.Status != MediaRequestStatus.Open && request.Status != MediaRequestStatus.InProgress)
+            return Results.BadRequest("Comments cannot be edited on completed or rejected requests.");
+
+        var comment = await context.MediaRequestComments.FirstOrDefaultAsync(c => c.Id == commentId && c.MediaRequestId == id);
+        if (comment == null)
+            return Results.NotFound("Comment not found");
+
+        if (comment.UserId != userId)
+            return Results.Forbid();
+
+        comment.Text = trimmedText;
+        comment.UpdatedAt = DateTime.UtcNow;
+
+        var textPreview = trimmedText.Length > 100 ? trimmedText[..100] + "..." : trimmedText;
+        activityService.LogWithoutSave(id, userId, RequestAction.CommentEdited,
+            JsonSerializer.Serialize(new { commentId, textPreview }),
+            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        await context.SaveChangesAsync();
+
+        return Results.Ok(new { success = true });
+    }
+
+    [HttpPut("{id:int}/edit-description")]
+    public async Task<IResult> EditDescription(int id, [FromBody] EditRequestDescriptionRequest model)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        if (!ModelState.IsValid)
+            return Results.ValidationProblem(ModelState.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray()));
+
+        if (!string.IsNullOrWhiteSpace(model.ExternalUrl) &&
+            (!Uri.TryCreate(model.ExternalUrl.Trim(), UriKind.Absolute, out var parsedUrl) ||
+             (parsedUrl.Scheme != Uri.UriSchemeHttp && parsedUrl.Scheme != Uri.UriSchemeHttps)))
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["externalUrl"] = ["ExternalUrl must be a valid http or https URL."]
+            });
+
+        var request = await context.MediaRequests.FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null)
+            return Results.NotFound("Request not found");
+
+        if (request.RequesterId != userId)
+            return Results.Forbid();
+
+        if (request.Status != MediaRequestStatus.Open && request.Status != MediaRequestStatus.InProgress)
+            return Results.BadRequest("Request cannot be edited in its current status.");
+
+        var externalLinkType = !string.IsNullOrWhiteSpace(model.ExternalUrl)
+            ? InferLinkType(model.ExternalUrl)
+            : (LinkType?)null;
+
+        request.Description = model.Description?.Trim();
+        request.ExternalUrl = model.ExternalUrl?.Trim();
+        request.ExternalLinkType = externalLinkType;
+        request.UpdatedAt = DateTime.UtcNow;
+
+        activityService.LogWithoutSave(id, userId, RequestAction.RequestEditedByRequester,
+            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        await context.SaveChangesAsync();
+
+        return Results.Ok(new { success = true });
+    }
+
     [HttpGet("{id:int}/comments")]
     public async Task<IResult> GetComments(int id)
     {
@@ -794,7 +883,8 @@ public partial class RequestController(
                 IsOwnComment = c.UserId == userId,
                 UserName = isAdmin ? userNames.GetValueOrDefault(c.UserId) : null,
                 Upload = uploadDto,
-                CreatedAt = c.CreatedAt
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt
             };
         }).ToList();
 

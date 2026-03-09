@@ -34,6 +34,12 @@ public class DeckDifficulty
     /// </summary>
     public string ProgressionJson { get; set; } = "[]";
 
+    public int EasierVoteCount { get; set; }
+    public int HarderVoteCount { get; set; }
+    public int DistinctVoterCount { get; set; }
+    public decimal UserAdjustment { get; set; }
+    public decimal NEffective { get; set; }
+
     public DateTimeOffset LastUpdated { get; set; } = DateTimeOffset.UtcNow;
 
     [JsonIgnore]

@@ -1,5 +1,14 @@
 import type { Deck, DeckStatus } from '~/types';
 
+interface SetStatusResponse {
+  deckId: number;
+  status: DeckStatus;
+  isFavourite: boolean;
+  isIgnored: boolean;
+  parentDeckId: number | null;
+  parentStatus: DeckStatus | null;
+}
+
 export function useDeckPreference(
   deck: () => Deck,
   onUpdate: (updated: Deck) => void
@@ -49,16 +58,18 @@ export function useDeckPreference(
     }
   };
 
-  const setStatus = async (status: DeckStatus) => {
+  const setStatus = async (status: DeckStatus): Promise<SetStatusResponse | null> => {
     try {
       const d = deck();
-      await $api(`/user/deck-preferences/${d.deckId}/status`, {
+      const response = await $api<SetStatusResponse>(`/user/deck-preferences/${d.deckId}/status`, {
         method: 'POST',
         body: { status },
       });
       onUpdate({ ...d, status });
+      return response;
     } catch (error) {
       console.error('Failed to set status:', error);
+      return null;
     }
   };
 

@@ -577,6 +577,7 @@ public class MediaDeckController(
                      .Include(d => d.DeckGenres)
                      .Include(d => d.DeckTags)
                      .ThenInclude(dt => dt.Tag)
+                     .Include(d => d.DeckDifficulty)
                      .Include(d => d.RelationshipsAsSource)
                      .ThenInclude(r => r.TargetDeck)
                      .Include(d => d.RelationshipsAsTarget)
@@ -759,6 +760,7 @@ public class MediaDeckController(
                                          .Include(d => d.DeckGenres)
                                          .Include(d => d.DeckTags)
                                          .ThenInclude(dt => dt.Tag)
+                                         .Include(d => d.DeckDifficulty)
                                          .Include(d => d.RelationshipsAsSource)
                                          .ThenInclude(r => r.TargetDeck)
                                          .Include(d => d.RelationshipsAsTarget)
@@ -1004,6 +1006,7 @@ public class MediaDeckController(
                                      .Include(d => d.DeckGenres)
                                      .Include(d => d.DeckTags)
                                      .ThenInclude(dt => dt.Tag)
+                                     .Include(d => d.DeckDifficulty)
                                      .Include(d => d.RelationshipsAsSource)
                                      .ThenInclude(r => r.TargetDeck)
                                      .Include(d => d.RelationshipsAsTarget)
@@ -1100,6 +1103,7 @@ public class MediaDeckController(
     /// <param name="sortOrder">Ascending or Descending.</param>
     /// <param name="offset">Pagination offset.</param>
     /// <param name="displayFilter">When authenticated: all | known | young | mature | mastered | blacklisted | unknown.</param>
+    /// <param name="search">Optional text search filter (Japanese, romaji, or English).</param>
     /// <returns>Paginated deck vocabulary list.</returns>
     [HttpGet("{id}/vocabulary")]
     // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
@@ -1107,7 +1111,8 @@ public class MediaDeckController(
     [ProducesResponseType(typeof(PaginatedResponse<DeckVocabularyListDto?>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<DeckVocabularyListDto?>> GetVocabulary(int id, string? sortBy = "",
                                                                                SortOrder sortOrder = SortOrder.Ascending,
-                                                                               int? offset = 0, string displayFilter = "all")
+                                                                               int? offset = 0, string displayFilter = "all",
+                                                                               string? search = null)
     {
         int pageSize = 100;
 
@@ -1120,6 +1125,12 @@ public class MediaDeckController(
         var parentDeckDto = parentDeck != null ? new DeckDto(parentDeck) : null;
 
         var query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == id);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var matchingWordIds = await SearchHelper.ResolveSearchWordIds(context, search);
+            query = query.Where(dw => matchingWordIds.Contains(dw.WordId));
+        }
 
         if (currentUserService.IsAuthenticated && !string.IsNullOrEmpty(displayFilter) && displayFilter != "all")
         {
@@ -1180,7 +1191,7 @@ public class MediaDeckController(
 
         var jmdictWordsDict = context.JMDictWords.AsNoTracking()
                                      .Where(w => uniqueWordIds.Contains(w.WordId))
-                                     .Include(w => w.Definitions)
+                                     .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                                      .ToDictionary(w => w.WordId);
 
         var wordIdOrder = new Dictionary<int, int>(capacity: wordIds.Count);
@@ -1261,6 +1272,7 @@ public class MediaDeckController(
                                 .Include(d => d.DeckGenres)
                                 .Include(d => d.DeckTags)
                                 .ThenInclude(dt => dt.Tag)
+                                .Include(d => d.DeckDifficulty)
                                 .Include(d => d.RelationshipsAsSource)
                                 .ThenInclude(r => r.TargetDeck)
                                 .Include(d => d.RelationshipsAsTarget)
@@ -1270,9 +1282,9 @@ public class MediaDeckController(
         if (deck == null)
             return new PaginatedResponse<DeckDetailDto?>(null, 0, pageSize, offset ?? 0);
 
-        var parentDeck = await context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag)
+        var parentDeck = await context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
                                       .FirstOrDefaultAsync(d => d.DeckId == deck.ParentDeckId);
-        var subDecks = context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag)
+        var subDecks = context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
                               .Where(d => d.ParentDeckId == id);
         int totalCount = await subDecks.CountAsync();
 
@@ -1518,7 +1530,7 @@ public class MediaDeckController(
                                                      List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords)
     {
         var jmdictWords = await context.JMDictWords.AsNoTracking()
-                                       .Include(w => w.Definitions)
+                                       .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                                        .Where(w => wordIds.Contains(w.WordId))
                                        .ToDictionaryAsync(w => w.WordId);
         var intWordIds = wordIds.Select(wid => (int)wid).ToList();
@@ -1628,7 +1640,7 @@ public class MediaDeckController(
                             if (j != 0)
                                 definitionBuilder.Append(" ; ");
                             definitionBuilder.Append(System.Net.WebUtility.HtmlEncode(meaning));
-                            if (j == definitions.Count - 1)
+                            if (j == definition.EnglishMeanings.Count - 1)
                                 definitionBuilder.Append("</li>");
                         }
                     }
@@ -2198,7 +2210,9 @@ public class MediaDeckController(
                                                                         Segment = p.Segment, Difficulty = p.Difficulty, Peak = p.Peak,
                                                                         ChildStartOrder = p.ChildStartOrder, ChildEndOrder = p.ChildEndOrder
                                                                     }).ToList(),
-                   LastUpdated = difficulty.LastUpdated
+                   LastUpdated = difficulty.LastUpdated,
+                   DistinctVoterCount = difficulty.DistinctVoterCount,
+                   UserAdjustment = difficulty.UserAdjustment
                };
     }
 

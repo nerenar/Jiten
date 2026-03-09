@@ -736,6 +736,8 @@ public static class JitenHelper
 
             if (formFreqsByWord.TryGetValue(word.WordId, out var wordFormFreqs))
             {
+                double wordTotalScore = wordFormFreqs.Sum(f => (double)f.FrequencyRank);
+
                 foreach (var formFreq in wordFormFreqs)
                 {
                     double readingRawCount = formFreq.ObservedFrequency;
@@ -743,8 +745,8 @@ public static class JitenHelper
                     formFreq.ObservedFrequency = totalOccurrences > 0
                         ? readingRawCount / (double)totalOccurrences : 0;
 
-                    formFreq.FrequencyPercentage = wordRawFrequencyCount > 0
-                        ? (readingRawCount / (double)wordRawFrequencyCount) * 100.0 : 0;
+                    formFreq.FrequencyPercentage = wordTotalScore > 0
+                        ? (formFreq.FrequencyRank / wordTotalScore) * 100.0 : 0;
                 }
             }
 

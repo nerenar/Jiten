@@ -311,7 +311,7 @@ public class FormSelectionTests
         yield return ["麦をかき分ける音に気づかれずに接近できるからだ。", "気づかれずに", 1591330, (byte)0];
 
         // 気附かぬ → 気付く (1591330) — user dic adds 気附く as verb, ぬ reclassified to auxiliary
-        yield return ["気附かぬ如くゆっくり", "気附かぬ", 1591330, (byte)1];
+        yield return ["気附かぬ如くゆっくり", "気附かぬ", 1591330, (byte)5];
 
         // 如く stays separate (not merged by CombineAuxiliary) → 如く (1466920)
         yield return ["気附かぬ如くゆっくり", "如く", 1466920, (byte)0];
@@ -744,8 +744,14 @@ public class FormSelectionTests
         // 弄る should be いじる (1560700), not いらう (2849632) — いらう is archaic
         yield return ["シリルさんが弄ったというのは本当のようだ", "弄った", 1560700, (byte)0];
         yield return ["そこを無数の腕が乱暴に弄っていた", "弄っていた", 1560700, (byte)0];
+
+        // たわけ split → わけ should match 訳 (not 戯け)
+        yield return ["術があるったわけではない", "わけではない", 2057560, (byte)3];
+        yield return ["どうしてたわけ", "わけ", 1538330, (byte)1];
+        // Legitimate たわけ (戯け) should match 戯け
+        yield return ["この大たわけがっ", "たわけ", 2644710, (byte)2];
     }
-    
+
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
     {
         // Kana surface ざと should not match kanji 里 — ざと is not a valid standalone reading

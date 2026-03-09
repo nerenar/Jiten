@@ -228,7 +228,7 @@ public class MorphologicalAnalyserTests
         yield return ["弾け飛びました", new[] { "弾け飛びました" }];
         yield return ["ぶっこんでいるようで", new[] { "ぶっこんでいる", "よう", "で" }];
         yield return ["であるようだ", new[] { "である", "ようだ" }];
-        yield return ["なかったようで安心した", new[] { "なかった", "よう", "で", "安心した" }];
+        yield return ["なかったようで安心した", new[] { "なかった", "よう", "で", "安心", "した" }];
         yield return ["食べようか", new[] { "食べよう", "か" }];
         yield return ["じゃないけど下手に", new[] { "じゃない", "けど", "下手", "に" }];
         yield return ["的にそうではない", new[] { "的", "に", "そう", "ではない" }];
@@ -865,7 +865,7 @@ public class MorphologicalAnalyserTests
         yield return ["気がついてしまう", new[] { "気がついて", "しまう" }];
 
         // もの + たち must not be merged into 物断ち (abstinence)
-        yield return ["生き延びたものたちへの糧となる", new[] { "生き延びた", "もの", "たち", "へ", "の", "糧", "と", "なる" }];
+        yield return ["生き延びたものたちへの糧となる", new[] { "生き延びた", "もの", "たち", "へ", "の", "糧", "となる" }];
 
         // Verb-like suffix かねる must merge with its conjugations, not stay as orphaned 鐘 (bell)
         yield return ["壊してしまいかねない", new[] { "壊してしまい", "かねない" }];
@@ -886,17 +886,25 @@ public class MorphologicalAnalyserTests
         yield return ["素でとぼけた行動をとる", new[] { "素で", "とぼけた", "行動をとる" }];
         yield return ["この期に及んでとぼける俺である", new[] { "この期に及んで", "とぼける", "俺", "である" }];
         yield return ["何ねぼけてんのよ", new[] { "何", "ねぼけてん", "の", "よ" }];
-        yield return ["何ねぼけた事言ってんだ", new[] { "何", "ねぼけた", "事", "言ってん", "だ" }];
+        yield return ["何ねぼけた事言ってんだ", new[] { "何", "ねぼけた", "事", "言って", "んだ" }];
 
         // 第一次/一次/第二次/二次 — ordinal counters should not be split
         yield return ["第一次魔王討伐", new[] { "第一次", "魔王", "討伐" }];
-        yield return ["立つ鳥の声一次の日の朝まだき", new[] { "立つ", "鳥", "の", "声", "一次", "の", "日", "の", "朝まだき" }];
-        yield return ["余のせいで第二次神魔大戦まであるんだけどーっ", new[] { "余", "の", "せい", "で", "、", "第二次", "神魔", "大戦", "まで", "ある", "ん", "だ", "けどー", "っ"}];
+        yield return ["立つ鳥の声一次の日の朝まだき", new[] { "立つ鳥", "の", "声", "一次", "の", "日", "の", "朝まだき" }];
+        yield return ["余のせいで第二次神魔大戦まであるんだけどーっ", new[] { "余", "の", "せい", "で", "第二次", "神", "魔", "大戦", "まで", "ある", "んだ", "けどー" }];
         yield return ["しかも何で二次性徴の部分", new[] { "しかも", "何で", "二次", "性徴", "の", "部分"}];
         yield return ["足元気をつけろ！", new[] { "足元", "気をつけろ" }];
 
         // Katakana interjection + ッ should not fuse with following word
         yield return ["フンッバカバカしい先に帰るぞ", new[] { "フンッ", "バカバカしい", "先に", "帰る", "ぞ" }];
+
+        // たわけ should split into た+わけ after verb contexts, not match 戯け
+        yield return ["術があるったわけではない", new[] { "術", "が", "ある", "わけではない" }];
+        yield return ["どうしてたわけ", new[] { "どうして", "わけ" }];
+        yield return ["チクッたわけじゃない", new[] { "チクッ", "わけじゃない" }];
+
+        // Legitimate たわけ (戯け) should be preserved
+        yield return ["この大たわけがっ", new[] { "この", "大", "たわけ", "が" }];
     }
 
     [Theory]

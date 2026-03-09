@@ -15,6 +15,7 @@
   }>();
 
   const showDownloadDialog = ref(false);
+  const difficultyRef = ref<{ tooltip: string }>();
 
   const isAudioVisual = computed(() =>
     [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType)
@@ -44,44 +45,46 @@
       <div class="flex flex-row items-center">
         <!-- Title and Media Type -->
         <div class="flex-grow">
-          <div class="font-bold">{{ localiseTitle(deck).substring(0, 50) }}</div>
+          <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)">{{ localiseTitle(deck) }}</div>
           <div class="text-xs text-gray-500">{{ getMediaTypeText(deck.mediaType) }}</div>
         </div>
 
         <!-- Key Stats -->
         <div class="flex gap-3 mx-3">
-          <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex flex-col items-center">
+          <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex flex-col items-center w-20">
             <div class="text-xs text-gray-600 dark:text-gray-300">Duration</div>
             <div class="font-medium tabular-nums">{{ formattedSpeechDuration }}</div>
           </div>
-          <div v-else class="flex flex-col items-center">
+          <div v-else class="flex flex-col items-center w-20">
             <div class="text-xs text-gray-600 dark:text-gray-300">Characters</div>
             <div class="font-medium tabular-nums">{{ deck.characterCount.toLocaleString() }}</div>
           </div>
 
-          <div class="flex flex-col items-center">
+          <div class="flex flex-col items-center w-18">
             <div class="text-xs text-gray-600 dark:text-gray-300">Words</div>
             <div class="font-medium tabular-nums">{{ deck.wordCount.toLocaleString() }}</div>
           </div>
 
-          <div class="flex flex-col items-center">
+          <div class="flex flex-col items-center w-22">
             <div class="text-xs text-gray-600 dark:text-gray-300">Uniq Words</div>
             <div class="font-medium tabular-nums">{{ deck.uniqueWordCount.toLocaleString() }}</div>
           </div>
 
-          <div class="flex flex-col items-center">
+          <div class="flex flex-col items-center w-14">
             <div class="text-xs text-gray-600 dark:text-gray-300">Kanji</div>
             <div class="font-medium tabular-nums">{{ deck.uniqueKanjiCount.toLocaleString() }}</div>
           </div>
 
-          <div v-if="deck.averageSentenceLength !== 0" class="flex flex-col items-center">
+          <div class="flex flex-col items-center w-22" :class="{ 'invisible': deck.averageSentenceLength === 0 }">
             <div class="text-xs text-gray-600 dark:text-gray-300">Avg sentence</div>
             <div class="font-medium tabular-nums">{{ deck.averageSentenceLength.toFixed(1) }}</div>
           </div>
 
-          <div v-if="deck.difficulty != -1" class="flex flex-col items-center">
-            <div class="text-xs text-gray-600 dark:text-gray-300">Difficulty</div>
-            <DifficultyStars :difficulty="deck.difficulty" />
+          <div class="flex flex-col items-center w-22" :class="{ 'invisible': deck.difficulty == -1 }">
+            <Tooltip :content="difficultyRef?.tooltip ?? ''">
+              <div class="text-xs text-gray-600 dark:text-gray-300">Difficulty</div>
+              <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" use-stars />
+            </Tooltip>
           </div>
         </div>
 

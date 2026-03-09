@@ -43,7 +43,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         await using var ctx4 = await contextFactory.CreateDbContextAsync();
 
         var wordTask = ctx1.JMDictWords.AsNoTracking()
-                           .Include(w => w.Definitions)
+                           .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                            .FirstOrDefaultAsync(w => w.WordId == wordId);
 
         var wordFormsTask = WordFormHelper.LoadWordFormsForWord(ctx2, wordId);
@@ -113,7 +113,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         await using var ctx2 = await contextFactory.CreateDbContextAsync();
 
         var wordTask = context.JMDictWords.AsNoTracking()
-                              .Include(w => w.Definitions)
+                              .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
                               .FirstOrDefaultAsync(w => w.WordId == wordId);
 
         var wordFormsTask = WordFormHelper.LoadWordFormsForWord(ctx1, wordId);
@@ -580,7 +580,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
         var words = await context.JMDictWords
             .AsNoTracking()
-            .Include(w => w.Definitions)
+            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
             .Where(w => wordIds.Contains(w.WordId))
             .ToListAsync();
 
@@ -657,22 +657,9 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             .ToList();
     }
 
-    private static bool ContainsJapanese(string text)
-    {
-        return text.Any(c =>
-            (c >= '\u3040' && c <= '\u309F') ||
-            (c >= '\u30A0' && c <= '\u30FF') ||
-            (c >= '\u4E00' && c <= '\u9FFF') ||
-            (c >= '\u3400' && c <= '\u4DBF'));
-    }
+    private static bool ContainsJapanese(string text) => SearchHelper.ContainsJapanese(text);
 
-    private static string SanitizeLikeInput(string input)
-    {
-        return input
-            .Replace("\\", "\\\\")
-            .Replace("%", "\\%")
-            .Replace("_", "\\_");
-    }
+    private static string SanitizeLikeInput(string input) => SearchHelper.SanitizeLikeInput(input);
 
     private static string SanitizeRegexInput(string input)
     {
