@@ -22,7 +22,7 @@ public class DifficultyAdjustmentJob(
     private const int GATE_DISTINCT_USERS_START = 3;
     private const int GATE_DISTINCT_OPPONENTS_START = 2;
     private const decimal GATE_NEFF_START = 3m;
-    private const decimal GATE_NEFF_FULL = 10m;
+    private const decimal GATE_NEFF_FULL = 18m;
     private const decimal SINGLE_USER_CONFIDENCE_THRESHOLD = 0.7m;
     private const decimal SINGLE_USER_ADJUSTMENT_RATIO = 0.25m;
     private const decimal PER_USER_DIMINISHING_SCALE = 1.5m;
