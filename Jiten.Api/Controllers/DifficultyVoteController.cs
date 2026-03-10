@@ -84,6 +84,12 @@ public class DifficultyVoteController(
         {
             existing.Outcome = outcome;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+            var existingSkipForUpdate = await context.SkippedComparisons
+                .FirstOrDefaultAsync(s => s.UserId == userId && s.DeckLowId == deckLowId && s.DeckHighId == deckHighId);
+            if (existingSkipForUpdate != null)
+                context.SkippedComparisons.Remove(existingSkipForUpdate);
+
             await context.SaveChangesAsync();
             return Results.Ok(new { id = existing.Id, isUpdate = true });
         }
@@ -99,6 +105,12 @@ public class DifficultyVoteController(
         };
 
         context.DifficultyVotes.Add(vote);
+
+        var existingSkip = await context.SkippedComparisons
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.DeckLowId == deckLowId && s.DeckHighId == deckHighId);
+        if (existingSkip != null)
+            context.SkippedComparisons.Remove(existingSkip);
+
         await context.SaveChangesAsync();
         return Results.Created($"/api/difficulty-votes/{vote.Id}", new { id = vote.Id, isUpdate = false });
     }
