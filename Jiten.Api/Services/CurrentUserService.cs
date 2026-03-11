@@ -97,12 +97,24 @@ public class CurrentUserService(
         // 4. Build result: FsrsCard wins, then WordSet, then New
         return keysSet.ToDictionary(k => k, k =>
         {
-            // FsrsCard takes precedence
-            if (fsrsCardDict.TryGetValue(k, out var card))
-                return GetKnownStatesFromCard(card);
+            var hasWordSetState = setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState);
 
-            // Check WordSet-derived state
-            if (setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState))
+            if (fsrsCardDict.TryGetValue(k, out var card))
+            {
+                if (card.State == FsrsState.New && hasWordSetState)
+                {
+                    return setState switch
+                    {
+                        WordSetStateType.Blacklisted => [KnownState.Blacklisted],
+                        WordSetStateType.Mastered => [KnownState.Mastered],
+                        _ => GetKnownStatesFromCard(card)
+                    };
+                }
+
+                return GetKnownStatesFromCard(card);
+            }
+
+            if (hasWordSetState)
             {
                 return setState switch
                 {
@@ -155,14 +167,12 @@ public class CurrentUserService(
         if (!IsAuthenticated)
             return [KnownState.New];
 
-        // 1. Check FsrsCard first (takes precedence)
+        // 1. Check FsrsCard
         var card = await userContext.FsrsCards.FirstOrDefaultAsync(u => u.UserId == UserId && u.WordId == wordId &&
                                                                         u.ReadingIndex == readingIndex);
 
-        if (card != null)
-            return GetKnownStatesFromCard(card);
-
         // 2. Check WordSet subscriptions (separate queries to avoid cross-context join)
+        WordSetStateType? effectiveWordSetState = null;
         var userSetStates = await userContext.UserWordSetStates
             .Where(uwss => uwss.UserId == UserId)
             .ToListAsync();
@@ -184,17 +194,36 @@ public class CurrentUserService(
 
             if (setDerivedStates.Count > 0)
             {
-                var effectiveState = setDerivedStates.Contains(WordSetStateType.Mastered)
+                effectiveWordSetState = setDerivedStates.Contains(WordSetStateType.Mastered)
                     ? WordSetStateType.Mastered
                     : setDerivedStates.First();
+            }
+        }
 
-                return effectiveState switch
+        // 3. FsrsCard takes precedence, except State=New yields to word set mastered/blacklisted
+        if (card != null)
+        {
+            if (card.State == FsrsState.New && effectiveWordSetState is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
+            {
+                return effectiveWordSetState switch
                 {
                     WordSetStateType.Blacklisted => [KnownState.Blacklisted],
                     WordSetStateType.Mastered => [KnownState.Mastered],
-                    _ => [KnownState.New]
+                    _ => GetKnownStatesFromCard(card)
                 };
             }
+
+            return GetKnownStatesFromCard(card);
+        }
+
+        if (effectiveWordSetState.HasValue)
+        {
+            return effectiveWordSetState switch
+            {
+                WordSetStateType.Blacklisted => [KnownState.Blacklisted],
+                WordSetStateType.Mastered => [KnownState.Mastered],
+                _ => [KnownState.New]
+            };
         }
 
         return [KnownState.New];

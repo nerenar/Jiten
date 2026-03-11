@@ -1883,16 +1883,15 @@ public class UserController(
             {
                 var key = (aw.WordId, aw.ReadingIndex);
                 var knownState = filterKnownStates.GetValueOrDefault(key, [KnownState.New]);
-                var fsrsState = fsrsStates.GetValueOrDefault(key);
 
                 return displayFilter switch
                 {
-                    "known" => !knownState.Contains(KnownState.New) && fsrsStates.ContainsKey(key),
+                    "known" => !knownState.Contains(KnownState.New),
                     "young" => knownState.Contains(KnownState.Young),
                     "mature" => knownState.Contains(KnownState.Mature),
                     "mastered" => knownState.Contains(KnownState.Mastered),
                     "blacklisted" => knownState.Contains(KnownState.Blacklisted),
-                    "unknown" => !fsrsStates.ContainsKey(key),
+                    "unknown" => !fsrsStates.ContainsKey(key) && knownState.Contains(KnownState.New),
                     _ => true
                 };
             }).ToList();
