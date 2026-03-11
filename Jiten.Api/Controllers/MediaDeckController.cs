@@ -848,62 +848,74 @@ public class MediaDeckController(
                 ? query.Where(d => d.Difficulty > -1)
                        .OrderBy(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
                            + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0))
+                       .ThenBy(d => d.DeckId)
                 : query.Where(d => d.Difficulty > -1)
                        .OrderByDescending(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
-                           + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0)),
+                           + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0))
+                       .ThenBy(d => d.DeckId),
             "charCount" => sortOrder == SortOrder.Ascending
                 ? query.Where(d => d.MediaType != MediaType.Anime && d.MediaType != MediaType.Drama && d.MediaType != MediaType.Movie && d.MediaType != MediaType.Audio)
                        .OrderBy(d => d.CharacterCount)
+                       .ThenBy(d => d.DeckId)
                 : query.Where(d => d.MediaType != MediaType.Anime && d.MediaType != MediaType.Drama && d.MediaType != MediaType.Movie && d.MediaType != MediaType.Audio)
-                       .OrderByDescending(d => d.CharacterCount),
+                       .OrderByDescending(d => d.CharacterCount)
+                       .ThenBy(d => d.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0)
-                : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0),
+                ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).ThenBy(d => d.DeckId).Where(d => d.SentenceCount != 0)
+                : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).ThenBy(d => d.DeckId).Where(d => d.SentenceCount != 0),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.DialoguePercentage)
+                       .ThenBy(d => d.DeckId)
                        .Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100)
                 : query.OrderByDescending(d => d.DialoguePercentage)
+                       .ThenBy(d => d.DeckId)
                        .Where(d => !d.HideDialoguePercentage && d.DialoguePercentage != 0 && d.DialoguePercentage != 100),
             "speechSpeed" => sortOrder == SortOrder.Ascending
                 ? query.Where(d => d.SpeechDuration > 0)
                        .OrderBy(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0))
+                       .ThenBy(d => d.DeckId)
                 : query.Where(d => d.SpeechDuration > 0)
-                       .OrderByDescending(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0)),
+                       .OrderByDescending(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0))
+                       .ThenBy(d => d.DeckId),
             "speechDuration" => sortOrder == SortOrder.Ascending
                 ? query.Where(d => d.SpeechDuration > 0)
                        .OrderBy(d => d.SpeechDuration)
+                       .ThenBy(d => d.DeckId)
                 : query.Where(d => d.SpeechDuration > 0)
-                       .OrderByDescending(d => d.SpeechDuration),
+                       .OrderByDescending(d => d.SpeechDuration)
+                       .ThenBy(d => d.DeckId),
             "wordCount" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.WordCount)
-                : query.OrderByDescending(d => d.WordCount),
+                ? query.OrderBy(d => d.WordCount).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.WordCount).ThenBy(d => d.DeckId),
             "uKanji" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.UniqueKanjiCount)
-                : query.OrderByDescending(d => d.UniqueKanjiCount),
+                ? query.OrderBy(d => d.UniqueKanjiCount).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.UniqueKanjiCount).ThenBy(d => d.DeckId),
             "uWordCount" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.UniqueWordCount)
-                : query.OrderByDescending(d => d.UniqueWordCount),
+                ? query.OrderBy(d => d.UniqueWordCount).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.UniqueWordCount).ThenBy(d => d.DeckId),
             "uKanjiOnce" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.UniqueKanjiUsedOnceCount)
-                : query.OrderByDescending(d => d.UniqueKanjiUsedOnceCount),
+                ? query.OrderBy(d => d.UniqueKanjiUsedOnceCount).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.UniqueKanjiUsedOnceCount).ThenBy(d => d.DeckId),
             "filter" => query.OrderBy(_ => 1), // Dummy ordering for pgroonga_score
             "releaseDate" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.ReleaseDate)
-                : query.OrderByDescending(d => d.ReleaseDate),
+                ? query.OrderBy(d => d.ReleaseDate).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.ReleaseDate).ThenBy(d => d.DeckId),
             "addedDate" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.CreationDate)
-                : query.OrderByDescending(d => d.CreationDate),
+                ? query.OrderBy(d => d.CreationDate).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.CreationDate).ThenBy(d => d.DeckId),
             "subdeckCount" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.Children.Count)
-                : query.OrderByDescending(d => d.Children.Count),
+                ? query.OrderBy(d => d.Children.Count).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.Children.Count).ThenBy(d => d.DeckId),
             "extRating" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.ExternalRating)
+                       .ThenBy(d => d.DeckId)
                        .Where(d => d.ExternalRating != 0)
                 : query.OrderByDescending(d => d.ExternalRating)
+                       .ThenBy(d => d.DeckId)
                        .Where(d => d.ExternalRating != 0),
             _ => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.RomajiTitle)
-                : query.OrderByDescending(d => d.RomajiTitle),
+                ? query.OrderBy(d => d.RomajiTitle).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.RomajiTitle).ThenBy(d => d.DeckId),
         };
     }
 
@@ -912,57 +924,67 @@ public class MediaDeckController(
         return sortBy switch
         {
             "occurrences" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Occurrences)
-                : query.OrderByDescending(p => p.Occurrences),
+                ? query.OrderBy(p => p.Occurrences).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Occurrences).ThenBy(p => p.Deck.DeckId),
             "difficulty" => sortOrder == SortOrder.Ascending
                 ? query.Where(p => p.Deck.Difficulty > -1)
                        .OrderBy(p => (p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty)
                            + (float)(p.Deck.DeckDifficulty != null ? p.Deck.DeckDifficulty.UserAdjustment : 0))
+                       .ThenBy(p => p.Deck.DeckId)
                 : query.Where(p => p.Deck.Difficulty > -1)
                        .OrderByDescending(p => (p.Deck.DifficultyOverride > -1 ? p.Deck.DifficultyOverride : p.Deck.Difficulty)
-                           + (float)(p.Deck.DeckDifficulty != null ? p.Deck.DeckDifficulty.UserAdjustment : 0)),
+                           + (float)(p.Deck.DeckDifficulty != null ? p.Deck.DeckDifficulty.UserAdjustment : 0))
+                       .ThenBy(p => p.Deck.DeckId),
             "charCount" => sortOrder == SortOrder.Ascending
                 ? query.Where(p => p.Deck.MediaType != MediaType.Anime && p.Deck.MediaType != MediaType.Drama && p.Deck.MediaType != MediaType.Movie && p.Deck.MediaType != MediaType.Audio)
                        .OrderBy(p => p.Deck.CharacterCount)
+                       .ThenBy(p => p.Deck.DeckId)
                 : query.Where(p => p.Deck.MediaType != MediaType.Anime && p.Deck.MediaType != MediaType.Drama && p.Deck.MediaType != MediaType.Movie && p.Deck.MediaType != MediaType.Audio)
-                       .OrderByDescending(p => p.Deck.CharacterCount),
+                       .OrderByDescending(p => p.Deck.CharacterCount)
+                       .ThenBy(p => p.Deck.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).Where(p => p.Deck.SentenceCount != 0)
-                : query.OrderByDescending(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).Where(p => p.Deck.SentenceCount != 0),
+                ? query.OrderBy(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount != 0)
+                : query.OrderByDescending(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount != 0),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(p => p.Deck.DialoguePercentage)
+                       .ThenBy(p => p.Deck.DeckId)
                        .Where(p => p.Deck.DialoguePercentage != 0 && p.Deck.DialoguePercentage != 100)
                 : query.OrderByDescending(p => p.Deck.DialoguePercentage)
+                       .ThenBy(p => p.Deck.DeckId)
                        .Where(p => p.Deck.DialoguePercentage != 0 && p.Deck.DialoguePercentage != 100),
             "speechSpeed" => sortOrder == SortOrder.Ascending
                 ? query.Where(p => p.Deck.SpeechDuration > 0)
                        .OrderBy(p => p.Deck.SpeechMoraCount / (p.Deck.SpeechDuration / 60000.0))
+                       .ThenBy(p => p.Deck.DeckId)
                 : query.Where(p => p.Deck.SpeechDuration > 0)
-                       .OrderByDescending(p => p.Deck.SpeechMoraCount / (p.Deck.SpeechDuration / 60000.0)),
+                       .OrderByDescending(p => p.Deck.SpeechMoraCount / (p.Deck.SpeechDuration / 60000.0))
+                       .ThenBy(p => p.Deck.DeckId),
             "speechDuration" => sortOrder == SortOrder.Ascending
                 ? query.Where(p => p.Deck.SpeechDuration > 0)
                        .OrderBy(p => p.Deck.SpeechDuration)
+                       .ThenBy(p => p.Deck.DeckId)
                 : query.Where(p => p.Deck.SpeechDuration > 0)
-                       .OrderByDescending(p => p.Deck.SpeechDuration),
+                       .OrderByDescending(p => p.Deck.SpeechDuration)
+                       .ThenBy(p => p.Deck.DeckId),
             "wordCount" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.WordCount)
-                : query.OrderByDescending(p => p.Deck.WordCount),
+                ? query.OrderBy(p => p.Deck.WordCount).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Deck.WordCount).ThenBy(p => p.Deck.DeckId),
             "uKanji" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.UniqueKanjiCount)
-                : query.OrderByDescending(p => p.Deck.UniqueKanjiCount),
+                ? query.OrderBy(p => p.Deck.UniqueKanjiCount).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Deck.UniqueKanjiCount).ThenBy(p => p.Deck.DeckId),
             "uWordCount" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.UniqueWordCount)
-                : query.OrderByDescending(p => p.Deck.UniqueWordCount),
+                ? query.OrderBy(p => p.Deck.UniqueWordCount).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Deck.UniqueWordCount).ThenBy(p => p.Deck.DeckId),
             "uKanjiOnce" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.UniqueKanjiUsedOnceCount)
-                : query.OrderByDescending(p => p.Deck.UniqueKanjiUsedOnceCount),
+                ? query.OrderBy(p => p.Deck.UniqueKanjiUsedOnceCount).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Deck.UniqueKanjiUsedOnceCount).ThenBy(p => p.Deck.DeckId),
             "filter" => query.OrderBy(_ => 1), // Dummy ordering for pgroonga_score
             "releaseDate" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.ReleaseDate)
-                : query.OrderByDescending(p => p.Deck.ReleaseDate),
+                ? query.OrderBy(p => p.Deck.ReleaseDate).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Deck.ReleaseDate).ThenBy(p => p.Deck.DeckId),
             _ => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.RomajiTitle)
-                : query.OrderByDescending(p => p.Deck.RomajiTitle),
+                ? query.OrderBy(p => p.Deck.RomajiTitle).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Deck.RomajiTitle).ThenBy(p => p.Deck.DeckId),
         };
     }
 
