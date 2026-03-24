@@ -70,7 +70,7 @@ public class StudyController(
         var resolvedDecks = new List<(UserStudyDeck Sd, Deck? Deck, List<(int WordId, byte ReadingIndex)>? WordPairs)>();
         var countOnlyStats = new Dictionary<int, (int Total, int Unseen, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, bool WasTruncated)>();
         Dictionary<(int, byte), int>? userCardFreqRanks = null;
-        HashSet<int>? kanaOnlyCardWords = null;
+        HashSet<long>? kanaOnlyCardWords = null;
 
         foreach (var sd in studyDecks)
         {
@@ -117,10 +117,7 @@ public class StudyController(
                     userCardFreqRanks = await BuildCardFrequencyRanks(cardStateMap);
 
                 if (sd.ExcludeKana && kanaOnlyCardWords == null)
-                {
-                    var cardWordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct().ToList();
-                    kanaOnlyCardWords = await WordFormHelper.GetKanaOnlyWordIds(context, cardWordIds);
-                }
+                    kanaOnlyCardWords = await WordFormHelper.GetKanaFormKeys(context, cardStateMap.Keys.Select(k => k.Item1).Distinct());
 
                 var posMatchedWordIds = await GetPosMatchedWordIds(sd.PosFilter, cardStateMap);
 
@@ -808,6 +805,13 @@ public class StudyController(
                     .ToListAsync();
                 allItems = mediaDeckItems.Select(d => (d.WordId, d.ReadingIndex, d.Occurrences)).ToList();
 
+                if (studyDeck.ExcludeKana)
+                {
+                    var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, allItems.Select(i => i.WordId).Distinct());
+                    if (kanaFormKeys.Count > 0)
+                        allItems = allItems.Where(i => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
+                }
+
                 break;
             }
 
@@ -831,12 +835,8 @@ public class StudyController(
                 }
 
                 if (studyDeck.ExcludeKana)
-                {
-                    var nonKanaWordIds = context.WordForms.AsNoTracking()
-                        .Where(wf => wf.FormType != JmDictFormType.KanaForm)
-                        .Select(wf => wf.WordId);
-                    freqQuery = freqQuery.Where(wff => nonKanaWordIds.Contains(wff.WordId));
-                }
+                    freqQuery = freqQuery.Where(wff => context.WordForms
+                        .Any(wf => wf.WordId == wff.WordId && wf.ReadingIndex == wff.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
 
                 if (!string.IsNullOrWhiteSpace(search))
                 {
@@ -894,6 +894,13 @@ public class StudyController(
                         ? allItems.OrderBy(i => freqMap.TryGetValue((i.WordId, i.ReadingIndex), out var f) ? f.FrequencyRank : int.MaxValue)
                         : allItems.OrderByDescending(i => freqMap.TryGetValue((i.WordId, i.ReadingIndex), out var f) ? f.FrequencyRank : int.MaxValue))
                         .ToList();
+                }
+
+                if (studyDeck.ExcludeKana)
+                {
+                    var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, allItems.Select(i => i.WordId).Distinct());
+                    if (kanaFormKeys.Count > 0)
+                        allItems = allItems.Where(i => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
                 }
 
                 break;
@@ -1398,10 +1405,9 @@ public class StudyController(
 
                 if (studyDeck.ExcludeKana)
                 {
-                    var deckWordIds = wordPairs.Select(w => w.WordId).Distinct().ToHashSet();
-                    var kanaOnly = await WordFormHelper.GetKanaOnlyWordIds(context, deckWordIds);
-                    if (kanaOnly.Count > 0)
-                        filtered = wordPairs.Where(w => !kanaOnly.Contains(w.WordId));
+                    var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, wordPairs.Select(w => w.WordId).Distinct());
+                    if (kanaFormKeys.Count > 0)
+                        filtered = wordPairs.Where(w => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)));
                 }
 
                 var deckCandidates = new List<(int WordId, byte ReadingIndex)>();
@@ -1748,13 +1754,33 @@ public class StudyController(
         var settings = await LoadStudySettings(userId);
 
         var dueCutoff = now;
-        var reviewsDue = await userContext.FsrsCards
-            .CountAsync(c => c.UserId == userId
-                             && c.State != FsrsState.New
-                             && c.State != FsrsState.Blacklisted
-                             && c.State != FsrsState.Mastered
-                             && c.State != FsrsState.Suspended
-                             && c.Due <= dueCutoff);
+
+        var dueBaseQuery = userContext.FsrsCards
+            .AsNoTracking()
+            .Where(c => c.UserId == userId
+                        && c.State != FsrsState.New
+                        && c.State != FsrsState.Blacklisted
+                        && c.State != FsrsState.Mastered
+                        && c.State != FsrsState.Suspended);
+
+        HashSet<long>? deckFilter = null;
+        int reviewsDue;
+
+        if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
+        {
+            var dueCardKeys = await dueBaseQuery
+                .Where(c => c.Due <= dueCutoff)
+                .Select(c => new { c.WordId, c.ReadingIndex })
+                .ToListAsync();
+            deckFilter = await BuildDeckReviewFilter(userId,
+                dueCardKeys.Select(c => (c.WordId, c.ReadingIndex)).ToList());
+            reviewsDue = dueCardKeys
+                .Count(c => deckFilter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)));
+        }
+        else
+        {
+            reviewsDue = await dueBaseQuery.Where(c => c.Due <= dueCutoff).CountAsync();
+        }
 
         var todayLogs = userContext.FsrsReviewLogs
             .AsNoTracking()
@@ -1809,16 +1835,25 @@ public class StudyController(
         DateTime? nextReviewAt = null;
         if (reviewsDue == 0)
         {
-            nextReviewAt = await userContext.FsrsCards
-                .Where(c => c.UserId == userId
-                            && c.State != FsrsState.New
-                            && c.State != FsrsState.Blacklisted
-                            && c.State != FsrsState.Mastered
-                            && c.State != FsrsState.Suspended
-                            && c.Due > dueCutoff)
-                .OrderBy(c => c.Due)
-                .Select(c => (DateTime?)c.Due)
-                .FirstOrDefaultAsync();
+            if (deckFilter != null)
+            {
+                var upcomingCards = await dueBaseQuery
+                    .Where(c => c.Due > dueCutoff)
+                    .OrderBy(c => c.Due)
+                    .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
+                    .ToListAsync();
+                nextReviewAt = upcomingCards
+                    .FirstOrDefault(c => deckFilter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)))
+                    ?.Due;
+            }
+            else
+            {
+                nextReviewAt = await dueBaseQuery
+                    .Where(c => c.Due > dueCutoff)
+                    .OrderBy(c => c.Due)
+                    .Select(c => (DateTime?)c.Due)
+                    .FirstOrDefaultAsync();
+            }
         }
 
         return Results.Ok(new
@@ -1900,12 +1935,25 @@ public class StudyController(
 
             case "extraReview":
             {
-                var totalDue = await userContext.FsrsCards
-                    .CountAsync(c => c.UserId == userId
-                                     && c.State != FsrsState.Blacklisted
-                                     && c.State != FsrsState.Mastered
-                                     && c.State != FsrsState.Suspended
-                                     && c.Due <= now);
+                var extraReviewQuery = userContext.FsrsCards
+                    .AsNoTracking()
+                    .Where(c => c.UserId == userId
+                                && c.State != FsrsState.Blacklisted
+                                && c.State != FsrsState.Mastered
+                                && c.State != FsrsState.Suspended
+                                && c.Due <= now);
+
+                int totalDue;
+                if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
+                {
+                    var keys = await extraReviewQuery.Select(c => new { c.WordId, c.ReadingIndex }).ToListAsync();
+                    var filter = await BuildDeckReviewFilter(userId, keys.Select(c => (c.WordId, c.ReadingIndex)).ToList());
+                    totalDue = keys.Count(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)));
+                }
+                else
+                {
+                    totalDue = await extraReviewQuery.CountAsync();
+                }
 
                 count = Math.Min(totalDue, extraReviews ?? 0);
                 break;
@@ -1915,13 +1963,25 @@ public class StudyController(
             {
                 var minutes = Math.Clamp(aheadMinutes ?? 1440, 60, 10080);
                 var aheadCutoff = now.AddMinutes(minutes);
-                count = await userContext.FsrsCards
-                    .CountAsync(c => c.UserId == userId
-                                     && c.State != FsrsState.New
-                                     && c.State != FsrsState.Blacklisted
-                                     && c.State != FsrsState.Mastered
-                                     && c.State != FsrsState.Suspended
-                                     && c.Due <= aheadCutoff);
+                var aheadQuery = userContext.FsrsCards
+                    .AsNoTracking()
+                    .Where(c => c.UserId == userId
+                                && c.State != FsrsState.New
+                                && c.State != FsrsState.Blacklisted
+                                && c.State != FsrsState.Mastered
+                                && c.State != FsrsState.Suspended
+                                && c.Due <= aheadCutoff);
+
+                if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
+                {
+                    var keys = await aheadQuery.Select(c => new { c.WordId, c.ReadingIndex }).ToListAsync();
+                    var filter = await BuildDeckReviewFilter(userId, keys.Select(c => (c.WordId, c.ReadingIndex)).ToList());
+                    count = keys.Count(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)));
+                }
+                else
+                {
+                    count = await aheadQuery.CountAsync();
+                }
                 break;
             }
 
@@ -1964,6 +2024,7 @@ public class StudyController(
         var oneHour = now.AddHours(1);
         var oneDay = now.AddHours(24);
         var twoDays = now.AddHours(48);
+        var settings = await LoadStudySettings(userId);
 
         var baseQuery = userContext.FsrsCards
             .AsNoTracking()
@@ -1974,23 +2035,52 @@ public class StudyController(
                         && c.State != FsrsState.Suspended
                         && c.Due > now);
 
-        var forecast = await baseQuery
-            .Where(c => c.Due <= twoDays)
-            .GroupBy(c => c.Due <= oneHour ? 0 : c.Due <= oneDay ? 1 : 2)
-            .Select(g => new { Bucket = g.Key, Count = g.Count() })
-            .ToListAsync();
-
-        var dueWithinHour = forecast.FirstOrDefault(f => f.Bucket == 0)?.Count ?? 0;
-        var dueToday = forecast.FirstOrDefault(f => f.Bucket == 1)?.Count ?? 0;
-        var dueTomorrow = forecast.FirstOrDefault(f => f.Bucket == 2)?.Count ?? 0;
-
+        int dueWithinHour, dueToday, dueTomorrow;
         DateTime? nextReviewAt = null;
-        if (dueWithinHour == 0 && dueToday == 0)
+
+        if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
         {
-            nextReviewAt = await baseQuery
-                .OrderBy(c => c.Due)
-                .Select(c => (DateTime?)c.Due)
-                .FirstOrDefaultAsync();
+            var upcomingCards = await baseQuery
+                .Where(c => c.Due <= twoDays)
+                .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
+                .ToListAsync();
+            var filter = await BuildDeckReviewFilter(userId, upcomingCards.Select(c => (c.WordId, c.ReadingIndex)).ToList());
+            var filtered = upcomingCards.Where(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex))).ToList();
+
+            dueWithinHour = filtered.Count(c => c.Due <= oneHour);
+            dueToday = filtered.Count(c => c.Due > oneHour && c.Due <= oneDay);
+            dueTomorrow = filtered.Count(c => c.Due > oneDay && c.Due <= twoDays);
+
+            if (dueWithinHour == 0 && dueToday == 0)
+            {
+                var allUpcoming = await baseQuery
+                    .OrderBy(c => c.Due)
+                    .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
+                    .ToListAsync();
+                nextReviewAt = allUpcoming
+                    .FirstOrDefault(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)))
+                    ?.Due;
+            }
+        }
+        else
+        {
+            var forecast = await baseQuery
+                .Where(c => c.Due <= twoDays)
+                .GroupBy(c => c.Due <= oneHour ? 0 : c.Due <= oneDay ? 1 : 2)
+                .Select(g => new { Bucket = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            dueWithinHour = forecast.FirstOrDefault(f => f.Bucket == 0)?.Count ?? 0;
+            dueToday = forecast.FirstOrDefault(f => f.Bucket == 1)?.Count ?? 0;
+            dueTomorrow = forecast.FirstOrDefault(f => f.Bucket == 2)?.Count ?? 0;
+
+            if (dueWithinHour == 0 && dueToday == 0)
+            {
+                nextReviewAt = await baseQuery
+                    .OrderBy(c => c.Due)
+                    .Select(c => (DateTime?)c.Due)
+                    .FirstOrDefaultAsync();
+            }
         }
 
         return Results.Ok(new
@@ -2351,7 +2441,7 @@ public class StudyController(
             UserStudyDeck sd,
             Dictionary<(int, byte), (FsrsState State, DateTime Due)> cardStateMap,
             Dictionary<(int, byte), int> freqRanks,
-            HashSet<int>? kanaOnlyCardWords,
+            HashSet<long>? kanaFormKeys,
             HashSet<int>? posMatchedWordIds,
             DateTime dueCutoff)
     {
@@ -2361,7 +2451,7 @@ public class StudyController(
             if (!freqRanks.TryGetValue((wordId, ri), out var freq)) return false;
             if (sd.MinGlobalFrequency.HasValue && freq < sd.MinGlobalFrequency.Value) return false;
             if (sd.MaxGlobalFrequency.HasValue && freq > sd.MaxGlobalFrequency.Value) return false;
-            if (sd.ExcludeKana && kanaOnlyCardWords != null && kanaOnlyCardWords.Contains(wordId)) return false;
+            if (sd.ExcludeKana && kanaFormKeys != null && kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(wordId, ri))) return false;
             if (posMatchedWordIds != null && !posMatchedWordIds.Contains(wordId)) return false;
             return true;
         }).Select(e => e.Value);
@@ -2635,6 +2725,51 @@ public class StudyController(
             query = query.Where(dw => dw.Occurrences <= maxOccurrences.Value);
 
         return Results.Ok(await query.CountAsync());
+    }
+
+    private async Task<HashSet<long>> BuildDeckReviewFilter(
+        string userId,
+        List<(int WordId, byte ReadingIndex)>? cardKeys = null)
+    {
+        var studyDecks = await userContext.UserStudyDecks
+            .AsNoTracking()
+            .Where(sd => sd.UserId == userId)
+            .ToListAsync();
+
+        var mediaDeckIds = studyDecks
+            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)
+            .Select(sd => sd.DeckId!.Value).ToList();
+        var wordKeys = await deckWordResolver.GetStudyDeckWordKeys(mediaDeckIds);
+
+        var staticDeckIds = studyDecks
+            .Where(sd => sd.DeckType == StudyDeckType.StaticWordList)
+            .Select(sd => sd.UserStudyDeckId).ToList();
+        if (staticDeckIds.Count > 0)
+            wordKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
+
+        if (cardKeys != null)
+        {
+            var globalDynamicDecks = studyDecks.Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic).ToList();
+            if (globalDynamicDecks.Count > 0)
+            {
+                var unmatchedWordIds = cardKeys
+                    .Where(k => !wordKeys.Contains(WordFormHelper.EncodeWordKey(k.WordId, k.ReadingIndex)))
+                    .Select(k => k.WordId)
+                    .Distinct()
+                    .ToList();
+
+                if (unmatchedWordIds.Count > 0)
+                {
+                    foreach (var gd in globalDynamicDecks)
+                    {
+                        wordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
+                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds));
+                    }
+                }
+            }
+        }
+
+        return wordKeys;
     }
 
     private async Task<string?> ValidateWordLimits(string userId, int deckId, int wordsToAdd)

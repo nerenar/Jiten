@@ -362,7 +362,9 @@ public class UserController(
         if (request.Cards == null || request.Cards.Count == 0)
             return Results.BadRequest("No cards provided");
 
-        var distinctWordIds = request.Cards.Select(c => c.WordId).Distinct().ToList();
+        var distinctWordIds = request.Cards
+            .Where(c => c.WordId is > 0 and <= int.MaxValue)
+            .Select(c => (int)c.WordId).Distinct().ToList();
 
         var wordForms = await jitenContext.WordForms
                                           .AsNoTracking()
@@ -398,7 +400,14 @@ public class UserController(
 
         foreach (var jpdbCard in request.Cards)
         {
-            if (!formsByWord.TryGetValue(jpdbCard.WordId, out var forms))
+            if (jpdbCard.WordId is <= 0 or > int.MaxValue)
+            {
+                skipped++;
+                continue;
+            }
+
+            var wordId = (int)jpdbCard.WordId;
+            if (!formsByWord.TryGetValue(wordId, out var forms))
             {
                 skipped++;
                 continue;
@@ -416,7 +425,7 @@ public class UserController(
             }
 
             byte readingIndex = ResolveReadingIndex(forms, jpdbCard.Spelling);
-            var key = (jpdbCard.WordId, (int)readingIndex);
+            var key = (wordId, (int)readingIndex);
 
             FsrsCard card;
             if (existingCards.TryGetValue(key, out var existingCard))
@@ -425,7 +434,7 @@ public class UserController(
             }
             else
             {
-                card = new FsrsCard(userId, jpdbCard.WordId, readingIndex);
+                card = new FsrsCard(userId, wordId, readingIndex);
                 cardsToAdd.Add(card);
                 existingCards[key] = card;
             }
@@ -438,7 +447,7 @@ public class UserController(
                 if (card.CardId > 0 && existingLogSet.Contains((card.CardId, reviewDt)))
                     continue;
 
-                var pendingKey = (jpdbCard.WordId, (int)readingIndex, reviewDt);
+                var pendingKey = (wordId, (int)readingIndex, reviewDt);
                 if (!pendingLogKeys.Add(pendingKey))
                     continue;
 

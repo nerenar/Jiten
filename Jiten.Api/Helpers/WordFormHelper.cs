@@ -72,6 +72,20 @@ public static class WordFormHelper
             .ToHashSet();
     }
 
+    public static async Task<HashSet<long>> GetKanaFormKeys(JitenDbContext context, IEnumerable<int> wordIds)
+    {
+        var distinctIds = wordIds.Distinct().ToList();
+        if (distinctIds.Count == 0) return [];
+
+        var kanaForms = await context.WordForms.AsNoTracking()
+            .Where(wf => distinctIds.Contains(wf.WordId) && wf.FormType == JmDictFormType.KanaForm)
+            .Select(wf => new { wf.WordId, wf.ReadingIndex })
+            .ToListAsync();
+        return kanaForms
+            .Select(wf => EncodeWordKey(wf.WordId, wf.ReadingIndex))
+            .ToHashSet();
+    }
+
     public static async Task<List<JmDictWordForm>> LoadWordFormsForWord(JitenDbContext context, int wordId)
     {
         return await context.WordForms

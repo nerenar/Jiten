@@ -12,11 +12,6 @@ namespace Jiten.Api.Services;
 
 public class DeckWordResolver(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService) : IDeckWordResolver
 {
-    private IQueryable<int> NonKanaFormWordIds() =>
-        context.WordForms.AsNoTracking()
-            .Where(wf => wf.FormType != JmDictFormType.KanaForm)
-            .Select(wf => wf.WordId);
-
     public async Task<(List<DeckWord>? Words, IResult? Error)> ResolveDeckWords(DeckWordResolveRequest request)
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
@@ -237,7 +232,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter);
 
         if (excludeKana)
-            query = query.Where(wff => NonKanaFormWordIds().Contains(wff.WordId));
+            query = query.Where(wff => context.WordForms
+                .Any(wf => wf.WordId == wff.WordId && wf.ReadingIndex == wff.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
 
         const int maxResults = 500_000;
 
@@ -371,7 +367,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter);
 
         if (excludeKana)
-            query = query.Where(wff => NonKanaFormWordIds().Contains(wff.WordId));
+            query = query.Where(wff => context.WordForms
+                .Any(wf => wf.WordId == wff.WordId && wf.ReadingIndex == wff.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
 
         var excludedKeys = await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords);
 
@@ -435,7 +432,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         }
 
         if (excludeKana)
-            query = query.Where(dw => NonKanaFormWordIds().Contains(dw.WordId));
+            query = query.Where(dw => context.WordForms
+                .Any(wf => wf.WordId == dw.WordId && wf.ReadingIndex == (short)dw.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
 
         var pairs = await query
             .Select(dw => new { dw.WordId, dw.ReadingIndex })
@@ -513,18 +511,10 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             var wordIds = allDeckWords
                 .Where(dw => resultKeys.Contains(WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex)))
                 .Select(dw => dw.WordId)
-                .Distinct()
-                .ToList();
-            var kanaOnly = await WordFormHelper.GetKanaOnlyWordIds(context, wordIds);
-            if (kanaOnly.Count > 0)
-            {
-                var toRemove = allDeckWords
-                    .Where(dw => kanaOnly.Contains(dw.WordId) && resultKeys.Contains(WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex)))
-                    .Select(dw => WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex))
-                    .ToList();
-                foreach (var k in toRemove)
-                    resultKeys.Remove(k);
-            }
+                .Distinct();
+            var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, wordIds);
+            if (kanaFormKeys.Count > 0)
+                resultKeys.RemoveWhere(k => kanaFormKeys.Contains(k));
         }
 
         return (resultKeys.Count, resultKeys);
@@ -537,7 +527,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             .Where(w => w.UserStudyDeckId == studyDeckId);
 
         if (excludeKana)
-            query = query.Where(w => NonKanaFormWordIds().Contains(w.WordId));
+            query = query.Where(w => context.WordForms
+                .Any(wf => wf.WordId == w.WordId && wf.ReadingIndex == w.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
 
         var pairs = await query
             .Select(w => new { w.WordId, w.ReadingIndex })

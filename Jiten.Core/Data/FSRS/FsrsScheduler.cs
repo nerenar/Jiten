@@ -110,7 +110,7 @@ public class FsrsScheduler
             nextInterval = FsrsHelper.ApplyFuzzing(nextInterval, MaximumInterval);
         }
 
-        card.Due = card.State == FsrsState.Blacklisted ? DateTime.MaxValue : reviewDateTime + nextInterval;
+        card.Due = nextInterval == TimeSpan.MaxValue ? DateTime.MaxValue : reviewDateTime + nextInterval;
         card.LastReview = reviewDateTime;
     }
 

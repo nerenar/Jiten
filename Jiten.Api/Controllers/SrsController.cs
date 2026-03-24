@@ -401,7 +401,6 @@ public class SrsController(
     }
 
     [HttpPost("settings/recompute")]
-    [EnableRateLimiting("compute")]
     [SwaggerOperation(Summary = "Recompute FSRS scheduling",
                       Description = "Recompute scheduling for all cards using the stored settings (or defaults).")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

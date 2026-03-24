@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
-  import { type FsrsParametersResponse, type SrsRecomputeBatchResponse } from '~/types';
+  import { type FsrsParametersResponse } from '~/types';
 
   const { $api } = useNuxtApp();
   const toast = useToast();
@@ -16,9 +16,6 @@
   const isSaving = ref(false);
   const isRecomputing = ref(false);
   const isResetting = ref(false);
-  const recomputeProcessed = ref(0);
-  const recomputeTotal = ref(0);
-  const recomputeProgress = ref(0);
   const hasUserEdited = ref(false);
 
   const parsedState = computed(() => {
@@ -178,36 +175,7 @@
   const recomputeSchedule = async () => {
     try {
       isRecomputing.value = true;
-      recomputeProcessed.value = 0;
-      recomputeTotal.value = 0;
-      recomputeProgress.value = 0;
-      let lastCardId = 0;
-
-      while (true) {
-        const result = await $api<SrsRecomputeBatchResponse>('srs/settings/recompute-batch', {
-          method: 'POST',
-          query: {
-            lastCardId,
-            batchSize: 500,
-          },
-        });
-
-        if (!recomputeTotal.value) {
-          recomputeTotal.value = result.total;
-        }
-
-        recomputeProcessed.value += result.processed;
-        if (recomputeTotal.value > 0) {
-          recomputeProgress.value = Math.min(100, Math.round((recomputeProcessed.value / recomputeTotal.value) * 100));
-        }
-
-        lastCardId = result.lastCardId;
-
-        if (result.done || result.processed === 0) {
-          break;
-        }
-      }
-
+      await $api('srs/settings/recompute', { method: 'POST' });
       toast.add({
         severity: 'success',
         summary: 'Reschedule complete',
@@ -272,13 +240,6 @@
       </p>
       <div class="mt-2">
         <Button label="Reschedule all cards" :loading="isRecomputing" :disabled="isLoading || isSaving" @click="recomputeSchedule" />
-      </div>
-      <div v-if="isRecomputing" class="mt-4 flex items-center gap-3">
-        <ProgressSpinner style="width: 28px; height: 28px" stroke-width="6" animation-duration=".5s" />
-        <div>
-          <p class="font-semibold">Rescheduling cards... {{ recomputeProgress }}%</p>
-          <p class="text-sm text-surface-500">Processed: {{ recomputeProcessed }} / {{ recomputeTotal || '—' }}</p>
-        </div>
       </div>
     </template>
   </Card>

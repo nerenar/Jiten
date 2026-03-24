@@ -7,7 +7,7 @@ public class ImportJpdbReviewsRequest
 
 public class JpdbReviewCard
 {
-    public int WordId { get; set; }
+    public long WordId { get; set; }
     public string Spelling { get; set; } = "";
     public List<JpdbReview> Reviews { get; set; } = [];
 }
