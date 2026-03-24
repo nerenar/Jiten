@@ -50,6 +50,28 @@ public static class WordFormHelper
             .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
     }
 
+    public static long EncodeWordKey(int wordId, byte readingIndex)
+        => ((long)wordId << 8) | readingIndex;
+
+    public static long EncodeWordKey(int wordId, short readingIndex)
+        => ((long)wordId << 8) | (byte)readingIndex;
+
+    public static async Task<HashSet<int>> GetKanaOnlyWordIds(JitenDbContext context, IEnumerable<int> wordIds)
+    {
+        var distinctIds = wordIds.Distinct().ToList();
+        if (distinctIds.Count == 0) return [];
+
+        var formTypes = await context.WordForms.AsNoTracking()
+            .Where(wf => distinctIds.Contains(wf.WordId))
+            .Select(wf => new { wf.WordId, wf.FormType })
+            .ToListAsync();
+        return formTypes
+            .GroupBy(wf => wf.WordId)
+            .Where(g => g.All(wf => wf.FormType == JmDictFormType.KanaForm))
+            .Select(g => g.Key)
+            .ToHashSet();
+    }
+
     public static async Task<List<JmDictWordForm>> LoadWordFormsForWord(JitenDbContext context, int wordId)
     {
         return await context.WordForms

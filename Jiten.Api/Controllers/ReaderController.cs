@@ -19,6 +19,7 @@ public class ReaderController(
     JitenDbContext context,
     IDbContextFactory<JitenDbContext> contextFactory,
     ICurrentUserService currentUserService,
+    IParseThrottleService parseThrottle,
     ILogger<ReaderController> logger) : ControllerBase
 {
     [HttpPost("ping")]
@@ -39,8 +40,13 @@ public class ReaderController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Parse(ReaderParseRequest request)
     {
-        if (string.Join("", request.Text).Length > 81000)
+        var totalLength = string.Join("", request.Text).Length;
+        if (totalLength > 81000)
             return Results.BadRequest("Text is too long");
+
+        var userId = currentUserService.UserId;
+        if (userId != null && !parseThrottle.TryConsume(userId, totalLength))
+            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
         List<List<ReaderToken>> allTokens = new();
         List<ReaderWord> allWords = new();

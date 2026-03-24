@@ -6,7 +6,6 @@ public class AnkiImportRequest
 {
     public List<AnkiCardWrapper> Cards { get; set; } = new();
     public bool Overwrite { get; set; } = false;
-    public bool ForceImportCardsWithNoReviews { get; set; } = false;
     public bool ParseWords { get; set; } = false;
 }
 

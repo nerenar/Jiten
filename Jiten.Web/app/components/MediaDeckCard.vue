@@ -21,6 +21,7 @@
   }>();
 
   const showDownloadDialog = ref(false);
+  const showStudyDeckDialog = ref(false);
   const showIssueDialog = ref(false);
   const isDescriptionExpanded = ref(false);
   const showIgnoreOverlay = ref(false);
@@ -144,6 +145,11 @@
       label: props.deck.isIgnored ? 'Unignore' : 'Ignore',
       icon: props.deck.isIgnored ? 'pi pi-eye' : 'pi pi-eye-slash',
       command: toggleIgnore,
+    },
+    {
+      label: 'Study with SRS',
+      icon: 'pi pi-play',
+      command: () => { showStudyDeckDialog.value = true; },
     },
     {
       label: 'Rate difficulty',
@@ -524,6 +530,7 @@
     </Card>
 
     <MediaDeckDownloadDialog :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+    <SrsAddDeckDialog :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
     <ReportIssueDialog :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
 
     <TieredMenu ref="menu" :model="menuItems" popup />

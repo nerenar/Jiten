@@ -22,15 +22,36 @@
 
   let reviewByCard: Map<number, Array<{ Rating: number; ReviewDateTime: Date; ReviewDuration: number }>> = new Map();
   let selectedFieldName = '';
+  let supportsFieldsFilter = false;
 
-  const importProgress = ref(0);
+  const cardsInfoFields = ['cardId', 'due', 'queue', 'type', 'interval', 'factor', 'reps', 'lapses', 'mod', 'flags', 'fields', 'modelName', 'deckName'];
+
+  async function ankiInvoke(action: string, params: Record<string, any> = {}): Promise<any> {
+    const res = await fetch('http://127.0.0.1:8765', {
+      method: 'POST',
+      body: JSON.stringify({ action, version: 6, params }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    return json.result;
+  }
+
+  async function fetchCardsInfo(cards: number[]): Promise<any[]> {
+    if (supportsFieldsFilter) {
+      return ankiInvoke('cardsInfo', { cards, fields: cardsInfoFields });
+    }
+    return client.card.cardsInfo({ cards }) as Promise<any[]>;
+  }
+
+  const fetchProgress = ref(0);
+  const uploadProgress = ref(0);
+  const importPhase = ref<'fetch' | 'upload'>('fetch');
   const importResults = ref({ imported: 0, updated: 0, skipped: 0, reviewLogs: 0 });
 
   const selectedDeck = ref<number>(0);
   const selectedField = ref<number>(0);
   const fields = ref<Array<[string, { order: number; value: string }]>>([]);
   const overwriteExisting = ref(false);
-  const forceImportCardsWithNoReviews = ref(false);
   const parseWords = ref(false);
   const importReviewHistory = ref(true);
 
@@ -47,6 +68,14 @@
       decks = await client.deck.deckNamesAndIds();
       deckEntries = Object.entries(decks);
       cantConnect.value = false;
+
+      try {
+        await ankiInvoke('cardsInfo', { cards: [], fields: cardsInfoFields });
+        supportsFieldsFilter = true;
+      } catch {
+        supportsFieldsFilter = false;
+      }
+
       await NextStep();
     } catch (e) {
       cantConnect.value = true;
@@ -123,7 +152,7 @@
 
       isLoading.value = true;
       cardsIds = await client.card.findCards({ query: `did:${selectedDeck.value}` });
-      const previewCards = await client.card.cardsInfo({ cards: [cardsIds[0]] });
+      const previewCards = await fetchCardsInfo([cardsIds[0]]);
       selectedField.value = 0;
       if (previewCards && previewCards.length > 0) {
         fields.value = Object.entries(previewCards[0].fields || {});
@@ -147,7 +176,9 @@
 
     if (currentStep.value == 4) {
       isLoading.value = true;
-      importProgress.value = 0;
+      fetchProgress.value = 0;
+      uploadProgress.value = 0;
+      importPhase.value = 'fetch';
       importResults.value = { imported: 0, updated: 0, skipped: 0, reviewLogs: 0 };
 
       const allSkippedWords: string[] = [];
@@ -186,67 +217,101 @@
           }
         }
 
-        const chunkSize = 500;
-        const totalChunks = Math.ceil(cardsIds.length / chunkSize);
+        const ankiChunkSize = supportsFieldsFilter ? 2000 : 500;
+        const chunks: number[][] = [];
+        for (let i = 0; i < cardsIds.length; i += ankiChunkSize) {
+          chunks.push(cardsIds.slice(i, i + ankiChunkSize));
+        }
 
-        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-          const start = chunkIndex * chunkSize;
-          const chunkIds = cardsIds.slice(start, start + chunkSize);
+        const aggregateResult = (result: any) => {
+          if (!result) return;
+          importResults.value = {
+            imported: importResults.value.imported + (result.imported || 0),
+            updated: importResults.value.updated + (result.updated || 0),
+            skipped: importResults.value.skipped + (result.skipped || 0),
+            reviewLogs: importResults.value.reviewLogs + (result.reviewLogs || 0),
+          };
+          if (result.skippedWords) allSkippedWords.push(...result.skippedWords);
+          skippedCountNoReviews += result.skippedCountNoReviews || 0;
+        };
 
-          // Fetch card info for this chunk only
-          const chunkCards = await client.card.cardsInfo({ cards: chunkIds });
-
-          // Build payload for this chunk
-          const chunkPayload: any[] = [];
-          for (const card of chunkCards || []) {
-            const payload = buildCardPayload(card, selectedFieldName);
-            if (payload) {
-              chunkPayload.push(payload);
-            }
-          }
-
-          // Skip empty chunks
-          if (chunkPayload.length === 0) {
-            importProgress.value = Math.round(((chunkIndex + 1) / totalChunks) * 100);
-            continue;
-          }
-
-          // Send chunk to API
-          const result = await $api<{
-            imported: number;
-            updated: number;
-            skipped: number;
-            reviewLogs: number;
-            skippedWords: string[];
-            skippedCountNoReviews: number;
-            skippedWordsNoReviews: string[];
-          }>('user/vocabulary/import-from-anki', {
-            method: 'POST',
-            body: JSON.stringify({
-              cards: chunkPayload,
-              overwrite: overwriteExisting.value,
-              forceImportCardsWithNoReviews: forceImportCardsWithNoReviews.value,
-              parseWords: parseWords.value,
+        if (supportsFieldsFilter) {
+          // Optimized path: fetch all in parallel, dedup, upload in parallel
+          let completedFetches = 0;
+          const allChunkCards = await Promise.all(
+            chunks.map(async (chunkIds) => {
+              const cards = await fetchCardsInfo(chunkIds);
+              completedFetches++;
+              fetchProgress.value = Math.round((completedFetches / chunks.length) * 100);
+              return cards;
             }),
-            headers: { 'Content-Type': 'application/json' },
-          });
+          );
 
-          // Aggregate results
-          if (result) {
-            importResults.value = {
-              imported: importResults.value.imported + (result.imported || 0),
-              updated: importResults.value.updated + (result.updated || 0),
-              skipped: importResults.value.skipped + (result.skipped || 0),
-              reviewLogs: importResults.value.reviewLogs + (result.reviewLogs || 0),
-            };
-            if (result.skippedWords) {
-              allSkippedWords.push(...result.skippedWords);
+          const seenWords = new Set<string>();
+          const allPayloads: any[] = [];
+          for (const chunkCards of allChunkCards) {
+            for (const card of chunkCards || []) {
+              const payload = buildCardPayload(card, selectedFieldName);
+              if (!payload) continue;
+              if (seenWords.has(payload.Card.Word)) continue;
+              seenWords.add(payload.Card.Word);
+              allPayloads.push(payload);
             }
-            skippedCountNoReviews += result.skippedCountNoReviews || 0;
           }
 
-          // Update progress
-          importProgress.value = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+          const apiChunkSize = 2000;
+          const apiChunks: any[][] = [];
+          for (let i = 0; i < allPayloads.length; i += apiChunkSize) {
+            apiChunks.push(allPayloads.slice(i, i + apiChunkSize));
+          }
+
+          importPhase.value = 'upload';
+          let completedUploads = 0;
+          const apiResults = await Promise.all(
+            apiChunks.map(async (chunkPayload) => {
+              const result = await $api<any>('user/vocabulary/import-from-anki', {
+                method: 'POST',
+                body: JSON.stringify({
+                  cards: chunkPayload,
+                  overwrite: overwriteExisting.value,
+                  parseWords: parseWords.value,
+                }),
+                headers: { 'Content-Type': 'application/json' },
+              });
+              completedUploads++;
+              uploadProgress.value = Math.round((completedUploads / apiChunks.length) * 100);
+              return result;
+            }),
+          );
+          for (const result of apiResults) aggregateResult(result);
+        } else {
+          // Standard path: sequential fetch + upload to keep memory low
+          for (let i = 0; i < chunks.length; i++) {
+            const chunkCards = await fetchCardsInfo(chunks[i]);
+            fetchProgress.value = Math.round(((i + 1) / chunks.length) * 100);
+
+            const chunkPayload: any[] = [];
+            for (const card of chunkCards || []) {
+              const payload = buildCardPayload(card, selectedFieldName);
+              if (payload) chunkPayload.push(payload);
+            }
+
+            if (chunkPayload.length === 0) continue;
+
+            importPhase.value = 'upload';
+            const result = await $api<any>('user/vocabulary/import-from-anki', {
+              method: 'POST',
+              body: JSON.stringify({
+                cards: chunkPayload,
+                overwrite: overwriteExisting.value,
+                parseWords: parseWords.value,
+              }),
+              headers: { 'Content-Type': 'application/json' },
+            });
+            uploadProgress.value = Math.round(((i + 1) / chunks.length) * 100);
+            aggregateResult(result);
+            importPhase.value = 'fetch';
+          }
         }
 
         // Show final results
@@ -383,12 +448,6 @@
             </label>
           </div>
           <div class="flex items-center gap-2">
-            <Checkbox v-model="forceImportCardsWithNoReviews" inputId="forceImportCardsWithNoReviews" :binary="true" />
-            <label for="forceImportCardsWithNoReviews" class="cursor-pointer">
-              Force import cards with no reviews (import cards even if they have no reviews in Anki, not recommended)
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
             <Checkbox v-model="parseWords" inputId="parseWords" :binary="true" />
             <label for="parseWords" class="cursor-pointer">
               Parse words instead of importing them directly (only use if you have conjugated verbs instead of the dictionary form, less accurate)
@@ -402,7 +461,8 @@
       </div>
       <div v-if="currentStep == 4">
         <ProgressSpinner style="width: 50px; height: 50px" stroke-width="8px" animation-duration=".5s" />
-        <p class="font-semibold">Importing cards... {{ importProgress }}%</p>
+        <p v-if="importPhase === 'fetch'" class="font-semibold">Fetching cards from Anki... {{ fetchProgress }}%</p>
+        <p v-else class="font-semibold">Uploading to server... {{ uploadProgress }}%</p>
         <p class="text-sm text-surface-500">
           Imported: {{ importResults.imported }} |
           Updated: {{ importResults.updated }} |

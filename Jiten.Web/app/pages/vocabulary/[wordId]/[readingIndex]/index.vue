@@ -9,13 +9,19 @@
   const wordId = ref(Number(route.params.wordId) || 0);
   const readingIndex = ref(Number(route.params.readingIndex) || 0);
 
-  const url = computed(() => `vocabulary/${wordId.value}/${readingIndex.value}/info`);
-  const { data: wordData } = await useApiFetch<Word>(url);
+  const initialUrl = `vocabulary/${wordId.value}/${readingIndex.value}/info`;
+  const { data: wordData } = await useApiFetch<Word>(initialUrl, {
+    key: `page-vocab-title-${wordId.value}-${readingIndex.value}`,
+  });
+
+  const mainReadingText = ref(wordData.value?.mainReading?.text ?? '');
+
+  const onMainReadingTextChanged = (text: string) => {
+    mainReadingText.value = text;
+  };
 
   const title = computed(() => {
-    if (wordData.value?.mainReading?.text) {
-      return stripRuby(wordData.value.mainReading.text);
-    }
+    if (mainReadingText.value) return stripRuby(mainReadingText.value);
     return 'Word';
   });
 
@@ -53,5 +59,6 @@
     :word-id="wordId"
     :reading-index="readingIndex"
     @reading-selected="onReadingSelected"
+    @main-reading-text-changed="onMainReadingTextChanged"
   />
 </template>

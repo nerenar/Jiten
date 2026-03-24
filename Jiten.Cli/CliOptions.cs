@@ -178,6 +178,9 @@ public class CliOptions
     [Option(longName: "import-deck-difficulty", Required = false, HelpText = "Import precomputed deck difficulty from a directory of JSON files named [DeckId].json.")]
     public string? ImportDeckDifficulty { get; set; }
 
+    [Option(longName: "export-ml-tags", Required = false, HelpText = "Export genre/tag labels and raw text for ML training to the specified output directory.")]
+    public string? ExportMlTags { get; set; }
+
     [Option(longName: "benchmark", Required = false, HelpText = "Run benchmark on txt files in a directory.")]
     public string? Benchmark { get; set; }
 
@@ -192,6 +195,12 @@ public class CliOptions
 
     [Option(longName: "threshold", Required = false, Default = 15, HelpText = "Confidence margin threshold for --scan-confidence (default: 15).")]
     public int Threshold { get; set; } = 15;
+
+    [Option(longName: "cleanup-ghost-cards", Required = false, HelpText = "Delete kana-form ghost cards created by kana sync that have 0 review logs.")]
+    public bool CleanupGhostCards { get; set; }
+
+    [Option(longName: "cleanup-new-cards", Required = false, HelpText = "Delete legacy FsrsCards with State=New (pre-created cards that were never reviewed).")]
+    public bool CleanupNewCards { get; set; }
 
     [Option(longName: "backfill-speech-stats", Required = false, HelpText = "Backfill speech stats from subtitle files in a directory. Each subdirectory must have metadata.json. Requires --deck-type.")]
     public string? BackfillSpeechStats { get; set; }

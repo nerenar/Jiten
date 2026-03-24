@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type Deck, DeckDownloadType, DeckFormat, DeckOrder } from '~/types';
+  import { type Deck, type StudyDeckDto, StudyDeckType, DeckDownloadType, DeckFormat, DeckOrder } from '~/types';
   import { SelectButton, Select, Slider, InputNumber, Checkbox, Dialog, Button, ProgressSpinner } from 'primevue';
   import { debounce } from 'perfect-debounce';
   import { useAuthStore } from '~/stores/authStore';
@@ -7,9 +7,22 @@
   import { useToast } from 'primevue/usetoast';
   import { computed, onMounted, ref, watch } from 'vue';
   const props = defineProps<{
-    deck: Deck;
+    deck?: Deck;
+    studyDeck?: StudyDeckDto;
     visible: boolean;
   }>();
+
+  const isStudyDeckMode = computed(() => !!props.studyDeck);
+  const isMediaStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.MediaDeck);
+  const isNonMediaStudyDeck = computed(() => isStudyDeckMode.value && !isMediaStudyDeck.value);
+  const apiBase = computed(() =>
+    isStudyDeckMode.value
+      ? `srs/study-decks/${props.studyDeck!.userStudyDeckId}`
+      : `media-deck/${props.deck!.deckId}`
+  );
+  const wordCount = computed(() =>
+    isStudyDeckMode.value ? props.studyDeck!.totalWords : props.deck!.uniqueWordCount
+  );
 
   const emit = defineEmits(['update:visible']);
   const { $api } = useNuxtApp();
@@ -41,8 +54,7 @@
   const downloadMode = ref<Mode>('manual');
   const targetPercentage = ref(80);
   const minTargetPercentage = computed(() => {
-    // Can't target below current coverage
-    const coverage = props.deck.coverage ?? 0;
+    const coverage = props.deck?.coverage ?? 0;
     return Math.ceil(coverage * 10) / 10;
   });
 
@@ -90,7 +102,7 @@
       desc: 'Occurrences dic (.zip)',
       icon: 'pi pi-book',
       longDesc: `A zip file importable as a Yomitan dictionary. It displays the specific number of occurrences of each word within this media source.`,
-      disabled: false,
+      disabled: isNonMediaStudyDeck.value,
     },
     {
       value: DeckFormat.Learn,
@@ -98,7 +110,7 @@
       desc: authStore.isAuthenticated ? 'Bulk vocabulary update' : 'Bulk vocabulary update (Login required)',
       icon: 'pi pi-graduation-cap',
       longDesc: `Mark the selected vocabulary as <b>mastered</b> or <b>blacklisted</b> in your vocabulary tracker. No file is downloaded, the words are applied directly to your account. Both of those options count towards your coverage after you trigger a manual refresh.`,
-      disabled: !authStore.isAuthenticated,
+      disabled: !authStore.isAuthenticated || isStudyDeckMode.value,
     },
   ]);
 
@@ -110,7 +122,7 @@
 
   const isLearn = computed(() => format.value === DeckFormat.Learn);
   const isOccurrences = computed(() => format.value === DeckFormat.Yomitan);
-  const showStrategyAndOptions = computed(() => !isOccurrences.value);
+  const showStrategyAndOptions = computed(() => !isOccurrences.value && !isNonMediaStudyDeck.value);
 
   const modeOptions = computed(() => [
     { label: 'Manual', value: 'manual', icon: 'pi pi-sliders-h' },
@@ -136,7 +148,7 @@
   const excludeExampleSentences = ref(false);
 
   // Stats
-  const currentSliderMax = ref(props.deck.uniqueWordCount);
+  const currentSliderMax = ref(wordCount.value);
   const debouncedCurrentCardAmount = ref(0);
   const accurateCardAmount = ref<number | null>(null);
   const isFrequencyCountLoading = ref(false);
@@ -158,7 +170,7 @@
   });
 
   const targetPercentageCardCount = computed(() => {
-    return Math.floor(props.deck.uniqueWordCount * (targetPercentage.value / 100));
+    return Math.floor(wordCount.value * (targetPercentage.value / 100));
   });
 
   const requiresAccurateCardAmount = computed(() => {
@@ -173,7 +185,7 @@
     if (downloadMode.value === 'occurrence') return occurrenceCount.value;
 
     if (downloadType.value == DeckDownloadType.Full) {
-      return props.deck.uniqueWordCount;
+      return wordCount.value;
     } else if (downloadType.value == DeckDownloadType.TopDeckFrequency || downloadType.value == DeckDownloadType.TopChronological) {
       return (frequencyRange.value?.[1] ?? 0) - (frequencyRange.value?.[0] ?? 0);
     } else if (downloadType.value == DeckDownloadType.TopGlobalFrequency) {
@@ -183,7 +195,7 @@
   });
 
   const currentCardAmount = computed(() => {
-    if (isOccurrences.value) return props.deck.uniqueWordCount;
+    if (isOccurrences.value) return wordCount.value;
     if (requiresAccurateCardAmount.value) return accurateCardAmount.value ?? fallbackCardAmount.value;
     return fallbackCardAmount.value;
   });
@@ -193,7 +205,7 @@
   // --- Lifecycle & Watches ---
   onMounted(() => {
     if (!frequencyRange.value) {
-      frequencyRange.value = [0, Math.min(props.deck.uniqueWordCount, 5000)];
+      frequencyRange.value = [0, Math.min(wordCount.value, 5000)];
     }
 
     if (localVisible.value && requiresAccurateCardAmount.value) {
@@ -211,11 +223,11 @@
     () => downloadType.value,
     (newVal) => {
       if (newVal == DeckDownloadType.Full) {
-        frequencyRange.value = [0, props.deck.uniqueWordCount];
-        currentSliderMax.value = props.deck.uniqueWordCount;
+        frequencyRange.value = [0, wordCount.value];
+        currentSliderMax.value = wordCount.value;
       } else if (newVal == DeckDownloadType.TopDeckFrequency || newVal == DeckDownloadType.TopChronological) {
-        frequencyRange.value = [0, Math.min(props.deck.uniqueWordCount, 5000)];
-        currentSliderMax.value = props.deck.uniqueWordCount;
+        frequencyRange.value = [0, Math.min(wordCount.value, 5000)];
+        currentSliderMax.value = wordCount.value;
       } else if (newVal == DeckDownloadType.TopGlobalFrequency) {
         frequencyRange.value = [1, Math.min(200000, 30000)];
         currentSliderMax.value = 200000;
@@ -272,7 +284,7 @@
     isFrequencyCountLoading.value = true;
 
     try {
-      const response = await $api<number>(`media-deck/${props.deck.deckId}/vocabulary-count-frequency`, {
+      const response = await $api<number>(`${apiBase.value}/vocabulary-count-frequency`, {
         query: { minFrequency: frequencyRange.value[0], maxFrequency: frequencyRange.value[1] },
       });
       if (reqId === frequencyRequestId && typeof response === 'number') {
@@ -311,7 +323,7 @@
     occurrenceCountLoadingStartedAt = Date.now();
     isOccurrenceCountLoading.value = true;
     try {
-      const response = await $api<number>(`media-deck/${props.deck.deckId}/vocabulary-count-occurrences`, { query });
+      const response = await $api<number>(`${apiBase.value}/vocabulary-count-occurrences`, { query });
       if (reqId === occurrenceRequestId && typeof response === 'number') {
         occurrenceCount.value = response;
       }
@@ -439,7 +451,7 @@
     accurateCountLoadingStartedAt = Date.now();
     isAccurateCountLoading.value = true;
     try {
-      const url = `media-deck/${props.deck.deckId}/vocabulary-count`;
+      const url = `${apiBase.value}/vocabulary-count`;
       const response = await $api<number>(url, {
         method: 'POST',
         body: buildCountPayload(),
@@ -472,7 +484,7 @@
     try {
       downloading.value = true;
       downloadStatusMessage.value = 'Preparing download...';
-      const url = `media-deck/${props.deck.deckId}/download`;
+      const url = `${apiBase.value}/download`;
 
       const payload = {
         ...buildFilterPayload(),
@@ -540,7 +552,12 @@
           [DeckFormat.TxtRepeated]: 'txt',
         };
 
-        link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.${extMap[format.value]}`);
+        const fileName = isStudyDeckMode.value
+          ? (isMediaStudyDeck.value
+            ? localiseTitle({ originalTitle: props.studyDeck!.title, romajiTitle: props.studyDeck!.romajiTitle, englishTitle: props.studyDeck!.englishTitle }).substring(0, 30)
+            : props.studyDeck!.name.substring(0, 30))
+          : localiseTitle(props.deck!).substring(0, 30);
+        link.setAttribute('download', `${fileName}.${extMap[format.value]}`);
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -569,7 +586,7 @@
       accept: async () => {
         try {
           downloading.value = true;
-          const url = `media-deck/${props.deck.deckId}/learn`;
+          const url = `${apiBase.value}/learn`;
 
           const payload = {
             ...buildFilterPayload(),
@@ -855,6 +872,57 @@
               <div v-if="isLearn" class="flex flex-col gap-1 p-3">
                 <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Vocabulary State</label>
                 <Select v-model="learnState" :options="learnStateOptions" option-value="value" option-label="label" class="w-full text-sm" size="small" />
+              </div>
+            </div>
+          </section>
+        </template>
+
+        <template v-if="isNonMediaStudyDeck && !isOccurrences">
+          <section>
+            <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Options</div>
+            <div class="flex flex-col gap-0">
+              <div
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
+                @click="excludeKana = !excludeKana"
+              >
+                <Checkbox v-model="excludeKana" binary class="mt-1" @click.stop />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Exclude Kana-only Words</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Removes words that have no Kanji (e.g., こころ, それでも, ...).</div>
+                </div>
+              </div>
+              <div
+                v-if="!isLearn"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
+                @click="excludeExampleSentences = !excludeExampleSentences"
+              >
+                <Checkbox v-model="excludeExampleSentences" binary class="mt-1" @click.stop />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Exclude Example Sentences</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Remove example sentences.</div>
+                </div>
+              </div>
+              <div
+                v-if="showCustomDefinitions"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
+                :class="hasCustomDictionaries
+                  ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
+                  : 'opacity-60'"
+                @click="hasCustomDictionaries && (useCustomDefinitions = !useCustomDefinitions)"
+              >
+                <Checkbox v-model="useCustomDefinitions" binary class="mt-1" :disabled="!hasCustomDictionaries" @click.stop />
+                <div class="flex-1">
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Use Custom Dictionaries</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">
+                    <template v-if="hasCustomDictionaries">
+                      Add the definitions from your custom dictionaries.
+                    </template>
+                    <template v-else>
+                      No custom dictionaries imported.
+                    </template>
+                    <NuxtLink to="/settings/dictionaries" class="text-primary hover:underline" @click.stop>Manage dictionaries</NuxtLink>
+                  </div>
+                </div>
               </div>
             </div>
           </section>

@@ -13,13 +13,81 @@ public class ComputationJob(
     IDbContextFactory<JitenDbContext> contextFactory,
     IDbContextFactory<UserDbContext> userContextFactory,
     IConfiguration configuration,
-    IBackgroundJobClient backgroundJobs)
+    IBackgroundJobClient backgroundJobs,
+    ILogger<ComputationJob> logger)
 {
     private static readonly object CoverageComputeLock = new();
     private static readonly HashSet<string> CoverageComputingUserIds = new();
     private const int COVERAGE_CHUNK_SIZE = 1024;
+
+    private const string CoverageWordStateCtes = """
+            fsrs_mature_direct AS (
+                SELECT fc."WordId", fc."ReadingIndex"
+                FROM "user"."FsrsCards" fc
+                WHERE fc."UserId" = {0}::uuid
+                  AND (
+                      fc."State" IN (4, 5, 6)
+                      OR (fc."LastReview" IS NOT NULL AND (fc."Due" - fc."LastReview") >= INTERVAL '21 days')
+                  )
+            ),
+            fsrs_mature AS (
+                SELECT "WordId", "ReadingIndex" FROM fsrs_mature_direct
+                UNION
+                SELECT kana_wf."WordId", kana_wf."ReadingIndex"
+                FROM fsrs_mature_direct fmd
+                JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fmd."WordId" AND kanji_wf."ReadingIndex" = fmd."ReadingIndex" AND kanji_wf."FormType" = 0
+                JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fmd."WordId" AND kana_wf."FormType" = 1
+            ),
+            wordset_known AS (
+                SELECT wsm."WordId", wsm."ReadingIndex"
+                FROM "user"."UserWordSetStates" uwss
+                JOIN "jiten"."WordSetMembers" wsm ON wsm."SetId" = uwss."SetId"
+                WHERE uwss."UserId" = {0}::uuid
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM "user"."FsrsCards" fc
+                      WHERE fc."UserId" = {0}::uuid
+                        AND fc."WordId" = wsm."WordId"
+                        AND fc."ReadingIndex" = wsm."ReadingIndex"
+                  )
+            ),
+            mature_known_direct AS (
+                SELECT "WordId", "ReadingIndex" FROM fsrs_mature_direct
+                UNION
+                SELECT "WordId", "ReadingIndex" FROM wordset_known
+            ),
+            mature_known AS (
+                SELECT "WordId", "ReadingIndex" FROM mature_known_direct
+                UNION
+                SELECT kana_wf."WordId", kana_wf."ReadingIndex"
+                FROM mature_known_direct mkd
+                JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = mkd."WordId" AND kanji_wf."ReadingIndex" = mkd."ReadingIndex" AND kanji_wf."FormType" = 0
+                JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = mkd."WordId" AND kana_wf."FormType" = 1
+            ),
+            fsrs_young_direct AS (
+                SELECT fc."WordId", fc."ReadingIndex"
+                FROM "user"."FsrsCards" fc
+                WHERE fc."UserId" = {0}::uuid
+                  AND fc."State" IN (1, 2, 3, 6)
+                  AND fc."LastReview" IS NOT NULL
+                  AND (fc."Due" - fc."LastReview") < INTERVAL '21 days'
+            ),
+            fsrs_young AS (
+                SELECT y."WordId", y."ReadingIndex" FROM (
+                    SELECT "WordId", "ReadingIndex" FROM fsrs_young_direct
+                    UNION
+                    SELECT kana_wf."WordId", kana_wf."ReadingIndex"
+                    FROM fsrs_young_direct fyd
+                    JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fyd."WordId" AND kanji_wf."ReadingIndex" = fyd."ReadingIndex" AND kanji_wf."FormType" = 0
+                    JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fyd."WordId" AND kana_wf."FormType" = 1
+                ) y
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM mature_known mk
+                    WHERE mk."WordId" = y."WordId" AND mk."ReadingIndex" = y."ReadingIndex"
+                )
+            )
+        """;
     private const string COVERAGE_WORK_MEM = "256MB";
-    private static readonly TimeSpan CoverageRetryDelay = TimeSpan.FromSeconds(60);
 
     [Queue("coverage")]
     public async Task DailyUserCoverage()
@@ -47,10 +115,7 @@ public class ComputationJob(
         lock (CoverageComputeLock)
         {
             if (!CoverageComputingUserIds.Add(userId))
-            {
-                backgroundJobs.Schedule<ComputationJob>(job => job.ComputeUserCoverage(userId), CoverageRetryDelay);
                 return;
-            }
         }
 
         await using var userContext = await userContextFactory.CreateDbContextAsync();
@@ -72,9 +137,11 @@ public class ComputationJob(
                 return;
             }
 
+            var totalSw = System.Diagnostics.Stopwatch.StartNew();
             await using var transaction = await userContext.Database.BeginTransactionAsync();
             await userContext.Database.ExecuteSqlRawAsync($"SET LOCAL work_mem = '{COVERAGE_WORK_MEM}';");
             await userContext.UserCoverageChunks.Where(uc => uc.UserId == userId).ExecuteDeleteAsync();
+            logger.LogInformation("Coverage: old chunks deleted in {Elapsed}ms", totalSw.ElapsedMilliseconds);
             await RecomputeUserCoverageChunks(userContext, userId, computedAt);
             await transaction.CommitAsync();
 
@@ -135,10 +202,7 @@ public class ComputationJob(
         lock (CoverageComputeLock)
         {
             if (!CoverageComputingUserIds.Add(userId))
-            {
-                backgroundJobs.Schedule<ComputationJob>(job => job.ComputeUserDeckCoverage(userId, deckId), CoverageRetryDelay);
                 return;
-            }
         }
 
         await using var userContext = await userContextFactory.CreateDbContextAsync();
@@ -198,143 +262,172 @@ public class ComputationJob(
         metadata.CoverageDirtyAt = isDirty ? computedAt : null;
     }
 
-    private static async Task RecomputeUserCoverageChunks(UserDbContext userContext, string userId, DateTime computedAt)
+    private async Task RecomputeUserCoverageChunks(UserDbContext userContext, string userId, DateTime computedAt)
     {
         var userGuid = Guid.Parse(userId);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
-        var sql = $$"""
-            INSERT INTO "user"."UserCoverageChunks" ("UserId", "Metric", "ChunkIndex", "Values", "ComputedAt")
+        // Step 1: Materialize user's mature known words
+        // Kana-expand FsrsCards (small set), word sets already store specific forms
+        await userContext.Database.ExecuteSqlRawAsync("""
+            CREATE TEMP TABLE _mature_known ON COMMIT DROP AS
             WITH
-            deck_bounds AS (
-                SELECT COALESCE(MAX(d."DeckId"), 0) AS max_deck_id
-                FROM "jiten"."Decks" d
-            ),
-            deck_ids AS (
-                SELECT generate_series(
-                    0,
-                    ((SELECT max_deck_id FROM deck_bounds) / {{COVERAGE_CHUNK_SIZE}} + 1) * {{COVERAGE_CHUNK_SIZE}} - 1
-                )::int AS deck_id
-            ),
-            fsrs_mature AS (
+            fsrs_mature_direct AS (
                 SELECT fc."WordId", fc."ReadingIndex"
                 FROM "user"."FsrsCards" fc
                 WHERE fc."UserId" = {0}::uuid
                   AND (
-                      fc."State" = 4
-                      OR fc."State" = 5
+                      fc."State" IN (4, 5, 6)
                       OR (fc."LastReview" IS NOT NULL AND (fc."Due" - fc."LastReview") >= INTERVAL '21 days')
                   )
             ),
-            wordset_known AS (
-                SELECT wsm."WordId", wsm."ReadingIndex"
-                FROM "user"."UserWordSetStates" uwss
-                JOIN "jiten"."WordSetMembers" wsm ON wsm."SetId" = uwss."SetId"
-                WHERE uwss."UserId" = {0}::uuid
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM "user"."FsrsCards" fc
-                      WHERE fc."UserId" = {0}::uuid
-                        AND fc."WordId" = wsm."WordId"
-                        AND fc."ReadingIndex" = wsm."ReadingIndex"
-                  )
-            ),
-            mature_known AS (
-                SELECT "WordId", "ReadingIndex" FROM fsrs_mature
+            fsrs_mature AS (
+                SELECT "WordId", "ReadingIndex" FROM fsrs_mature_direct
                 UNION
-                SELECT "WordId", "ReadingIndex" FROM wordset_known
-            ),
-            fsrs_young AS (
+                SELECT kana_wf."WordId", kana_wf."ReadingIndex"
+                FROM fsrs_mature_direct fmd
+                JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fmd."WordId" AND kanji_wf."ReadingIndex" = fmd."ReadingIndex" AND kanji_wf."FormType" = 0
+                JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fmd."WordId" AND kana_wf."FormType" = 1
+            )
+            SELECT "WordId", "ReadingIndex" FROM fsrs_mature
+            UNION
+            SELECT wsm."WordId", wsm."ReadingIndex"
+            FROM "user"."UserWordSetStates" uwss
+            JOIN "jiten"."WordSetMembers" wsm ON wsm."SetId" = uwss."SetId"
+            WHERE uwss."UserId" = {0}::uuid
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM "user"."FsrsCards" fc
+                  WHERE fc."UserId" = {0}::uuid
+                    AND fc."WordId" = wsm."WordId"
+                    AND fc."ReadingIndex" = wsm."ReadingIndex"
+              );
+            """, userGuid);
+        await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _mature_known ("WordId", "ReadingIndex");""");
+        await userContext.Database.ExecuteSqlRawAsync("ANALYZE _mature_known;");
+        var matureCount = await userContext.Database.SqlQueryRaw<int>("SELECT COUNT(*)::int AS \"Value\" FROM _mature_known").SingleAsync();
+        logger.LogInformation("Coverage: mature_known materialized ({Count} rows) in {Elapsed}ms", matureCount, sw.ElapsedMilliseconds);
+        sw.Restart();
+
+        // Step 2: Materialize user's young words (kana-expanded, excluding mature)
+        await userContext.Database.ExecuteSqlRawAsync("""
+            CREATE TEMP TABLE _fsrs_young ON COMMIT DROP AS
+            WITH
+            fsrs_young_direct AS (
                 SELECT fc."WordId", fc."ReadingIndex"
                 FROM "user"."FsrsCards" fc
                 WHERE fc."UserId" = {0}::uuid
-                  AND fc."State" IN (1, 2, 3)
+                  AND fc."State" IN (1, 2, 3, 6)
                   AND fc."LastReview" IS NOT NULL
                   AND (fc."Due" - fc."LastReview") < INTERVAL '21 days'
             ),
-            mature_hits AS (
-                SELECT dw."DeckId" AS deck_id,
-                       SUM(dw."Occurrences") AS occ_hits,
-                       COUNT(*) AS uniq_hits
-                FROM "jiten"."DeckWords" dw
-                JOIN mature_known mk
-                  ON mk."WordId" = dw."WordId"
-                 AND mk."ReadingIndex" = dw."ReadingIndex"
-                GROUP BY dw."DeckId"
-            ),
-            young_hits AS (
-                SELECT dw."DeckId" AS deck_id,
-                       SUM(dw."Occurrences") AS occ_hits,
-                       COUNT(*) AS uniq_hits
-                FROM "jiten"."DeckWords" dw
-                JOIN fsrs_young yk
-                  ON yk."WordId" = dw."WordId"
-                 AND yk."ReadingIndex" = dw."ReadingIndex"
-                GROUP BY dw."DeckId"
-            ),
-            deck_cov AS (
-                SELECT d."DeckId" AS deck_id,
-                       CASE WHEN d."WordCount" = 0 THEN 0
-                            ELSE LEAST(ROUND(COALESCE(mh.occ_hits, 0)::numeric * 10000 / d."WordCount")::int, 10000)
-                       END AS mature_cov_bp,
-                       CASE WHEN d."UniqueWordCount" = 0 THEN 0
-                            ELSE LEAST(ROUND(COALESCE(mh.uniq_hits, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)
-                       END AS mature_unique_cov_bp,
-                       CASE WHEN d."WordCount" = 0 THEN 0
-                            ELSE LEAST(ROUND(COALESCE(yh.occ_hits, 0)::numeric * 10000 / d."WordCount")::int, 10000)
-                       END AS young_cov_bp,
-                       CASE WHEN d."UniqueWordCount" = 0 THEN 0
-                            ELSE LEAST(ROUND(COALESCE(yh.uniq_hits, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)
-                       END AS young_unique_cov_bp
-                FROM "jiten"."Decks" d
-                LEFT JOIN mature_hits mh ON mh.deck_id = d."DeckId"
-                LEFT JOIN young_hits yh ON yh.deck_id = d."DeckId"
-            ),
-            deck_values AS (
-                SELECT di.deck_id,
-                       COALESCE(dc.mature_cov_bp, 0)::smallint AS m_cov,
-                       COALESCE(dc.mature_unique_cov_bp, 0)::smallint AS m_ucov,
-                       COALESCE(dc.young_cov_bp, 0)::smallint AS y_cov,
-                       COALESCE(dc.young_unique_cov_bp, 0)::smallint AS y_ucov
-                FROM deck_ids di
-                LEFT JOIN deck_cov dc ON dc.deck_id = di.deck_id
-            ),
-            flat AS (
-                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
-                       deck_id,
-                       {{(short)UserCoverageMetric.MatureCoverage}}::smallint AS metric,
-                       m_cov AS val
-                FROM deck_values
-                UNION ALL
-                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
-                       deck_id,
-                       {{(short)UserCoverageMetric.MatureUniqueCoverage}}::smallint AS metric,
-                       m_ucov AS val
-                FROM deck_values
-                UNION ALL
-                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
-                       deck_id,
-                       {{(short)UserCoverageMetric.YoungCoverage}}::smallint AS metric,
-                       y_cov AS val
-                FROM deck_values
-                UNION ALL
-                SELECT (deck_id / {{COVERAGE_CHUNK_SIZE}})::int AS chunk_index,
-                       deck_id,
-                       {{(short)UserCoverageMetric.YoungUniqueCoverage}}::smallint AS metric,
-                       y_ucov AS val
-                FROM deck_values
+            young_expanded AS (
+                SELECT "WordId", "ReadingIndex" FROM fsrs_young_direct
+                UNION
+                SELECT kana_wf."WordId", kana_wf."ReadingIndex"
+                FROM fsrs_young_direct fyd
+                JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fyd."WordId" AND kanji_wf."ReadingIndex" = fyd."ReadingIndex" AND kanji_wf."FormType" = 0
+                JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fyd."WordId" AND kana_wf."FormType" = 1
             )
-            SELECT
-                {0}::uuid AS "UserId",
-                metric AS "Metric",
-                chunk_index AS "ChunkIndex",
-                array_agg(val ORDER BY deck_id) AS "Values",
-                {1}::timestamptz AS "ComputedAt"
-            FROM flat
-            GROUP BY metric, chunk_index
-            ORDER BY metric, chunk_index;
-            """;
+            SELECT ye."WordId", ye."ReadingIndex"
+            FROM young_expanded ye
+            WHERE NOT EXISTS (
+                SELECT 1 FROM _mature_known mk
+                WHERE mk."WordId" = ye."WordId" AND mk."ReadingIndex" = ye."ReadingIndex"
+            );
+            """, userGuid);
+        await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _fsrs_young ("WordId", "ReadingIndex");""");
+        await userContext.Database.ExecuteSqlRawAsync("ANALYZE _fsrs_young;");
+        logger.LogInformation("Coverage: fsrs_young materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
+        sw.Restart();
 
-        await userContext.Database.ExecuteSqlRawAsync(sql, userGuid, computedAt);
+        // Step 3: Compute hits per deck
+        // Force hash join for mature (778K+ rows makes nestloop too expensive)
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_nestloop = off;");
+        await userContext.Database.ExecuteSqlRawAsync("""
+            CREATE TEMP TABLE _mature_hits ON COMMIT DROP AS
+            SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
+            FROM "jiten"."DeckWords" dw
+            JOIN _mature_known mk ON mk."WordId" = dw."WordId" AND mk."ReadingIndex" = dw."ReadingIndex"
+            GROUP BY dw."DeckId";
+            """);
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_nestloop = on;");
+        logger.LogInformation("Coverage: mature_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
+        sw.Restart();
+
+        // Young set is small — nestloop with covering index is optimal
+        await userContext.Database.ExecuteSqlRawAsync("""
+            CREATE TEMP TABLE _young_hits ON COMMIT DROP AS
+            SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
+            FROM "jiten"."DeckWords" dw
+            JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
+            GROUP BY dw."DeckId";
+            """);
+        logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
+        sw.Restart();
+
+        // Step 4: Build per-deck coverage
+        await userContext.Database.ExecuteSqlRawAsync("""
+            CREATE TEMP TABLE _deck_cov ON COMMIT DROP AS
+            SELECT d."DeckId",
+                   CASE WHEN d."WordCount" = 0 THEN 0::smallint
+                        ELSE LEAST(ROUND(COALESCE(mh.occ_hits, 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
+                   END AS m_cov,
+                   CASE WHEN d."UniqueWordCount" = 0 THEN 0::smallint
+                        ELSE LEAST(ROUND(COALESCE(mh.uniq_hits, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
+                   END AS m_ucov,
+                   CASE WHEN d."WordCount" = 0 THEN 0::smallint
+                        ELSE LEAST(ROUND(COALESCE(yh.occ_hits, 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
+                   END AS y_cov,
+                   CASE WHEN d."UniqueWordCount" = 0 THEN 0::smallint
+                        ELSE LEAST(ROUND(COALESCE(yh.uniq_hits, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
+                   END AS y_ucov
+            FROM "jiten"."Decks" d
+            LEFT JOIN _mature_hits mh ON mh."DeckId" = d."DeckId"
+            LEFT JOIN _young_hits yh ON yh."DeckId" = d."DeckId";
+            """);
+        await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _deck_cov ("DeckId");""");
+        logger.LogInformation("Coverage: deck_cov built in {Elapsed}ms", sw.ElapsedMilliseconds);
+        sw.Restart();
+
+        // Step 5: Insert coverage chunks per metric
+        var metrics = new (short id, string col)[]
+        {
+            ((short)UserCoverageMetric.MatureCoverage, "m_cov"),
+            ((short)UserCoverageMetric.MatureUniqueCoverage, "m_ucov"),
+            ((short)UserCoverageMetric.YoungCoverage, "y_cov"),
+            ((short)UserCoverageMetric.YoungUniqueCoverage, "y_ucov"),
+        };
+
+        foreach (var (metricId, colName) in metrics)
+        {
+            var insertSql = $$"""
+                INSERT INTO "user"."UserCoverageChunks" ("UserId", "Metric", "ChunkIndex", "Values", "ComputedAt")
+                WITH
+                deck_bounds AS (
+                    SELECT COALESCE(MAX(d."DeckId"), 0) AS max_deck_id FROM "jiten"."Decks" d
+                ),
+                all_ids AS (
+                    SELECT generate_series(
+                        0,
+                        ((SELECT max_deck_id FROM deck_bounds) / {{COVERAGE_CHUNK_SIZE}} + 1) * {{COVERAGE_CHUNK_SIZE}} - 1
+                    )::int AS deck_id
+                )
+                SELECT
+                    {0}::uuid,
+                    {{metricId}}::smallint,
+                    (ai.deck_id / {{COVERAGE_CHUNK_SIZE}})::int,
+                    array_agg(COALESCE(dc."{{colName}}", 0::smallint) ORDER BY ai.deck_id),
+                    {1}::timestamptz
+                FROM all_ids ai
+                LEFT JOIN _deck_cov dc ON dc."DeckId" = ai.deck_id
+                GROUP BY (ai.deck_id / {{COVERAGE_CHUNK_SIZE}})::int
+                ORDER BY (ai.deck_id / {{COVERAGE_CHUNK_SIZE}})::int;
+                """;
+
+            await userContext.Database.ExecuteSqlRawAsync(insertSql, userGuid, computedAt);
+        }
+        logger.LogInformation("Coverage: chunks inserted in {Elapsed}ms", sw.ElapsedMilliseconds);
     }
 
     private static async Task<DeckCoverageBasisPoints> ComputeUserDeckCoverageBasisPoints(UserDbContext userContext, string userId, int deckId)
@@ -343,42 +436,8 @@ public class ComputationJob(
 
         var sql = """
             WITH
-            fsrs_mature AS (
-                SELECT fc."WordId", fc."ReadingIndex"
-                FROM "user"."FsrsCards" fc
-                WHERE fc."UserId" = {0}::uuid
-                  AND (
-                      fc."State" = 4
-                      OR fc."State" = 5
-                      OR (fc."LastReview" IS NOT NULL AND (fc."Due" - fc."LastReview") >= INTERVAL '21 days')
-                  )
-            ),
-            wordset_known AS (
-                SELECT wsm."WordId", wsm."ReadingIndex"
-                FROM "user"."UserWordSetStates" uwss
-                JOIN "jiten"."WordSetMembers" wsm ON wsm."SetId" = uwss."SetId"
-                WHERE uwss."UserId" = {0}::uuid
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM "user"."FsrsCards" fc
-                      WHERE fc."UserId" = {0}::uuid
-                        AND fc."WordId" = wsm."WordId"
-                        AND fc."ReadingIndex" = wsm."ReadingIndex"
-                  )
-            ),
-            mature_known AS (
-                SELECT "WordId", "ReadingIndex" FROM fsrs_mature
-                UNION
-                SELECT "WordId", "ReadingIndex" FROM wordset_known
-            ),
-            fsrs_young AS (
-                SELECT fc."WordId", fc."ReadingIndex"
-                FROM "user"."FsrsCards" fc
-                WHERE fc."UserId" = {0}::uuid
-                  AND fc."State" IN (1, 2, 3)
-                  AND fc."LastReview" IS NOT NULL
-                  AND (fc."Due" - fc."LastReview") < INTERVAL '21 days'
-            ),
+        """ + CoverageWordStateCtes + """
+            ,
             deck_denoms AS (
                 SELECT d."WordCount", d."UniqueWordCount"
                 FROM "jiten"."Decks" d
@@ -489,9 +548,9 @@ public class ComputationJob(
             await using var userContext = await userContextFactory.CreateDbContextAsync();
 
             // Get scoring weights from configuration
-            var youngWeight = double.Parse(configuration["KanjiGrid:YoungScoreWeight"] ?? "0.5");
-            var matureWeight = double.Parse(configuration["KanjiGrid:MatureScoreWeight"] ?? "1.0");
-            var masteredWeight = double.Parse(configuration["KanjiGrid:MasteredScoreWeight"] ?? "1.0");
+            var youngWeight = double.Parse(configuration["KanjiGrid:YoungScoreWeight"] ?? "0.5", CultureInfo.InvariantCulture);
+            var matureWeight = double.Parse(configuration["KanjiGrid:MatureScoreWeight"] ?? "1.0", CultureInfo.InvariantCulture);
+            var masteredWeight = double.Parse(configuration["KanjiGrid:MasteredScoreWeight"] ?? "1.0", CultureInfo.InvariantCulture);
 
             // Compute kanji scores
             var sql = $$"""

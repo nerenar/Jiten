@@ -44,6 +44,8 @@ public class FsrsCard
     /// </summary>
     public DateTime? LastReview { get; set; }
 
+    public DateTime CreatedAt { get; set; }
+
     /// <summary>
     /// Review history for this card
     /// </summary>
@@ -78,6 +80,7 @@ public class FsrsCard
         Difficulty = difficulty;
         Due = due ?? DateTime.UtcNow;
         LastReview = lastReview;
+        CreatedAt = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -85,6 +88,9 @@ public class FsrsCard
     /// </summary>
     public FsrsCard Clone()
     {
-        return new FsrsCard(UserId, WordId, ReadingIndex, CardId, State, Step, Stability, Difficulty, Due, LastReview);
+        return new FsrsCard(UserId, WordId, ReadingIndex, CardId, State, Step, Stability, Difficulty, Due, LastReview)
+        {
+            CreatedAt = CreatedAt
+        };
     }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div ref="referenceRef" :class="block ? 'block' : 'inline-block'">
+  <div ref="wrapperRef" style="display: contents">
     <slot :toggle="toggle" :show="show" :hide="hide" />
   </div>
 
@@ -60,32 +60,30 @@
     offset: 8,
   });
 
-  const referenceRef = ref<HTMLElement | null>(null);
+  const wrapperRef = ref<HTMLElement | null>(null);
+  const referenceEl = computed<HTMLElement | null>(() => wrapperRef.value?.firstElementChild as HTMLElement | null);
   const floatingRef = ref<HTMLElement | null>(null);
   const arrowRef = ref<HTMLElement | null>(null);
   const isVisible = ref(false);
   const isMobile = ref(false);
 
-  // Format content with basic HTML support
   const formattedContent = computed(() => {
     const html = props.content.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>').replace(/\n/g, '<br>');
     return sanitiseHtml(html);
   });
 
-  // Floating UI setup
   const {
     x,
     y,
     strategy,
     middlewareData,
     placement: computedPlacement,
-  } = useFloating(referenceRef, floatingRef, {
+  } = useFloating(referenceEl, floatingRef, {
     placement: props.placement,
     middleware: [offset(props.offset), flip(), shift({ padding: 8 }), arrow({ element: arrowRef })],
     whileElementsMounted: autoUpdate,
   });
 
-  // Arrow positioning
   const arrowX = computed(() => middlewareData.value.arrow?.x);
   const arrowY = computed(() => middlewareData.value.arrow?.y);
 
@@ -123,7 +121,6 @@
     }
   })
 
-  // Show/hide functions
   const show = () => {
     isVisible.value = true;
   };
@@ -136,7 +133,6 @@
     isVisible.value = !isVisible.value;
   };
 
-  // Event handlers
   const handleMouseEnter = () => {
     if (!isMobile.value) show();
   };
@@ -156,16 +152,15 @@
     if (
       isMobile.value &&
       isVisible.value &&
-      referenceRef.value &&
+      referenceEl.value &&
       floatingRef.value &&
-      !referenceRef.value.contains(e.target as Node) &&
+      !referenceEl.value.contains(e.target as Node) &&
       !floatingRef.value.contains(e.target as Node)
     ) {
       hide();
     }
   };
 
-  // Detect mobile
   const checkMobile = () => {
     isMobile.value = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   };
@@ -173,20 +168,22 @@
   onMounted(() => {
     checkMobile();
 
-    if (referenceRef.value) {
-      referenceRef.value.addEventListener('mouseenter', handleMouseEnter);
-      referenceRef.value.addEventListener('mouseleave', handleMouseLeave);
-      referenceRef.value.addEventListener('click', handleClick);
+    const el = referenceEl.value;
+    if (el) {
+      el.addEventListener('mouseenter', handleMouseEnter);
+      el.addEventListener('mouseleave', handleMouseLeave);
+      el.addEventListener('click', handleClick);
     }
 
     document.addEventListener('click', handleClickOutside);
   });
 
   onBeforeUnmount(() => {
-    if (referenceRef.value) {
-      referenceRef.value.removeEventListener('mouseenter', handleMouseEnter);
-      referenceRef.value.removeEventListener('mouseleave', handleMouseLeave);
-      referenceRef.value.removeEventListener('click', handleClick);
+    const el = referenceEl.value;
+    if (el) {
+      el.removeEventListener('mouseenter', handleMouseEnter);
+      el.removeEventListener('mouseleave', handleMouseLeave);
+      el.removeEventListener('click', handleClick);
     }
 
     document.removeEventListener('click', handleClickOutside);

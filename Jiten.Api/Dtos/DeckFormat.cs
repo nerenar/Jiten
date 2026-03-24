@@ -6,5 +6,6 @@ public enum DeckFormat
     Csv = 2,
     Txt = 3,
     TxtRepeated = 4,
-    Yomitan = 5
+    Yomitan = 5,
+    Learn = 6
 }

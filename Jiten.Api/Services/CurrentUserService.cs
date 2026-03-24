@@ -11,7 +11,7 @@ public class CurrentUserService(
     IHttpContextAccessor httpContextAccessor,
     JitenDbContext jitenDbContext,
     UserDbContext userContext,
-    ISrsService srsService)
+    IWordFormSiblingCache wordFormCache)
     : ICurrentUserService
 {
     public ClaimsPrincipal? Principal => httpContextAccessor.HttpContext?.User;
@@ -53,6 +53,7 @@ public class CurrentUserService(
 
         var fsrsCardDict = candidates
                             .Where(w => keysSet.Contains((w.WordId, w.ReadingIndex)))
+                            .DistinctBy(w => (w.WordId, w.ReadingIndex))
                             .ToDictionary(w => (w.WordId, w.ReadingIndex));
 
         // 2. Get user's WordSet subscriptions
@@ -94,25 +95,16 @@ public class CurrentUserService(
             }
         }
 
-        // 4. Build result: FsrsCard wins, then WordSet, then New
+        // 4. Build result: FsrsCard wins, then WordSet, then redundancy (kanji→kana), then New
+        var candidatesByWordId = candidates.GroupBy(c => c.WordId)
+                                           .ToDictionary(g => g.Key, g => g.ToList());
+
         return keysSet.ToDictionary(k => k, k =>
         {
             var hasWordSetState = setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState);
 
             if (fsrsCardDict.TryGetValue(k, out var card))
-            {
-                if (card.State == FsrsState.New && hasWordSetState)
-                {
-                    return setState switch
-                    {
-                        WordSetStateType.Blacklisted => [KnownState.Blacklisted],
-                        WordSetStateType.Mastered => [KnownState.Mastered],
-                        _ => GetKnownStatesFromCard(card)
-                    };
-                }
-
                 return GetKnownStatesFromCard(card);
-            }
 
             if (hasWordSetState)
             {
@@ -124,9 +116,35 @@ public class CurrentUserService(
                 };
             }
 
+            var kanjiIndexes = wordFormCache.GetKanjiIndexesForKana(k.WordId, k.ReadingIndex);
+            if (kanjiIndexes != null && candidatesByWordId.TryGetValue(k.WordId, out var wordCandidates))
+            {
+                var bestKanjiCard = wordCandidates
+                    .Where(c => kanjiIndexes.Contains(c.ReadingIndex))
+                    .OrderByDescending(c => GetKnownStateRank(c))
+                    .FirstOrDefault();
+
+                if (bestKanjiCard != null)
+                {
+                    var states = GetKnownStatesFromCard(bestKanjiCard);
+                    states.Add(KnownState.Redundant);
+                    return states;
+                }
+            }
+
             return [KnownState.New];
         });
     }
+
+    private static int GetKnownStateRank(FsrsCard card) => card.State switch
+    {
+        FsrsState.Mastered => 4,
+        FsrsState.Blacklisted => 3,
+        FsrsState.Review or FsrsState.Relearning or FsrsState.Learning or FsrsState.Suspended when
+            card.LastReview != null && (card.Due - card.LastReview.Value).TotalDays >= 21 => 2,
+        FsrsState.Review or FsrsState.Relearning or FsrsState.Learning or FsrsState.Suspended when card.LastReview != null => 1,
+        _ => 0
+    };
 
     private static List<KnownState> GetKnownStatesFromCard(FsrsCard card)
     {
@@ -138,9 +156,6 @@ public class CurrentUserService(
                 break;
             case FsrsState.Blacklisted:
                 knownState.Add(KnownState.Blacklisted);
-                break;
-            case FsrsState.New:
-                knownState.Add(KnownState.New);
                 break;
         }
 
@@ -164,72 +179,18 @@ public class CurrentUserService(
 
     public async Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex)
     {
-        if (!IsAuthenticated)
-            return [KnownState.New];
-
-        // 1. Check FsrsCard
-        var card = await userContext.FsrsCards.FirstOrDefaultAsync(u => u.UserId == UserId && u.WordId == wordId &&
-                                                                        u.ReadingIndex == readingIndex);
-
-        // 2. Check WordSet subscriptions (separate queries to avoid cross-context join)
-        WordSetStateType? effectiveWordSetState = null;
-        var userSetStates = await userContext.UserWordSetStates
-            .Where(uwss => uwss.UserId == UserId)
-            .ToListAsync();
-
-        if (userSetStates.Count > 0)
-        {
-            var subscribedSetIds = userSetStates.Select(s => s.SetId).ToList();
-
-            var matchingSetIds = await jitenDbContext.WordSetMembers
-                .Where(wsm => subscribedSetIds.Contains(wsm.SetId) && wsm.WordId == wordId && wsm.ReadingIndex == readingIndex)
-                .Select(wsm => wsm.SetId)
-                .ToListAsync();
-
-            var setStateDict = userSetStates.ToDictionary(s => s.SetId, s => s.State);
-            var setDerivedStates = matchingSetIds
-                .Where(setStateDict.ContainsKey)
-                .Select(id => setStateDict[id])
-                .ToList();
-
-            if (setDerivedStates.Count > 0)
-            {
-                effectiveWordSetState = setDerivedStates.Contains(WordSetStateType.Mastered)
-                    ? WordSetStateType.Mastered
-                    : setDerivedStates.First();
-            }
-        }
-
-        // 3. FsrsCard takes precedence, except State=New yields to word set mastered/blacklisted
-        if (card != null)
-        {
-            if (card.State == FsrsState.New && effectiveWordSetState is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
-            {
-                return effectiveWordSetState switch
-                {
-                    WordSetStateType.Blacklisted => [KnownState.Blacklisted],
-                    WordSetStateType.Mastered => [KnownState.Mastered],
-                    _ => GetKnownStatesFromCard(card)
-                };
-            }
-
-            return GetKnownStatesFromCard(card);
-        }
-
-        if (effectiveWordSetState.HasValue)
-        {
-            return effectiveWordSetState switch
-            {
-                WordSetStateType.Blacklisted => [KnownState.Blacklisted],
-                WordSetStateType.Mastered => [KnownState.Mastered],
-                _ => [KnownState.New]
-            };
-        }
-
-        return [KnownState.New];
+        var key = (wordId, readingIndex);
+        var result = await GetKnownWordsState([key]);
+        return result.TryGetValue(key, out var states) ? states : [KnownState.New];
     }
 
-    public async Task<int> AddKnownWords(IEnumerable<DeckWord> deckWords)
+    public Task<int> AddKnownWords(IEnumerable<DeckWord> deckWords) =>
+        UpsertCardsWithState(deckWords, FsrsState.Mastered);
+
+    public Task<int> BlacklistWords(IEnumerable<DeckWord> deckWords) =>
+        UpsertCardsWithState(deckWords, FsrsState.Blacklisted);
+
+    private async Task<int> UpsertCardsWithState(IEnumerable<DeckWord> deckWords, FsrsState targetState)
     {
         if (!IsAuthenticated) return 0;
         var words = deckWords?.ToList() ?? [];
@@ -244,7 +205,6 @@ public class CurrentUserService(
                                              .ToListAsync();
         var validFormSet = validForms.Select(f => (f.WordId, (byte)f.ReadingIndex)).ToHashSet();
 
-        // Determine all (WordId, ReadingIndex) pairs to add, preserving input order
         var pairs = new List<(int WordId, byte ReadingIndex)>();
         var seen = new HashSet<(int, byte)>();
         foreach (var word in words)
@@ -263,105 +223,50 @@ public class CurrentUserService(
         List<FsrsCard> existing = await userContext.FsrsCards
                                                    .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
                                                    .ToListAsync();
-        var existingSet = existing.ToDictionary(e => (e.WordId, e.ReadingIndex));
+        var existingSet = existing.DistinctBy(e => (e.WordId, e.ReadingIndex))
+                                  .ToDictionary(e => (e.WordId, e.ReadingIndex));
 
         List<FsrsCard> toInsert = new();
-        var cardsToSync = new List<(int WordId, byte ReadingIndex, FsrsCard SourceCard, bool Overwrite)>();
 
         foreach (var p in pairs)
         {
             if (!existingSet.TryGetValue(p, out var existingUk))
             {
-                var newCard = new FsrsCard(UserId!, p.WordId, p.ReadingIndex, due: now, lastReview: now,
-                                           state: FsrsState.Mastered);
-                toInsert.Add(newCard);
-                cardsToSync.Add((newCard.WordId, newCard.ReadingIndex, newCard, true));
+                toInsert.Add(new FsrsCard(UserId!, p.WordId, p.ReadingIndex, due: now, lastReview: now,
+                                           state: targetState));
             }
             else
             {
-                existingUk.State = FsrsState.Mastered;
-                cardsToSync.Add((existingUk.WordId, existingUk.ReadingIndex, existingUk, true));
+                existingUk.State = targetState;
             }
         }
 
         if (toInsert.Count > 0)
             await userContext.FsrsCards.AddRangeAsync(toInsert);
 
-        await userContext.SaveChangesAsync();
-
-        if (cardsToSync.Count > 0)
+        try
         {
-            await srsService.SyncKanaReadingBatch(UserId!, cardsToSync, now);
+            await userContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            foreach (var entry in userContext.ChangeTracker.Entries().Where(e => e.State == EntityState.Added))
+                entry.State = EntityState.Detached;
+
+            var retryExisting = await userContext.FsrsCards
+                .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
+                .ToListAsync();
+            var retrySet = retryExisting.DistinctBy(e => (e.WordId, e.ReadingIndex))
+                                        .ToDictionary(e => (e.WordId, e.ReadingIndex));
+
+            foreach (var p in pairs)
+                if (retrySet.TryGetValue(p, out var card))
+                    card.State = targetState;
+
+            await userContext.SaveChangesAsync();
         }
 
-        return (toInsert.Count);
-    }
-
-    public async Task<int> BlacklistWords(IEnumerable<DeckWord> deckWords)
-    {
-        if (!IsAuthenticated) return 0;
-        var words = deckWords?.ToList() ?? [];
-        if (words.Count == 0) return 0;
-
-        var wordIds = words.Select(w => w.WordId).Distinct().ToList();
-
-        var blValidForms = await jitenDbContext.WordForms
-                                               .AsNoTracking()
-                                               .Where(wf => wordIds.Contains(wf.WordId))
-                                               .Select(wf => new { wf.WordId, wf.ReadingIndex })
-                                               .ToListAsync();
-        var blValidFormSet = blValidForms.Select(f => (f.WordId, (byte)f.ReadingIndex)).ToHashSet();
-
-        var pairs = new List<(int WordId, byte ReadingIndex)>();
-        var seen = new HashSet<(int, byte)>();
-        foreach (var word in words)
-        {
-            if (!blValidFormSet.Contains((word.WordId, word.ReadingIndex))) continue;
-
-            var key = (word.WordId, word.ReadingIndex);
-            if (seen.Add(key))
-                pairs.Add(key);
-        }
-
-        if (pairs.Count == 0) return 0;
-
-        DateTime now = DateTime.UtcNow;
-        List<int> pairWordIds = pairs.Select(p => p.WordId).Distinct().ToList();
-        List<FsrsCard> existing = await userContext.FsrsCards
-                                                   .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
-                                                   .ToListAsync();
-        var existingSet = existing.ToDictionary(e => (e.WordId, e.ReadingIndex));
-
-        List<FsrsCard> toInsert = new();
-        var cardsToSync = new List<(int WordId, byte ReadingIndex, FsrsCard SourceCard, bool Overwrite)>();
-
-        foreach (var p in pairs)
-        {
-            if (!existingSet.TryGetValue(p, out var existingUk))
-            {
-                var newCard = new FsrsCard(UserId!, p.WordId, p.ReadingIndex, due: now, lastReview: now,
-                                           state: FsrsState.Blacklisted);
-                toInsert.Add(newCard);
-                cardsToSync.Add((newCard.WordId, newCard.ReadingIndex, newCard, true));
-            }
-            else
-            {
-                existingUk.State = FsrsState.Blacklisted;
-                cardsToSync.Add((existingUk.WordId, existingUk.ReadingIndex, existingUk, true));
-            }
-        }
-
-        if (toInsert.Count > 0)
-            await userContext.FsrsCards.AddRangeAsync(toInsert);
-
-        await userContext.SaveChangesAsync();
-
-        if (cardsToSync.Count > 0)
-        {
-            await srsService.SyncKanaReadingBatch(UserId!, cardsToSync, now);
-        }
-
-        return (toInsert.Count);
+        return toInsert.Count;
     }
 
     public async Task AddKnownWord(int wordId, byte readingIndex)
@@ -377,9 +282,7 @@ public class CurrentUserService(
                                                                         u.ReadingIndex == readingIndex);
         if (card == null) return;
 
-        card.State = FsrsState.New;
-        await srsService.SyncKanaReading(UserId!, wordId, readingIndex, card, DateTime.UtcNow);
-
+        userContext.FsrsCards.Remove(card);
         await userContext.SaveChangesAsync();
     }
 

@@ -55,9 +55,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             foreach (var d in hostedServices)
                 services.Remove(d);
 
-            // Replace Redis
+            // Replace Redis with in-memory mock that supports GetDatabase()
             services.RemoveAll<IConnectionMultiplexer>();
-            services.AddSingleton(Mock.Of<IConnectionMultiplexer>());
+            services.AddSingleton(InMemoryRedis.Create());
 
             // Register SQLite in-memory DbContexts (Npgsql is skipped via
             // environment guard in Program.cs, so no dual-provider conflict).
@@ -89,6 +89,14 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
                 .AddPolicy("RequiresAdmin", policy =>
                     policy.AddAuthenticationSchemes(TestAuthHandler.SchemeName)
                           .RequireRole("Administrator"));
+
+            // Replace debounce service with no-op for testing
+            services.RemoveAll<Jiten.Api.Services.ISrsDebounceService>();
+            services.AddSingleton<Jiten.Api.Services.ISrsDebounceService, NoOpSrsDebounceService>();
+
+            // Replace study session service with in-memory for testing
+            services.RemoveAll<Jiten.Api.Services.IStudySessionService>();
+            services.AddSingleton<Jiten.Api.Services.IStudySessionService, InMemoryStudySessionService>();
 
             // Replace CDN
             services.RemoveAll<ICdnService>();

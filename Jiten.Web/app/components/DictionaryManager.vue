@@ -122,40 +122,16 @@
     await reorderDictionaries(ids);
   }
 
-  const dragIndex = ref<number | null>(null);
-  const dropIndex = ref<number | null>(null);
-
-  function onDragStart(index: number, event: DragEvent) {
-    dragIndex.value = index;
-    event.dataTransfer!.effectAllowed = 'move';
-  }
-
-  function onDragOver(index: number, event: DragEvent) {
-    event.preventDefault();
-    event.dataTransfer!.dropEffect = 'move';
-    dropIndex.value = index;
-  }
-
-  function onDragLeave() {
-    dropIndex.value = null;
-  }
-
-  function onDragEnd() {
-    dragIndex.value = null;
-    dropIndex.value = null;
-  }
-
-  async function onDropReorder(targetIndex: number) {
-    const fromIndex = dragIndex.value;
-    dragIndex.value = null;
-    dropIndex.value = null;
-    if (fromIndex === null || fromIndex === targetIndex) return;
-
-    const ids = dictionaries.value.map((d) => d.id);
-    const [moved] = ids.splice(fromIndex, 1);
-    ids.splice(targetIndex, 0, moved);
-    await reorderDictionaries(ids);
-  }
+  const dictListRef = ref<HTMLElement | null>(null);
+  const { dragIndex, dropIndex, handlePointerDown: handleDictPointerDown } = useTouchReorder({
+    containerRef: dictListRef,
+    async onReorder(from, to) {
+      const ids = dictionaries.value.map((d) => d.id);
+      const [moved] = ids.splice(from, 1);
+      ids.splice(to, 0, moved);
+      await reorderDictionaries(ids);
+    },
+  });
 
   const modeOptions = [
     { label: 'Always show', value: 'always' },
@@ -216,7 +192,7 @@
       class="hidden sm:block border-2 border-dashed rounded-xl p-6 text-center transition-colors"
       :class="dragOver
         ? 'border-primary bg-primary-50 dark:bg-primary-900/20'
-        : 'border-gray-300 dark:border-gray-600'"
+        : 'border-surface-300 dark:border-surface-600'"
       @dragover.prevent="dragOver = true"
       @dragleave.prevent="dragOver = false"
       @drop.prevent="onDrop"
@@ -243,29 +219,24 @@
         Dictionaries ({{ dictionaries.length }})
       </div>
 
+      <div ref="dictListRef" class="flex flex-col gap-3">
       <div
         v-for="(dict, index) in dictionaries"
         :key="dict.id"
-        draggable="true"
-        class="border rounded-lg p-4 bg-white dark:bg-gray-800 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors"
+        class="border rounded-lg p-4 bg-surface-0 dark:bg-surface-900 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors"
         :class="{
           'border-primary bg-primary-50/50 dark:bg-primary-900/20': dropIndex === index && dragIndex !== index,
           'opacity-50': dragIndex === index,
-          'border-gray-200 dark:border-gray-700': dropIndex !== index && dragIndex !== index,
+          'border-surface-200 dark:border-surface-700': dropIndex !== index && dragIndex !== index,
         }"
-        @dragstart="onDragStart(index, $event)"
-        @dragover="onDragOver(index, $event)"
-        @dragleave="onDragLeave"
-        @dragend="onDragEnd"
-        @drop.prevent="onDropReorder(index)"
       >
-        <!-- Arrows + drag handle (desktop only) + priority badge -->
+        <!-- Arrows + drag handle + priority badge -->
         <div class="flex items-center gap-1 shrink-0">
           <div class="flex flex-col gap-0.5">
             <Button icon="pi pi-chevron-up" text rounded size="small" :disabled="index === 0" @click="moveUp(index)" class="!w-6 !h-6" />
             <Button icon="pi pi-chevron-down" text rounded size="small" :disabled="index === dictionaries.length - 1" @click="moveDown(index)" class="!w-6 !h-6" />
           </div>
-          <span class="max-sm:hidden cursor-grab active:cursor-grabbing">
+          <span class="cursor-grab active:cursor-grabbing" style="touch-action: none" @pointerdown="handleDictPointerDown($event, index)">
             <i class="pi pi-bars text-gray-400 dark:text-gray-500 text-xs" />
           </span>
           <span class="w-7 h-7 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-xs font-bold flex items-center justify-center">
@@ -322,6 +293,7 @@
           <Button v-if="!isJmDict(dict)" icon="pi pi-trash" severity="danger" text rounded size="small" @click="confirmRemove(dict)" />
           <div v-else class="w-8" />
         </div>
+      </div>
       </div>
     </div>
   </div>

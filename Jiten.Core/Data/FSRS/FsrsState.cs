@@ -33,5 +33,10 @@ public enum FsrsState
     /// <summary>
     /// Card marked as always known, will never be reviewed
     /// </summary>
-    Mastered = 5
+    Mastered = 5,
+
+    /// <summary>
+    /// Card is temporarily paused, retains scheduling data for resumption
+    /// </summary>
+    Suspended = 6
 }

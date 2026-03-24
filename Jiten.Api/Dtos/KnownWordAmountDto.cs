@@ -14,4 +14,5 @@ public class KnownWordAmountDto
     public int WordSetMasteredForm { get; set; }
     public int WordSetBlacklisted { get; set; }
     public int WordSetBlacklistedForm { get; set; }
+    public int RedundantForms { get; set; }
 }

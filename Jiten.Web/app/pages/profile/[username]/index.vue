@@ -245,6 +245,19 @@
         </div>
       </template>
 
+      <!-- Study Heatmap -->
+      <Card>
+        <template #title>
+          <div class="flex items-center gap-2">
+            <Icon name="material-symbols:calendar-month" />
+            Study Activity
+          </div>
+        </template>
+        <template #content>
+          <StudyHeatmap :username="displayUsername" />
+        </template>
+      </Card>
+
       <!-- Kanji Grid -->
       <Card>
         <template #title>

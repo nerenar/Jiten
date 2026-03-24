@@ -11,6 +11,8 @@ public class UserFsrsSettings
 
     public double? DesiredRetention { get; set; }
 
+    public string SettingsJson { get; set; } = "{}";
+
     [NotMapped]
     private double[]? _cachedParameters;
 

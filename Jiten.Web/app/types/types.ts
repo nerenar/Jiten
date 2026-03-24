@@ -361,6 +361,7 @@ export interface FsrsCardWithWordDto {
   wordText: string;
   readingType: ReadingType;
   frequencyRank: number;
+  wordTextPlain?: string;
 }
 
 export interface FsrsImportResultDto {
@@ -539,6 +540,16 @@ export interface DictionaryEntry {
   frequencyRank: number;
 }
 
+export interface StaticDeckWordDto extends DictionaryEntry {
+  occurrences: number;
+  deckSortOrder: number;
+}
+
+export interface StaticDeckWordsResponse {
+  deckName: string;
+  words: StaticDeckWordDto[];
+}
+
 export interface DictionarySearchResult {
   query: string;
   queryType: string;
@@ -700,4 +711,252 @@ export interface BlacklistedDeckDto {
   coverUrl: string | null
   mediaType: MediaType
   createdAt: string
+}
+
+// SRS Study types
+export interface StudyDeckDto {
+  userStudyDeckId: number;
+  deckType: StudyDeckType;
+  name: string;
+  description?: string;
+  deckId?: number;
+  title: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  coverName?: string;
+  mediaType: MediaType;
+  sortOrder: number;
+  isActive: boolean;
+  downloadType: number;
+  order: number;
+  minFrequency: number;
+  maxFrequency: number;
+  targetPercentage?: number;
+  minOccurrences?: number;
+  maxOccurrences?: number;
+  excludeKana: boolean;
+  minGlobalFrequency?: number;
+  maxGlobalFrequency?: number;
+  posFilter?: string;
+  totalWords: number;
+  unseenCount: number;
+  learningCount: number;
+  reviewCount: number;
+  masteredCount: number;
+  blacklistedCount: number;
+  suspendedCount: number;
+  dueReviewCount: number;
+  warning?: string;
+}
+
+export type StudyMoreMode = 'extraNew' | 'extraReview' | 'ahead' | 'mistakes';
+
+export interface StudyMoreParams {
+  mode: StudyMoreMode;
+  extraNewCards?: number;
+  extraReviews?: number;
+  aheadMinutes?: number;
+  mistakeDays?: number;
+}
+
+export interface StudyBatchResponse {
+  sessionId: string;
+  cards: StudyCardDto[];
+  newCardsRemaining: number;
+  reviewsRemaining: number;
+  newCardsToday: number;
+  reviewsToday: number;
+}
+
+export interface StudyCardDto {
+  cardId: number;
+  wordId: number;
+  readingIndex: number;
+  state: number;
+  isNewCard: boolean;
+  wordText: string;
+  wordTextPlain: string;
+  readings: StudyReadingDto[];
+  definitions: StudyDefinitionDto[];
+  partsOfSpeech: string[];
+  pitchAccents?: number[];
+  frequencyRank: number;
+  exampleSentence?: StudyExampleSentenceDto;
+  intervalPreview?: IntervalPreviewDto;
+  deckOccurrences?: StudyDeckOccurrenceDto[];
+}
+
+export interface StudyDeckOccurrenceDto {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  occurrences: number;
+}
+
+export interface IntervalPreviewDto {
+  againSeconds: number;
+  hardSeconds: number;
+  goodSeconds: number;
+  easySeconds: number;
+}
+
+export interface StudyReadingDto {
+  text: string;
+  rubyText: string;
+  readingIndex: number;
+  formType: number;
+}
+
+export interface StudyDefinitionDto {
+  index: number;
+  meanings: string[];
+  partsOfSpeech: string[];
+}
+
+export interface StudyExampleSentenceDto {
+  text: string;
+  wordPosition: number;
+  wordLength: number;
+  sourceDeck?: StudyExampleSourceDto;
+  sourceParent?: StudyExampleSourceDto;
+}
+
+export interface StudyExampleSourceDto {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  mediaType: MediaType;
+}
+
+export type StudyInterleaving = 'Mixed' | 'NewFirst' | 'ReviewsFirst';
+export type StudyNewCardGathering = 'TopDeck' | 'RoundRobin';
+export type StudyReviewFrom = 'AllTracked' | 'StudyDecksOnly';
+export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
+
+export interface StudySettingsDto {
+  newCardsPerDay: number;
+  maxReviewsPerDay: number;
+  batchSize: number;
+  gradingButtons: number;
+  interleaving: StudyInterleaving;
+  newCardGathering: StudyNewCardGathering;
+  reviewFrom: StudyReviewFrom;
+  showPitchAccent: boolean;
+  exampleSentencePosition: ExampleSentencePosition;
+  showFrequencyRank: boolean;
+  showKanjiBreakdown: boolean;
+  showNextInterval: boolean;
+  showKeybinds: boolean;
+  showElapsedTime: boolean;
+  enableSwipeGesture: boolean;
+}
+
+export interface CardExamplesResponse {
+  examples: Record<string, StudyExampleSentenceDto>;
+}
+
+export interface DueSummaryDto {
+  reviewsDue: number;
+  newCardsAvailable: number;
+  reviewsToday: number;
+  reviewBudgetLeft: number;
+  nextReviewAt: string | null;
+}
+
+export interface ReviewForecastDto {
+  dueWithinHour: number;
+  dueToday: number;
+  dueTomorrow: number;
+  nextReviewAt: string | null;
+}
+
+export interface SessionStreakDto {
+  currentStreak: number;
+  longestStreak: number;
+  isNewRecord: boolean;
+}
+
+export interface DeckStreakDto {
+  currentStreak: number;
+  longestStreak: number;
+  isNewRecord: boolean;
+  totalReviewDays: number;
+  recentDays: { date: string; count: number }[];
+}
+
+export interface StudyHeatmapResponse {
+  year: number;
+  days: HeatmapDay[];
+  currentStreak: number;
+  longestStreak: number;
+  totalReviewDays: number;
+  totalReviews: number;
+}
+
+export interface HeatmapDay {
+  date: string;
+  reviewCount: number;
+  correctCount: number;
+}
+
+export interface ReviewHistoryDto {
+  card?: {
+    state: FsrsState;
+    stability?: number;
+    difficulty?: number;
+    due: string;
+    lastReview?: string;
+    createdAt: string;
+  };
+  reviews: {
+    rating: FsrsRating;
+    reviewDateTime: string;
+    reviewDuration?: number;
+  }[];
+}
+
+export interface RecentReviewDto {
+  wordId: number;
+  readingIndex: number;
+  wordText: string;
+  rating: FsrsRating;
+  reviewDateTime: string;
+  reviewDuration?: number;
+  cardState: FsrsState;
+}
+
+export interface AddStudyDeckRequest {
+  deckType: StudyDeckType;
+  name?: string;
+  description?: string;
+  deckId?: number;
+  downloadType: number;
+  order: number;
+  minFrequency: number;
+  maxFrequency: number;
+  targetPercentage?: number;
+  minOccurrences?: number;
+  maxOccurrences?: number;
+  excludeKana: boolean;
+  minGlobalFrequency?: number;
+  maxGlobalFrequency?: number;
+  posFilter?: string;
+}
+
+export interface UpdateStudyDeckRequest {
+  name?: string;
+  description?: string;
+  downloadType: number;
+  order: number;
+  minFrequency: number;
+  maxFrequency: number;
+  targetPercentage?: number;
+  minOccurrences?: number;
+  maxOccurrences?: number;
+  excludeKana: boolean;
+  minGlobalFrequency?: number;
+  maxGlobalFrequency?: number;
+  posFilter?: string;
 }

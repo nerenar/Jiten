@@ -2,7 +2,7 @@ namespace Jiten.Core.Data.FSRS;
 
 public static class FsrsHelper
 {
-    private static readonly Random Random = new();
+    private static Random Random => Random.Shared;
 
     /// <summary>
     /// Calculates initial difficulty for a new card

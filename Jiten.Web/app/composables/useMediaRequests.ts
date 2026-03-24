@@ -17,6 +17,7 @@ export function useMediaRequests() {
     offset?: number;
     limit?: number;
     mine?: boolean;
+    contributed?: boolean;
     search?: string;
     attachments?: string;
   } = {}) => {
@@ -32,7 +33,8 @@ export function useMediaRequests() {
           sort: params.sort ?? 'votes',
           offset: params.offset ?? 0,
           limit: params.limit ?? 20,
-          mine: params.mine ?? false,
+          mine: params.mine || undefined,
+          contributed: params.contributed || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
         },

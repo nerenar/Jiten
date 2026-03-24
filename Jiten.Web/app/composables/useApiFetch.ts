@@ -64,7 +64,7 @@ function buildFetchOptions(
   return {
     ...opts,
     headers,
-    key: uniqueKey,
+    key: opts?.key ?? uniqueKey,
     server: opts?.server ?? true,
     lazy: opts?.lazy ?? false,
     async onRequest({ options }: any) {

@@ -39,18 +39,17 @@
 
   const { data: response, refresh: refreshInfo } = useApiFetch<Word>(infoUrl, { watch: false });
   const { data: mediaFrequency, status: mediaFreqStatus, refresh: refreshMediaFrequency } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, watch: false });
-  const { data: knownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, { lazy: true, watch: false });
+  const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, { lazy: true, watch: false });
+  const knownStatesOverride = computed(() => fetchedKnownStates.value ?? response.value?.knownStates ?? undefined);
 
   const { resolvedGroups } = useDictionaryDefinitions(
     computed(() => response.value?.mainReading?.text),
     computed(() => response.value?.definitions),
   );
 
-  const getSortedReadings = () => {
+  const sortedReadings = computed(() => {
     return response.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
-  };
-
-  const sortedReadings = computed(() => getSortedReadings());
+  });
 
   const mediaAmountUrl = 'media-deck/decks-count';
   const { data: mediaAmountResponse } = useApiFetch<Record<MediaType, number>>(mediaAmountUrl);
@@ -78,14 +77,13 @@
 
   const switchReadingOrWord = async () => {
     isTransitioning.value = true;
-    await refreshInfo();
+    await Promise.all([refreshInfo(), refreshKnownStates()]);
     isTransitioning.value = false;
 
     selectedMediaType.value = null;
     mediaAccordionValue.value = '0';
 
     refreshMediaFrequency();
-    refreshKnownStates();
 
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
@@ -101,6 +99,7 @@
   watch(
     [() => props.wordId, () => props.readingIndex],
     async ([newWordId, newReadingIndex]) => {
+      if (currentReadingIndex.value === newReadingIndex) return;
       currentReadingIndex.value = newReadingIndex;
       await switchReadingOrWord();
     },
@@ -172,7 +171,7 @@
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
               <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.mainReading.frequencyRank.toLocaleString() }}</div>
-              <VocabularyStatus :word="response" :known-states-override="knownStates ?? undefined" />
+              <VocabularyStatus :word="response" :known-states-override="knownStatesOverride" />
             </div>
           </div>
 
@@ -220,7 +219,7 @@
 
         <div class="md:min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
-            <VocabularyStatus :word="response" :known-states-override="knownStates ?? undefined" />
+            <VocabularyStatus :word="response" :known-states-override="knownStatesOverride" />
             Rank #{{ response.mainReading.frequencyRank }}
           </div>
           <div class="md:text-right pt-4 cursor-pointer" @click="selectMediaType(null)">

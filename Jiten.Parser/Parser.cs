@@ -1754,6 +1754,10 @@ namespace Jiten.Parser
 
             List<DeckWord> matchedWords = new();
 
+            // Phase 1: resolve all words to their candidate matches
+            var wordCandidates = new List<(string word, List<(JmDictWord match, int readingIndex)> matches)>();
+            var allCandidateWordIds = new HashSet<int>();
+
             foreach (var word in words)
             {
                 var wordInHiragana = KanaConverter.ToHiragana(word, convertLongVowelMark: false);
@@ -1780,15 +1784,25 @@ namespace Jiten.Parser
                 if (matchesWithReading.Count == 0)
                     continue;
 
-                // Fetch frequency data from database
-                var candidateWordIds = matchesWithReading.Select(m => m.match.WordId).ToList();
-                await using var context = await _contextFactory.CreateDbContextAsync();
-                var formFrequencies = await context.WordFormFrequencies
-                                                   .AsNoTracking()
-                                                   .Where(wff => candidateWordIds.Contains(wff.WordId))
-                                                   .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
+                wordCandidates.Add((word, matchesWithReading));
+                foreach (var m in matchesWithReading)
+                    allCandidateWordIds.Add(m.match.WordId);
+            }
 
-                // Order by frequency rank (lower = more frequent = better)
+            // Phase 2: single batched frequency query
+            Dictionary<(int, short), JmDictWordFormFrequency> formFrequencies = new();
+            if (allCandidateWordIds.Count > 0)
+            {
+                await using var context = await _contextFactory.CreateDbContextAsync();
+                formFrequencies = await context.WordFormFrequencies
+                                               .AsNoTracking()
+                                               .Where(wff => allCandidateWordIds.Contains(wff.WordId))
+                                               .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
+            }
+
+            // Phase 3: pick best match per word using the pre-fetched frequencies
+            foreach (var (word, matchesWithReading) in wordCandidates)
+            {
                 var best = matchesWithReading
                            .OrderBy(m =>
                            {

@@ -3,6 +3,7 @@ using CommandLine;
 using Jiten.Cli;
 using Jiten.Cli.Commands;
 using Jiten.Core;
+using Microsoft.EntityFrameworkCore;
 
 // ReSharper disable MethodSupportsCancellation
 
@@ -248,10 +249,145 @@ public class Program
             await mlCommands.ImportDeckDifficulty(options.ImportDeckDifficulty);
         }
 
+        if (!string.IsNullOrEmpty(options.ExportMlTags))
+        {
+            await mlCommands.ExportMlTags(options.ExportMlTags);
+        }
+
         // Benchmark commands
         if (!string.IsNullOrEmpty(options.Benchmark))
         {
             await benchmarkCommands.RunBenchmark(options);
         }
+
+        // SRS maintenance commands
+        if (options.CleanupGhostCards)
+        {
+            await CleanupGhostCards(context, options.DryRun);
+        }
+
+        if (options.CleanupNewCards)
+        {
+            await CleanupNewCards(context, options.DryRun);
+        }
+    }
+
+    private static async Task CleanupGhostCards(CliContext context, bool dryRun)
+    {
+        await using var jitenDb = await context.ContextFactory.CreateDbContextAsync();
+
+        // Count ghost cards using raw SQL (cross-schema query)
+        var countSql = """
+            SELECT COUNT(*) FROM "user"."FsrsCards" fc
+            JOIN "jmdict"."WordForms" kana_wf
+              ON kana_wf."WordId" = fc."WordId" AND kana_wf."ReadingIndex" = fc."ReadingIndex"
+            WHERE kana_wf."FormType" = 1
+              AND EXISTS (
+                  SELECT 1 FROM "user"."FsrsCards" fc2
+                  JOIN "jmdict"."WordForms" kanji_wf
+                    ON kanji_wf."WordId" = fc2."WordId" AND kanji_wf."ReadingIndex" = fc2."ReadingIndex"
+                  WHERE fc2."UserId" = fc."UserId" AND fc2."WordId" = fc."WordId"
+                    AND kanji_wf."FormType" = 0
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM "user"."FsrsReviewLogs" rl WHERE rl."CardId" = fc."CardId"
+              )
+            """;
+
+        var ghostCount = await jitenDb.Database.SqlQueryRaw<int>($"SELECT ({countSql})::int AS \"Value\"").FirstAsync();
+        Console.WriteLine($"Found {ghostCount} ghost kana cards with 0 review logs.");
+
+        if (ghostCount == 0) return;
+
+        // Show per-user breakdown
+        var breakdownSql = """
+            SELECT fc."UserId"::text AS "Key", COUNT(*)::int AS "Value"
+            FROM "user"."FsrsCards" fc
+            JOIN "jmdict"."WordForms" kana_wf
+              ON kana_wf."WordId" = fc."WordId" AND kana_wf."ReadingIndex" = fc."ReadingIndex"
+            WHERE kana_wf."FormType" = 1
+              AND EXISTS (
+                  SELECT 1 FROM "user"."FsrsCards" fc2
+                  JOIN "jmdict"."WordForms" kanji_wf
+                    ON kanji_wf."WordId" = fc2."WordId" AND kanji_wf."ReadingIndex" = fc2."ReadingIndex"
+                  WHERE fc2."UserId" = fc."UserId" AND fc2."WordId" = fc."WordId"
+                    AND kanji_wf."FormType" = 0
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM "user"."FsrsReviewLogs" rl WHERE rl."CardId" = fc."CardId"
+              )
+            GROUP BY fc."UserId"
+            ORDER BY COUNT(*) DESC
+            LIMIT 20
+            """;
+
+        var breakdown = await jitenDb.Database.SqlQueryRaw<UserGhostCount>(breakdownSql).ToListAsync();
+        foreach (var row in breakdown)
+            Console.WriteLine($"  User {row.Key}: {row.Value} ghost cards");
+
+        if (dryRun)
+        {
+            Console.WriteLine("Dry run — no changes made.");
+            return;
+        }
+
+        var deleteSql = """
+            DELETE FROM "user"."FsrsCards"
+            WHERE "CardId" IN (
+                SELECT fc."CardId" FROM "user"."FsrsCards" fc
+                JOIN "jmdict"."WordForms" kana_wf
+                  ON kana_wf."WordId" = fc."WordId" AND kana_wf."ReadingIndex" = fc."ReadingIndex"
+                WHERE kana_wf."FormType" = 1
+                  AND EXISTS (
+                      SELECT 1 FROM "user"."FsrsCards" fc2
+                      JOIN "jmdict"."WordForms" kanji_wf
+                        ON kanji_wf."WordId" = fc2."WordId" AND kanji_wf."ReadingIndex" = fc2."ReadingIndex"
+                      WHERE fc2."UserId" = fc."UserId" AND fc2."WordId" = fc."WordId"
+                        AND kanji_wf."FormType" = 0
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM "user"."FsrsReviewLogs" rl WHERE rl."CardId" = fc."CardId"
+                  )
+            )
+            """;
+
+        var deleted = await jitenDb.Database.ExecuteSqlRawAsync(deleteSql);
+        Console.WriteLine($"Done. Deleted {deleted} ghost cards.");
+    }
+
+    private static async Task CleanupNewCards(CliContext context, bool dryRun)
+    {
+        await using var jitenDb = await context.ContextFactory.CreateDbContextAsync();
+
+        var countSql = """SELECT COUNT(*)::int AS "Value" FROM "user"."FsrsCards" WHERE "State" = 0""";
+        var count = await jitenDb.Database.SqlQueryRaw<int>(countSql).FirstAsync();
+        Console.WriteLine($"Found {count} legacy FsrsCards with State=New.");
+
+        if (count == 0) return;
+
+        var breakdownSql = """
+            SELECT "UserId"::text AS "Key", COUNT(*)::int AS "Value"
+            FROM "user"."FsrsCards" WHERE "State" = 0
+            GROUP BY "UserId" ORDER BY COUNT(*) DESC LIMIT 20
+            """;
+        var breakdown = await jitenDb.Database.SqlQueryRaw<UserGhostCount>(breakdownSql).ToListAsync();
+        foreach (var row in breakdown)
+            Console.WriteLine($"  User {row.Key}: {row.Value} cards");
+
+        if (dryRun)
+        {
+            Console.WriteLine("Dry run — no changes made.");
+            return;
+        }
+
+        var deleteSql = """DELETE FROM "user"."FsrsCards" WHERE "State" = 0""";
+        var deleted = await jitenDb.Database.ExecuteSqlRawAsync(deleteSql);
+        Console.WriteLine($"Done. Deleted {deleted} legacy New cards.");
+    }
+
+    private class UserGhostCount
+    {
+        public string Key { get; set; } = "";
+        public int Value { get; set; }
     }
 }

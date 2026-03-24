@@ -59,6 +59,7 @@
   });
 
   const hasAdjustment = computed(() => Math.abs(props.userAdjustment ?? 0) >= 0.1);
+  const hasVotesButSmallAdjustment = computed(() => (props.voteCount ?? 0) > 0 && !hasAdjustment.value);
 
   const arrowIndicator = computed(() => {
     const adj = props.userAdjustment ?? 0;
@@ -106,6 +107,8 @@
       if (props.voteCount && props.voteCount > 0) {
         parts.push(`Based on ${props.voteCount} vote${props.voteCount !== 1 ? 's' : ''}`);
       }
+    } else if (hasVotesButSmallAdjustment.value) {
+      parts.push(`Algorithmic score confirmed by ${props.voteCount} community vote${props.voteCount !== 1 ? 's' : ''}`);
     } else {
       parts.push('Algorithmic difficulty. No community votes yet.');
     }
@@ -123,7 +126,8 @@
 
 <template>
   <span :class="['tabular-nums font-bold whitespace-nowrap', difficultyClass]">
-    <span v-if="arrowIndicator && !useStars" :class="['text-xs mr-0.5', arrowClass]">{{ arrowIndicator }}</span>
+    <span v-if="hasVotesButSmallAdjustment && !useStars" class="text-xs mr-0.5 text-gray-400 dark:text-gray-500">&asymp;</span>
+    <span v-else-if="arrowIndicator && !useStars" :class="['text-xs mr-0.5', arrowClass]">{{ arrowIndicator }}</span>
     {{ difficultyText }}
     <span v-if="voteCount && voteCount >= 3" class="text-xs font-normal text-muted-color ml-1"></span>
   </span>

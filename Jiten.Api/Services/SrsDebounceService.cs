@@ -7,7 +7,7 @@ public class SrsDebounceService : ISrsDebounceService
     private static readonly TimeSpan DebounceWindow = TimeSpan.FromSeconds(1f);
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5f);
 
-    private readonly ConcurrentDictionary<string, DateTime> _lastOperationTimes = new();
+    private readonly ConcurrentDictionary<string, DebounceBucket> _buckets = new();
     private DateTime _lastCleanup = DateTime.UtcNow;
     private readonly Lock _cleanupLock = new();
 
@@ -18,15 +18,16 @@ public class SrsDebounceService : ISrsDebounceService
 
         CleanupIfNeeded(now);
 
-        var lastTime = _lastOperationTimes.GetOrAdd(key, DateTime.MinValue);
+        var bucket = _buckets.GetOrAdd(key, _ => new DebounceBucket(DateTime.MinValue));
 
-        if (now - lastTime < DebounceWindow)
+        lock (bucket)
         {
-            return false;
-        }
+            if (now - bucket.LastOperation < DebounceWindow)
+                return false;
 
-        _lastOperationTimes[key] = now;
-        return true;
+            bucket.LastOperation = now;
+            return true;
+        }
     }
 
     private void CleanupIfNeeded(DateTime now)
@@ -40,17 +41,20 @@ public class SrsDebounceService : ISrsDebounceService
                 return;
 
             var cutoff = now - DebounceWindow - TimeSpan.FromSeconds(1);
-            var keysToRemove = _lastOperationTimes
-                .Where(kvp => kvp.Value < cutoff)
+            var keysToRemove = _buckets
+                .Where(kvp => { lock (kvp.Value) { return kvp.Value.LastOperation < cutoff; } })
                 .Select(kvp => kvp.Key)
                 .ToList();
 
             foreach (var key in keysToRemove)
-            {
-                _lastOperationTimes.TryRemove(key, out _);
-            }
+                _buckets.TryRemove(key, out _);
 
             _lastCleanup = now;
         }
+    }
+
+    private class DebounceBucket(DateTime lastOperation)
+    {
+        public DateTime LastOperation = lastOperation;
     }
 }

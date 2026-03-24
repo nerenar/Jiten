@@ -20,7 +20,11 @@ const route = useRoute();
 
 const limit = 20;
 
-function parseTabFromQuery() { return route.query.tab === 'mine' ? 1 : 0; }
+function parseTabFromQuery() {
+  if (route.query.tab === 'mine') return 1;
+  if (route.query.tab === 'contributions') return 2;
+  return 0;
+}
 function parseTypeFromQuery() { return route.query.type !== undefined ? Number(route.query.type) as MediaType : undefined; }
 function parseStatusFromQuery() {
   if (route.query.status === 'all') return undefined;
@@ -79,6 +83,8 @@ watch(searchQuery, (val) => {
 });
 
 const isMine = computed(() => activeTab.value === 1);
+const isContributed = computed(() => activeTab.value === 2);
+const isPersonalTab = computed(() => activeTab.value === 1 || activeTab.value === 2);
 
 const displaySections = computed(() => {
   return [{ title: '', items: requests.value, muted: false }];
@@ -86,7 +92,18 @@ const displaySections = computed(() => {
 
 async function loadRequests() {
   const search = debouncedSearch.value.trim() || undefined;
-  if (isMine.value) {
+  if (isContributed.value) {
+    await fetchRequests({
+      mediaType: selectedMediaType.value,
+      status: selectedStatus.value,
+      sort: sortBy.value,
+      offset: 0,
+      limit: 200,
+      contributed: true,
+      search,
+      attachments: selectedAttachments.value,
+    });
+  } else if (isMine.value) {
     await fetchRequests({
       mediaType: selectedMediaType.value,
       status: selectedStatus.value,
@@ -135,13 +152,14 @@ watch(offset, () => loadRequests());
 watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset, debouncedSearch, selectedAttachments], () => {
   const query: Record<string, string> = {};
   if (activeTab.value === 1) query.tab = 'mine';
+  else if (activeTab.value === 2) query.tab = 'contributions';
   if (selectedMediaType.value !== undefined) query.type = String(selectedMediaType.value);
   if (debouncedSearch.value.trim()) query.search = debouncedSearch.value.trim();
   if (selectedAttachments.value) query.attachments = selectedAttachments.value;
   if (selectedStatus.value === undefined) query.status = 'all';
   else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
   if (sortBy.value !== 'votes') query.sort = sortBy.value;
-  if (!isMine.value && offset.value > 0) query.page = String(offset.value / limit + 1);
+  if (!isPersonalTab.value && offset.value > 0) query.page = String(offset.value / limit + 1);
   router.replace({ query });
 });
 
@@ -211,6 +229,7 @@ onMounted(() => loadRequests());
       <TabList>
         <Tab :value="0">All Requests</Tab>
         <Tab :value="1">My Requests</Tab>
+        <Tab :value="2">My Contributions</Tab>
       </TabList>
     </Tabs>
 
@@ -285,6 +304,7 @@ onMounted(() => loadRequests());
           @click="router.push('/requests/new')"
         />
       </template>
+      <p v-else-if="isContributed">You haven't contributed to any requests yet.</p>
       <p v-else>No requests found. Be the first!</p>
     </div>
 
@@ -368,7 +388,7 @@ onMounted(() => loadRequests());
       </template>
 
       <Paginator
-        v-if="!isMine && totalCount > limit"
+        v-if="!isPersonalTab && totalCount > limit"
         :rows="limit"
         :totalRecords="totalCount"
         :first="offset"

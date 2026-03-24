@@ -72,7 +72,7 @@ public class SrsRecomputeJob(
                 continue;
             }
 
-            var overrideState = card.State is FsrsState.Mastered or FsrsState.Blacklisted
+            var overrideState = card.State is FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended
                 ? card.State
                 : (FsrsState?)null;
 

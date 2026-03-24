@@ -10,6 +10,16 @@
     },
   });
 
+  const route = useRoute();
+  const isStudyMode = computed(() => route.path === '/srs/study');
+  const studyHeaderVisible = ref(false);
+
+  watch(isStudyMode, () => {
+    studyHeaderVisible.value = false;
+  });
+
+  provide('studyHeaderVisible', studyHeaderVisible);
+
   onMounted(() => {
     // Trick from https://github.com/primefaces/primevue/issues/5899#issuecomment-2585781190
     // TODO remove after primevue fix
@@ -24,11 +34,20 @@
     <ClientOnly>
       <MaintenanceBanner />
     </ClientOnly>
-    <AppHeader />
-    <div class="container mx-auto pl-4 pr-4 max-w-6xl flex-grow pb-2">
+
+    <div
+      class="grid transition-[grid-template-rows] duration-300 ease-in-out"
+      :style="{ gridTemplateRows: (!isStudyMode || studyHeaderVisible) ? '1fr' : '0fr' }"
+    >
+      <div :class="{ 'overflow-hidden': isStudyMode }">
+        <AppHeader />
+      </div>
+    </div>
+
+    <div :class="isStudyMode ? 'flex-grow flex flex-col' : 'container mx-auto pl-4 pr-4 max-w-6xl flex-grow pb-2'">
       <NuxtPage />
     </div>
-    <AppFooter />
+    <AppFooter v-if="!isStudyMode" />
     <Toast />
     <Toast position="bottom-center" group="bottom" />
     <ConfirmDialog />

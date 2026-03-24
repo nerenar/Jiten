@@ -1,6 +1,8 @@
-import { type Deck, TitleLanguage } from '~/types';
+import { TitleLanguage } from '~/types';
 
-export function localiseTitleWithLanguage(deck: Deck, titleLanguage: TitleLanguage): string {
+type Localisable = { originalTitle: string; romajiTitle?: string | null; englishTitle?: string | null };
+
+export function localiseTitleWithLanguage(deck: Localisable, titleLanguage: TitleLanguage): string {
   if (titleLanguage === TitleLanguage.Original) {
     return deck.originalTitle;
   }

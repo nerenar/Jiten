@@ -9,7 +9,7 @@ definePageMeta({
   middleware: ['auth'],
 });
 
-useHead({ title: 'FSRS Cards - Settings - Jiten' });
+useHead({ title: 'FSRS Cards - Settings' });
 
 const { $api } = useNuxtApp();
 const toast = useToast();
@@ -29,12 +29,12 @@ const hasWordSetSubscriptions = computed(() => subscriptions.value.length > 0);
 // State options for dropdown
 const stateOptions = ref([
   { label: 'All States', value: null },
-  { label: 'New', value: FsrsState.New },
   { label: 'Learning', value: FsrsState.Learning },
   { label: 'Review', value: FsrsState.Review },
   { label: 'Relearning', value: FsrsState.Relearning },
   { label: 'Blacklisted', value: FsrsState.Blacklisted },
   { label: 'Mastered', value: FsrsState.Mastered },
+  { label: 'Suspended', value: FsrsState.Suspended },
 ]);
 
 // Fetch cards and word set subscriptions on mount
@@ -88,24 +88,24 @@ const filteredCards = computed(() => {
 // State display helpers
 function getStateName(state: FsrsState): string {
   switch (state) {
-    case FsrsState.New: return 'New';
     case FsrsState.Learning: return 'Learning';
     case FsrsState.Review: return 'Review';
     case FsrsState.Relearning: return 'Relearning';
     case FsrsState.Blacklisted: return 'Blacklisted';
     case FsrsState.Mastered: return 'Mastered';
+    case FsrsState.Suspended: return 'Suspended';
     default: return 'Unknown';
   }
 }
 
 function getStateSeverity(state: FsrsState): string {
   switch (state) {
-    case FsrsState.New: return 'info';
     case FsrsState.Learning: return 'warn';
     case FsrsState.Review: return 'success';
     case FsrsState.Relearning: return 'warn';
     case FsrsState.Blacklisted: return 'secondary';
     case FsrsState.Mastered: return 'success';
+    case FsrsState.Suspended: return 'secondary';
     default: return 'secondary';
   }
 }
@@ -235,12 +235,12 @@ const stats = computed(() => {
 
   return {
     total,
-    new: byState[FsrsState.New] || 0,
     learning: byState[FsrsState.Learning] || 0,
     review: byState[FsrsState.Review] || 0,
     relearning: byState[FsrsState.Relearning] || 0,
     blacklisted: byState[FsrsState.Blacklisted] || 0,
     mastered: byState[FsrsState.Mastered] || 0,
+    suspended: byState[FsrsState.Suspended] || 0,
   };
 });
 
@@ -252,9 +252,12 @@ function getAvailableActions(card: FsrsCardWithWordDto) {
     actions.push({ label: 'Remove Mastered', command: () => removeMastered(card) });
   } else if (card.state === FsrsState.Blacklisted) {
     actions.push({ label: 'Unblacklist', command: () => unblacklist(card) });
+  } else if (card.state === FsrsState.Suspended) {
+    actions.push({ label: 'Resume', command: () => setVocabularyState(card, 'suspend-remove') });
   } else {
     actions.push({ label: 'Set to Mastered', command: () => setToMastered(card) });
     actions.push({ label: 'Blacklist', command: () => blacklist(card) });
+    actions.push({ label: 'Suspend', command: () => setVocabularyState(card, 'suspend-add') });
   }
 
   return actions;
@@ -287,6 +290,7 @@ function getAvailableActions(card: FsrsCardWithWordDto) {
             <div>Relearning: <Tag :value="stats.relearning" severity="warn" /></div>
             <div>Blacklisted: <Tag :value="stats.blacklisted" severity="secondary" /></div>
             <div>Mastered: <Tag :value="stats.mastered" severity="success" /></div>
+            <div>Suspended: <Tag :value="stats.suspended" severity="secondary" /></div>
           </div>
         </div>
       </template>
@@ -388,7 +392,7 @@ function getAvailableActions(card: FsrsCardWithWordDto) {
             <template #body="{ data }">
               <div class="flex gap-2">
                 <SplitButton
-                  :label="data.state === FsrsState.Mastered ? 'Remove Mastered' : data.state === FsrsState.Blacklisted ? 'Unblacklist' : 'Set to Mastered'"
+                  :label="data.state === FsrsState.Mastered ? 'Remove Mastered' : data.state === FsrsState.Blacklisted ? 'Unblacklist' : data.state === FsrsState.Suspended ? 'Resume' : 'Set to Mastered'"
                   :model="getAvailableActions(data)"
                   severity="secondary"
                   size="small"

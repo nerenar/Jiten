@@ -336,8 +336,13 @@ builder.Services.AddSingleton<ApiKeyService>();
 builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSender, Jiten.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-builder.Services.AddScoped<ISrsService, SrsService>();
+builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
+builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
+builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
+builder.Services.AddScoped<IDeckImportService, DeckImportService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
+builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
+builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(sp.GetRequiredService<IConfiguration>().GetConnectionString("Redis")!));
 builder.Services.AddScoped<WordReplacementService>();
@@ -345,6 +350,7 @@ builder.Services.AddScoped<ICdnService, BunnyCdnService>();
 builder.Services.AddScoped<Jiten.Core.Services.RequestActivityService>();
 builder.Services.AddScoped<Jiten.Core.Services.NotificationService>();
 builder.Services.AddHostedService<ParserWarmupService>();
+builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -393,6 +399,20 @@ builder.Services.AddRateLimiter(options =>
                                                                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 2,
                                                                    AutoReplenishment = true
                                                                });
+    });
+
+    options.AddPolicy("compute", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 2, Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
     });
 
     options.OnRejected = async (context, token) =>

@@ -50,7 +50,7 @@ public class FsrsScheduler
         int maximumInterval = 36500,
         bool enableFuzzing = true)
     {
-        Parameters = parameters ?? FsrsConstants.DefaultParameters;
+        Parameters = parameters is { Length: > 0 } ? parameters : FsrsConstants.DefaultParameters;
         DesiredRetention = desiredRetention;
         LearningSteps = learningSteps ?? [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)];
         RelearningSteps = relearningSteps ?? [TimeSpan.FromMinutes(10)];
@@ -110,7 +110,7 @@ public class FsrsScheduler
             nextInterval = FsrsHelper.ApplyFuzzing(nextInterval, MaximumInterval);
         }
 
-        card.Due = reviewDateTime + nextInterval;
+        card.Due = card.State == FsrsState.Blacklisted ? DateTime.MaxValue : reviewDateTime + nextInterval;
         card.LastReview = reviewDateTime;
     }
 
@@ -118,7 +118,7 @@ public class FsrsScheduler
     {
         var stability = card.Stability ?? 1.0d;
         var difficulty = card.Difficulty ?? 1.0d;
-        if (card is { State: FsrsState.Learning or FsrsState.New, Stability: null, Difficulty: null })
+        if (card is { State: FsrsState.Learning, Stability: null, Difficulty: null })
         {
             card.Stability = FsrsHelper.CalculateInitialStability(rating, Parameters);
             card.Difficulty = FsrsHelper.CalculateInitialDifficulty(rating, Parameters);
@@ -148,8 +148,8 @@ public class FsrsScheduler
             FsrsState.Review => CalculateReviewInterval(card, rating),
             FsrsState.Relearning => CalculateRelearningInterval(card, rating),
             FsrsState.Blacklisted => TimeSpan.MaxValue,
-            FsrsState.Mastered => TimeSpan.Zero, 
-            FsrsState.New => CalculateLearningInterval(card, rating),
+            FsrsState.Mastered => TimeSpan.MaxValue,
+            FsrsState.Suspended => TimeSpan.MaxValue,
             _ => throw new ArgumentException($"Unknown card state: {card.State}")
         };
     }
@@ -265,10 +265,30 @@ public class FsrsScheduler
     private TimeSpan HandleEasyRating(FsrsCard card)
     {
         var stability = card.Stability ?? 1.0d;
-        
+
         card.State = FsrsState.Review;
         card.Step = null;
         var days = FsrsHelper.CalculateNextInterval(stability, DesiredRetention, Parameters, MaximumInterval);
         return TimeSpan.FromDays(days);
+    }
+
+    public Dictionary<FsrsRating, TimeSpan> PreviewIntervals(FsrsCard card, DateTime? reviewDateTime = null)
+    {
+        reviewDateTime ??= DateTime.UtcNow;
+        var result = new Dictionary<FsrsRating, TimeSpan>();
+
+        foreach (var rating in new[] { FsrsRating.Again, FsrsRating.Hard, FsrsRating.Good, FsrsRating.Easy })
+        {
+            var clone = card.Clone();
+            var daysSinceLastReview = clone.LastReview != null
+                ? (reviewDateTime.Value - clone.LastReview.Value).Days
+                : (int?)null;
+
+            UpdateCardParameters(clone, rating, reviewDateTime.Value, daysSinceLastReview);
+            var interval = CalculateNextInterval(clone, rating);
+            result[rating] = interval;
+        }
+
+        return result;
     }
 }

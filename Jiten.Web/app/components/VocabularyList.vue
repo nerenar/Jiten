@@ -2,12 +2,18 @@
   import type { Word } from '~/types/types';
   import type { AsyncDataRequestStatus } from '#app';
 
-  defineProps<{
+  const props = defineProps<{
     words: Word[];
     status: AsyncDataRequestStatus;
     error?: Error | string | null;
     emptyMessage?: string;
     skeletonCount?: number;
+    removable?: boolean;
+    removingKey?: string | null;
+  }>();
+
+  const emit = defineEmits<{
+    remove: [word: Word];
   }>();
 </script>
 
@@ -36,6 +42,9 @@
       :key="`${word.wordId}-${word.mainReading.readingIndex}`"
       :word="word"
       :is-compact="true"
+      :removable="removable"
+      :removing="removingKey === `${word.wordId}-${word.mainReading.readingIndex}`"
+      @remove="emit('remove', word)"
     />
   </div>
 </template>

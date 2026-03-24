@@ -19,6 +19,7 @@ export function useVocabularyStats() {
   const wordSetMasteredForms = ref(0);
   const wordSetBlacklistedWords = ref(0);
   const wordSetBlacklistedForms = ref(0);
+  const redundantForms = ref(0);
   const hasWordSetContributions = computed(() => wordSetMasteredWords.value > 0 || wordSetBlacklistedWords.value > 0);
 
   async function fetchKnownWordsAmount() {
@@ -36,6 +37,7 @@ export function useVocabularyStats() {
         wordSetMasteredForm: number;
         wordSetBlacklisted: number;
         wordSetBlacklistedForm: number;
+        redundantForms: number;
       }>('user/vocabulary/known-ids/amount');
       youngWordsAmount.value = result.young;
       matureWordsAmount.value = result.mature;
@@ -49,6 +51,7 @@ export function useVocabularyStats() {
       wordSetMasteredForms.value = result.wordSetMasteredForm;
       wordSetBlacklistedWords.value = result.wordSetBlacklisted;
       wordSetBlacklistedForms.value = result.wordSetBlacklistedForm;
+      redundantForms.value = result.redundantForms;
     } catch {} finally {
       vocabStatsLoading.value = false;
     }
@@ -67,6 +70,7 @@ export function useVocabularyStats() {
     wordSetMasteredForms.value = 0;
     wordSetBlacklistedWords.value = 0;
     wordSetBlacklistedForms.value = 0;
+    redundantForms.value = 0;
   }
 
   return {
@@ -86,6 +90,7 @@ export function useVocabularyStats() {
     wordSetBlacklistedWords,
     wordSetBlacklistedForms,
     hasWordSetContributions,
+    redundantForms,
     fetchKnownWordsAmount,
     resetStats,
   };

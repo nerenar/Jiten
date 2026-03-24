@@ -21,6 +21,12 @@ export const useJpdbApi = () => {
     id2: number;
   }
 
+  interface JpdbImportResult {
+    knownIds: number[];
+    blacklistedIds: number[];
+    suspendedIds: number[];
+  }
+
   class JpdbApiClient {
     private apiKey: string;
 
@@ -31,24 +37,18 @@ export const useJpdbApi = () => {
       this.apiKey = apiKey;
     }
 
-    /**
-     * Gets vocabulary IDs with specific states from all user decks
-     */
-    async getFilteredVocabularyIds(blacklistedAsKnown = false, dueAsKnown = false, suspendedAsKnown = false): Promise<number[]> {
+    async getFilteredVocabularyIds(): Promise<JpdbImportResult> {
       try {
-        // Step 1: Get list of decks
         const deckIds = await this.getUserDecks();
         deckIds.push('never-forget');
         deckIds.push('blacklist');
 
-        // Step 2: Get vocabulary from all decks
         const allVocabulary: VocabularyIdPair[] = [];
         for (const deckId of deckIds) {
           const deckVocabulary = await this.getDeckVocabulary(deckId);
           allVocabulary.push(...deckVocabulary);
         }
 
-        // Remove duplicates by id1
         const uniqueVocab = allVocabulary.reduce((acc, vocab) => {
           if (!acc.find((v) => v.id1 === vocab.id1)) {
             acc.push(vocab);
@@ -56,10 +56,7 @@ export const useJpdbApi = () => {
           return acc;
         }, [] as VocabularyIdPair[]);
 
-        // Step 3: Lookup vocabulary info and filter by states
-        const filteredIds = await this.lookupAndFilterVocabulary(uniqueVocab, blacklistedAsKnown, dueAsKnown, suspendedAsKnown);
-
-        return filteredIds;
+        return await this.lookupAndFilterVocabulary(uniqueVocab);
       } catch (error) {
         throw new Error(`Error getting filtered vocabulary IDs: ${error}`);
       }
@@ -102,22 +99,11 @@ export const useJpdbApi = () => {
       return vocabularyPairs;
     }
 
-    private async lookupAndFilterVocabulary(
-      vocabularyPairs: VocabularyIdPair[],
-      blacklistedAsKnown = false,
-      dueAsKnown = false,
-      suspendedAsKnown = false
-    ): Promise<number[]> {
+    private async lookupAndFilterVocabulary(vocabularyPairs: VocabularyIdPair[]): Promise<JpdbImportResult> {
       const chunkSize = 2500;
-      const filteredIds: number[] = [];
-      const targetStates = new Set(['never-forget', 'known']);
+      const knownStates = new Set(['never-forget', 'known']);
+      const result: JpdbImportResult = { knownIds: [], blacklistedIds: [], suspendedIds: [] };
 
-      // Add optional states based on parameters
-      if (blacklistedAsKnown) targetStates.add('blacklisted');
-      if (dueAsKnown) targetStates.add('due');
-      if (suspendedAsKnown) targetStates.add('suspended');
-
-      // Process vocabulary in chunks
       for (let i = 0; i < vocabularyPairs.length; i += chunkSize) {
         const chunk = vocabularyPairs.slice(i, i + chunkSize);
         const lookupList = chunk.map((vp) => [vp.id1, vp.id2]);
@@ -137,17 +123,18 @@ export const useJpdbApi = () => {
 
             if (!Array.isArray(states)) continue;
 
-            // Check if any state matches target states
-            const matchesTargetState = states.some((state: string) => targetStates.has(state));
-
-            if (matchesTargetState) {
-              filteredIds.push(id);
+            if (states.some((s: string) => s === 'blacklisted')) {
+              result.blacklistedIds.push(id);
+            } else if (states.some((s: string) => s === 'suspended')) {
+              result.suspendedIds.push(id);
+            } else if (states.some((s: string) => knownStates.has(s))) {
+              result.knownIds.push(id);
             }
           }
         }
       }
 
-      return filteredIds;
+      return result;
     }
 
     private async makeApiRequest(url: string, requestBody: any): Promise<any> {

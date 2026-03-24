@@ -9,6 +9,12 @@
   const props = defineProps<{
     word: Word;
     isCompact: boolean;
+    removable?: boolean;
+    removing?: boolean;
+  }>();
+
+  const emit = defineEmits<{
+    remove: [word: Word];
   }>();
 
   const convertToRuby = useConvertToRuby();
@@ -35,6 +41,15 @@
         <div class="text-gray-500 dark:text-gray-300 text-sm text-right">
           <VocabularyStatus :word="word" />
           x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
+          <Button
+            v-if="removable"
+            icon="pi pi-trash"
+            severity="danger"
+            text
+            size="small"
+            :loading="removing"
+            @click.stop="emit('remove', word)"
+          />
         </div>
       </div>
     </template>

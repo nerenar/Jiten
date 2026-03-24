@@ -24,4 +24,5 @@ export default defineNuxtPlugin(async (nuxtApp) => {
       console.error('Error initialising auth in plugin:', error);
     }
   }
+
 });

@@ -52,6 +52,7 @@ public partial class RequestController(
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 20,
         [FromQuery] bool mine = false,
+        [FromQuery] bool contributed = false,
         [FromQuery] string? search = null,
         [FromQuery] string? attachments = null)
     {
@@ -59,12 +60,21 @@ public partial class RequestController(
         if (string.IsNullOrEmpty(userId))
             return Results.Unauthorized();
 
-        limit = Math.Clamp(limit, 1, 50);
+        limit = Math.Clamp(limit, 1, mine || contributed ? 200 : 50);
 
         var query = context.MediaRequests.AsNoTracking().AsQueryable();
 
         if (mine)
             query = query.Where(r => r.RequesterId == userId);
+        else if (contributed)
+        {
+            var contributedRequestIds = context.MediaRequestComments
+                .Where(c => c.UserId == userId)
+                .Where(c => context.MediaRequestUploads.Any(u => u.MediaRequestCommentId == c.Id && !u.FileDeleted))
+                .Select(c => c.MediaRequestId)
+                .Distinct();
+            query = query.Where(r => contributedRequestIds.Contains(r.Id) && r.RequesterId != userId);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -636,6 +646,12 @@ public partial class RequestController(
                 var displayName = files.Length == 1
                     ? SanitiseFileName(files[0].FileName)
                     : string.Join(", ", files.Select(f => SanitiseFileName(f.FileName)));
+
+                if (displayName.Length > 255)
+                {
+                    var suffix = originalFileCount > 1 ? $"... (+{originalFileCount} files)" : "...";
+                    displayName = displayName[..(255 - suffix.Length)] + suffix;
+                }
 
                 using var ms = new MemoryStream();
                 using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, true))

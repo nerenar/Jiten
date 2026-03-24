@@ -132,6 +132,12 @@ public class MlCommands(CliContext context)
         */
     }
 
+    public async Task ExportMlTags(string outputDir)
+    {
+        var exporter = new MlExportCommand(context);
+        await exporter.Export(outputDir);
+    }
+
     public async Task ImportDeckDifficulty(string directoryPath)
     {
         if (!Directory.Exists(directoryPath))
