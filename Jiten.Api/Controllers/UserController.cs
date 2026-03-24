@@ -392,6 +392,7 @@ public class UserController(
 
         var cardsToAdd = new List<FsrsCard>();
         var logsToAdd = new List<FsrsReviewLog>();
+        var pendingLogKeys = new HashSet<(int WordId, int ReadingIndex, DateTime ReviewDateTime)>();
         var cardsToReplay = new List<FsrsCard>();
         int skipped = 0;
 
@@ -435,6 +436,10 @@ public class UserController(
                 var rating = MapJpdbGrade(review.Grade)!.Value;
 
                 if (card.CardId > 0 && existingLogSet.Contains((card.CardId, reviewDt)))
+                    continue;
+
+                var pendingKey = (jpdbCard.WordId, (int)readingIndex, reviewDt);
+                if (!pendingLogKeys.Add(pendingKey))
                     continue;
 
                 logsToAdd.Add(new FsrsReviewLog(card.CardId, rating, reviewDt) { Card = card });

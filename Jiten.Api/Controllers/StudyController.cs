@@ -1263,7 +1263,7 @@ public class StudyController(
             var globalDynamicDecks = studyDecks
                 .Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic).ToList();
 
-            if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly && studyDecks.Count > 0)
+            if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
             {
                 var mediaDeckIds = studyDecks
                     .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)

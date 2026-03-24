@@ -265,7 +265,7 @@
         <Button icon="pi pi-plus" label="Add Deck" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
         <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
         <Button
-          v-if="srsStore.studyDecks.length > 0"
+          v-if="srsStore.studyDecks.length > 0 || totalDue > 0"
           icon="pi pi-play"
           :label="totalDue > 0 ? `Study (${totalDue})` : 'Study'"
           :severity="totalDue > 0 ? 'success' : 'secondary'"
@@ -273,7 +273,7 @@
           @click="startStudy"
         />
         <Button
-          v-if="srsStore.studyDecks.length > 0"
+          v-if="srsStore.studyDecks.length > 0 || totalDue > 0"
           icon="pi pi-play"
           :badge="totalDue > 0 ? String(totalDue) : undefined"
           :severity="totalDue > 0 ? 'success' : 'secondary'"
@@ -309,7 +309,7 @@
 
     <!-- Due Summary Banner -->
     <div
-      v-else-if="srsStore.dueSummary && srsStore.studyDecks.length > 0"
+      v-else-if="srsStore.dueSummary"
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden"
     >
       <div class="grid grid-cols-2 md:grid-cols-4 divide-x divide-surface-200 dark:divide-surface-700">
@@ -363,7 +363,7 @@
 
     <!-- Streak & Mini Heatmap -->
     <div
-      v-if="srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0 && srsStore.studyDecks.length > 0"
+      v-if="srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0"
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4"
     >
       <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
