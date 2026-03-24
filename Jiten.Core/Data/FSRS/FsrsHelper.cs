@@ -39,6 +39,8 @@ public static class FsrsHelper
 
     private static double ClampDifficulty(double difficulty)
     {
+        if (double.IsNaN(difficulty) || double.IsInfinity(difficulty))
+            return 5.0;
         return Math.Clamp(difficulty, 1.0, 10.0);
     }
 
@@ -189,6 +191,10 @@ public static class FsrsHelper
 
     private static double ClampStability(double stability)
     {
-        return Math.Max(stability, FsrsConstants.StabilityMin);
+        if (double.IsNaN(stability) || double.IsNegativeInfinity(stability))
+            return FsrsConstants.StabilityMin;
+        if (double.IsPositiveInfinity(stability))
+            return FsrsConstants.StabilityMax;
+        return Math.Clamp(stability, FsrsConstants.StabilityMin, FsrsConstants.StabilityMax);
     }
 }

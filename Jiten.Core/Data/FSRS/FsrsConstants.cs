@@ -15,6 +15,8 @@ public static class FsrsConstants
     /// </summary>
     public const double StabilityMin = 0.001;
 
+    public const double StabilityMax = 36500.0;
+
     /// <summary>
     /// Default FSRS algorithm parameters optimized for general use
     /// </summary>

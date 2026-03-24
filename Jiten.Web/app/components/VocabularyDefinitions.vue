@@ -60,7 +60,14 @@
   <div v-if="!isCompact">
     <ul>
       <li v-for="definition in definitionsWithPartsOfSpeech" :key="definition.index" :class="{ 'opacity-40': isRestricted(definition) }">
-        <div v-if="definition.isDifferentPartOfSpeech" class="font-bold">{{ definition.partsOfSpeech.join(', ') }}</div>
+        <div v-if="definition.isDifferentPartOfSpeech" class="flex flex-wrap gap-1 mt-1 mb-0.5">
+          <Tooltip v-for="pos in definition.partsOfSpeech" :key="pos" :content="pos" placement="top">
+            <span
+              class="pos-badge"
+              :class="`pos-${posColorClass(abbreviatePos(pos))}`"
+            >{{ abbreviatePos(pos) }}</span>
+          </Tooltip>
+        </div>
         <span class="text-gray-400">{{ definition.index }}.</span> {{ definition.meanings.join('; ') }}
         <span v-for="f in definition.field" :key="f" class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">{{ f }}</span>
         <span v-for="d in definition.dial" :key="d" class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ d }}</span>

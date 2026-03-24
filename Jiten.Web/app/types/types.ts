@@ -845,6 +845,7 @@ export interface StudySettingsDto {
   reviewFrom: StudyReviewFrom;
   showPitchAccent: boolean;
   exampleSentencePosition: ExampleSentencePosition;
+  blurExampleSentence: boolean;
   showFrequencyRank: boolean;
   showKanjiBreakdown: boolean;
   showNextInterval: boolean;

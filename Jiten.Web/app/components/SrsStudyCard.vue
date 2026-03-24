@@ -101,6 +101,12 @@
     return sanitiseHtml(html);
   });
 
+  const exampleRevealed = ref(false);
+
+  watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
+    exampleRevealed.value = false;
+  });
+
   const extraSentences = ref<ExampleSentence[]>([]);
   const extraSentencesExpanded = ref(false);
   const canLoadMoreSentences = ref(true);
@@ -191,7 +197,7 @@
       <!-- Front (always visible) -->
       <div
         class="flex flex-col items-center"
-        :class="{ 'cursor-pointer': !isFlipped }"
+        :class="{ 'cursor-pointer min-h-[50vh]': !isFlipped }"
         :role="!isFlipped ? 'button' : undefined"
         :tabindex="!isFlipped ? 0 : undefined"
         :aria-label="!isFlipped ? 'Reveal answer' : undefined"
@@ -208,12 +214,16 @@
         </div>
         <div
           v-else
-          class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans"
+          class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans head-word"
           v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain)"
         />
         <!-- Example sentence on front -->
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full">
-          <blockquote class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full">
+          <blockquote
+            class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
+            :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
+            @click.stop="exampleRevealed = true"
+          >
             <div v-html="exampleSentenceHtml" class="text-base leading-relaxed" />
           </blockquote>
         </div>
@@ -248,8 +258,13 @@
           </template>
           <template v-else>
             <div v-for="def in fallbackDefinitions" :key="def.index">
-              <div v-if="def.showPos" class="font-bold mt-2">
-                {{ def.partsOfSpeech.join(', ') }}
+              <div v-if="def.showPos" class="flex flex-wrap gap-1 mt-2 mb-0.5">
+                <Tooltip v-for="pos in def.partsOfSpeech" :key="pos" :content="pos" placement="top">
+                  <span
+                    class="pos-badge"
+                    :class="`pos-${posColorClass(abbreviatePos(pos))}`"
+                  >{{ abbreviatePos(pos) }}</span>
+                </Tooltip>
               </div>
               <div>
                 <span class="text-gray-400">{{ def.index }}.</span> {{ def.meanings.join('; ') }}
@@ -265,7 +280,11 @@
         <!-- Example sentence (back) -->
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Back'" class="mb-4">
           <template v-if="exampleSentenceHtml">
-            <blockquote class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full">
+            <blockquote
+              class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
+              :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
+              @click.stop="exampleRevealed = true"
+            >
               <div v-html="exampleSentenceHtml" class="text-base leading-relaxed" />
             </blockquote>
             <div v-if="cardExample?.sourceDeck" class="flex items-center mt-1">
@@ -363,4 +382,9 @@
 :deep([data-pc-name="tablist"]) {
   background: transparent !important;
 }
+.head-word :deep(rt) {
+  font-size: 0.35em !important;
+  color: light-dark(var(--p-surface-700), var(--p-surface-400));
+}
+
 </style>

@@ -275,7 +275,7 @@
         <Button
           v-if="srsStore.studyDecks.length > 0 || totalDue > 0"
           icon="pi pi-play"
-          :badge="totalDue > 0 ? String(totalDue) : undefined"
+          :label="totalDue > 0 ? String(totalDue) : undefined"
           :severity="totalDue > 0 ? 'success' : 'secondary'"
           class="sm:!hidden"
           @click="startStudy"

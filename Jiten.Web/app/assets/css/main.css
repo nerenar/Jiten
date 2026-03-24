@@ -53,3 +53,26 @@ a:not(.p-button) {
 .p-inputnumber-stacked {
     inset-inline-end: auto !important;
 }
+
+.pos-badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.pos-blue { background: rgb(219 234 254); color: rgb(29 78 216); }
+.pos-green { background: rgb(220 252 231); color: rgb(21 128 61); }
+.pos-purple { background: rgb(237 233 254); color: rgb(109 40 217); }
+.pos-amber { background: rgb(254 243 199); color: rgb(180 83 9); }
+.pos-teal { background: rgb(204 251 241); color: rgb(15 118 110); }
+.pos-gray { background: rgb(243 244 246); color: rgb(75 85 99); }
+
+.dark-mode .pos-blue { background: rgb(30 58 138 / 0.3); color: rgb(147 197 253); }
+.dark-mode .pos-green { background: rgb(20 83 45 / 0.3); color: rgb(134 239 172); }
+.dark-mode .pos-purple { background: rgb(76 29 149 / 0.3); color: rgb(196 181 253); }
+.dark-mode .pos-amber { background: rgb(120 53 15 / 0.3); color: rgb(252 211 77); }
+.dark-mode .pos-teal { background: rgb(17 94 89 / 0.3); color: rgb(94 234 212); }
+.dark-mode .pos-gray { background: rgb(55 65 81 / 0.3); color: rgb(156 163 175); }

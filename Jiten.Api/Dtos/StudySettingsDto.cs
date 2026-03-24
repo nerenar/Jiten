@@ -62,6 +62,9 @@ public class StudySettingsDto
     [JsonPropertyName("exampleSentencePosition")]
     public ExampleSentencePosition ExampleSentencePosition { get; set; } = ExampleSentencePosition.Back;
 
+    [JsonPropertyName("blurExampleSentence")]
+    public bool BlurExampleSentence { get; set; }
+
     [JsonPropertyName("showFrequencyRank")]
     public bool ShowFrequencyRank { get; set; } = true;
 

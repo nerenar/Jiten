@@ -69,8 +69,13 @@
       minFrequency.value = deck.minFrequency;
       maxFrequency.value = deck.maxFrequency;
       targetPercentage.value = deck.targetPercentage ?? 80;
-      minOccurrences.value = deck.minOccurrences;
-      maxOccurrences.value = deck.maxOccurrences;
+      if (deck.minOccurrences) {
+        occurrenceFilterType.value = 'gte';
+        occurrenceThreshold.value = deck.minOccurrences;
+      } else if (deck.maxOccurrences) {
+        occurrenceFilterType.value = 'lte';
+        occurrenceThreshold.value = deck.maxOccurrences;
+      }
       excludeKana.value = deck.excludeKana;
       step.value = 'filters';
     } else if (deck.deckType === StudyDeckType.GlobalDynamic) {
@@ -125,8 +130,8 @@
   const minFrequency = ref(0);
   const maxFrequency = ref(30000);
   const targetPercentage = ref(80);
-  const minOccurrences = ref<number | undefined>(undefined);
-  const maxOccurrences = ref<number | undefined>(undefined);
+  const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
+  const occurrenceThreshold = ref(10);
   const excludeKana = ref(false);
   const adding = ref(false);
   const previewCount = ref<{ total: number; unlearned: number } | null>(null);
@@ -153,8 +158,8 @@
           minFrequency: minFrequency.value,
           maxFrequency: maxFrequency.value,
           targetPercentage: downloadMode.value === 'target' ? targetPercentage.value : undefined,
-          minOccurrences: downloadMode.value === 'occurrence' ? minOccurrences.value : undefined,
-          maxOccurrences: downloadMode.value === 'occurrence' ? maxOccurrences.value : undefined,
+          minOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'gte' ? occurrenceThreshold.value : undefined,
+          maxOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'lte' ? occurrenceThreshold.value : undefined,
           excludeKana: excludeKana.value,
         },
       });
@@ -174,7 +179,7 @@
       step, () => selectedDeck.value?.deckId,
       computedDownloadType, downloadType, deckOrder,
       minFrequency, maxFrequency, targetPercentage,
-      minOccurrences, maxOccurrences, excludeKana,
+      occurrenceFilterType, occurrenceThreshold, excludeKana,
     ],
     () => {
       if (step.value !== 'filters' || !selectedDeck.value) {
@@ -323,8 +328,8 @@
           minFrequency: minFrequency.value,
           maxFrequency: maxFrequency.value,
           targetPercentage: downloadMode.value === 'target' ? targetPercentage.value : undefined,
-          minOccurrences: downloadMode.value === 'occurrence' ? minOccurrences.value : undefined,
-          maxOccurrences: downloadMode.value === 'occurrence' ? maxOccurrences.value : undefined,
+          minOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'gte' ? occurrenceThreshold.value : undefined,
+          maxOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'lte' ? occurrenceThreshold.value : undefined,
           excludeKana: excludeKana.value,
         };
 
@@ -403,8 +408,8 @@
     minFrequency.value = 0;
     maxFrequency.value = 30000;
     targetPercentage.value = 80;
-    minOccurrences.value = undefined;
-    maxOccurrences.value = undefined;
+    occurrenceFilterType.value = 'gte';
+    occurrenceThreshold.value = 10;
     excludeKana.value = false;
     previewCount.value = null;
     globalName.value = '';
@@ -475,7 +480,7 @@
     v-model:visible="localVisible"
     :header="dialogHeader"
     modal
-    :style="{ width: step === 'static-import-preview' ? '550px' : '500px', maxWidth: '95vw' }"
+    :style="{ width: step === 'static-import-preview' ? '600px' : '550px', maxWidth: '95vw', minHeight: '450px' }"
     :pt="{ content: { class: 'p-4' } }"
   >
     <!-- Step: Choose deck type -->
@@ -570,13 +575,13 @@
           <Select v-model="downloadType" :options="downloadTypeOptions" option-label="label" option-value="value" class="w-full" />
         </div>
         <div v-if="downloadType !== DeckDownloadType.Full" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs mb-1">Min</label>
-            <InputNumber v-model="minFrequency" :min="0" class="w-full" />
+            <InputNumber v-model="minFrequency" :min="0" class="w-full [&_input]:w-full" />
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs mb-1">Max</label>
-            <InputNumber v-model="maxFrequency" :min="0" class="w-full" />
+            <InputNumber v-model="maxFrequency" :min="0" class="w-full [&_input]:w-full" />
           </div>
         </div>
       </template>
@@ -590,13 +595,22 @@
 
       <template v-if="downloadMode === 'occurrence'">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <div>
-            <label class="block text-xs mb-1">Min Occurrences</label>
-            <InputNumber v-model="minOccurrences" :min="1" class="w-full" />
+          <div class="min-w-0">
+            <label class="block text-xs mb-1">Filter Type</label>
+            <Select
+              v-model="occurrenceFilterType"
+              :options="[
+                { label: 'Over or equal to (≥)', value: 'gte' },
+                { label: 'Under or equal to (≤)', value: 'lte' },
+              ]"
+              option-value="value"
+              option-label="label"
+              class="w-full"
+            />
           </div>
-          <div>
-            <label class="block text-xs mb-1">Max Occurrences</label>
-            <InputNumber v-model="maxOccurrences" :min="1" class="w-full" />
+          <div class="min-w-0">
+            <label class="block text-xs mb-1">Threshold</label>
+            <InputNumber v-model="occurrenceThreshold" :min="1" :useGrouping="false" class="w-full [&_input]:w-full" />
           </div>
         </div>
       </template>
@@ -644,13 +658,13 @@
         <Textarea v-model="globalDescription" class="w-full" rows="2" :maxlength="2000" />
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-        <div>
+        <div class="min-w-0">
           <label class="block text-xs mb-1">Min Frequency Rank</label>
-          <InputNumber v-model="globalMinFreq" :min="1" class="w-full" />
+          <InputNumber v-model="globalMinFreq" :min="1" class="w-full [&_input]:w-full" />
         </div>
-        <div>
+        <div class="min-w-0">
           <label class="block text-xs mb-1">Max Frequency Rank</label>
-          <InputNumber v-model="globalMaxFreq" :min="1" class="w-full" />
+          <InputNumber v-model="globalMaxFreq" :min="1" class="w-full [&_input]:w-full" />
         </div>
       </div>
 

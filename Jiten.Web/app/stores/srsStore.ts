@@ -62,6 +62,7 @@ export const useSrsStore = defineStore('srs', () => {
     reviewFrom: 'AllTracked',
     showPitchAccent: true,
     exampleSentencePosition: 'Back',
+    blurExampleSentence: false,
     showFrequencyRank: true,
     showKanjiBreakdown: true,
     showNextInterval: false,

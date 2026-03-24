@@ -781,6 +781,45 @@ public class StudyController(
                     query = query.Where(dw => searchIds.Contains(dw.WordId));
                 }
 
+                switch ((DeckDownloadType)studyDeck.DownloadType)
+                {
+                    case DeckDownloadType.TopGlobalFrequency:
+                        query = query.Where(dw => context.WordFormFrequencies
+                            .Any(wff => wff.WordId == dw.WordId && wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                        wff.FrequencyRank >= studyDeck.MinFrequency && wff.FrequencyRank <= studyDeck.MaxFrequency));
+                        break;
+                    case DeckDownloadType.TopDeckFrequency:
+                    {
+                        var rangeIds = await context.DeckWords.AsNoTracking()
+                            .Where(dw => dw.DeckId == studyDeck.DeckId)
+                            .OrderByDescending(dw => dw.Occurrences)
+                            .Skip(studyDeck.MinFrequency)
+                            .Take(studyDeck.MaxFrequency - studyDeck.MinFrequency)
+                            .Select(dw => dw.DeckWordId)
+                            .ToListAsync();
+                        query = query.Where(dw => rangeIds.Contains(dw.DeckWordId));
+                        break;
+                    }
+                    case DeckDownloadType.TopChronological:
+                    {
+                        var rangeIds = await context.DeckWords.AsNoTracking()
+                            .Where(dw => dw.DeckId == studyDeck.DeckId)
+                            .OrderBy(dw => dw.DeckWordId)
+                            .Skip(studyDeck.MinFrequency)
+                            .Take(studyDeck.MaxFrequency - studyDeck.MinFrequency)
+                            .Select(dw => dw.DeckWordId)
+                            .ToListAsync();
+                        query = query.Where(dw => rangeIds.Contains(dw.DeckWordId));
+                        break;
+                    }
+                    case DeckDownloadType.OccurrenceCount:
+                        if (studyDeck.MinOccurrences.HasValue)
+                            query = query.Where(dw => dw.Occurrences >= studyDeck.MinOccurrences.Value);
+                        if (studyDeck.MaxOccurrences.HasValue)
+                            query = query.Where(dw => dw.Occurrences <= studyDeck.MaxOccurrences.Value);
+                        break;
+                }
+
                 IOrderedQueryable<DeckWord> sorted = sortBy switch
                 {
                     "deckFreq" => sortOrder == SortOrder.Ascending
@@ -804,6 +843,18 @@ public class StudyController(
                     .Select(d => new { d.WordId, ReadingIndex = (short)d.ReadingIndex, d.Occurrences })
                     .ToListAsync();
                 allItems = mediaDeckItems.Select(d => (d.WordId, d.ReadingIndex, d.Occurrences)).ToList();
+
+                if ((DeckDownloadType)studyDeck.DownloadType == DeckDownloadType.TargetCoverage && studyDeck.TargetPercentage.HasValue)
+                {
+                    var deck = await context.Decks.AsNoTracking()
+                        .FirstOrDefaultAsync(d => d.DeckId == studyDeck.DeckId);
+                    if (deck != null)
+                    {
+                        var (_, targetKeys) = await deckWordResolver.CountTargetCoverageWords(
+                            studyDeck.DeckId!.Value, deck, studyDeck.TargetPercentage.Value, false);
+                        allItems = allItems.Where(i => targetKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
+                    }
+                }
 
                 if (studyDeck.ExcludeKana)
                 {
@@ -1186,24 +1237,32 @@ public class StudyController(
             existingKeys?.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
         }
 
-        var masteredSetIds = await userContext.UserWordSetStates
+        var wordSetStates = await userContext.UserWordSetStates
             .AsNoTracking()
-            .Where(uwss => uwss.UserId == userId && uwss.State == WordSetStateType.Mastered)
-            .Select(uwss => uwss.SetId)
+            .Where(uwss => uwss.UserId == userId)
+            .Select(uwss => new { uwss.SetId, uwss.State })
             .ToListAsync();
 
-        if (masteredSetIds.Count > 0)
+        if (wordSetStates.Count > 0)
         {
+            var allSetIds = wordSetStates.Select(s => s.SetId).ToList();
+            var masteredSetIdSet = wordSetStates
+                .Where(s => s.State == WordSetStateType.Mastered)
+                .Select(s => s.SetId)
+                .ToHashSet();
+
             var setMembers = await context.WordSetMembers
                 .AsNoTracking()
-                .Where(wsm => masteredSetIds.Contains(wsm.SetId))
-                .Select(wsm => new { wsm.WordId, wsm.ReadingIndex })
+                .Where(wsm => allSetIds.Contains(wsm.SetId))
+                .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
                 .ToListAsync();
 
             foreach (var m in setMembers)
             {
-                if (wordFormCache.GetKanaIndexesForKanji(m.WordId, (byte)m.ReadingIndex) != null)
+                if (masteredSetIdSet.Contains(m.SetId)
+                    && wordFormCache.GetKanaIndexesForKanji(m.WordId, (byte)m.ReadingIndex) != null)
                     knownKanjiWordIds.Add(m.WordId);
+                existingKeys?.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
             }
         }
 
@@ -1807,6 +1866,23 @@ public class StudyController(
                 existingKeys.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
             }
 
+            var wordSetIds = await userContext.UserWordSetStates
+                .AsNoTracking()
+                .Where(uwss => uwss.UserId == userId)
+                .Select(uwss => uwss.SetId)
+                .ToListAsync();
+
+            if (wordSetIds.Count > 0)
+            {
+                var setMembers = await context.WordSetMembers
+                    .AsNoTracking()
+                    .Where(wsm => wordSetIds.Contains(wsm.SetId))
+                    .Select(wsm => new { wsm.WordId, wsm.ReadingIndex })
+                    .ToListAsync();
+                foreach (var m in setMembers)
+                    existingKeys.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
+            }
+
             var studyDecks = await userContext.UserStudyDecks
                 .AsNoTracking()
                 .Where(sd => sd.UserId == userId && sd.IsActive)
@@ -1825,6 +1901,9 @@ public class StudyController(
                 .Select(sd => sd.UserStudyDeckId).ToList();
             if (staticDeckIds.Count > 0)
                 candidateKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
+
+            foreach (var sd in studyDecks.Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
+                candidateKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeys(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter));
 
             candidateKeys.ExceptWith(existingKeys);
             newCardsAvailable = Math.Min(candidateKeys.Count, newCardBudget);
