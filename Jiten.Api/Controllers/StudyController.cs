@@ -2655,7 +2655,8 @@ public class StudyController(
                 if (request.Format == DeckFormat.Yomitan)
                     return Results.BadRequest("Yomitan format is not supported for static word list decks.");
 
-                var words = await deckWordResolver.ResolveStaticDeckWords(id, (int)request.Order);
+                var words = await deckWordResolver.ResolveStaticDeckWords(id, (int)request.Order,
+                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
                 deckWords = words.Select(w => (w.WordId, w.ReadingIndex, Math.Max(1, w.Occurrences))).ToList();
                 deckTitle = studyDeck.Name;
                 break;
@@ -2736,7 +2737,8 @@ public class StudyController(
             }
             case StudyDeckType.StaticWordList:
             {
-                var (staticCount, _) = await deckWordResolver.CountStaticDeckWords(id, request.ExcludeKana);
+                var (staticCount, _) = await deckWordResolver.CountStaticDeckWords(id, request.ExcludeKana,
+                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
                 count = staticCount;
                 break;
             }

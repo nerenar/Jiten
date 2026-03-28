@@ -125,7 +125,7 @@ export function useClientApkg() {
 
     const initSqlJs = (await import('sql.js')).default;
     const SQL = await initSqlJs({
-      locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/${file}`,
+      locateFile: (file: string) => `/${file}`,
     });
 
     const dbBuffer = await collectionFile.async('uint8array');

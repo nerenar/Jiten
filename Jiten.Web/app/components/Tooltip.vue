@@ -1,5 +1,5 @@
 <template>
-  <div ref="wrapperRef" style="display: contents">
+  <div ref="wrapperRef" :style="block ? undefined : { display: 'contents' }">
     <slot :toggle="toggle" :show="show" :hide="hide" />
   </div>
 
@@ -61,7 +61,9 @@
   });
 
   const wrapperRef = ref<HTMLElement | null>(null);
-  const referenceEl = computed<HTMLElement | null>(() => wrapperRef.value?.firstElementChild as HTMLElement | null);
+  const referenceEl = computed<HTMLElement | null>(() =>
+    props.block ? wrapperRef.value : wrapperRef.value?.firstElementChild as HTMLElement | null
+  );
   const floatingRef = ref<HTMLElement | null>(null);
   const arrowRef = ref<HTMLElement | null>(null);
   const isVisible = ref(false);

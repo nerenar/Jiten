@@ -265,7 +265,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return new GlobalDynamicResult(words, wasTruncated);
     }
 
-    public async Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order)
+    public async Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order,
+        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false)
     {
         var baseQuery = userContext.UserStudyDeckWords
             .AsNoTracking()
@@ -295,7 +296,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 return rankA.CompareTo(rankB);
             });
 
-            return words;
+            return FilterExcludedWords(words, await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords));
         }
 
         if (order == (int)DeckOrder.Random)
@@ -310,6 +311,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 })
                 .ToListAsync();
 
+            words = FilterExcludedWords(words, await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords));
+
             var rng = Random.Shared;
             for (var i = words.Count - 1; i > 0; i--)
             {
@@ -323,7 +326,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             ? baseQuery.OrderByDescending(w => w.Occurrences)
             : baseQuery.OrderBy(w => w.SortOrder);
 
-        return await ordered
+        var result = await ordered
             .Select(w => new ResolvedWord
             {
                 WordId = w.WordId,
@@ -332,6 +335,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 SortOrder = w.SortOrder
             })
             .ToListAsync();
+
+        return FilterExcludedWords(result, await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords));
     }
 
     public async Task<HashSet<long>> GetGlobalDynamicWordKeys(int? minFreq, int? maxFreq, string? posFilter)
@@ -520,7 +525,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return (resultKeys.Count, resultKeys);
     }
 
-    public async Task<(int Count, HashSet<long> WordKeys)> CountStaticDeckWords(int studyDeckId, bool excludeKana)
+    public async Task<(int Count, HashSet<long> WordKeys)> CountStaticDeckWords(int studyDeckId, bool excludeKana,
+        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false)
     {
         IQueryable<UserStudyDeckWord> query = userContext.UserStudyDeckWords
             .AsNoTracking()
@@ -535,7 +541,18 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             .ToListAsync();
 
         var keySet = pairs.Select(p => WordFormHelper.EncodeWordKey(p.WordId, p.ReadingIndex)).ToHashSet();
+
+        var excludedKeys = await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords);
+        if (excludedKeys.Count > 0)
+            keySet.ExceptWith(excludedKeys);
+
         return (keySet.Count, keySet);
+    }
+
+    private static List<ResolvedWord> FilterExcludedWords(List<ResolvedWord> words, HashSet<long> excludedKeys)
+    {
+        if (excludedKeys.Count == 0) return words;
+        return words.Where(w => !excludedKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex))).ToList();
     }
 
     private async Task<HashSet<long>> BuildExcludedWordKeys(bool excludeMatureMasteredBlacklisted, bool excludeAllTrackedWords)

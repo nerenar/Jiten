@@ -903,6 +903,28 @@
                 </div>
               </div>
               <div
+                v-if="authStore.isAuthenticated"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
+                @click="excludeMatureMasteredBlacklisted = !excludeMatureMasteredBlacklisted"
+              >
+                <Checkbox v-model="excludeMatureMasteredBlacklisted" binary class="mt-1" @click.stop />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Exclude Mature, Mastered & Blacklisted Vocabulary</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Removes words that are mature (21+ day review interval), mastered, or blacklisted.</div>
+                </div>
+              </div>
+              <div
+                v-if="authStore.isAuthenticated"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
+                @click="excludeAllTrackedWords = !excludeAllTrackedWords"
+              >
+                <Checkbox v-model="excludeAllTrackedWords" binary class="mt-1" @click.stop />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Exclude All Tracked Vocabulary</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Removes all words in your vocabulary list, regardless of their status.</div>
+                </div>
+              </div>
+              <div
                 v-if="showCustomDefinitions"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
                 :class="hasCustomDictionaries

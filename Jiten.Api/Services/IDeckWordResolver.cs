@@ -33,12 +33,14 @@ public interface IDeckWordResolver
     Task<HashSet<long>> GetStaticDeckWordKeys(List<int> studyDeckIds);
     Task<GlobalDynamicResult> ResolveGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter,
         bool excludeKana, bool excludeMatureMasteredBlacklisted, bool excludeAllTrackedWords);
-    Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order);
+    Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order,
+        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
     Task<HashSet<long>> GetGlobalDynamicWordKeys(int? minFreq, int? maxFreq, string? posFilter);
     Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds);
     Task<(int Count, bool WasTruncated)> CountGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
     Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana);
     Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana);
-    Task<(int Count, HashSet<long> WordKeys)> CountStaticDeckWords(int studyDeckId, bool excludeKana);
+    Task<(int Count, HashSet<long> WordKeys)> CountStaticDeckWords(int studyDeckId, bool excludeKana,
+        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
 }
