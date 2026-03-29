@@ -25,6 +25,7 @@ public class SrsController(
     ICurrentUserService currentUserService,
     ISrsDebounceService debounceService,
     IStudySessionService sessionService,
+    IWordFormSiblingCache wordFormCache,
     SrsRecomputeJob recomputeJob,
     ILogger<SrsController> logger) : ControllerBase
 {
@@ -485,6 +486,8 @@ public class SrsController(
                 {
                     card.State = FsrsState.Mastered;
                 }
+
+                await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, userId, request.WordId, request.ReadingIndex);
 
                 break;
 

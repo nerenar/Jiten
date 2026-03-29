@@ -280,6 +280,17 @@ public class UserController(
         var blacklistedSet = blacklistedIds.ToHashSet();
         var suspendedSet = suspendedIds.ToHashSet();
 
+        var allImportCardKeys = new HashSet<(int WordId, byte ReadingIndex)>();
+        foreach (var word in jmdictWords)
+        {
+            var indices = GetReadingIndicesToImport(formFreqsByWord.GetValueOrDefault(word.WordId), request.FrequencyThreshold);
+            foreach (var i in indices)
+                allImportCardKeys.Add((word.WordId, (byte)i));
+        }
+        foreach (var k in alreadyKnownSet)
+            allImportCardKeys.Add((k.WordId, (byte)k.Item2));
+        var importCardsByWord = WordFormHelper.GroupCardKeysByWord(allImportCardKeys);
+
         foreach (var word in jmdictWords)
         {
             var wordFormFreqs = formFreqsByWord.GetValueOrDefault(word.WordId);
@@ -292,6 +303,9 @@ public class UserController(
             foreach (var i in readingIndicesToImport)
             {
                 if (alreadyKnownSet.Contains((word.WordId, i)))
+                    continue;
+
+                if (WordFormHelper.IsRedundantKanaCard(wordFormCache, word.WordId, (byte)i, importCardsByWord))
                     continue;
 
                 toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow, lastReview: DateTime.UtcNow,
@@ -455,6 +469,23 @@ public class UserController(
             }
 
             cardsToReplay.Add(card);
+        }
+
+        var allJpdbCardKeys = cardsToReplay.Select(c => (c.WordId, c.ReadingIndex))
+            .Concat(existingCards.Values.Select(c => (c.WordId, c.ReadingIndex)))
+            .ToHashSet();
+        var jpdbCardsByWord = WordFormHelper.GroupCardKeysByWord(allJpdbCardKeys);
+
+        var redundantCardSet = cardsToAdd
+            .Where(c => WordFormHelper.IsRedundantKanaCard(wordFormCache, c.WordId, c.ReadingIndex, jpdbCardsByWord))
+            .ToHashSet();
+
+        if (redundantCardSet.Count > 0)
+        {
+            cardsToAdd.RemoveAll(c => redundantCardSet.Contains(c));
+            cardsToReplay.RemoveAll(c => redundantCardSet.Contains(c));
+            logsToAdd.RemoveAll(l => redundantCardSet.Contains(l.Card));
+            skipped += redundantCardSet.Count;
         }
 
         if (cardsToAdd.Count > 0)
@@ -739,6 +770,25 @@ public class UserController(
             }
         }
 
+        var allAnkiCardKeys = processedPairs.Keys
+            .Concat(existingCardsMap.Keys.Select(k => (k.WordId, k.ReadingIndex)))
+            .ToHashSet();
+        var ankiCardsByWord = WordFormHelper.GroupCardKeysByWord(allAnkiCardKeys);
+
+        var redundantAnkiKeys = cardsToAdd.Concat(cardsToUpdate)
+            .Where(c => WordFormHelper.IsRedundantKanaCard(wordFormCache, c.WordId, c.ReadingIndex, ankiCardsByWord))
+            .Select(c => (c.WordId, c.ReadingIndex))
+            .ToHashSet();
+
+        if (redundantAnkiKeys.Count > 0)
+        {
+            cardsToAdd.RemoveAll(c => redundantAnkiKeys.Contains((c.WordId, c.ReadingIndex)));
+            cardsToUpdate.RemoveAll(c => redundantAnkiKeys.Contains((c.WordId, c.ReadingIndex)));
+            foreach (var key in redundantAnkiKeys)
+                processedPairs.Remove(key);
+            skippedCount += redundantAnkiKeys.Count;
+        }
+
         // Step 4: Bulk insert/update with transaction
         if (cardsToAdd.Count == 0 && cardsToUpdate.Count == 0)
         {
@@ -835,6 +885,10 @@ public class UserController(
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
         await userService.AddKnownWord(wordId, readingIndex);
+
+        await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, userId, wordId, readingIndex);
+        await userContext.SaveChangesAsync();
+
         return Results.Ok();
     }
 
@@ -895,11 +949,18 @@ public class UserController(
 
         var alreadyKnownSet = alreadyKnown.Select(uk => (uk.WordId, (short)uk.ReadingIndex)).ToHashSet();
 
+        var allFreqCardKeys = targetReadings.Select(r => (r.WordId, (byte)r.ReadingIndex))
+            .Concat(alreadyKnown.Select(k => (k.WordId, k.ReadingIndex)))
+            .ToHashSet();
+        var freqCardsByWord = WordFormHelper.GroupCardKeysByWord(allFreqCardKeys);
         List<FsrsCard> toInsert = new();
 
         foreach (var target in targetReadings)
         {
             if (alreadyKnownSet.Contains((target.WordId, target.ReadingIndex)))
+                continue;
+
+            if (WordFormHelper.IsRedundantKanaCard(wordFormCache, target.WordId, (byte)target.ReadingIndex, freqCardsByWord))
                 continue;
 
             toInsert.Add(new FsrsCard(userId, target.WordId, (byte)target.ReadingIndex,
@@ -1200,6 +1261,7 @@ public class UserController(
                                     Due = new DateTimeOffset(c.Due).ToUnixTimeSeconds(), LastReview = c.LastReview.HasValue
                                         ? new DateTimeOffset(c.LastReview.Value).ToUnixTimeSeconds()
                                         : null,
+                                    CreatedAt = new DateTimeOffset(c.CreatedAt).ToUnixTimeSeconds(),
                                     ReviewLogs = c.ReviewLogs.OrderBy(r => r.ReviewDateTime)
                                                   .Select(r => new FsrsReviewLogExportDto
                                                                {
@@ -1406,9 +1468,17 @@ public class UserController(
                                                   .ToDictionaryAsync(w => w.WordId);
 
         var validCards = new List<FsrsCardExportDto>(exportDto.Cards.Count);
+        int skippedNew = 0;
+        int skippedRedundant = 0;
 
         foreach (var card in exportDto.Cards)
         {
+            if (card.State == FsrsState.New)
+            {
+                skippedNew++;
+                continue;
+            }
+
             if (!wordValidationMap.TryGetValue(card.WordId, out var wordInfo))
             {
                 result.ValidationErrors.Add($"WordId {card.WordId} does not exist in JMDict");
@@ -1423,6 +1493,27 @@ public class UserController(
 
             validCards.Add(card);
         }
+
+        var importWordIds = validCards.Select(c => c.WordId).Distinct().ToList();
+        var existingUserCardKeys = await userContext.FsrsCards
+            .AsNoTracking()
+            .Where(c => c.UserId == userId && importWordIds.Contains(c.WordId))
+            .Select(c => new { c.WordId, c.ReadingIndex })
+            .ToListAsync();
+
+        var allBackupCardKeys = validCards.Select(c => (c.WordId, c.ReadingIndex))
+            .Concat(existingUserCardKeys.Select(k => (k.WordId, k.ReadingIndex)))
+            .ToHashSet();
+        var backupCardsByWord = WordFormHelper.GroupCardKeysByWord(allBackupCardKeys);
+        validCards.RemoveAll(c =>
+        {
+            if (!WordFormHelper.IsRedundantKanaCard(wordFormCache, c.WordId, c.ReadingIndex, backupCardsByWord))
+                return false;
+            skippedRedundant++;
+            return true;
+        });
+
+        result.CardsSkipped += skippedNew + skippedRedundant;
 
         if (validCards.Count == 0)
         {
@@ -1463,6 +1554,8 @@ public class UserController(
                     existingCard.LastReview = cardDto.LastReview.HasValue
                         ? DateTimeOffset.FromUnixTimeSeconds(cardDto.LastReview.Value).UtcDateTime
                         : null;
+                    if (cardDto.CreatedAt > 0)
+                        existingCard.CreatedAt = DateTimeOffset.FromUnixTimeSeconds(cardDto.CreatedAt).UtcDateTime;
 
                     // Replace logs: Clear old ones, Add new ones
                     userContext.FsrsReviewLogs.RemoveRange(existingCard.ReviewLogs);
@@ -1491,6 +1584,9 @@ public class UserController(
                                       LastReview = cardDto.LastReview.HasValue
                                           ? DateTimeOffset.FromUnixTimeSeconds(cardDto.LastReview.Value).UtcDateTime
                                           : null,
+                                      CreatedAt = cardDto.CreatedAt > 0
+                                          ? DateTimeOffset.FromUnixTimeSeconds(cardDto.CreatedAt).UtcDateTime
+                                          : DateTime.UtcNow,
                                       ReviewLogs = uniqueIncomingLogs.Select(l => new FsrsReviewLog
                                                                                   {
                                                                                       Rating = l.Rating, ReviewDateTime = DateTimeOffset
@@ -1518,8 +1614,8 @@ public class UserController(
             await userContext.SaveChangesAsync();
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
-            logger.LogInformation("Import stats: Imported={Imported}, Updated={Updated}, Skipped={Skipped}",
-                                  result.CardsImported, result.CardsUpdated, result.CardsSkipped);
+            logger.LogInformation("Import stats: Imported={Imported}, Updated={Updated}, Skipped={Skipped}, SkippedNew={SkippedNew}, SkippedRedundant={SkippedRedundant}",
+                                  result.CardsImported, result.CardsUpdated, result.CardsSkipped, skippedNew, skippedRedundant);
 
             return Results.Ok(result);
         }

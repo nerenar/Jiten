@@ -32,6 +32,9 @@ public class FsrsCardExportDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? LastReview { get; set; }
 
+    [JsonPropertyName("ca")]
+    public long CreatedAt { get; set; }
+
     [JsonPropertyName("l")]
     public List<FsrsReviewLogExportDto> ReviewLogs { get; set; } = [];
 }

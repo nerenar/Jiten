@@ -1,4 +1,5 @@
 using Jiten.Api.Dtos;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,52 @@ namespace Jiten.Api.Helpers;
 
 public static class WordFormHelper
 {
+    /// <summary>
+    /// Returns true if the card at (wordId, readingIndex) is a redundant kana form,
+    /// meaning it's a kana reading AND at least one kanji reading for the same word
+    /// exists in <paramref name="cardKeysByWord"/>.
+    /// </summary>
+    public static bool IsRedundantKanaCard(
+        IWordFormSiblingCache cache, int wordId, byte readingIndex,
+        Dictionary<int, List<byte>> cardKeysByWord)
+    {
+        if (cache.GetKanjiIndexesForKana(wordId, readingIndex) == null)
+            return false;
+        if (!cardKeysByWord.TryGetValue(wordId, out var siblings))
+            return false;
+        return siblings.Any(ri => cache.GetKanaIndexesForKanji(wordId, ri) != null);
+    }
+
+    public static Dictionary<int, List<byte>> GroupCardKeysByWord(
+        HashSet<(int WordId, byte ReadingIndex)> allCardKeys)
+    {
+        var result = new Dictionary<int, List<byte>>();
+        foreach (var (wordId, readingIndex) in allCardKeys)
+        {
+            if (!result.TryGetValue(wordId, out var list))
+            {
+                list = new List<byte>();
+                result[wordId] = list;
+            }
+            list.Add(readingIndex);
+        }
+        return result;
+    }
+
+    public static async Task RemoveRedundantKanaSrsCards(
+        UserDbContext userContext, IWordFormSiblingCache cache,
+        string userId, int wordId, byte readingIndex)
+    {
+        var kanaIndexes = cache.GetKanaIndexesForKanji(wordId, readingIndex);
+        if (kanaIndexes is not { Length: > 0 })
+            return;
+        var cards = await userContext.FsrsCards
+            .Where(c => c.UserId == userId && c.WordId == wordId && kanaIndexes.Contains(c.ReadingIndex))
+            .ToListAsync();
+        if (cards.Count > 0)
+            userContext.FsrsCards.RemoveRange(cards);
+    }
+
     public static WordFormDto ToFormDto(JmDictWordForm form, JmDictWordFormFrequency? freq, Dictionary<int, int>? usedInMediaByType = null)
     {
         return new WordFormDto

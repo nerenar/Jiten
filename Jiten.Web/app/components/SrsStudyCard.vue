@@ -349,7 +349,7 @@
           <div v-if="pitchAccents" class="mb-3">
             <h3 class="text-gray-500 dark:text-gray-300 text-sm mb-2">Pitch accent</h3>
             <div class="flex flex-wrap gap-2">
-              <PitchDiagram
+              <LazyPitchDiagram
                 v-for="pitch in pitchAccents"
                 :key="pitch"
                 :reading="pitchReadingText"
