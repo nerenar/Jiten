@@ -338,7 +338,10 @@ public partial class AdminController(
         if (model.File is { Length: > 0 })
         {
             var (text, stats) = await GetTextFromFile(model.File);
-            deck.RawText!.RawText = text;
+            if (deck.RawText != null)
+                deck.RawText.RawText = text;
+            else
+                deck.RawText = new DeckRawText(text);
             if (stats.DurationMs > 0)
             {
                 deck.SpeechDuration = stats.DurationMs;

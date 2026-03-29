@@ -39,6 +39,7 @@
   }
 
   const selectedFile = ref<File | null>(null);
+  const parentTextFile = ref<File | null>(null);
   const originalTitle = ref('');
   const romajiTitle = ref('');
   const englishTitle = ref('');
@@ -227,6 +228,12 @@
       const file = event.files[0];
       coverImage.value = file;
       coverImageUrl.value = null;
+    }
+  }
+
+  function handleParentTextFileUpload(event: { files: File[] }) {
+    if (event.files && event.files.length > 0) {
+      parentTextFile.value = event.files[0];
     }
   }
 
@@ -604,6 +611,10 @@
         formData.append('coverImage', coverImage.value);
       } else if (coverImageUrl.value) {
         formData.append('coverImageUrl', coverImageUrl.value);
+      }
+
+      if (parentTextFile.value) {
+        formData.append('file', parentTextFile.value);
       }
 
       if (links.value && links.value.length > 0) {
@@ -1116,6 +1127,33 @@
             <Button label="Add" @click="addRelationship" :disabled="!newRelationship.targetDeckId || !newRelationship.relationshipType || !newRelationship.targetTitle" />
           </template>
         </Dialog>
+
+        <!-- Replace text file (parent decks without children) -->
+        <div v-if="!response?.subDecks?.length && !subdecks.length" class="mt-6">
+          <h3 class="text-lg font-medium mb-4">Text File</h3>
+          <Card>
+            <template #content>
+              <div v-if="parentTextFile" class="flex items-center gap-2">
+                <span class="text-sm text-gray-600">{{ parentTextFile.name }}</span>
+                <Button class="p-button-danger p-button-text p-button-sm" @click="parentTextFile = null">
+                  <Icon name="material-symbols-light:close" size="1.2em" />
+                </Button>
+              </div>
+              <FileUpload
+                v-else
+                mode="advanced"
+                :auto="true"
+                choose-label="Replace current text file"
+                :multiple="false"
+                class="w-full subdeck-file-upload"
+                :custom-upload="true"
+                :show-upload-button="false"
+                :show-cancel-button="false"
+                @select="handleParentTextFileUpload"
+              />
+            </template>
+          </Card>
+        </div>
 
         <!-- Subdecks section -->
         <div class="mt-6">
