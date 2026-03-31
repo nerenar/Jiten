@@ -72,7 +72,6 @@ export default defineNuxtConfig({
   modules: [
     '@primevue/nuxt-module',
     '@nuxt/icon',
-    '@nuxtjs/google-fonts',
     '@pinia/nuxt',
     '@nuxtjs/seo',
     '@nuxt/scripts',
@@ -89,18 +88,6 @@ export default defineNuxtConfig({
         },
       },
     },
-  },
-  googleFonts: {
-    families: {
-      'Noto+Sans+JP': {
-        wght: [400, 700],
-        ital: [400, 700], // if you need italic
-      },
-    },
-    display: 'swap',
-    preload: true,
-    useStylesheet: true,
-    download: false,
   },
   vite: {
     plugins: [tailwindcss()],

@@ -132,7 +132,7 @@
         <h3 class="italic text-sm px-6">This shows how much text coverage you'll have if you know the most X frequent words in that work.</h3>
       </template>
       <template #content>
-        <CoverageChart class="hidden sm:block" v-if="curveData" :curve-data="curveData" />
+        <LazyCoverageChart class="hidden sm:block" v-if="curveData" :curve-data="curveData" />
         <div v-else class="text-center text-gray-500 py-8">No curve data available</div>
 
         <h2 class="text-xl font-bold pt-6">Milestones</h2>
@@ -173,7 +173,7 @@
         <template #content>
           <template v-if="difficultyData.progression && difficultyData.progression.length > 0">
             <!-- Desktop: Chart -->
-            <DifficultyProgressionChart
+            <LazyDifficultyProgressionChart
               class="hidden sm:block"
               :progression="difficultyData.progression"
               :overall-difficulty="difficultyData.difficulty"
@@ -198,7 +198,7 @@
           <h3 class="italic text-sm">Shows the difficulty level at or below which X% of the text falls.</h3>
 
           <!-- Desktop: Chart -->
-          <DecilesChart
+          <LazyDecilesChart
             class="hidden sm:block"
             v-if="difficultyData.deciles && Object.keys(difficultyData.deciles).length > 0"
             :deciles="difficultyData.deciles"

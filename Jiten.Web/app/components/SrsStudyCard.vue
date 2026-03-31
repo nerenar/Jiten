@@ -205,11 +205,16 @@
         @keydown.enter="!isFlipped && emit('flip')"
         @keydown.space.prevent="!isFlipped && emit('flip')"
       >
-        <div class="text-sm mb-4 uppercase tracking-wider" :class="srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'text-red-400 dark:text-red-400' : 'text-surface-400 dark:text-surface-300'">
+        <div v-if="srsStore.studySettings.showCardStatus" class="text-sm mb-4 uppercase tracking-wider" :class="srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'text-red-400 dark:text-red-400' : 'text-surface-400 dark:text-surface-300'">
           {{ srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'Again' : card.isNewCard ? 'New' : 'Review' }}
         </div>
         <!-- Plain text before flip, ruby text after flip -->
-        <div v-if="!isFlipped" class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans">
+        <div
+          v-if="!isFlipped && srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || card.isNewCard)"
+          class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans head-word"
+          v-html="convertToRuby(card.wordText || card.wordTextPlain)"
+        />
+        <div v-else-if="!isFlipped" class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans">
           {{ card.wordTextPlain }}
         </div>
         <div
@@ -218,7 +223,7 @@
           v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain)"
         />
         <!-- Example sentence on front -->
-        <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full">
+        <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full" @click.stop>
           <blockquote
             class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
             :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
@@ -226,6 +231,60 @@
           >
             <div v-html="exampleSentenceHtml" class="text-base leading-relaxed" />
           </blockquote>
+          <div v-if="cardExample?.sourceDeck" class="flex items-center mt-1">
+            <span class="text-xs italic mr-2 ml-4">Source:</span>
+            <div class="inline-flex items-center text-xs flex-wrap">
+              <NuxtLink
+                v-if="cardExample.sourceParent"
+                :to="`/decks/media/${cardExample.sourceParent.deckId}/detail`"
+                target="_blank"
+                class="hover:underline text-primary-600"
+              >
+                {{ localiseTitle(cardExample.sourceParent) }}
+              </NuxtLink>
+              <span v-if="cardExample.sourceParent" class="mx-1">-</span>
+              <NuxtLink
+                :to="`/decks/media/${cardExample.sourceDeck.deckId}/detail`"
+                target="_blank"
+                class="hover:underline text-primary-600"
+              >
+                {{ localiseTitle(cardExample.sourceDeck) }}
+              </NuxtLink>
+              &nbsp;
+              ({{ getMediaTypeText(cardExample.sourceDeck.mediaType) }})
+            </div>
+          </div>
+
+          <button
+            class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1"
+            @pointerdown.stop
+            @click="toggleExtraSentences"
+          >
+            <i :class="extraSentencesExpanded ? 'pi pi-chevron-up' : 'pi pi-plus'" class="text-[0.6rem]" />
+            {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
+          </button>
+
+          <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
+            <ExampleSentenceEntry
+              v-for="(sentence, i) in extraSentences"
+              :key="i"
+              :example-sentence="sentence"
+              :show-source="true"
+            />
+            <div v-if="isLoadingMoreSentences" class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
+              <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+            </div>
+            <button
+              v-if="extraSentences.length > 0 && canLoadMoreSentences"
+              class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1"
+              :disabled="isLoadingMoreSentences"
+              @pointerdown.stop
+              @click="loadMoreSentences"
+            >
+              <i class="pi pi-plus text-[0.6rem]" />
+              Load more
+            </button>
+          </div>
         </div>
 
         <div v-if="!isFlipped" class="text-sm text-surface-400 dark:text-surface-300 mt-6">
@@ -362,11 +421,14 @@
         <KanjiBreakdown v-if="srsStore.studySettings.showKanjiBreakdown" :key="`${card.wordId}-${card.readingIndex}`" :word-id="card.wordId" :reading-index="card.readingIndex" />
 
         <!-- Deck occurrences -->
-        <div v-if="card.deckOccurrences?.length" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
+        <div v-if="card.deckOccurrences?.length || card.sourceDeckName" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
           <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500">
-            <span v-for="occ in card.deckOccurrences" :key="occ.deckId">
-              ×{{ occ.occurrences }} {{ localiseTitle(occ) }}
-            </span>
+            <template v-if="card.deckOccurrences?.length">
+              <span v-for="occ in card.deckOccurrences" :key="occ.deckId">
+                ×{{ occ.occurrences }} {{ localiseTitle(occ) }}
+              </span>
+            </template>
+            <span v-else-if="card.sourceDeckName">{{ card.sourceDeckName }}</span>
           </div>
         </div>
 

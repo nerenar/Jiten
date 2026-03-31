@@ -27,6 +27,7 @@ public class StudyCardDto
     public StudyExampleSentenceDto? ExampleSentence { get; set; }
     public IntervalPreviewDto? IntervalPreview { get; set; }
     public List<StudyDeckOccurrenceDto>? DeckOccurrences { get; set; }
+    public string? SourceDeckName { get; set; }
 }
 
 public class StudyDeckOccurrenceDto

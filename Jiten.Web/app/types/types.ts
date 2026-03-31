@@ -784,6 +784,7 @@ export interface StudyCardDto {
   exampleSentence?: StudyExampleSentenceDto;
   intervalPreview?: IntervalPreviewDto;
   deckOccurrences?: StudyDeckOccurrenceDto[];
+  sourceDeckName?: string;
 }
 
 export interface StudyDeckOccurrenceDto {
@@ -831,7 +832,7 @@ export interface StudyExampleSourceDto {
 }
 
 export type StudyInterleaving = 'Mixed' | 'NewFirst' | 'ReviewsFirst';
-export type StudyNewCardGathering = 'TopDeck' | 'RoundRobin';
+export type StudyNewCardGathering = 'TopDeck' | 'RoundRobin' | 'CrossDeckFrequency';
 export type StudyReviewFrom = 'AllTracked' | 'StudyDecksOnly';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
 
@@ -852,6 +853,10 @@ export interface StudySettingsDto {
   showKeybinds: boolean;
   showElapsedTime: boolean;
   enableSwipeGesture: boolean;
+  countFailedReviews: boolean;
+  showCardStatus: boolean;
+  showFuriganaOnFront: boolean;
+  furiganaOnFrontNewOnly: boolean;
 }
 
 export interface CardExamplesResponse {

@@ -16,15 +16,15 @@ importers:
       '@floating-ui/vue':
         specifier: ^1.1.11
         version: 1.1.11(vue@3.5.29(typescript@5.9.3))
+      '@fontsource-variable/noto-sans-jp':
+        specifier: ^5.2.10
+        version: 5.2.10
       '@nuxt/icon':
         specifier: ^1.15.0
         version: 1.15.0(magicast@0.5.2)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(yaml@2.8.2))(vue@3.5.29(typescript@5.9.3))
       '@nuxt/scripts':
         specifier: 0.13.2
         version: 0.13.2(@netlify/blobs@9.1.2)(@unhead/vue@2.1.10(vue@3.5.29(typescript@5.9.3)))(db0@0.3.4)(ioredis@5.10.0)(magicast@0.5.2)(typescript@5.9.3)(vue@3.5.29(typescript@5.9.3))
-      '@nuxtjs/google-fonts':
-        specifier: ^3.2.0
-        version: 3.2.0(magicast@0.5.2)
       '@nuxtjs/seo':
         specifier: ^3.4.0
         version: 3.4.0(@netlify/blobs@9.1.2)(@unhead/vue@2.1.10(vue@3.5.29(typescript@5.9.3)))(db0@0.3.4)(ioredis@5.10.0)(magicast@0.5.2)(rollup@4.59.0)(unhead@2.1.10)(unstorage@1.17.4(@netlify/blobs@9.1.2)(db0@0.3.4)(ioredis@5.10.0))(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(yaml@2.8.2))(vue@3.5.29(typescript@5.9.3))
@@ -602,6 +602,9 @@ packages:
   '@floating-ui/vue@1.1.11':
     resolution: {integrity: sha512-HzHKCNVxnGS35r9fCHBc3+uCnjw9IWIlCPL683cGgM9Kgj2BiAl8x1mS7vtvP6F9S/e/q4O6MApwSHj8hNLGfw==}
 
+  '@fontsource-variable/noto-sans-jp@5.2.10':
+    resolution: {integrity: sha512-m0XfZ38rZtCaGAuAQL0cBPQ6fc/RguYEOqw66zvuLOV9vNRUBf9MFqyoazTu2JVCRIcnkrxbwF29UUaHHgTKdg==}
+
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
     engines: {node: '>=18.18.0'}
@@ -857,9 +860,6 @@ packages:
     peerDependenciesMeta:
       rolldown:
         optional: true
-
-  '@nuxtjs/google-fonts@3.2.0':
-    resolution: {integrity: sha512-cGAjDJoeQ2jm6VJCo4AtSmKO6KjsbO9RSLj8q261fD0lMVNMZCxkCxBkg8L0/2Vfgp+5QBHWVXL71p1tiybJFw==}
 
   '@nuxtjs/robots@5.7.1':
     resolution: {integrity: sha512-1y1pW8Dh2gqJGFpXwkTin1KokBofYAG91C1gqxR4XbI7Xkl7DAXQ+BropHF2AeCV/uCxs6qz28ONp0+60TSw1Q==}
@@ -3283,9 +3283,6 @@ packages:
   globby@16.1.1:
     resolution: {integrity: sha512-dW7vl+yiAJSp6aCekaVnVJxurRv7DCOLyXqEG3RYMYUg7AuJ2jCqPkZTA8ooqC2vtnkaMcV5WfFBMuEnTu1OQg==}
     engines: {node: '>=20'}
-
-  google-fonts-helper@3.7.3:
-    resolution: {integrity: sha512-dENZeK6RMvkCOFoKbLbS+pyoDgpmk4U6BYmfXnztMar2d8SjEG6valxql/Lkyi7bu5F+3FTdE+gAEYSYZ5zzMA==}
 
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
@@ -5853,6 +5850,8 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
+  '@fontsource-variable/noto-sans-jp@5.2.10': {}
+
   '@humanfs/core@0.19.1': {}
 
   '@humanfs/node@0.16.7':
@@ -6467,14 +6466,6 @@ snapshots:
       - vti
       - vue-tsc
       - yaml
-
-  '@nuxtjs/google-fonts@3.2.0(magicast@0.5.2)':
-    dependencies:
-      '@nuxt/kit': 3.21.1(magicast@0.5.2)
-      google-fonts-helper: 3.7.3
-      pathe: 1.1.2
-    transitivePeerDependencies:
-      - magicast
 
   '@nuxtjs/robots@5.7.1(magicast@0.5.2)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(yaml@2.8.2))(vue@3.5.29(typescript@5.9.3))':
     dependencies:
@@ -8803,13 +8794,6 @@ snapshots:
       is-path-inside: 4.0.0
       slash: 5.1.0
       unicorn-magic: 0.4.0
-
-  google-fonts-helper@3.7.3:
-    dependencies:
-      deepmerge: 4.3.1
-      hookable: 5.5.3
-      ofetch: 1.5.1
-      ufo: 1.6.3
 
   gopd@1.2.0: {}
 

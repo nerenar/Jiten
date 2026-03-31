@@ -179,13 +179,23 @@ public class SrsController(
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
 
+        var previewScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+        var intervals = previewScheduler.PreviewIntervals(cardAndLog.UpdatedCard, DateTime.UtcNow);
+
         var resultObj = new
         {
             success = true,
             nextDue = cardAndLog.UpdatedCard.Due,
             newState = (int)cardAndLog.UpdatedCard.State,
             stability = cardAndLog.UpdatedCard.Stability,
-            difficulty = cardAndLog.UpdatedCard.Difficulty
+            difficulty = cardAndLog.UpdatedCard.Difficulty,
+            intervalPreview = new
+            {
+                againSeconds = (int)intervals[FsrsRating.Again].TotalSeconds,
+                hardSeconds = (int)intervals[FsrsRating.Hard].TotalSeconds,
+                goodSeconds = (int)intervals[FsrsRating.Good].TotalSeconds,
+                easySeconds = (int)intervals[FsrsRating.Easy].TotalSeconds,
+            }
         };
 
         if (hasIdempotency)

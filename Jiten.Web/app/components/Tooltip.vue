@@ -125,14 +125,19 @@
 
   const show = () => {
     isVisible.value = true;
+    if (isMobile.value) {
+      requestAnimationFrame(() => document.addEventListener('click', handleClickOutside));
+    }
   };
 
   const hide = () => {
     isVisible.value = false;
+    document.removeEventListener('click', handleClickOutside);
   };
 
   const toggle = () => {
-    isVisible.value = !isVisible.value;
+    if (isVisible.value) hide();
+    else show();
   };
 
   const handleMouseEnter = () => {
@@ -152,8 +157,6 @@
 
   const handleClickOutside = (e: Event) => {
     if (
-      isMobile.value &&
-      isVisible.value &&
       referenceEl.value &&
       floatingRef.value &&
       !referenceEl.value.contains(e.target as Node) &&
@@ -172,12 +175,10 @@
 
     const el = referenceEl.value;
     if (el) {
-      el.addEventListener('mouseenter', handleMouseEnter);
-      el.addEventListener('mouseleave', handleMouseLeave);
+      el.addEventListener('mouseenter', handleMouseEnter, { passive: true });
+      el.addEventListener('mouseleave', handleMouseLeave, { passive: true });
       el.addEventListener('click', handleClick);
     }
-
-    document.addEventListener('click', handleClickOutside);
   });
 
   onBeforeUnmount(() => {

@@ -207,7 +207,7 @@
               <div class="pl-2 flex flex-row flex-wrap gap-8">
                 <span v-for="pitchAccent in response.pitchAccents" :key="pitchAccent">
                   <div>
-                    <PitchDiagram :reading="response.mainReading.text" :pitch-accent="pitchAccent" />
+                    <LazyPitchDiagram :reading="response.mainReading.text" :pitch-accent="pitchAccent" />
                   </div>
                 </span>
               </div>

@@ -31,6 +31,7 @@
   const newCardGatheringOptions = [
     { label: 'Top deck', value: 'TopDeck' },
     { label: 'All decks equally', value: 'RoundRobin' },
+    { label: 'Cross-deck frequency', value: 'CrossDeckFrequency' },
   ];
 
   const reviewFromOptions = [
@@ -76,6 +77,7 @@
       <ProgressSpinner style="width: 24px; height: 24px" />
     </div>
     <div v-else class="flex flex-col gap-4">
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Session limits</h3>
       <div :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-3 gap-4'">
         <div class="min-w-0">
           <label class="block text-sm font-medium mb-1">
@@ -106,16 +108,19 @@
         </div>
       </div>
 
-      <div>
-        <label class="block text-sm font-medium mb-1">
-          Grading buttons
-          <Tooltip content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Forgot and Remembered — simpler and faster to grade." placement="top">
+      <div class="flex items-center gap-2">
+        <ToggleSwitch v-model="form.countFailedReviews" input-id="countFailedReviews" />
+        <label for="countFailedReviews" class="text-sm cursor-pointer">
+          Count failed reviews toward daily limit
+          <Tooltip content="When enabled, every review counts toward your daily limit, including repeated reviews of cards you got wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget." placement="top">
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
-        <SelectButton v-model="form.gradingButtons" :options="gradingOptions" option-label="label" option-value="value" :allow-empty="false" />
       </div>
 
+      <Divider />
+
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Scheduling</h3>
       <div>
         <label class="block text-sm font-medium mb-1">
           Card interleaving
@@ -129,7 +134,7 @@
       <div>
         <label class="block text-sm font-medium mb-1">
           New card gathering
-          <Tooltip content="How new cards are picked when you have multiple decks.<br>**Top deck** — draws all new cards from your highest-priority deck first before moving to the next.<br>**All decks equally** — rotates between decks so you get new cards from each one." placement="top">
+          <Tooltip content="How new cards are picked when you have multiple decks.<br>**Top deck** — draws all new cards from your highest-priority deck first before moving to the next.<br>**All decks equally** — rotates between decks so you get new cards from each one.<br>**Cross-deck frequency** — draw words by total occurrence count across all your study decks, picking the words you'll see the most first." placement="top">
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
@@ -146,8 +151,44 @@
         <SelectButton v-model="form.reviewFrom" :options="reviewFromOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
       </div>
 
+      <Divider />
+
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Card appearance</h3>
       <div>
-        <label class="block text-sm font-medium mb-2">Card back content</label>
+        <label class="block text-sm font-medium mb-2">Card front</label>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.showCardStatus" input-id="showCardStatus" />
+            <label for="showCardStatus" class="text-sm cursor-pointer">
+              Show card status
+              <Tooltip content="Display the card status (New, Review, Again) at the top of the card." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.showFuriganaOnFront" input-id="showFuriganaOnFront" />
+            <label for="showFuriganaOnFront" class="text-sm cursor-pointer">
+              Show furigana
+              <Tooltip content="Display furigana (reading hints) above kanji on the card front." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div v-if="form.showFuriganaOnFront" class="flex items-center gap-2 ml-6">
+            <ToggleSwitch v-model="form.furiganaOnFrontNewOnly" input-id="furiganaOnFrontNewOnly" />
+            <label for="furiganaOnFrontNewOnly" class="text-sm cursor-pointer">
+              New cards only
+              <Tooltip content="Only show furigana on cards you haven't seen before. Review cards will show plain kanji." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-2">Card back</label>
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <ToggleSwitch v-model="form.showPitchAccent" input-id="showPitchAccent" />
@@ -197,45 +238,55 @@
         </div>
       </div>
 
+      <Divider />
+
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Study session UI</h3>
       <div>
-        <label class="block text-sm font-medium mb-2">Grade buttons</label>
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showNextInterval" input-id="showNextInterval" />
-            <label for="showNextInterval" class="text-sm cursor-pointer">
-              Show next interval on buttons
-              <Tooltip content="Display the next review interval (e.g. '4d', '2w') on each grade button." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showKeybinds" input-id="showKeybinds" />
-            <label for="showKeybinds" class="text-sm cursor-pointer">
-              Show keyboard shortcuts
-              <Tooltip content="Display keyboard shortcut hints (1, 2, 3, 4) on the grade buttons." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showElapsedTime" input-id="showElapsedTime" />
-            <label for="showElapsedTime" class="text-sm cursor-pointer">
-              Show elapsed time
-              <Tooltip content="Display a timer showing how long you've spent in the study session." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.enableSwipeGesture" input-id="enableSwipeGesture" />
-            <label for="enableSwipeGesture" class="text-sm cursor-pointer">
-              Swipe to grade
-              <Tooltip content="Swipe the card left (Again) or right (Good) to grade. Works with both mouse and touch." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
+        <label class="block text-sm font-medium mb-1">
+          Grading buttons
+          <Tooltip content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Forgot and Remembered — simpler and faster to grade." placement="top">
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+        <SelectButton v-model="form.gradingButtons" :options="gradingOptions" option-label="label" option-value="value" :allow-empty="false" />
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.showNextInterval" input-id="showNextInterval" />
+          <label for="showNextInterval" class="text-sm cursor-pointer">
+            Show next interval on buttons
+            <Tooltip content="Display the next review interval (e.g. '4d', '2w') on each grade button." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.showKeybinds" input-id="showKeybinds" />
+          <label for="showKeybinds" class="text-sm cursor-pointer">
+            Show keyboard shortcuts
+            <Tooltip content="Display keyboard shortcut hints (1, 2, 3, 4) on the grade buttons." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.showElapsedTime" input-id="showElapsedTime" />
+          <label for="showElapsedTime" class="text-sm cursor-pointer">
+            Show elapsed time
+            <Tooltip content="Display a timer showing how long you've spent in the study session." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.enableSwipeGesture" input-id="enableSwipeGesture" />
+          <label for="enableSwipeGesture" class="text-sm cursor-pointer">
+            Swipe to grade
+            <Tooltip content="Swipe the card left (Again) or right (Good) to grade. Works with both mouse and touch." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
         </div>
       </div>
 

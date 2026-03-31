@@ -69,6 +69,9 @@ export const useSrsStore = defineStore('srs', () => {
     showKeybinds: true,
     showElapsedTime: true,
     enableSwipeGesture: true,
+    countFailedReviews: true,
+    showFuriganaOnFront: false,
+    furiganaOnFrontNewOnly: false,
   });
   const sessionStats = ref({
     cardsReviewed: 0,
@@ -311,6 +314,7 @@ export const useSrsStore = defineStore('srs', () => {
     if (!deck) return;
     deck.isActive = !deck.isActive;
     await reorderStudyDecks([...studyDecks.value]);
+    await fetchDueSummary();
   }
 
   async function fetchBatch(limit?: number) {
@@ -444,12 +448,13 @@ export const useSrsStore = defineStore('srs', () => {
         clientRequestId,
       };
 
+      let reviewResult: any;
       try {
-        await $api('srs/review', { method: 'POST', body });
+        reviewResult = await $api('srs/review', { method: 'POST', body });
       } catch (firstError: any) {
         if (firstError?.status !== 429) {
           try {
-            await $api('srs/review', { method: 'POST', body });
+            reviewResult = await $api('srs/review', { method: 'POST', body });
           } catch (retryError: any) {
             if (retryError?.status !== 429) throw retryError;
           }
@@ -469,7 +474,8 @@ export const useSrsStore = defineStore('srs', () => {
       const cardKey = `${card.wordId}-${card.readingIndex}`;
       const isRepeat = againCardKeys.value.has(cardKey);
 
-      sessionStats.value.cardsReviewed++;
+      const shouldCount = studySettings.value.countFailedReviews || !isRepeat;
+      if (shouldCount) sessionStats.value.cardsReviewed++;
       if (card.isNewCard && !isRepeat) sessionStats.value.newCardsLearned++;
       if (rating >= FsrsRating.Good) sessionStats.value.correctCount++;
       if (rating === FsrsRating.Again) sessionStats.value.gradeCounts.again++;
@@ -486,7 +492,9 @@ export const useSrsStore = defineStore('srs', () => {
         batch.splice(currentCardIndex.value, 1);
         const remaining = batch.length - currentCardIndex.value;
         const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
-        batch.splice(currentCardIndex.value + offset, 0, { ...card });
+        const reinsertedCard = { ...card };
+        if (reviewResult?.intervalPreview) reinsertedCard.intervalPreview = reviewResult.intervalPreview;
+        batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
         currentBatch.value = batch;
       } else {
         if (isRepeat) {

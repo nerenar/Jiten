@@ -189,7 +189,7 @@
                 </Button>
               </NuxtLink>
             </div>
-            <Image src="/img/jitenreader_screenshot.jpg" alt="Jiten Reader screenshot" class="rounded-lg w-full md:w-80" preview />
+            <Image src="/img/jitenreader_screenshot.jpg" alt="Jiten Reader screenshot" class="rounded-lg w-full md:w-80" preview width="320" height="200" />
           </div>
         </template>
       </Card>
@@ -220,7 +220,7 @@
                 </Button>
               </a>
             </div>
-            <Image src="/img/vndb_userscript.jpg" alt="VNDB Character Count userscript screenshot" class="rounded-lg w-full md:w-80" preview />
+            <Image src="/img/vndb_userscript.jpg" alt="VNDB Character Count userscript screenshot" class="rounded-lg w-full md:w-80" preview width="320" height="167" />
           </div>
         </template>
       </Card>

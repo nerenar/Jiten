@@ -299,7 +299,7 @@
                 <div>{{ formatDateAsYyyyMmDd(new Date(deck.releaseDate)).replace(/-/g, '/') }}</div>
                 <template v-if="authStore.isAuthenticated && (deck.coverage != 0 || deck.uniqueCoverage != 0)">
                   <Tooltip :content="coverageTooltip" block>
-                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Coverage</div>
+                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Coverage</div>
                     <div class="relative w-full bg-gray-400 dark:bg-gray-700 rounded-lg h-6 overflow-hidden">
                       <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedCoverage.toFixed(1) + '%' }"></div>
                       <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: deck.coverage.toFixed(1) + '%' }"></div>
@@ -309,7 +309,7 @@
                     </div>
                   </Tooltip>
                   <Tooltip :content="uniqueCoverageTooltip" block>
-                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Unique coverage</div>
+                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Unique coverage</div>
                     <div class="relative w-full bg-gray-400 dark:bg-gray-700 rounded-lg h-6 overflow-hidden">
                       <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedUniqueCoverage.toFixed(1) + '%' }"></div>
                       <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: deck.uniqueCoverage.toFixed(1) + '%' }"></div>
@@ -325,44 +325,44 @@
                   <div class="w-full md:w-64">
                     <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex justify-between flex-wrap stat-row">
                       <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + deck.characterCount.toLocaleString()">
-                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Speech duration</span>
+                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Speech duration</span>
                       </Tooltip>
                       <span class="tabular-nums font-semibold">{{ formattedSpeechDuration }}</span>
                     </div>
                     <div v-else class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Character count</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Character count</span>
                       <span class="tabular-nums font-semibold">{{ deck.characterCount.toLocaleString() }}</span>
                     </div>
                     <div class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Word count</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Word count</span>
                       <span class="tabular-nums font-semibold">{{ deck.wordCount.toLocaleString() }}</span>
                     </div>
                     <div class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Unique words</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Unique words</span>
                       <span class="tabular-nums font-semibold">{{ deck.uniqueWordCount.toLocaleString() }}</span>
                     </div>
                     <div class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Words (1-occurrence)</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Words (1-occurrence)</span>
                       <span class="tabular-nums font-semibold">{{ deck.uniqueWordUsedOnceCount.toLocaleString() }}</span>
                     </div>
                   </div>
 
                   <div class="w-full md:w-64">
                     <div class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Unique kanji</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Unique kanji</span>
                       <span class="tabular-nums font-semibold">{{ deck.uniqueKanjiCount.toLocaleString() }}</span>
                     </div>
                     <div class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Kanji (1-occurrence)</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Kanji (1-occurrence)</span>
                       <span class="tabular-nums font-semibold">{{ deck.uniqueKanjiUsedOnceCount.toLocaleString() }}</span>
                     </div>
                     <div v-if="deck.averageSentenceLength !== 0" class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Average sentence length</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Average sentence length</span>
                       <span class="tabular-nums font-semibold">{{ deck.averageSentenceLength.toFixed(1) }}</span>
                     </div>
                     <div v-if="speechSpeed > 0" class="flex justify-between flex-wrap stat-row">
                       <Tooltip content="Average speed of speech in mora per minute.">
-                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Speech speed</span>
+                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Speech speed</span>
                       </Tooltip>
                       <span class="tabular-nums font-semibold">{{ speechSpeed.toFixed(0) }}</span>
                     </div>
@@ -370,7 +370,7 @@
                     <div v-if="deck.difficulty != -1" class="stat-row cursor-help">
                       <Tooltip :content="difficultyRef?.tooltip ?? ''" block>
                         <div class="flex justify-between">
-                          <span class="text-gray-600 dark:text-gray-300 pr-2 font-medium shrink-0">
+                          <span class="text-gray-600 dark:text-gray-300 pr-2 font-normal shrink-0">
                             Difficulty
                             <i class="pi pi-info-circle text-primary-400 text-xs ml-0.5" />
                           </span>
@@ -385,12 +385,12 @@
                       v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100"
                       class="flex justify-between flex-wrap stat-row"
                     >
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Dialogue</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Dialogue</span>
                       <span class="tabular-nums font-semibold">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
                     </div>
 
                     <div v-if="deck.childrenDeckCount != 0" class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">{{ getChildrenCountText(deck.mediaType) }}</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">{{ getChildrenCountText(deck.mediaType) }}</span>
                       <span class="tabular-nums font-semibold">{{ deck.childrenDeckCount.toLocaleString() }}</span>
                     </div>
 
@@ -412,7 +412,7 @@
                           ' characters per hour.\n<i>You can adjust it in the quick settings cog at the top right.</i>'
                         "
                       >
-                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">
+                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">
                           Duration
                           <i class="pi pi-info-circle cursor-pointer text-primary-500" />
                         </span>
@@ -423,13 +423,13 @@
 
                     <div v-if="deck.externalRating != 0" class="flex justify-between flex-wrap stat-row">
                       <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
-                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">External Rating</span>
+                        <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">External Rating</span>
                       </Tooltip>
                       <span class="tabular-nums font-semibold">{{ deck.externalRating }} %</span>
                     </div>
 
                     <div v-if="deck.selectedWordOccurrences != 0" class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Appears (times)</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Appears (times)</span>
                       <span class="tabular-nums font-bold">{{ deck.selectedWordOccurrences.toLocaleString() }}</span>
                     </div>
                   </div>
@@ -457,7 +457,7 @@
                 </div>
                 <template v-if="isCompact && authStore.isAuthenticated && (deck.coverage != 0 || deck.uniqueCoverage != 0)">
                   <Tooltip :content="coverageTooltip" block>
-                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Coverage</div>
+                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Coverage</div>
                     <div class="relative w-full bg-gray-400 dark:bg-gray-700 rounded-lg h-6 overflow-hidden">
                       <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedCoverage.toFixed(1) + '%' }"></div>
                       <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: deck.coverage.toFixed(1) + '%' }"></div>
@@ -467,7 +467,7 @@
                     </div>
                   </Tooltip>
                   <Tooltip :content="uniqueCoverageTooltip" block>
-                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-medium">Unique coverage</div>
+                    <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Unique coverage</div>
                     <div class="relative w-full bg-gray-400 dark:bg-gray-700 rounded-lg h-6 overflow-hidden">
                       <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedUniqueCoverage.toFixed(1) + '%' }"></div>
                       <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: deck.uniqueCoverage.toFixed(1) + '%' }"></div>
@@ -529,13 +529,13 @@
       </template>
     </Card>
 
-    <MediaDeckDownloadDialog :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
-    <SrsAddDeckDialog :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
-    <ReportIssueDialog :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
+    <MediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+    <SrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
+    <ReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
 
-    <TieredMenu ref="menu" :model="menuItems" popup />
+    <TieredMenu v-if="authStore.isAuthenticated" ref="menu" :model="menuItems" popup />
 
-    <Dialog v-model:visible="showCompletionDialog" modal header="Rate Difficulty" class="w-full" style="max-width: 40rem" :closable="true">
+    <Dialog v-if="showCompletionDialog" v-model:visible="showCompletionDialog" modal header="Rate Difficulty" class="w-full" style="max-width: 40rem" :closable="true">
       <div class="flex flex-col gap-6">
         <div>
           <p class="text-sm text-muted-color mb-2">How difficult did you find <strong>{{ ratingDeckId === deck.deckId ? localiseTitle(deck) : 'this series' }}</strong>?</p>

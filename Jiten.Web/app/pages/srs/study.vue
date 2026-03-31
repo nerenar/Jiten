@@ -215,6 +215,12 @@
 
   async function handleGrade(rating: FsrsRating) {
     const ok = await srsStore.gradeCard(rating);
+    const wasDismissing = swipe.isDismissing.value;
+    swipe.resetInstant();
+    if (wasDismissing) {
+      cardEntering.value = true;
+      setTimeout(() => { cardEntering.value = false; }, 250);
+    }
     if (!ok) toast.add({ severity: 'error', summary: 'Review failed', detail: 'Your grade was not saved. Try again.', life: 5000 });
   }
 

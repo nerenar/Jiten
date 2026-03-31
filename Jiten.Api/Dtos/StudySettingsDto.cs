@@ -21,7 +21,8 @@ public enum StudyReviewFrom
 public enum StudyNewCardGathering
 {
     TopDeck,
-    RoundRobin
+    RoundRobin,
+    CrossDeckFrequency
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<ExampleSentencePosition>))]
@@ -82,4 +83,16 @@ public class StudySettingsDto
 
     [JsonPropertyName("enableSwipeGesture")]
     public bool EnableSwipeGesture { get; set; } = true;
+
+    [JsonPropertyName("countFailedReviews")]
+    public bool CountFailedReviews { get; set; } = true;
+
+    [JsonPropertyName("showCardStatus")]
+    public bool ShowCardStatus { get; set; } = true;
+
+    [JsonPropertyName("showFuriganaOnFront")]
+    public bool ShowFuriganaOnFront { get; set; }
+
+    [JsonPropertyName("furiganaOnFrontNewOnly")]
+    public bool FuriganaOnFrontNewOnly { get; set; }
 }
