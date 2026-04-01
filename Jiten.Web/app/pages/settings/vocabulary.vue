@@ -121,6 +121,8 @@
       <VocabularyCompleteVocabularyPanel v-if="mode === 'export' && option === 'complete-vocabulary'" mode="export" @changed="onPanelChanged" />
     </div>
 
+    <SettingsVocabularyMassActionsCard class="mt-4" @changed="onPanelChanged" />
+
     <SettingsVocabularyDangerZoneCard class="mt-4" @changed="onPanelChanged" />
 
   </div>

@@ -747,6 +747,11 @@ export interface StudyDeckDto {
   suspendedCount: number;
   dueReviewCount: number;
   warning?: string;
+  parentDeckId?: number;
+  parentTitle?: string;
+  parentRomajiTitle?: string;
+  parentEnglishTitle?: string;
+  parentCoverName?: string;
 }
 
 export type StudyMoreMode = 'extraNew' | 'extraReview' | 'ahead' | 'mistakes';
@@ -793,6 +798,9 @@ export interface StudyDeckOccurrenceDto {
   romajiTitle?: string;
   englishTitle?: string;
   occurrences: number;
+  parentOriginalTitle?: string;
+  parentRomajiTitle?: string;
+  parentEnglishTitle?: string;
 }
 
 export interface IntervalPreviewDto {

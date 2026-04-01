@@ -133,6 +133,20 @@ public static class WordFormHelper
             .ToHashSet();
     }
 
+    public static void ExpandKanaRedundancyKeys(
+        IWordFormSiblingCache cache,
+        IEnumerable<(int WordId, byte ReadingIndex)> kanjiCards,
+        HashSet<long> target)
+    {
+        foreach (var (wordId, ri) in kanjiCards)
+        {
+            var kanaIndexes = cache.GetKanaIndexesForKanji(wordId, ri);
+            if (kanaIndexes == null) continue;
+            foreach (var kanaRi in kanaIndexes)
+                target.Add(EncodeWordKey(wordId, kanaRi));
+        }
+    }
+
     public static async Task<List<JmDictWordForm>> LoadWordFormsForWord(JitenDbContext context, int wordId)
     {
         return await context.WordForms

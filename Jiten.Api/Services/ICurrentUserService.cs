@@ -10,6 +10,7 @@ public interface ICurrentUserService
     ClaimsPrincipal? Principal { get; }
     Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> GetKnownWordsState(IEnumerable<(int WordId, byte ReadingIndex)> keys);
     Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex);
+    Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates();
     Task<int> AddKnownWords(IEnumerable<DeckWord> deckWords);
     Task<int> BlacklistWords(IEnumerable<DeckWord> deckWords);
     Task AddKnownWord(int wordId, byte readingIndex);

@@ -425,7 +425,8 @@
           <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500">
             <template v-if="card.deckOccurrences?.length">
               <span v-for="occ in card.deckOccurrences" :key="occ.deckId">
-                ×{{ occ.occurrences }} {{ localiseTitle(occ) }}
+                ×{{ occ.occurrences }}
+                <template v-if="occ.parentOriginalTitle">{{ localiseTitle({ originalTitle: occ.parentOriginalTitle, romajiTitle: occ.parentRomajiTitle, englishTitle: occ.parentEnglishTitle }) }} - </template>{{ localiseTitle(occ) }}
               </span>
             </template>
             <span v-else-if="card.sourceDeckName">{{ card.sourceDeckName }}</span>

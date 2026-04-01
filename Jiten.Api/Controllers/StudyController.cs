@@ -51,26 +51,115 @@ public class StudyController(
             return Results.Ok(new List<StudyDeckDto>());
 
         var deckIds = studyDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToList();
-        var decks = await context.Decks
+
+        var decksTask = context.Decks
             .AsNoTracking()
             .Where(d => deckIds.Contains(d.DeckId))
             .ToDictionaryAsync(d => d.DeckId);
 
+        var cardsTask = userContext.FsrsCards
+            .AsNoTracking()
+            .Where(fc => fc.UserId == userId)
+            .Select(fc => new { fc.WordId, fc.ReadingIndex, fc.State, fc.Due })
+            .ToListAsync();
+
+        await Task.WhenAll(decksTask, cardsTask);
+
+        var decks = decksTask.Result;
+
+        var parentDeckIds = decks.Values.Where(d => d.ParentDeckId.HasValue).Select(d => d.ParentDeckId!.Value).Distinct().ToList();
+        var parentDecks = parentDeckIds.Count > 0
+            ? await context.Decks.AsNoTracking()
+                .Where(d => parentDeckIds.Contains(d.DeckId))
+                .Select(d => new { d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.CoverName })
+                .ToDictionaryAsync(d => d.DeckId)
+            : new();
+
         var cardStateMap = new Dictionary<(int, byte), (FsrsState State, DateTime Due)>();
-        foreach (var c in await userContext.FsrsCards
-                     .AsNoTracking()
-                     .Where(fc => fc.UserId == userId)
-                     .Select(fc => new { fc.WordId, fc.ReadingIndex, fc.State, fc.Due })
-                     .ToListAsync())
+        foreach (var c in cardsTask.Result)
             cardStateMap[(c.WordId, c.ReadingIndex)] = (c.State, c.Due);
 
-        var dueCutoff = DateTime.UtcNow;
+        var wordSetStates = await currentUserService.GetWordSetDerivedStates();
+        var wordSetEncodedKeys = new Dictionary<long, WordSetStateType>();
+        foreach (var (key, setState) in wordSetStates)
+        {
+            if (cardStateMap.ContainsKey(key)) continue;
+            wordSetEncodedKeys[WordFormHelper.EncodeWordKey(key.Item1, key.Item2)] = setState;
+        }
 
-        var allKanaFilterWordIds = new HashSet<int>();
-        var resolvedDecks = new List<(UserStudyDeck Sd, Deck? Deck, List<(int WordId, byte ReadingIndex)>? WordPairs)>();
+        var redundantKanaKeys = new HashSet<long>();
+        var redundantKanaPairs = new HashSet<(int, byte)>();
+        foreach (var ((wordId, ri), (state, _)) in cardStateMap)
+        {
+            if (state is FsrsState.New) continue;
+            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(wordId, ri);
+            if (kanaIndexes == null) continue;
+            foreach (var kanaRi in kanaIndexes)
+            {
+                if (cardStateMap.ContainsKey((wordId, kanaRi))) continue;
+                redundantKanaKeys.Add(WordFormHelper.EncodeWordKey(wordId, kanaRi));
+                redundantKanaPairs.Add((wordId, kanaRi));
+            }
+        }
+
+        var dueCutoff = DateTime.UtcNow;
+        var resolvedDecks = new List<(UserStudyDeck Sd, Deck? Deck)>();
         var countOnlyStats = new Dictionary<int, (int Total, int Unseen, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, bool WasTruncated)>();
+
+        // Pre-compute shared GlobalDynamic data before the per-deck loop
         Dictionary<(int, byte), int>? userCardFreqRanks = null;
         HashSet<long>? kanaOnlyCardWords = null;
+        List<int>? extraWordIds = null;
+        var posFilterCache = new Dictionary<string, HashSet<int>?>();
+
+        if (studyDecks.Any(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
+        {
+            extraWordIds = wordSetStates.Keys.Select(k => k.Item1).Distinct().ToList();
+            userCardFreqRanks = await BuildCardFrequencyRanks(cardStateMap, extraWordIds);
+
+            if (studyDecks.Any(sd => sd.DeckType == StudyDeckType.GlobalDynamic && sd.ExcludeKana))
+                kanaOnlyCardWords = await WordFormHelper.GetKanaFormKeys(context,
+                    cardStateMap.Keys.Select(k => k.Item1).Distinct().Union(extraWordIds));
+
+            foreach (var pf in studyDecks
+                         .Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic && !string.IsNullOrEmpty(sd.PosFilter))
+                         .Select(sd => sd.PosFilter!)
+                         .Distinct())
+                posFilterCache[pf] = await GetPosMatchedWordIds(pf, cardStateMap, extraWordIds);
+        }
+
+        // Batch load all StaticWordList data in one query instead of per-deck
+        Dictionary<int, HashSet<long>>? staticWordKeysByDeck = null;
+        var staticDecks = studyDecks.Where(sd => sd.DeckType == StudyDeckType.StaticWordList).ToList();
+        if (staticDecks.Count > 0)
+        {
+            var staticDeckIds = staticDecks.Select(sd => sd.UserStudyDeckId).ToList();
+            var allStaticPairs = await userContext.UserStudyDeckWords.AsNoTracking()
+                .Where(w => staticDeckIds.Contains(w.UserStudyDeckId))
+                .Select(w => new { w.UserStudyDeckId, w.WordId, w.ReadingIndex })
+                .ToListAsync();
+
+            HashSet<long>? staticKanaKeys = null;
+            if (staticDecks.Any(sd => sd.ExcludeKana))
+            {
+                var allStaticWordIds = allStaticPairs.Select(p => p.WordId).Distinct();
+                staticKanaKeys = await WordFormHelper.GetKanaFormKeys(context, allStaticWordIds);
+            }
+
+            staticWordKeysByDeck = new();
+            foreach (var g in allStaticPairs.GroupBy(p => p.UserStudyDeckId))
+            {
+                var sd = staticDecks.First(s => s.UserStudyDeckId == g.Key);
+                var keySet = g.Select(p => WordFormHelper.EncodeWordKey(p.WordId, (byte)p.ReadingIndex)).ToHashSet();
+                if (sd.ExcludeKana && staticKanaKeys is { Count: > 0 })
+                    keySet.ExceptWith(staticKanaKeys);
+                staticWordKeysByDeck[g.Key] = keySet;
+            }
+        }
+
+        // Collect parallel tasks — each uses its own factory-created JitenDbContext
+        var mediaDeckCountTasks = new List<(int StudyDeckId, Task<(int Count, HashSet<long> WordKeys)>)>();
+        var globalDynamicCountTasks = new List<(int StudyDeckId, UserStudyDeck Sd, Task<(int Count, bool WasTruncated)>)>();
 
         foreach (var sd in studyDecks)
         {
@@ -78,77 +167,84 @@ public class StudyController(
             {
                 if (!sd.DeckId.HasValue || !decks.TryGetValue(sd.DeckId.Value, out var deck))
                 {
-                    resolvedDecks.Add((sd, null, null));
+                    resolvedDecks.Add((sd, null));
                     continue;
                 }
-
-                var request = new DeckWordResolveRequest(
-                    sd.DeckId.Value, deck,
-                    (DeckDownloadType)sd.DownloadType, (DeckOrder)sd.Order,
-                    sd.MinFrequency, sd.MaxFrequency,
-                    false, false,
-                    sd.TargetPercentage,
-                    sd.MinOccurrences, sd.MaxOccurrences);
+                resolvedDecks.Add((sd, deck));
 
                 if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
                 {
-                    var (total, wordKeys) = await deckWordResolver.CountTargetCoverageWords(
-                        sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana);
-                    var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateMap, dueCutoff);
-                    countOnlyStats[sd.UserStudyDeckId] = (total, Math.Max(0, total - stats.Tracked),
-                        stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, false);
-                    resolvedDecks.Add((sd, deck, null));
+                    mediaDeckCountTasks.Add((sd.UserStudyDeckId,
+                        CountWithFactoryContext(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
+                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana))));
                 }
                 else
                 {
-                    var (total, wordKeys) = await deckWordResolver.CountDeckWords(request, sd.ExcludeKana);
-                    var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateMap, dueCutoff);
-                    countOnlyStats[sd.UserStudyDeckId] = (total, Math.Max(0, total - stats.Tracked),
-                        stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, false);
-                    resolvedDecks.Add((sd, deck, null));
+                    var request = new DeckWordResolveRequest(
+                        sd.DeckId.Value, deck,
+                        (DeckDownloadType)sd.DownloadType, (DeckOrder)sd.Order,
+                        sd.MinFrequency, sd.MaxFrequency,
+                        false, false,
+                        sd.TargetPercentage,
+                        sd.MinOccurrences, sd.MaxOccurrences);
+                    mediaDeckCountTasks.Add((sd.UserStudyDeckId,
+                        CountWithFactoryContext(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
+                            .CountDeckWords(request, sd.ExcludeKana))));
                 }
             }
             else if (sd.DeckType == StudyDeckType.GlobalDynamic)
             {
-                var (total, wasTruncated) = await deckWordResolver.CountGlobalDynamicWords(
-                    sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana);
-
-                if (userCardFreqRanks == null)
-                    userCardFreqRanks = await BuildCardFrequencyRanks(cardStateMap);
-
-                if (sd.ExcludeKana && kanaOnlyCardWords == null)
-                    kanaOnlyCardWords = await WordFormHelper.GetKanaFormKeys(context, cardStateMap.Keys.Select(k => k.Item1).Distinct());
-
-                var posMatchedWordIds = await GetPosMatchedWordIds(sd.PosFilter, cardStateMap);
-
-                var stats = ComputeGlobalDynamicCardStats(
-                    sd, cardStateMap, userCardFreqRanks, kanaOnlyCardWords, posMatchedWordIds, dueCutoff);
-
-                countOnlyStats[sd.UserStudyDeckId] = (total, Math.Max(0, total - stats.Tracked),
-                    stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, wasTruncated);
-                resolvedDecks.Add((sd, null, null));
+                resolvedDecks.Add((sd, null));
+                globalDynamicCountTasks.Add((sd.UserStudyDeckId, sd,
+                    CountWithFactoryContext<(int, bool)>(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
+                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana))));
             }
             else if (sd.DeckType == StudyDeckType.StaticWordList)
             {
-                var (total, wordKeys) = await deckWordResolver.CountStaticDeckWords(sd.UserStudyDeckId, sd.ExcludeKana);
-                var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateMap, dueCutoff);
-                countOnlyStats[sd.UserStudyDeckId] = (total, Math.Max(0, total - stats.Tracked),
-                    stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, false);
-                resolvedDecks.Add((sd, null, null));
+                resolvedDecks.Add((sd, null));
+                if (staticWordKeysByDeck != null && staticWordKeysByDeck.TryGetValue(sd.UserStudyDeckId, out var wordKeys))
+                {
+                    var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateMap, dueCutoff, wordSetEncodedKeys, redundantKanaKeys);
+                    countOnlyStats[sd.UserStudyDeckId] = (wordKeys.Count, Math.Max(0, wordKeys.Count - stats.Tracked),
+                        stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, false);
+                }
             }
             else
             {
-                resolvedDecks.Add((sd, null, null));
+                resolvedDecks.Add((sd, null));
             }
         }
 
-        HashSet<int>? kanaOnlyWords = null;
-        if (allKanaFilterWordIds.Count > 0)
-            kanaOnlyWords = await WordFormHelper.GetKanaOnlyWordIds(context, allKanaFilterWordIds);
+        // Await all parallel deck queries
+        var allParallelTasks = mediaDeckCountTasks.Select(t => (Task)t.Item2)
+            .Concat(globalDynamicCountTasks.Select(t => (Task)t.Item3))
+            .ToList();
+        if (allParallelTasks.Count > 0)
+            await Task.WhenAll(allParallelTasks);
+
+        foreach (var (studyDeckId, task) in mediaDeckCountTasks)
+        {
+            var (total, wordKeys) = task.Result;
+            var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateMap, dueCutoff, wordSetEncodedKeys, redundantKanaKeys);
+            countOnlyStats[studyDeckId] = (total, Math.Max(0, total - stats.Tracked),
+                stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, false);
+        }
+
+        foreach (var (studyDeckId, sd, task) in globalDynamicCountTasks)
+        {
+            var (total, wasTruncated) = task.Result;
+            var posMatchedWordIds = !string.IsNullOrEmpty(sd.PosFilter) && posFilterCache.TryGetValue(sd.PosFilter!, out var cached)
+                ? cached : null;
+            var stats = ComputeGlobalDynamicCardStats(
+                sd, cardStateMap, userCardFreqRanks!, kanaOnlyCardWords, posMatchedWordIds, dueCutoff,
+                wordSetStates, redundantKanaPairs);
+            countOnlyStats[studyDeckId] = (total, Math.Max(0, total - stats.Tracked),
+                stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, wasTruncated);
+        }
 
         var result = resolvedDecks.Select(entry =>
         {
-            var (sd, deck, wordPairs) = entry;
+            var (sd, deck) = entry;
             var dto = new StudyDeckDto
             {
                 UserStudyDeckId = sd.UserStudyDeckId,
@@ -176,6 +272,15 @@ public class StudyController(
                 PosFilter = sd.PosFilter
             };
 
+            if (deck?.ParentDeckId != null && parentDecks.TryGetValue(deck.ParentDeckId.Value, out var parent))
+            {
+                dto.ParentDeckId = parent.DeckId;
+                dto.ParentTitle = parent.OriginalTitle;
+                dto.ParentRomajiTitle = parent.RomajiTitle;
+                dto.ParentEnglishTitle = parent.EnglishTitle;
+                dto.ParentCoverName = parent.CoverName;
+            }
+
             if (countOnlyStats.TryGetValue(sd.UserStudyDeckId, out var precomputed))
             {
                 dto.TotalWords = precomputed.Total;
@@ -188,15 +293,6 @@ public class StudyController(
                 dto.DueReviewCount = precomputed.Due;
                 if (precomputed.WasTruncated)
                     dto.Warning = "Results were truncated at 500,000 words. Consider narrowing your frequency range.";
-            }
-            else if (wordPairs != null)
-            {
-                var filtered = sd.ExcludeKana && kanaOnlyWords != null
-                    ? wordPairs.Where(w => !kanaOnlyWords.Contains(w.WordId)).ToList()
-                    : wordPairs;
-
-                dto.TotalWords = filtered.Count;
-                ApplyWordPairCardStats(dto, filtered, cardStateMap, dueCutoff);
             }
 
             return dto;
@@ -1177,10 +1273,34 @@ public class StudyController(
         var wordIds = wordPairs.Select(w => w.WordId).Distinct().ToList();
         var learnedSet = await userContext.FsrsCards
             .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
-            .Select(c => new { c.WordId, c.ReadingIndex })
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State })
             .ToListAsync();
-        var learnedLookup = new HashSet<(int, byte)>(learnedSet.Select(c => (c.WordId, c.ReadingIndex)));
-        var unlearned = wordPairs.Count(w => !learnedLookup.Contains((w.WordId, (byte)w.ReadingIndex)));
+        var cardStateMap = new Dictionary<(int, byte), FsrsState>();
+        foreach (var c in learnedSet)
+            cardStateMap[(c.WordId, c.ReadingIndex)] = c.State;
+
+        var wordSetStates = await currentUserService.GetWordSetDerivedStates();
+        var trackedKeys = new HashSet<(int, byte)>(cardStateMap.Keys);
+
+        foreach (var (key, _) in wordSetStates)
+        {
+            if (!trackedKeys.Contains(key))
+                trackedKeys.Add(key);
+        }
+
+        foreach (var ((wordId, ri), state) in cardStateMap)
+        {
+            if (state is FsrsState.New) continue;
+            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(wordId, ri);
+            if (kanaIndexes == null) continue;
+            foreach (var kanaRi in kanaIndexes)
+            {
+                if (!trackedKeys.Contains((wordId, kanaRi)))
+                    trackedKeys.Add((wordId, kanaRi));
+            }
+        }
+
+        var unlearned = wordPairs.Count(w => !trackedKeys.Contains((w.WordId, (byte)w.ReadingIndex)));
 
         return Results.Ok(new { total, unlearned });
     }
@@ -1643,9 +1763,18 @@ public class StudyController(
         var occurrenceDecks = occurrenceDeckIds.Count > 0
             ? await context.Decks.AsNoTracking()
                 .Where(d => occurrenceDeckIds.Contains(d.DeckId))
+                .Select(d => new { d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.ParentDeckId })
+                .ToDictionaryAsync(d => d.DeckId)
+            : new();
+
+        var occParentDeckIds = occurrenceDecks.Values.Where(d => d.ParentDeckId.HasValue).Select(d => d.ParentDeckId!.Value).Distinct().ToList();
+        var occParentDecks = occParentDeckIds.Count > 0
+            ? await context.Decks.AsNoTracking()
+                .Where(d => occParentDeckIds.Contains(d.DeckId))
                 .Select(d => new { d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle })
                 .ToDictionaryAsync(d => d.DeckId)
             : new();
+
         var cards = new List<StudyCardDto>();
         foreach (var item in ordered)
         {
@@ -1688,13 +1817,24 @@ public class StudyController(
                         .OrderByDescending(o => o.Occurrences)
                         .Take(5)
                         .Where(o => occurrenceDecks.ContainsKey(o.DeckId))
-                        .Select(o => new StudyDeckOccurrenceDto
+                        .Select(o =>
                         {
-                            DeckId = o.DeckId,
-                            OriginalTitle = occurrenceDecks[o.DeckId].OriginalTitle,
-                            RomajiTitle = occurrenceDecks[o.DeckId].RomajiTitle,
-                            EnglishTitle = occurrenceDecks[o.DeckId].EnglishTitle,
-                            Occurrences = o.Occurrences
+                            var occDeck = occurrenceDecks[o.DeckId];
+                            var dto = new StudyDeckOccurrenceDto
+                            {
+                                DeckId = o.DeckId,
+                                OriginalTitle = occDeck.OriginalTitle,
+                                RomajiTitle = occDeck.RomajiTitle,
+                                EnglishTitle = occDeck.EnglishTitle,
+                                Occurrences = o.Occurrences
+                            };
+                            if (occDeck.ParentDeckId != null && occParentDecks.TryGetValue(occDeck.ParentDeckId.Value, out var occParent))
+                            {
+                                dto.ParentOriginalTitle = occParent.OriginalTitle;
+                                dto.ParentRomajiTitle = occParent.RomajiTitle;
+                                dto.ParentEnglishTitle = occParent.EnglishTitle;
+                            }
+                            return dto;
                         }).ToList()
                     : null,
                 SourceDeckName = item.IsNew && sourceDeckNames.TryGetValue(exKey, out var srcName) ? srcName : null
@@ -1739,7 +1879,7 @@ public class StudyController(
             NewCardsRemaining = Math.Max(0, settings.NewCardsPerDay - newCardsToday),
             ReviewsRemaining = Math.Max(0, remainingReviews),
             NewCardsToday = newCardsToday,
-            ReviewsToday = reviewsToday
+            ReviewsToday = reviewsToday,
         });
     }
 
@@ -1932,13 +2072,16 @@ public class StudyController(
         if (newCardBudget > 0)
         {
             var existingKeys = new HashSet<long>();
-            await foreach (var c in userContext.FsrsCards.AsNoTracking()
+            var cards = await userContext.FsrsCards.AsNoTracking()
                 .Where(c => c.UserId == userId)
-                .Select(c => new { c.WordId, c.ReadingIndex })
-                .AsAsyncEnumerable())
-            {
+                .Select(c => new { c.WordId, c.ReadingIndex, c.State })
+                .ToListAsync();
+            foreach (var c in cards)
                 existingKeys.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
-            }
+
+            WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache,
+                cards.Where(c => c.State != FsrsState.New).Select(c => (c.WordId, c.ReadingIndex)),
+                existingKeys);
 
             var wordSetIds = await userContext.UserWordSetStates
                 .AsNoTracking()
@@ -2055,12 +2198,31 @@ public class StudyController(
                     .ToListAsync();
 
                 var existingKeys = new HashSet<long>();
-                await foreach (var c in userContext.FsrsCards.AsNoTracking()
+                var userCards = await userContext.FsrsCards.AsNoTracking()
                     .Where(c => c.UserId == userId)
-                    .Select(c => new { c.WordId, c.ReadingIndex })
-                    .AsAsyncEnumerable())
-                {
+                    .Select(c => new { c.WordId, c.ReadingIndex, c.State })
+                    .ToListAsync();
+                foreach (var c in userCards)
                     existingKeys.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
+
+                WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache,
+                    userCards.Where(c => c.State != FsrsState.New).Select(c => (c.WordId, c.ReadingIndex)),
+                    existingKeys);
+
+                var smWordSetIds = await userContext.UserWordSetStates
+                    .AsNoTracking()
+                    .Where(uwss => uwss.UserId == userId)
+                    .Select(uwss => uwss.SetId)
+                    .ToListAsync();
+                if (smWordSetIds.Count > 0)
+                {
+                    var setMembers = await context.WordSetMembers
+                        .AsNoTracking()
+                        .Where(wsm => smWordSetIds.Contains(wsm.SetId))
+                        .Select(wsm => new { wsm.WordId, wsm.ReadingIndex })
+                        .ToListAsync();
+                    foreach (var m in setMembers)
+                        existingKeys.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
                 }
 
                 var mediaDecks = studyDecks
@@ -2519,6 +2681,12 @@ public class StudyController(
         return dto;
     }
 
+    private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, Task<T>> query)
+    {
+        await using var ctx = await contextFactory.CreateDbContextAsync();
+        return await query(ctx);
+    }
+
     private static bool IsValidPosFilter(string? posFilter)
     {
         if (string.IsNullOrEmpty(posFilter)) return true;
@@ -2534,11 +2702,15 @@ public class StudyController(
     }
 
     private async Task<Dictionary<(int, byte), int>> BuildCardFrequencyRanks(
-        Dictionary<(int, byte), (FsrsState State, DateTime Due)> cardStateMap)
+        Dictionary<(int, byte), (FsrsState State, DateTime Due)> cardStateMap,
+        IEnumerable<int>? additionalWordIds = null)
     {
-        var cardWordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct().ToList();
+        var wordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct();
+        if (additionalWordIds != null)
+            wordIds = wordIds.Union(additionalWordIds);
+        var wordIdList = wordIds.ToList();
         var freqs = await context.WordFormFrequencies.AsNoTracking()
-            .Where(wff => cardWordIds.Contains(wff.WordId))
+            .Where(wff => wordIdList.Contains(wff.WordId))
             .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
             .ToListAsync();
         var result = new Dictionary<(int, byte), int>();
@@ -2548,16 +2720,20 @@ public class StudyController(
     }
 
     private async Task<HashSet<int>?> GetPosMatchedWordIds(
-        string? posFilter, Dictionary<(int, byte), (FsrsState, DateTime)> cardStateMap)
+        string? posFilter, Dictionary<(int, byte), (FsrsState, DateTime)> cardStateMap,
+        IEnumerable<int>? additionalWordIds = null)
     {
         if (string.IsNullOrEmpty(posFilter)) return null;
 
         var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
         if (posTags is not { Length: > 0 }) return null;
 
-        var cardWordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct().ToList();
+        var wordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct();
+        if (additionalWordIds != null)
+            wordIds = wordIds.Union(additionalWordIds);
+        var wordIdList = wordIds.ToList();
         return (await context.JMDictWords.AsNoTracking()
-            .Where(w => cardWordIds.Contains(w.WordId) && w.PartsOfSpeech.Any(p => posTags.Contains(p)))
+            .Where(w => wordIdList.Contains(w.WordId) && w.PartsOfSpeech.Any(p => posTags.Contains(p)))
             .Select(w => w.WordId)
             .ToListAsync())
             .ToHashSet();
@@ -2593,53 +2769,124 @@ public class StudyController(
             Dictionary<(int, byte), int> freqRanks,
             HashSet<long>? kanaFormKeys,
             HashSet<int>? posMatchedWordIds,
-            DateTime dueCutoff)
+            DateTime dueCutoff,
+            Dictionary<(int, byte), WordSetStateType>? wordSetStates = null,
+            HashSet<(int, byte)>? redundantKanaPairs = null)
     {
-        var filtered = cardStateMap.Where(entry =>
+        bool MatchesFreqRange((int wordId, byte ri) key)
         {
-            var (wordId, ri) = entry.Key;
-            if (!freqRanks.TryGetValue((wordId, ri), out var freq)) return false;
+            if (!freqRanks.TryGetValue(key, out var freq)) return false;
             if (sd.MinGlobalFrequency.HasValue && freq < sd.MinGlobalFrequency.Value) return false;
             if (sd.MaxGlobalFrequency.HasValue && freq > sd.MaxGlobalFrequency.Value) return false;
-            if (sd.ExcludeKana && kanaFormKeys != null && kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(wordId, ri))) return false;
-            if (posMatchedWordIds != null && !posMatchedWordIds.Contains(wordId)) return false;
+            if (sd.ExcludeKana && kanaFormKeys != null && kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(key.wordId, key.ri))) return false;
+            if (posMatchedWordIds != null && !posMatchedWordIds.Contains(key.wordId)) return false;
             return true;
-        }).Select(e => e.Value);
+        }
 
-        return CountCardStats(filtered, dueCutoff);
+        var filtered = cardStateMap
+            .Where(entry => MatchesFreqRange(entry.Key))
+            .Select(e => e.Value);
+
+        var stats = CountCardStats(filtered, dueCutoff);
+
+        if (wordSetStates != null)
+        {
+            foreach (var (key, setState) in wordSetStates)
+            {
+                if (cardStateMap.ContainsKey(key)) continue;
+                if (!MatchesFreqRange(key)) continue;
+                stats.Tracked++;
+                if (setState == WordSetStateType.Mastered) stats.Mastered++;
+                else stats.Blacklisted++;
+            }
+        }
+
+        if (redundantKanaPairs != null)
+        {
+            foreach (var key in redundantKanaPairs)
+            {
+                if (wordSetStates != null && wordSetStates.ContainsKey(key)) continue;
+                if (!MatchesFreqRange(key)) continue;
+                stats.Tracked++;
+                stats.Mastered++;
+            }
+        }
+
+        return stats;
     }
 
     private static (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due)
         ComputeCardStatsFromWordKeys(
             HashSet<long> wordKeys,
             Dictionary<(int, byte), (FsrsState State, DateTime Due)> cardStateMap,
-            DateTime dueCutoff)
+            DateTime dueCutoff,
+            Dictionary<long, WordSetStateType>? wordSetKeys = null,
+            HashSet<long>? redundantKanaKeys = null)
     {
         var filtered = cardStateMap
             .Where(e => wordKeys.Contains(WordFormHelper.EncodeWordKey(e.Key.Item1, e.Key.Item2)))
             .Select(e => e.Value);
 
-        return CountCardStats(filtered, dueCutoff);
+        var stats = CountCardStats(filtered, dueCutoff);
+        if (wordSetKeys != null || redundantKanaKeys != null)
+            EnrichStatsWithWordSetAndKana(ref stats, wordKeys, wordSetKeys, redundantKanaKeys);
+        return stats;
+    }
+
+    private static void EnrichStatsWithWordSetAndKana(
+        ref (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due) stats,
+        HashSet<long> deckKeys,
+        Dictionary<long, WordSetStateType>? wordSetKeys,
+        HashSet<long>? redundantKanaKeys)
+    {
+        if (wordSetKeys != null)
+        {
+            foreach (var (key, setState) in wordSetKeys)
+            {
+                if (!deckKeys.Contains(key)) continue;
+                stats.Tracked++;
+                if (setState == WordSetStateType.Mastered) stats.Mastered++;
+                else stats.Blacklisted++;
+            }
+        }
+
+        if (redundantKanaKeys != null)
+        {
+            foreach (var key in redundantKanaKeys)
+            {
+                if (!deckKeys.Contains(key)) continue;
+                if (wordSetKeys != null && wordSetKeys.ContainsKey(key)) continue;
+                stats.Tracked++;
+                stats.Mastered++;
+            }
+        }
     }
 
     private static void ApplyWordPairCardStats(
         StudyDeckDto dto,
         List<(int WordId, byte ReadingIndex)> wordPairs,
         Dictionary<(int, byte), (FsrsState State, DateTime Due)> cardStateMap,
-        DateTime dueCutoff)
+        DateTime dueCutoff,
+        Dictionary<long, WordSetStateType>? wordSetKeys = null,
+        HashSet<long>? redundantKanaKeys = null)
     {
         var matched = wordPairs
             .Where(w => cardStateMap.ContainsKey((w.WordId, w.ReadingIndex)))
             .Select(w => cardStateMap[(w.WordId, w.ReadingIndex)]);
 
         var stats = CountCardStats(matched, dueCutoff);
+        if (wordSetKeys != null || redundantKanaKeys != null)
+        {
+            var encodedKeys = wordPairs.Select(w => WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)).ToHashSet();
+            EnrichStatsWithWordSetAndKana(ref stats, encodedKeys, wordSetKeys, redundantKanaKeys);
+        }
         dto.LearningCount = stats.Learning;
         dto.ReviewCount = stats.Review;
         dto.MasteredCount = stats.Mastered;
         dto.BlacklistedCount = stats.Blacklisted;
         dto.SuspendedCount = stats.Suspended;
         dto.DueReviewCount = stats.Due;
-        dto.UnseenCount = wordPairs.Count(w => !cardStateMap.ContainsKey((w.WordId, w.ReadingIndex)));
+        dto.UnseenCount = Math.Max(0, wordPairs.Count - stats.Tracked);
     }
 
     private async Task<(UserStudyDeck? Deck, IResult? Error)> GetStaticDeckForUser(int id, string action)

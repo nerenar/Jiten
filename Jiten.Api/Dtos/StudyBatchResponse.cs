@@ -37,6 +37,9 @@ public class StudyDeckOccurrenceDto
     public string? RomajiTitle { get; set; }
     public string? EnglishTitle { get; set; }
     public int Occurrences { get; set; }
+    public string? ParentOriginalTitle { get; set; }
+    public string? ParentRomajiTitle { get; set; }
+    public string? ParentEnglishTitle { get; set; }
 }
 
 public class IntervalPreviewDto
@@ -129,5 +132,10 @@ public class StudyDeckDto
     public int DueReviewCount { get; set; }
     public bool IsActive { get; set; }
     public string? Warning { get; set; }
+    public int? ParentDeckId { get; set; }
+    public string? ParentTitle { get; set; }
+    public string? ParentRomajiTitle { get; set; }
+    public string? ParentEnglishTitle { get; set; }
+    public string? ParentCoverName { get; set; }
 }
 

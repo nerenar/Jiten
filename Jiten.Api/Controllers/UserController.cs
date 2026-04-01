@@ -60,8 +60,8 @@ public class UserController(
                 ComputeEffectiveCategory(c.State, c.Due, c.LastReview, now) ?? KnownState.New;
         }
 
-        // Expand kanji-kana redundancy: count kana forms covered by known kanji forms
-        int redundantForms = 0;
+        // Expand kanji-kana redundancy: build set of kana forms covered by known kanji cards
+        // (deferred merge — WordSets take priority over kana redundancy)
         var redundantExpansions = new Dictionary<(int, int), KnownState>();
         foreach (var kvp in effectiveForms)
         {
@@ -78,9 +78,6 @@ public class UserController(
                     redundantExpansions[kanaKey] = kvp.Value;
             }
         }
-        redundantForms = redundantExpansions.Count;
-        foreach (var (key, state) in redundantExpansions)
-            effectiveForms.TryAdd(key, state);
 
         // Count FSRS-only forms and words
         int youngForms = 0, matureForms = 0, masteredForms = 0, blacklistedForms = 0;
@@ -167,6 +164,14 @@ public class UserController(
                     }
                 }
             }
+        }
+
+        // Merge kana redundancy after WordSets (WordSet > KanaRedundancy priority)
+        int redundantForms = 0;
+        foreach (var (key, state) in redundantExpansions)
+        {
+            if (effectiveForms.TryAdd(key, state))
+                redundantForms++;
         }
 
         return Results.Ok(new KnownWordAmountDto

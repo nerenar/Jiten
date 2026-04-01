@@ -126,7 +126,7 @@
   type Mode = 'manual' | 'target' | 'occurrence';
   const downloadMode = ref<Mode>('manual');
   const downloadType = ref(DeckDownloadType.TopGlobalFrequency);
-  const deckOrder = ref(DeckOrder.GlobalFrequency);
+  const deckOrder = ref(DeckOrder.DeckFrequency);
   const minFrequency = ref(0);
   const maxFrequency = ref(30000);
   const targetPercentage = ref(80);
@@ -136,6 +136,11 @@
   const adding = ref(false);
   const previewCount = ref<{ total: number; unlearned: number } | null>(null);
   const isCountLoading = ref(false);
+
+  watch(downloadMode, (mode) => {
+    if (isEditMode.value) return;
+    deckOrder.value = mode === 'manual' ? DeckOrder.GlobalFrequency : DeckOrder.DeckFrequency;
+  });
 
   const computedDownloadType = computed(() => {
     if (downloadMode.value === 'target') return DeckDownloadType.TargetCoverage;
@@ -404,7 +409,7 @@
     if (!props.preselectedDeck && !props.editDeck) selectedDeck.value = null;
     downloadMode.value = 'manual';
     downloadType.value = DeckDownloadType.TopGlobalFrequency;
-    deckOrder.value = DeckOrder.GlobalFrequency;
+    deckOrder.value = DeckOrder.DeckFrequency;
     minFrequency.value = 0;
     maxFrequency.value = 30000;
     targetPercentage.value = 80;
@@ -635,7 +640,7 @@
           </template>
           <template v-else-if="previewCount !== null">
             <span>~<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.total.toLocaleString() }}</span> words match
-              <span v-if="previewCount.unlearned !== previewCount.total" class="text-gray-500">(<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.unlearned.toLocaleString() }}</span> unlearned)</span>
+              <span v-if="previewCount.unlearned !== previewCount.total" class="text-gray-500">(<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.unlearned.toLocaleString() }}</span> unknown)</span>
             </span>
           </template>
         </span>

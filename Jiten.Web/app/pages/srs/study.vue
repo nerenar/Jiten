@@ -208,7 +208,8 @@
 
   onMounted(async () => {
     loading.value = true;
-    await Promise.all([srsStore.fetchSettings(), srsStore.fetchBatch()]);
+    await srsStore.fetchSettings();
+    await srsStore.fetchBatch();
     loading.value = false;
     if (!srsStore.isSessionComplete && srsStore.currentCard) startElapsedTimer();
   });

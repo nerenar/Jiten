@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Services;
 
-public class DeckWordResolver(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService) : IDeckWordResolver
+public class DeckWordResolver(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService, IWordFormSiblingCache wordFormCache) : IDeckWordResolver
 {
     public async Task<(List<DeckWord>? Words, IResult? Error)> ResolveDeckWords(DeckWordResolveRequest request)
     {
@@ -73,23 +73,18 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                                    .ToHashSet();
 
                 int totalOccurrences = deck.WordCount;
-                int knownOccurrences = allDeckWordsForCoverage
-                                       .Where(dw => knownKeysSet.Contains(WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex)))
-                                       .Sum(dw => dw.Occurrences);
-
                 double targetCoverage = targetPercentage.Value;
 
                 var resultWords = new List<DeckWord>();
-                int cumulativeOccurrences = knownOccurrences;
+                int cumulativeOccurrences = 0;
 
                 foreach (var dw in allDeckWordsForCoverage)
                 {
-                    var key = WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex);
-                    if (knownKeysSet.Contains(key))
-                        continue;
-
-                    resultWords.Add(dw);
                     cumulativeOccurrences += dw.Occurrences;
+
+                    var key = WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex);
+                    if (!knownKeysSet.Contains(key))
+                        resultWords.Add(dw);
 
                     double newCoverage = (double)cumulativeOccurrences / totalOccurrences * 100;
                     if (newCoverage >= targetCoverage)
@@ -483,18 +478,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         var allDeckWords = await context.DeckWords.AsNoTracking()
             .Where(dw => dw.DeckId == deckId)
             .OrderByDescending(dw => dw.Occurrences)
+            .Select(dw => new { dw.WordId, dw.ReadingIndex, dw.Occurrences })
             .ToListAsync();
-
-        var coverageWordKeys = allDeckWords
-            .Select(dw => (dw.WordId, dw.ReadingIndex))
-            .ToList();
-
-        var coverageStates = await currentUserService.GetKnownWordsState(coverageWordKeys);
-
-        var knownKeysSet = coverageStates
-            .Where(kvp => kvp.Value.Any(s => s is KnownState.Mastered or KnownState.Blacklisted or KnownState.Mature))
-            .Select(kvp => WordFormHelper.EncodeWordKey(kvp.Key.WordId, kvp.Key.ReadingIndex))
-            .ToHashSet();
 
         int totalOccurrences = deck.WordCount;
         int cumulativeOccurrences = 0;
@@ -605,6 +590,10 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 excluded.Add(WordFormHelper.EncodeWordKey(m.WordId, m.ReadingIndex));
             }
         }
+
+        WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache,
+            cards.Select(c => (c.WordId, (byte)c.ReadingIndex)),
+            excluded);
 
         return excluded;
     }

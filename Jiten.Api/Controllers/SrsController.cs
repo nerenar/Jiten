@@ -600,6 +600,218 @@ public class SrsController(
         }
     }
 
+    [HttpPost("mass-action/preview")]
+    [SwaggerOperation(Summary = "Preview mass action",
+                      Description = "Returns count and paginated list of cards matching the filters.")]
+    public async Task<IResult> MassActionPreview(MassActionRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var validationError = ValidateMassActionRequest(request, previewOnly: true);
+        if (validationError != null) return Results.BadRequest(validationError);
+
+        var query = BuildMassActionQuery(userId, request);
+        var totalCount = await query.CountAsync();
+
+        var limit = Math.Clamp(request.Limit, 1, 100);
+        var offset = Math.Max(0, request.Offset);
+
+        var cards = await query
+            .OrderBy(c => c.Due)
+            .Skip(offset)
+            .Take(limit)
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Due, c.CreatedAt })
+            .ToListAsync();
+
+        var wordIds = cards.Select(c => c.WordId).Distinct().ToList();
+        var formDict = await WordFormHelper.LoadWordForms(context, wordIds);
+        var freqDict = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+        var words = await context.JMDictWords
+            .AsNoTracking()
+            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
+            .Where(w => wordIds.Contains(w.WordId))
+            .ToDictionaryAsync(w => w.WordId);
+
+        var result = cards.Select(c =>
+        {
+            var form = formDict.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
+            var freq = freqDict.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
+            var mainDef = words.GetValueOrDefault(c.WordId)?.Definitions
+                .FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
+
+            return new MassActionCardDto
+            {
+                WordId = c.WordId,
+                ReadingIndex = (byte)c.ReadingIndex,
+                Reading = form?.RubyText ?? form?.Text ?? "",
+                MainDefinition = mainDef,
+                FrequencyRank = freq?.FrequencyRank ?? 0,
+                State = c.State,
+                Due = c.Due,
+                CreatedAt = c.CreatedAt
+            };
+        }).ToList();
+
+        return Results.Ok(new PaginatedResponse<List<MassActionCardDto>>(result, totalCount, limit, offset));
+    }
+
+    [HttpPost("mass-action/execute")]
+    [SwaggerOperation(Summary = "Execute mass action",
+                      Description = "Applies the configured action to all matching cards.")]
+    public async Task<IResult> MassActionExecute(MassActionRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var validationError = ValidateMassActionRequest(request, previewOnly: false);
+        if (validationError != null) return Results.BadRequest(validationError);
+
+        var query = BuildMassActionQuery(userId, request);
+        int affected;
+
+        switch (request.Action)
+        {
+            case "change-state":
+            {
+                var target = (FsrsState)request.TargetState!.Value;
+                affected = target switch
+                {
+                    FsrsState.Learning => await query.ExecuteUpdateAsync(s => s
+                        .SetProperty(c => c.State, FsrsState.Learning)
+                        .SetProperty(c => c.Step, 0)
+                        .SetProperty(c => c.Due, DateTime.UtcNow)),
+                    _ => await query.ExecuteUpdateAsync(s => s
+                        .SetProperty(c => c.State, target))
+                };
+                break;
+            }
+
+            case "push-due":
+            {
+                var days = request.PushDays!.Value;
+
+                if (request.StaggerBatchSize is > 0)
+                {
+                    var cardIds = await query.OrderBy(c => c.Due).Select(c => c.CardId).ToListAsync();
+                    var batchSize = request.StaggerBatchSize.Value;
+                    affected = 0;
+
+                    for (var i = 0; i < cardIds.Count; i += batchSize)
+                    {
+                        var batch = cardIds.GetRange(i, Math.Min(batchSize, cardIds.Count - i));
+                        var extraDays = i / batchSize;
+                        var totalDays = days + extraDays;
+
+                        affected += await userContext.FsrsCards
+                            .Where(c => batch.Contains(c.CardId))
+                            .ExecuteUpdateAsync(s => s
+                                .SetProperty(c => c.Due, c => c.Due.AddDays(totalDays)));
+                    }
+                }
+                else
+                {
+                    affected = await query.ExecuteUpdateAsync(s => s
+                        .SetProperty(c => c.Due, c => c.Due.AddDays(days)));
+                }
+
+                break;
+            }
+
+            case "delete-cards":
+                affected = await query.ExecuteDeleteAsync();
+                break;
+
+            case "reset-schedule":
+                affected = await query.ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.State, FsrsState.Learning)
+                    .SetProperty(c => c.Step, 0)
+                    .SetProperty(c => c.Stability, (double?)null)
+                    .SetProperty(c => c.Difficulty, (double?)null)
+                    .SetProperty(c => c.Due, DateTime.UtcNow)
+                    .SetProperty(c => c.LastReview, (DateTime?)null));
+                break;
+
+            default:
+                return Results.BadRequest($"Invalid action: {request.Action}");
+        }
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+
+        logger.LogInformation("User executed mass action: Action={Action}, AffectedCount={Count}",
+            request.Action, affected);
+
+        return Results.Json(new { success = true, affectedCount = affected });
+    }
+
+    private IQueryable<FsrsCard> BuildMassActionQuery(string userId, MassActionRequest request)
+    {
+        var query = userContext.FsrsCards.Where(c => c.UserId == userId);
+
+        if (request.StateFilter is { Length: > 0 })
+        {
+            var states = request.StateFilter.Select(s => (FsrsState)s).ToList();
+            query = query.Where(c => states.Contains(c.State));
+        }
+
+        if (request.DateType is "created" or "due")
+        {
+            var isCreated = request.DateType == "created";
+            if (request.DateFrom.HasValue)
+            {
+                var from = DateTime.SpecifyKind(request.DateFrom.Value.Date, DateTimeKind.Utc);
+                query = isCreated
+                    ? query.Where(c => c.CreatedAt >= from)
+                    : query.Where(c => c.Due >= from);
+            }
+
+            if (request.DateTo.HasValue)
+            {
+                var to = DateTime.SpecifyKind(request.DateTo.Value.Date.AddDays(1), DateTimeKind.Utc);
+                query = isCreated
+                    ? query.Where(c => c.CreatedAt < to)
+                    : query.Where(c => c.Due < to);
+            }
+        }
+
+        return query;
+    }
+
+    private static string? ValidateMassActionRequest(MassActionRequest request, bool previewOnly)
+    {
+        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule"))
+            return $"Invalid action: {request.Action}";
+
+        if (!previewOnly)
+        {
+            switch (request.Action)
+            {
+                case "change-state":
+                    if (request.TargetState is not ((int)FsrsState.Learning or (int)FsrsState.Blacklisted
+                        or (int)FsrsState.Mastered or (int)FsrsState.Suspended))
+                        return "Invalid target state. Must be Learning, Blacklisted, Mastered, or Suspended.";
+                    break;
+
+                case "push-due":
+                    if (request.PushDays is null or < -365 or > 365)
+                        return "PushDays is required and must be between -365 and 365.";
+                    if (request.StaggerBatchSize is < 1 or > 10000)
+                        return "StaggerBatchSize must be between 1 and 10000.";
+                    break;
+
+                case "delete-cards" or "reset-schedule":
+                    var hasFilter = (request.StateFilter is { Length: > 0 })
+                                    || request.DateFrom.HasValue
+                                    || request.DateTo.HasValue;
+                    if (!hasFilter)
+                        return "At least one filter is required for this action.";
+                    break;
+            }
+        }
+
+        return null;
+    }
+
     private async Task<UserFsrsSettings?> LoadUserSettings(string userId)
     {
         return await userContext.UserFsrsSettings.AsNoTracking()

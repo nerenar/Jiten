@@ -20,7 +20,7 @@
           top: `${y ?? 0}px`,
           left: `${x ?? 0}px`,
         }"
-        class="z-50"
+        class="z-[1200]"
       >
         <div class="bg-gray-900 dark:bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm max-w-sm">
           <div v-html="formattedContent" class="whitespace-pre-wrap" />

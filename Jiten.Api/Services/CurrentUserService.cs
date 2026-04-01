@@ -46,7 +46,6 @@ public class CurrentUserService(
 
         var wordIds = keysSet.Select(k => k.WordId).Distinct().ToList();
 
-        // 1. Get FsrsCards
         var candidates = await userContext.FsrsCards
                                           .Where(u => u.UserId == UserId && wordIds.Contains(u.WordId))
                                           .ToListAsync();
@@ -56,46 +55,8 @@ public class CurrentUserService(
                             .DistinctBy(w => (w.WordId, w.ReadingIndex))
                             .ToDictionary(w => (w.WordId, w.ReadingIndex));
 
-        // 2. Get user's WordSet subscriptions
-        var userSetStates = await userContext.UserWordSetStates
-                                             .Where(uwss => uwss.UserId == UserId)
-                                             .ToListAsync();
+        var setDerivedStates = await GetWordSetDerivedStates(wordIds);
 
-        // 3. If user has subscriptions, get which requested words are in those sets
-        Dictionary<(int, byte), WordSetStateType> setDerivedStates = new();
-        if (userSetStates.Count > 0)
-        {
-            var subscribedSetIds = userSetStates.Select(s => s.SetId).ToList();
-
-            var memberships = await jitenDbContext.WordSetMembers
-                .Where(wsm => subscribedSetIds.Contains(wsm.SetId) && wordIds.Contains(wsm.WordId))
-                .Select(wsm => new { wsm.WordId, wsm.ReadingIndex, wsm.SetId })
-                .ToListAsync();
-
-            var setStateDict = userSetStates.ToDictionary(s => s.SetId, s => s.State);
-
-            foreach (var m in memberships)
-            {
-                if (m.ReadingIndex < 0 || m.ReadingIndex > byte.MaxValue) continue;
-                var key = (m.WordId, (byte)m.ReadingIndex);
-                if (!keysSet.Contains(key))
-                    continue;
-
-                var newState = setStateDict[m.SetId];
-
-                // Handle overlapping sets: Mastered wins over Blacklisted
-                if (!setDerivedStates.TryGetValue(key, out var existingState))
-                {
-                    setDerivedStates[key] = newState;
-                }
-                else if (newState == WordSetStateType.Mastered && existingState == WordSetStateType.Blacklisted)
-                {
-                    setDerivedStates[key] = WordSetStateType.Mastered;
-                }
-            }
-        }
-
-        // 4. Build result: FsrsCard wins, then WordSet, then redundancy (kanji→kana), then New
         var candidatesByWordId = candidates.GroupBy(c => c.WordId)
                                            .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -175,6 +136,52 @@ public class CurrentUserService(
         knownState.Add(interval < 21 ? KnownState.Young : KnownState.Mature);
 
         return knownState;
+    }
+
+    public Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates() =>
+        GetWordSetDerivedStates(null);
+
+    private async Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates(List<int>? wordIds)
+    {
+        if (!IsAuthenticated)
+            return new();
+
+        var userSetStates = await userContext.UserWordSetStates
+            .AsNoTracking()
+            .Where(uwss => uwss.UserId == UserId)
+            .ToListAsync();
+
+        if (userSetStates.Count == 0)
+            return new();
+
+        var subscribedSetIds = userSetStates.Select(s => s.SetId).ToList();
+
+        IQueryable<WordSetMember> query = jitenDbContext.WordSetMembers
+            .Where(wsm => subscribedSetIds.Contains(wsm.SetId));
+        if (wordIds != null)
+            query = query.Where(wsm => wordIds.Contains(wsm.WordId));
+
+        var memberships = await query
+            .Select(wsm => new { wsm.WordId, wsm.ReadingIndex, wsm.SetId })
+            .ToListAsync();
+
+        var setStateDict = userSetStates.ToDictionary(s => s.SetId, s => s.State);
+        var result = new Dictionary<(int, byte), WordSetStateType>();
+
+        foreach (var m in memberships)
+        {
+            if (m.ReadingIndex < 0 || m.ReadingIndex > byte.MaxValue) continue;
+            var key = (m.WordId, (byte)m.ReadingIndex);
+
+            var newState = setStateDict[m.SetId];
+
+            if (!result.TryGetValue(key, out var existingState))
+                result[key] = newState;
+            else if (newState == WordSetStateType.Mastered && existingState == WordSetStateType.Blacklisted)
+                result[key] = WordSetStateType.Mastered;
+        }
+
+        return result;
     }
 
     public async Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex)
