@@ -188,6 +188,7 @@ public class ReaderController(
                                          MeaningsPartOfSpeech = jmdictWord.Definitions.SelectMany(d => d.PartsOfSpeech).ToList() ?? [""],
                                          FrequencyRank = rdrFormFreq?.FrequencyRank ?? 0,
                                          KnownState = knownState ?? [KnownState.New],
+                                         PitchAccents = jmdictWord.PitchAccents ?? new(),
                                      };
                     allWords.Add(readerWord);
 
