@@ -48,8 +48,8 @@
       <NuxtPage />
     </div>
     <AppFooter v-if="!isStudyMode" />
-    <Toast />
-    <Toast position="bottom-center" group="bottom" />
-    <ConfirmDialog />
+    <LazyToast />
+    <LazyToast position="bottom-center" group="bottom" />
+    <LazyConfirmDialog />
   </div>
 </template>

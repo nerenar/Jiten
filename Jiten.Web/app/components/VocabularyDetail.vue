@@ -32,8 +32,9 @@
   const store = useJitenStore();
   const convertToRuby = useConvertToRuby();
 
+  const currentWordId = ref(props.wordId);
   const currentReadingIndex = ref(props.readingIndex);
-  const infoUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/info`);
+  const infoUrl = computed(() => `vocabulary/${currentWordId.value}/${currentReadingIndex.value}/info`);
   const mediaFreqUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/media-frequency`);
   const knownStateUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/known-state`);
 
@@ -99,7 +100,8 @@
   watch(
     [() => props.wordId, () => props.readingIndex],
     async ([newWordId, newReadingIndex]) => {
-      if (currentReadingIndex.value === newReadingIndex) return;
+      if (currentWordId.value === newWordId && currentReadingIndex.value === newReadingIndex) return;
+      currentWordId.value = newWordId;
       currentReadingIndex.value = newReadingIndex;
       await switchReadingOrWord();
     },

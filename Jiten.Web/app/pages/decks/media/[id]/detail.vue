@@ -60,6 +60,11 @@
     return title;
   });
 
+  const coverUrl = computed(() => {
+    const cover = response.value?.data?.mainDeck?.coverName;
+    return cover && cover !== 'nocover.jpg' ? cover : undefined;
+  });
+
   useHead(() => {
     return {
       title: `${title.value} - Detail`,
@@ -69,6 +74,9 @@
           content: `Anki deck, vocabulary list and statistics for ${title.value} (${response.value?.data?.mainDeck?.originalTitle ?? ''}).`,
         },
       ],
+      link: coverUrl.value
+        ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }]
+        : [],
     };
   });
 

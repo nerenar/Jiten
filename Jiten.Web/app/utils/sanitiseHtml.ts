@@ -1,17 +1,11 @@
-import DOMPurify from 'dompurify';
+const dangerous = /<\s*\/?\s*(script|iframe|object|embed|form|input|textarea|button)\b[^>]*>/gi;
+const onHandlers = /\s+on\w+\s*=\s*["'][^"']*["']/gi;
 
 /**
- * Sanitises HTML content to prevent XSS attacks.
- * Allows basic formatting tags used for ruby text and styling.
- * Client-only — SSR returns raw HTML since it comes from our own API.
+ * Lightweight HTML sanitiser for trusted sources (own API, app-generated markup).
+ * Strips script/iframe/embed tags and inline event handlers as defense-in-depth.
  */
 export function sanitiseHtml(html: string): string {
   if (!html) return '';
-  if (import.meta.server) return html;
-
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ['ruby', 'rt', 'rp', 'span', 'strong', 'em', 'br', 'a', 'b', 'i'],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style', 'lang'],
-    ALLOW_DATA_ATTR: false,
-  });
+  return html.replace(dangerous, '').replace(onHandlers, '');
 }

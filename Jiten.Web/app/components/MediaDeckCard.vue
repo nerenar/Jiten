@@ -295,6 +295,9 @@
                   :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
                   :alt="deck.originalTitle"
                   class="h-48 w-34 min-w-34 object-cover"
+                  fetchpriority="high"
+                  width="136"
+                  height="192"
                 />
                 <div>{{ formatDateAsYyyyMmDd(new Date(deck.releaseDate)).replace(/-/g, '/') }}</div>
                 <template v-if="authStore.isAuthenticated && (deck.coverage != 0 || deck.uniqueCoverage != 0)">
@@ -529,9 +532,9 @@
       </template>
     </Card>
 
-    <MediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
-    <SrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
-    <ReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
+    <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+    <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
+    <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
 
     <TieredMenu v-if="authStore.isAuthenticated" ref="menu" :model="menuItems" popup />
 
@@ -539,14 +542,14 @@
       <div class="flex flex-col gap-6">
         <div>
           <p class="text-sm text-muted-color mb-2">How difficult did you find <strong>{{ ratingDeckId === deck.deckId ? localiseTitle(deck) : 'this series' }}</strong>?</p>
-          <DifficultyRating :deck-id="ratingDeckId" :current-rating="existingRating" @rated="() => {}" />
+          <LazyDifficultyRating :deck-id="ratingDeckId" :current-rating="existingRating" @rated="() => {}" />
         </div>
 
         <template v-if="completionSuggestions.length > 0">
           <Divider />
           <div v-if="completionCurrentPair">
             <p class="text-sm text-muted-color mb-2">Compare with other media you've completed:</p>
-            <DifficultyComparison
+            <LazyDifficultyComparison
               :deck-a="completionCurrentPair.deckA"
               :deck-b="completionCurrentPair.deckB"
               :vote-timestamps="completionVoteTimestamps"

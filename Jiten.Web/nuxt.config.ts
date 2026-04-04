@@ -56,6 +56,9 @@ const JitenPreset = definePreset(Aura, {
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-14',
   devtools: { enabled: true },
+  features: {
+    inlineStyles: false,
+  },
   runtimeConfig: {
     public: {
       baseURL: 'https://localhost:7299/api/',
@@ -111,7 +114,10 @@ export default defineNuxtConfig({
       htmlAttrs: {
         lang: 'en',
       },
-      link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }],
+      link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'preconnect', href: 'https://cdn.jiten.moe' },
+      ],
     },
   },
   site: {
