@@ -147,6 +147,7 @@ services:
   voicevox:
     image: voicevox/voicevox_engine:cpu-latest
     restart: unless-stopped
+    entrypoint: /opt/voicevox_engine/run
     command: --host 0.0.0.0 --port 50021 --cpu_num_threads 4
     deploy:
       resources:
