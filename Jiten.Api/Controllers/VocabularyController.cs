@@ -375,6 +375,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
             return new ExampleSentenceDto
             {
+                SentenceId = p.SentenceId,
                 Text = p.Text,
                 WordPosition = pos?.Position ?? 0,
                 WordLength = pos?.Length ?? 0,

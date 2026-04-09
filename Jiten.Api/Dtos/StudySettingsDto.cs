@@ -95,4 +95,13 @@ public class StudySettingsDto
 
     [JsonPropertyName("furiganaOnFrontNewOnly")]
     public bool FuriganaOnFrontNewOnly { get; set; }
+
+    [JsonPropertyName("autoPlayWord")]
+    public bool AutoPlayWord { get; set; } = true;
+
+    [JsonPropertyName("autoPlaySentence")]
+    public bool AutoPlaySentence { get; set; } = true;
+
+    [JsonPropertyName("timezone")]
+    public string? Timezone { get; set; }
 }

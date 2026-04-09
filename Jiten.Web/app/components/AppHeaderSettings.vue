@@ -19,6 +19,7 @@
     readingSpeed,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
+    ttsVoice,
   } = storeToRefs(store);
   const auth = useAuthStore();
 
@@ -30,6 +31,13 @@
     { label: 'Japanese', value: 0 },
     { label: 'Romaji', value: 1 },
     { label: 'English', value: 2 },
+  ]);
+
+  const ttsVoiceOptions = ref([
+    { label: 'Female', value: 'female' },
+    { label: 'Male', value: 'male' },
+    { label: 'ASMR', value: 'asmr' },
+    { label: 'System', value: 'system' },
   ]);
 
   const difficultyDisplayStyleOptions = ref([
@@ -90,6 +98,20 @@
           @hide="isSettingsInteracted = false"
         />
         <label for="titleLanguage">Titles Language</label>
+      </FloatLabel>
+
+      <FloatLabel variant="on">
+        <Select
+          v-model="ttsVoice"
+          :options="ttsVoiceOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="TTS Voice"
+          input-id="ttsVoice"
+          @show="isSettingsInteracted = true"
+          @hide="isSettingsInteracted = false"
+        />
+        <label for="ttsVoice">TTS Voice</label>
       </FloatLabel>
 
       <Divider class="!my-1 md:!my-2 !mx-2" />

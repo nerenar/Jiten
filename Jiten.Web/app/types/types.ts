@@ -271,6 +271,7 @@ export interface TokenResponse {
 }
 
 export interface ExampleSentence {
+  sentenceId: number;
   text: string;
   wordPosition: number;
   wordLength: number;
@@ -824,6 +825,7 @@ export interface StudyDefinitionDto {
 }
 
 export interface StudyExampleSentenceDto {
+  sentenceId: number;
   text: string;
   wordPosition: number;
   wordLength: number;
@@ -865,6 +867,9 @@ export interface StudySettingsDto {
   showCardStatus: boolean;
   showFuriganaOnFront: boolean;
   furiganaOnFrontNewOnly: boolean;
+  autoPlayWord: boolean;
+  autoPlaySentence: boolean;
+  timezone: string | null;
 }
 
 export interface CardExamplesResponse {
@@ -973,4 +978,75 @@ export interface UpdateStudyDeckRequest {
   minGlobalFrequency?: number;
   maxGlobalFrequency?: number;
   posFilter?: string;
+}
+
+export interface CorpusSnippet {
+  html: string;
+  deckId: number;
+  deckTitle: string;
+  mediaType: MediaType;
+  difficulty: number;
+  releaseYear: number;
+}
+
+export interface CorpusMediaBreakdown {
+  mediaType: MediaType;
+  hits: number;
+  deckCount: number;
+  totalCharacters: number;
+  hitsPerMillion: number;
+  percentage: number;
+}
+
+export interface CorpusTrendPoint {
+  year: number;
+  matchingChars: number;
+  totalCharsInYear: number;
+  percentage: number;
+}
+
+export interface CorpusDifficultyBucket {
+  bucketMin: number;
+  bucketMax: number;
+  deckCount: number;
+  hits: number;
+}
+
+export interface CorpusTopDeck {
+  deckId: number;
+  title: string;
+  parentTitle: string | null;
+  mediaType: MediaType;
+  occurrences: number;
+  perMillion: number;
+}
+
+export interface CorpusTermResult {
+  term: string;
+  totalHits: number;
+  matchingDecks: number;
+  hitsPerMillion: number;
+  snippets: CorpusSnippet[];
+  mediaBreakdown: CorpusMediaBreakdown[];
+  trends: CorpusTrendPoint[];
+  difficultyDistribution: CorpusDifficultyBucket[];
+  topDecks: CorpusTopDeck[];
+  dialogueWeightedAvg: number;
+}
+
+export interface CorpusStats {
+  totalDecks: number;
+  totalCharacters: number;
+  decksWithRawText: number;
+}
+
+export interface CorpusSearchResponse {
+  results: CorpusTermResult[];
+  corpusStats: CorpusStats;
+}
+
+export interface CorpusCoOccurrence {
+  termA: string;
+  termB: string;
+  sharedDecks: number;
 }

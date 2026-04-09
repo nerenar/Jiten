@@ -476,8 +476,26 @@
               </div>
 
               <!-- Cover -->
-              <div class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
-                <template v-if="deck.deckType === StudyDeckType.MediaDeck">
+              <NuxtLink
+                v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
+                :to="`/decks/media/${deck.deckId}/detail`"
+                class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700"
+              >
+                <img
+                  v-if="getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName)"
+                  :src="(getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName))!"
+                  :alt="deck.title"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
+                  <Icon name="material-symbols:book-2" size="24" />
+                </div>
+              </NuxtLink>
+              <div v-else class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
+                <div v-if="deck.deckType === StudyDeckType.GlobalDynamic" class="w-full h-full flex items-center justify-center text-blue-400">
+                  <Icon name="material-symbols:language" size="28" />
+                </div>
+                <div v-else-if="deck.deckType === StudyDeckType.MediaDeck">
                   <img
                     v-if="getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName)"
                     :src="(getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName))!"
@@ -487,9 +505,6 @@
                   <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
                     <Icon name="material-symbols:book-2" size="24" />
                   </div>
-                </template>
-                <div v-else-if="deck.deckType === StudyDeckType.GlobalDynamic" class="w-full h-full flex items-center justify-center text-blue-400">
-                  <Icon name="material-symbols:language" size="28" />
                 </div>
                 <div v-else class="w-full h-full flex items-center justify-center text-green-400">
                   <Icon name="material-symbols:list-alt" size="28" />
@@ -502,7 +517,14 @@
                   {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
                 </div>
                 <div class="font-semibold truncate">
-                  <template v-if="deck.deckType === StudyDeckType.MediaDeck">
+                  <NuxtLink
+                    v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
+                    :to="`/decks/media/${deck.deckId}/detail`"
+                    class="hover:text-primary-500 transition-colors"
+                  >
+                    {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
+                  </NuxtLink>
+                  <template v-else-if="deck.deckType === StudyDeckType.MediaDeck">
                     {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
                   </template>
                   <template v-else>{{ deck.name }}</template>
@@ -637,8 +659,26 @@
               </div>
 
               <!-- Cover -->
-              <div class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
-                <template v-if="deck.deckType === StudyDeckType.MediaDeck">
+              <NuxtLink
+                v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
+                :to="`/decks/media/${deck.deckId}/detail`"
+                class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700"
+              >
+                <img
+                  v-if="getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName)"
+                  :src="(getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName))!"
+                  :alt="deck.title"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
+                  <Icon name="material-symbols:book-2" size="24" />
+                </div>
+              </NuxtLink>
+              <div v-else class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
+                <div v-if="deck.deckType === StudyDeckType.GlobalDynamic" class="w-full h-full flex items-center justify-center text-blue-400">
+                  <Icon name="material-symbols:language" size="28" />
+                </div>
+                <div v-else-if="deck.deckType === StudyDeckType.MediaDeck">
                   <img
                     v-if="getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName)"
                     :src="(getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName))!"
@@ -648,9 +688,6 @@
                   <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
                     <Icon name="material-symbols:book-2" size="24" />
                   </div>
-                </template>
-                <div v-else-if="deck.deckType === StudyDeckType.GlobalDynamic" class="w-full h-full flex items-center justify-center text-blue-400">
-                  <Icon name="material-symbols:language" size="28" />
                 </div>
                 <div v-else class="w-full h-full flex items-center justify-center text-green-400">
                   <Icon name="material-symbols:list-alt" size="28" />
@@ -663,7 +700,14 @@
                   {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
                 </div>
                 <div class="font-semibold truncate">
-                  <template v-if="deck.deckType === StudyDeckType.MediaDeck">
+                  <NuxtLink
+                    v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
+                    :to="`/decks/media/${deck.deckId}/detail`"
+                    class="hover:text-primary-500 transition-colors"
+                  >
+                    {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
+                  </NuxtLink>
+                  <template v-else-if="deck.deckType === StudyDeckType.MediaDeck">
                     {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
                   </template>
                   <template v-else>{{ deck.name }}</template>

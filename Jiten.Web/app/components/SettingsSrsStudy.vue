@@ -14,7 +14,9 @@
   onMounted(async () => {
     await srsStore.fetchSettings();
     Object.assign(form, srsStore.studySettings);
+    if (!form.timezone) applyDetectedTimezone();
     loaded.value = true;
+    tickInterval = setInterval(() => { nowMinute.value = Date.now(); }, 60_000);
   });
 
   const gradingOptions = [
@@ -44,6 +46,58 @@
     { label: 'Front', value: 'Front' },
     { label: 'Back', value: 'Back' },
   ];
+
+  function getUtcOffsetMinutes(zone: string, date?: Date): number {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false, timeZoneName: 'shortOffset' })
+      .formatToParts(date ?? new Date());
+    const offsetStr = parts.find(p => p.type === 'timeZoneName')?.value ?? 'GMT';
+    const match = offsetStr.match(/GMT([+-]?\d+)?(?::(\d+))?/);
+    const hours = match?.[1] ? parseInt(match[1]) : 0;
+    const minutes = match?.[2] ? parseInt(match[2]) : 0;
+    return hours * 60 + (hours >= 0 ? minutes : -minutes);
+  }
+
+  function formatUtcOffset(totalMinutes: number): string {
+    if (totalMinutes === 0) return 'UTC';
+    const sign = totalMinutes > 0 ? '+' : '-';
+    const abs = Math.abs(totalMinutes);
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    return m > 0 ? `UTC${sign}${h}:${m.toString().padStart(2, '0')}` : `UTC${sign}${h}`;
+  }
+
+  function formatZoneName(zone: string): string {
+    return zone.split('/').pop()!.replace(/_/g, ' ');
+  }
+
+  const nowMinute = ref(Date.now());
+  let tickInterval: ReturnType<typeof setInterval>;
+  onUnmounted(() => clearInterval(tickInterval));
+
+  const dayStartOptions = computed(() => {
+    void nowMinute.value;
+    const now = new Date();
+    const zones = Intl.supportedValuesOf('timeZone')
+      .filter(z => !z.startsWith('Etc/'));
+    const items = zones.map(zone => {
+      const offsetMinutes = getUtcOffsetMinutes(zone);
+      const localTime = now.toLocaleTimeString('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false });
+      return {
+        label: `(${formatUtcOffset(offsetMinutes)}) ${formatZoneName(zone)} — Currently ${localTime}`,
+        value: zone,
+        offsetMinutes,
+      };
+    });
+    items.sort((a, b) => a.offsetMinutes - b.offsetMinutes || a.label.localeCompare(b.label));
+    return items;
+  });
+
+  function applyDetectedTimezone() {
+    try {
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (dayStartOptions.value.some(o => o.value === zone)) form.timezone = zone;
+    } catch { /* no-op */ }
+  }
 
   async function save() {
     saving.value = true;
@@ -116,6 +170,19 @@
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-1">
+          Timezone
+          <Tooltip content="Your daily card limits and streaks reset at midnight in this timezone." placement="top">
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <Select v-model="form.timezone" :options="dayStartOptions" option-label="label" option-value="value" filter class="flex-1" />
+          <Button type="button" severity="secondary" size="small" label="Detect my timezone" class="shrink-0" @click="applyDetectedTimezone" />
+        </div>
       </div>
 
       <Divider />
@@ -284,6 +351,24 @@
           <label for="enableSwipeGesture" class="text-sm cursor-pointer">
             Swipe to grade
             <Tooltip content="Swipe the card left (Again) or right (Good) to grade. Works with both mouse and touch." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlayWord" input-id="autoPlayWord" />
+          <label for="autoPlayWord" class="text-sm cursor-pointer">
+            Auto-play word audio on flip
+            <Tooltip content="Automatically read the headword aloud when you flip a card." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlaySentence" input-id="autoPlaySentence" />
+          <label for="autoPlaySentence" class="text-sm cursor-pointer">
+            Auto-play example sentence on flip
+            <Tooltip content="Automatically read the example sentence aloud when you flip a card. If both word and sentence are enabled, they play sequentially." placement="right">
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>

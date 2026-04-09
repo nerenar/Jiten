@@ -10,6 +10,7 @@
 
   const srs = useSrsStore();
   const srsAcknowledged = ref(false);
+
   const enrolling = ref(false);
 
   async function enrollInSrs() {

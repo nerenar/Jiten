@@ -32,6 +32,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      voicevox:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1"]
       interval: 5s
@@ -74,6 +76,7 @@ services:
       - RunPod__ApiKey=${RUNPOD_API_KEY:-}
       - RunPod__NovelsEndpointId=${RUNPOD_NOVELS_ENDPOINT_ID:-}
       - RunPod__ShowsEndpointId=${RUNPOD_SHOWS_ENDPOINT_ID:-}
+      - VoicevoxUrl=${VOICEVOX_URL:-http://voicevox:50021}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
@@ -140,6 +143,21 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.umami.rule=Host(`umami.jiten.moe`)"
       - "traefik.http.services.umami.loadbalancer.server.port=3005"
+
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-latest
+    restart: unless-stopped
+    command: --host 0.0.0.0 --port 50021 --cpu_num_threads 4
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:50021/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   redis:
     image: redis:latest

@@ -76,6 +76,7 @@
         occurrenceFilterType.value = 'lte';
         occurrenceThreshold.value = deck.maxOccurrences;
       }
+      mediaPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
       excludeKana.value = deck.excludeKana;
       step.value = 'filters';
     } else if (deck.deckType === StudyDeckType.GlobalDynamic) {
@@ -132,6 +133,7 @@
   const targetPercentage = ref(80);
   const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
   const occurrenceThreshold = ref(10);
+  const mediaPosFilter = ref<string[]>([]);
   const excludeKana = ref(false);
   const adding = ref(false);
   const previewCount = ref<{ total: number; unlearned: number } | null>(null);
@@ -165,6 +167,7 @@
           targetPercentage: downloadMode.value === 'target' ? targetPercentage.value : undefined,
           minOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'gte' ? occurrenceThreshold.value : undefined,
           maxOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'lte' ? occurrenceThreshold.value : undefined,
+          posFilter: mediaPosFilter.value.length > 0 ? JSON.stringify(mediaPosFilter.value) : undefined,
           excludeKana: excludeKana.value,
         },
       });
@@ -184,7 +187,7 @@
       step, () => selectedDeck.value?.deckId,
       computedDownloadType, downloadType, deckOrder,
       minFrequency, maxFrequency, targetPercentage,
-      occurrenceFilterType, occurrenceThreshold, excludeKana,
+      occurrenceFilterType, occurrenceThreshold, mediaPosFilter, excludeKana,
     ],
     () => {
       if (step.value !== 'filters' || !selectedDeck.value) {
@@ -335,6 +338,7 @@
           targetPercentage: downloadMode.value === 'target' ? targetPercentage.value : undefined,
           minOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'gte' ? occurrenceThreshold.value : undefined,
           maxOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'lte' ? occurrenceThreshold.value : undefined,
+          posFilter: mediaPosFilter.value.length > 0 ? JSON.stringify(mediaPosFilter.value) : undefined,
           excludeKana: excludeKana.value,
         };
 
@@ -415,6 +419,7 @@
     targetPercentage.value = 80;
     occurrenceFilterType.value = 'gte';
     occurrenceThreshold.value = 10;
+    mediaPosFilter.value = [];
     excludeKana.value = false;
     previewCount.value = null;
     globalName.value = '';
@@ -619,6 +624,20 @@
           </div>
         </div>
       </template>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium mb-1">Parts of Speech <span class="text-gray-400">(optional)</span></label>
+        <MultiSelect
+          v-model="mediaPosFilter"
+          :options="posOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="All parts of speech"
+          class="w-full"
+          :max-selected-labels="3"
+          display="chip"
+        />
+      </div>
 
       <div class="mb-3">
         <label class="block text-sm font-medium mb-1">Card Order</label>

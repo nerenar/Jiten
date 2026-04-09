@@ -1078,7 +1078,7 @@ public class MediaDeckController(
                                            .Where(x => targetDeckIds.Contains(x.d.ParentDeckId ?? x.d.DeckId))
                                            .Select(x => new
                                                         {
-                                                            EffectiveDeckId = x.d.ParentDeckId ?? x.d.DeckId, x.es.Text, Match = x.es.Words
+                                                            EffectiveDeckId = x.d.ParentDeckId ?? x.d.DeckId, x.es.SentenceId, x.es.Text, Match = x.es.Words
                                                                 .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
                                                                 .Select(w => new { w.Position, w.Length })
                                                                 .FirstOrDefault()
@@ -1092,7 +1092,7 @@ public class MediaDeckController(
         var exampleSentencesByDeck = minimalExamples
             .ToDictionary(
                           x => x.EffectiveDeckId,
-                          x => new ExampleSentenceDto { Text = x.Text, WordPosition = x.Match!.Position, WordLength = x.Match!.Length });
+                          x => new ExampleSentenceDto { SentenceId = x.SentenceId, Text = x.Text, WordPosition = x.Match!.Position, WordLength = x.Match!.Length });
 
         var dtos = paginatedResults
                    .Select(r => new DeckDto(

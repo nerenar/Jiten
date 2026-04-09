@@ -72,6 +72,9 @@ export const useSrsStore = defineStore('srs', () => {
     countFailedReviews: true,
     showFuriganaOnFront: false,
     furiganaOnFrontNewOnly: false,
+    autoPlayWord: true,
+    autoPlaySentence: true,
+    timezone: 'Europe/London',
   });
   const sessionStats = ref({
     cardsReviewed: 0,

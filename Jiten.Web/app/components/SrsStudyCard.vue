@@ -3,6 +3,7 @@
   import { useSrsStore } from '~/stores/srsStore';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
+  import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
 
   const props = defineProps<{
@@ -149,6 +150,34 @@
     extraSentencesExpanded.value = false;
     canLoadMoreSentences.value = true;
   });
+
+  const headWordTtsText = computed(() => {
+    const raw = wordData.value?.mainReading?.text || props.card.wordText || props.card.wordTextPlain;
+    return stripRubyMarkup(raw);
+  });
+
+  const tts = useTts();
+
+  watch(() => props.isFlipped, (flipped) => {
+    if (!flipped) return;
+    const playWord = srsStore.studySettings.autoPlayWord;
+    const example = cardExample.value;
+    const playSentence = srsStore.studySettings.autoPlaySentence && example?.sentenceId;
+
+    if (playWord) {
+      tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
+      if (playSentence) {
+        const unwatch = watch(tts.isAnyPlaying, (playing) => {
+          if (!playing) {
+            unwatch();
+            setTimeout(() => tts.speakSentence(example!.sentenceId, example!.text), 150);
+          }
+        });
+      }
+    } else if (playSentence) {
+      tts.speakSentence(example!.sentenceId, example!.text);
+    }
+  });
 </script>
 
 <template>
@@ -209,19 +238,22 @@
           {{ srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'Again' : card.isNewCard ? 'New' : 'Review' }}
         </div>
         <!-- Plain text before flip, ruby text after flip -->
-        <div
-          v-if="!isFlipped && srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || card.isNewCard)"
-          class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans head-word"
-          v-html="convertToRuby(card.wordText || card.wordTextPlain)"
-        />
-        <div v-else-if="!isFlipped" class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans">
-          {{ card.wordTextPlain }}
+        <div class="flex items-center justify-center gap-3 mb-2">
+          <div
+            v-if="!isFlipped && srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || card.isNewCard)"
+            class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+            v-html="convertToRuby(card.wordText || card.wordTextPlain)"
+          />
+          <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans">
+            {{ card.wordTextPlain }}
+          </div>
+          <div
+            v-else
+            class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+            v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain)"
+          />
+          <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
         </div>
-        <div
-          v-else
-          class="text-4xl md:text-5xl font-bold text-center mb-2 font-noto-sans head-word"
-          v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain)"
-        />
         <!-- Example sentence on front -->
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full" @click.stop>
           <blockquote
@@ -229,7 +261,10 @@
             :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
             @click.stop="exampleRevealed = true"
           >
-            <div v-html="exampleSentenceHtml" class="text-base leading-relaxed" />
+            <div class="flex items-start gap-2">
+              <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
+              <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
+            </div>
           </blockquote>
           <div v-if="cardExample?.sourceDeck" class="flex items-center mt-1">
             <span class="text-xs italic mr-2 ml-4">Source:</span>
@@ -344,7 +379,10 @@
               :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
               @click.stop="exampleRevealed = true"
             >
-              <div v-html="exampleSentenceHtml" class="text-base leading-relaxed" />
+              <div class="flex items-start gap-2">
+                <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
+                <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
+              </div>
             </blockquote>
             <div v-if="cardExample?.sourceDeck" class="flex items-center mt-1">
               <span class="text-xs italic mr-2 ml-4">Source:</span>

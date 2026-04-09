@@ -2,6 +2,7 @@
   import { KnownState, type ExampleSentence, type MediaType, type Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
   import Button from 'primevue/button';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -166,10 +167,13 @@
           <div class="flex justify-between">
             <div>
               <div v-if="conjugationString != null" class="text-gray-500 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
-              <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
-                <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.mainReading.text)" />
-              </NuxtLink>
-              <div v-if="!showRedirect" class="text-3xl font-noto-sans" v-html="convertToRuby(response.mainReading.text)" />
+              <div class="flex items-center gap-2">
+                <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
+                  <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.mainReading.text)" />
+                </NuxtLink>
+                <div v-if="!showRedirect" class="text-3xl font-noto-sans" v-html="convertToRuby(response.mainReading.text)" />
+                <TtsButton :text="stripRubyMarkup(response.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" />
+              </div>
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
               <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.mainReading.frequencyRank.toLocaleString() }}</div>

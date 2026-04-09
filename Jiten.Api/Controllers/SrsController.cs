@@ -558,7 +558,13 @@ public class SrsController(
                 break;
 
             case "suspend-add":
-                if (card != null && card.State != FsrsState.Suspended)
+                if (card == null)
+                {
+                    card = new FsrsCard(userId, request.WordId, request.ReadingIndex,
+                                        state: FsrsState.Suspended);
+                    await userContext.FsrsCards.AddAsync(card);
+                }
+                else if (card.State != FsrsState.Suspended)
                 {
                     card.State = FsrsState.Suspended;
                 }

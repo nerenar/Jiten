@@ -34,7 +34,8 @@
       Subtitles from <a href="https://www.jimaku.cc" target="_blank" rel="noopener noreferrer">Jimaku</a> <br />
       Game scripts from <a href="https://sites.google.com/view/jo-mako/resources/resources-list?authuser=0" target="_blank" rel="noopener noreferrer">Jo-Mako</a> <br />
       Some VN scripts from <a href="http://wiki.wareya.moe/Stats" target="_blank" rel="noopener noreferrer">Wareya</a>.<br />
-      Everything else comes from me or our generous contributors on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>!`,
+      Everything else comes from me or our generous contributors on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>!<br /><br />
+      Audio pronunciations are generated using <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener noreferrer">VOICEVOX</a> with voices <a href="https://www.krnr.top/rules" target="_blank" rel="noopener noreferrer">ナースロボ＿タイプＴ</a> and <a href="https://frontier.creatia.cc/fanclubs/413/posts/4507" target="_blank" rel="noopener noreferrer">剣崎雌雄</a>.`,
     },
     {
       question: "What's next for the website?",

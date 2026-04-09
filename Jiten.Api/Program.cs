@@ -107,6 +107,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("Voicevox", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["VoicevoxUrl"] ?? "http://localhost:50021");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddSingleton<ITtsService, TtsService>();
 
 // OpenTelemetry Configuration
 var otelConfig = builder.Configuration.GetSection("OpenTelemetry");

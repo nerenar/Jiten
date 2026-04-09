@@ -16,9 +16,20 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter) = request;
 
         IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
+
+        if (!string.IsNullOrEmpty(posFilter))
+        {
+            var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
+            if (posTags is { Length: > 0 })
+            {
+                var wordIdsWithPos = context.JMDictWords.AsNoTracking()
+                    .Where(w => w.PartsOfSpeech.Any(p => posTags.Contains(p)));
+                deckWordsQuery = deckWordsQuery.Where(dw => wordIdsWithPos.Any(w => w.WordId == dw.WordId));
+            }
+        }
 
         List<DeckWord>? deckWordsRaw = null;
 
@@ -396,7 +407,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter) = request;
 
         IQueryable<DeckWord> query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
 
@@ -435,6 +446,17 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             query = query.Where(dw => context.WordForms
                 .Any(wf => wf.WordId == dw.WordId && wf.ReadingIndex == (short)dw.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
 
+        if (!string.IsNullOrEmpty(posFilter))
+        {
+            var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
+            if (posTags is { Length: > 0 })
+            {
+                var wordIdsWithPos = context.JMDictWords.AsNoTracking()
+                    .Where(w => w.PartsOfSpeech.Any(p => posTags.Contains(p)));
+                query = query.Where(dw => wordIdsWithPos.Any(w => w.WordId == dw.WordId));
+            }
+        }
+
         var pairs = await query
             .Select(dw => new { dw.WordId, dw.ReadingIndex })
             .ToListAsync();
@@ -470,13 +492,26 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return false;
     }
 
-    public async Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana)
+    public async Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null)
     {
         if (!currentUserService.IsAuthenticated)
             return (0, []);
 
-        var allDeckWords = await context.DeckWords.AsNoTracking()
-            .Where(dw => dw.DeckId == deckId)
+        IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking()
+            .Where(dw => dw.DeckId == deckId);
+
+        if (!string.IsNullOrEmpty(posFilter))
+        {
+            var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
+            if (posTags is { Length: > 0 })
+            {
+                var wordIdsWithPos = context.JMDictWords.AsNoTracking()
+                    .Where(w => w.PartsOfSpeech.Any(p => posTags.Contains(p)));
+                deckWordsQuery = deckWordsQuery.Where(dw => wordIdsWithPos.Any(w => w.WordId == dw.WordId));
+            }
+        }
+
+        var allDeckWords = await deckWordsQuery
             .OrderByDescending(dw => dw.Occurrences)
             .Select(dw => new { dw.WordId, dw.ReadingIndex, dw.Occurrences })
             .ToListAsync();
