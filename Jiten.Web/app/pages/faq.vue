@@ -35,7 +35,7 @@
       Game scripts from <a href="https://sites.google.com/view/jo-mako/resources/resources-list?authuser=0" target="_blank" rel="noopener noreferrer">Jo-Mako</a> <br />
       Some VN scripts from <a href="http://wiki.wareya.moe/Stats" target="_blank" rel="noopener noreferrer">Wareya</a>.<br />
       Everything else comes from me or our generous contributors on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>!<br /><br />
-      Audio pronunciations are generated using <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener noreferrer">VOICEVOX</a> with voices <a href="https://www.krnr.top/rules" target="_blank" rel="noopener noreferrer">ナースロボ＿タイプＴ</a> and <a href="https://frontier.creatia.cc/fanclubs/413/posts/4507" target="_blank" rel="noopener noreferrer">剣崎雌雄</a>.`,
+      Audio pronunciations are generated using <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener noreferrer">VOICEVOX</a> with voices <a href="https://zunko.jp/con_ongen_kiyaku.html" target="_blank" rel="noopener noreferrer">四国めたん</a> (Female 1), <a href="https://zunko.jp/con_ongen_kiyaku.html" target="_blank" rel="noopener noreferrer">九州そら</a> (Female 2, ASMR), <a href="https://frontier.creatia.cc/fanclubs/413/posts/4507" target="_blank" rel="noopener noreferrer">剣崎雌雄</a> (Male 1), and <a href="https://virvoxproject.wixsite.com/official/voicevox" target="_blank" rel="noopener noreferrer">青山龍星</a> (Male 2).`,
     },
     {
       question: "What's next for the website?",
