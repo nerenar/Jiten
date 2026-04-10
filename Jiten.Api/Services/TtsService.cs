@@ -33,9 +33,11 @@ public class TtsService(
 {
     private static readonly Dictionary<string, VoiceConfig> Voices = new()
     {
-        ["female"] = new("ナースロボ＿タイプＴ", null),
+        ["female"] = new("四国めたん", null),
+        ["female2"] = new("九州そら", "セクシー", 1.25),
         ["male"] = new("剣崎雌雄", null),
-        ["asmr"] = new("ナースロボ＿タイプＴ", "内緒話"),
+        ["male2"] = new("青山龍星", "しっとり"),
+        ["asmr"] = new("九州そら", "ささやき", 1.25),
     };
 
     private static readonly ConcurrentDictionary<string, int> SpeakerIds = new();
@@ -198,9 +200,13 @@ public class TtsService(
         var query = await queryResp.Content.ReadFromJsonAsync<JsonElement>(ct);
 
         var queryDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(query.GetRawText())!;
+        var config = Voices[voice];
         queryDict["outputSamplingRate"] = JsonSerializer.SerializeToElement(24000);
+        if (config.SpeedScale != 1.0)
+            queryDict["speedScale"] = JsonSerializer.SerializeToElement(config.SpeedScale);
         if (type == TtsType.Sentence)
             queryDict["intonationScale"] = JsonSerializer.SerializeToElement(1.5);
+        BoostVoicedConsonants(queryDict);
 
         var synthResp = await vvClient.PostAsJsonAsync($"/synthesis?speaker={speakerId}", queryDict, ct);
         synthResp.EnsureSuccessStatusCode();
@@ -309,12 +315,45 @@ public class TtsService(
 
     private string GetCdnUrl(string text, TtsType type, string voice) => $"{_cdnBaseUrl}/{GetStoragePath(text, type, voice)}";
 
+    private static readonly HashSet<string> VoicedConsonants = ["b", "d", "g", "z", "j", "dy", "by", "gy", "zy"];
+    private const double VoicedBoostFactor = 2.0;
+    private const double VoicedMinLength = 0.1;
+
+    private static void BoostVoicedConsonants(Dictionary<string, JsonElement> queryDict)
+    {
+        if (!queryDict.TryGetValue("accent_phrases", out var phrasesEl)) return;
+        var phrases = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(phrasesEl.GetRawText());
+        if (phrases == null) return;
+
+        foreach (var phrase in phrases)
+        {
+            if (!phrase.TryGetValue("moras", out var morasEl)) continue;
+            var moras = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(morasEl.GetRawText());
+            if (moras == null) continue;
+
+            foreach (var mora in moras)
+            {
+                if (!mora.TryGetValue("consonant", out var cEl) || cEl.ValueKind != JsonValueKind.String) continue;
+                var consonant = cEl.GetString();
+                if (consonant == null || !VoicedConsonants.Contains(consonant)) continue;
+
+                var currentLength = mora.TryGetValue("consonant_length", out var clEl) ? clEl.GetDouble() : 0;
+                mora["consonant_length"] = JsonSerializer.SerializeToElement(
+                    Math.Max(currentLength * VoicedBoostFactor, VoicedMinLength));
+            }
+
+            phrase["moras"] = JsonSerializer.SerializeToElement(moras);
+        }
+
+        queryDict["accent_phrases"] = JsonSerializer.SerializeToElement(phrases);
+    }
+
     private static readonly Regex RubyPattern = new(@"[\u4E00-\u9FFF\uFF10-\uFF5A々]+\[([\u3040-\u309F\u30A0-\u30FF]+)\]", RegexOptions.Compiled);
 
     private static string StripRubyToKana(string rubyText) =>
         RubyPattern.Replace(rubyText, "$1");
 
-    private record VoiceConfig(string Speaker, string? Style);
+    private record VoiceConfig(string Speaker, string? Style, double SpeedScale = 1.0);
 
     private class GenerationCounter
     {

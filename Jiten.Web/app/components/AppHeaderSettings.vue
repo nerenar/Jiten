@@ -23,6 +23,8 @@
   } = storeToRefs(store);
   const auth = useAuthStore();
 
+  const { speakWord, isSpeaking, isLoading } = useTts(undefined, 'word');
+
   const settings = ref();
   const isOverSettings = ref(false);
   const isSettingsInteracted = ref(false);
@@ -34,8 +36,10 @@
   ]);
 
   const ttsVoiceOptions = ref([
-    { label: 'Female', value: 'female' },
-    { label: 'Male', value: 'male' },
+    { label: 'Female 1', value: 'female' },
+    { label: 'Female 2', value: 'female2' },
+    { label: 'Male 1', value: 'male' },
+    { label: 'Male 2', value: 'male2' },
     { label: 'ASMR', value: 'asmr' },
     { label: 'System', value: 'system' },
   ]);
@@ -100,19 +104,32 @@
         <label for="titleLanguage">Titles Language</label>
       </FloatLabel>
 
-      <FloatLabel variant="on">
-        <Select
-          v-model="ttsVoice"
-          :options="ttsVoiceOptions"
-          option-label="label"
-          option-value="value"
-          placeholder="TTS Voice"
-          input-id="ttsVoice"
-          @show="isSettingsInteracted = true"
-          @hide="isSettingsInteracted = false"
-        />
-        <label for="ttsVoice">TTS Voice</label>
-      </FloatLabel>
+      <div class="flex items-center gap-2">
+        <FloatLabel variant="on" class="flex-1">
+          <Select
+            v-model="ttsVoice"
+            :options="ttsVoiceOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="TTS Voice"
+            input-id="ttsVoice"
+            @show="isSettingsInteracted = true"
+            @hide="isSettingsInteracted = false"
+          />
+          <label for="ttsVoice">TTS Voice</label>
+        </FloatLabel>
+        <button
+          v-if="ttsVoice !== 'system'"
+          type="button"
+          class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer p-1"
+          :class="{ '!text-primary-500': isSpeaking }"
+          title="Preview voice"
+          @click="speakWord(1002340, 3)"
+        >
+          <i v-if="isLoading" class="pi pi-spin pi-spinner text-base" />
+          <i v-else class="pi pi-volume-up text-base" />
+        </button>
+      </div>
 
       <Divider class="!my-1 md:!my-2 !mx-2" />
 
