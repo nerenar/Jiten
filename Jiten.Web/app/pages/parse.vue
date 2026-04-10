@@ -80,7 +80,9 @@
 
   const showParseResults = computed(() => {
     if (!canParse.value) return false;
-    if (hasAnyDictionaryResults.value && !showParseResultsManually.value) return false;
+    if (showParseResultsManually.value) return true;
+    if (searchStatus.value !== 'success') return false;
+    if (hasAnyDictionaryResults.value) return false;
     return true;
   });
 
@@ -277,8 +279,8 @@
   onUnmounted(() => observer?.disconnect());
 
   watch(
-    () => status.value,
-    (newStatus) => {
+    () => [status.value, showParseResults.value] as const,
+    ([newStatus]) => {
       if (showParseResults.value && !selectedWord.value) {
         selectedWord.value = words.value.find((word) => word.wordId != 0);
       } else if (newStatus === 'error' || newStatus === 'idle') {
