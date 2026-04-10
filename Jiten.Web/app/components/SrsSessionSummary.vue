@@ -39,9 +39,15 @@
     return `${minutes}m ${seconds}s`;
   });
 
+  const totalReviews = computed(() => {
+    const { again, hard, good, easy } = props.gradeCounts;
+    return again + hard + good + easy;
+  });
+
   const accuracy = computed(() => {
-    if (props.cardsReviewed === 0) return 0;
-    return Math.round((props.correctCount / props.cardsReviewed) * 100);
+    if (totalReviews.value === 0) return 0;
+    const { good, easy } = props.gradeCounts;
+    return Math.round(((good + easy) / totalReviews.value) * 100);
   });
 
   const isAllCaughtUp = computed(() => {
@@ -128,8 +134,8 @@
 
     <div class="grid grid-cols-2 gap-6 w-full mb-6">
       <div class="text-center">
-        <div class="text-3xl font-bold text-primary-600 dark:text-primary-400">{{ cardsReviewed }}</div>
-        <div class="text-sm text-gray-500">Cards Reviewed</div>
+        <div class="text-3xl font-bold text-primary-600 dark:text-primary-400">{{ totalReviews }}</div>
+        <div class="text-sm text-gray-500">Reviews</div>
       </div>
       <div class="text-center">
         <div class="text-3xl font-bold text-green-600 dark:text-green-400">{{ newCardsLearned }}</div>
