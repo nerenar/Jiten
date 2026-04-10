@@ -42,6 +42,8 @@ function reset() {
   activeState.value = null;
 }
 
+export function stopTts() { reset(); }
+
 export type TtsType = 'word' | 'sentence';
 
 export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {

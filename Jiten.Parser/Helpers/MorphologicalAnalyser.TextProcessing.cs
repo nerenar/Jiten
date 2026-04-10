@@ -25,7 +25,7 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(外|家)出(ない|なかった|なく)")]
     private static partial Regex DeNaiCompoundRegex();
 
-    [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?![かきくけこさしすせそたちつてとぱぴぷぺぽカキクケコサシスセソタチツテトパピプペポ])")]
+    [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?![かきくけこさしすせそたちつてとぱぴぷぺぽばびぶべぼカキクケコサシスセソタチツテトパピプペポバビブベボ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex EmphaticTsuRegex();
 
     [GeneratedRegex(@"ホント(バカ|ダメ|マジ|クソ|アホ)")]
@@ -39,6 +39,16 @@ public partial class MorphologicalAnalyser
 
     [GeneratedRegex(@"(?<=[\u4E00-\u9FAF])番っ")]
     private static partial Regex BanCompoundTsuRegex();
+
+    [GeneratedRegex(@"(?<=(?:どー|どう|そー|そう|こー|こう|ああ|あー))ゆう")]
+    private static partial Regex ColloquialYuuRegex();
+
+    // Colloquial emphatic gemination: っ inserted before a consonant for emphasis.
+    // E.g., ふざけんな→ふざっけんな, すごい→すっごい, くそ→くっそ.
+    // Removes っ before specific suffixes that are clearly colloquial emphasis,
+    // not part of a legitimate word like きっと or さっき.
+    [GeneratedRegex(@"(?<=[\u3041-\u3096])っ(?=ご[くい]|けん[なの]|くそ|じ[でか]|ぜ[えぇー])")]
+    private static partial Regex ColloquialGeminationRegex();
 
     [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]{2})…+(?=[^\r\n…])")]
     private static partial Regex MidSentenceEllipsisRegex();
@@ -88,7 +98,14 @@ public partial class MorphologicalAnalyser
             .Replace("いやあんま", $"いや{_stopToken}あんま")
             .Replace("この手紙", $"この{_stopToken}手紙")
             .Replace("少女の手", $"少女{_stopToken}の手")
-            .Replace("はたまたま", $"は{_stopToken}たまたま");
+            .Replace("はたまたま", $"は{_stopToken}たまたま")
+            .Replace("涎たら", $"涎{_stopToken}たら");
+
+        text = ColloquialGeminationRegex().Replace(text, "");
+
+        text = text.Replace('頚', '頸');
+
+        text = text.Replace("前出すぎ", $"前{_stopToken}出すぎ");
 
         text = DeNaiCompoundRegex().Replace(text, $"$1{_stopToken}出$2");
         text = text.Replace("ぶっち切", "ぶち切");
@@ -123,6 +140,13 @@ public partial class MorphologicalAnalyser
 
         text = text.Replace("できんよう", $"できん{_stopToken}よう");
         text = ColloquialSshoRegex().Replace(text, $"{_stopToken}っしょ");
+
+        text = ColloquialYuuRegex().Replace(text, "いう");
+        text = text
+            .Replace("殺ス", "殺す")
+            .Replace("殺サ", "殺さ")
+            .Replace("殺セ", "殺せ");
+
         text = MidSentenceEllipsisRegex().Replace(text, "");
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
     }

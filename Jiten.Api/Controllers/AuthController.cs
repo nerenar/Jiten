@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -65,6 +66,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest model)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -153,6 +155,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginRequest model)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -208,10 +211,13 @@ public class AuthController : ControllerBase
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return BadRequest(new { message = "User not found." });
 
+        var jti = principal.Claims.FirstOrDefault(c => c.Type == System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+        if (string.IsNullOrEmpty(jti)) return BadRequest(new { message = "Invalid token claims." });
+
         var oldRefreshToken = await _context.RefreshTokens
                                             .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken && rt.UserId == userId);
 
-        if (oldRefreshToken == null || oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
+        if (oldRefreshToken == null || oldRefreshToken.JwtId != jti || oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
         {
             if (oldRefreshToken != null && (oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked))
             {
@@ -234,6 +240,7 @@ public class AuthController : ControllerBase
 
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest model)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -268,6 +275,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("reset-password")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest model)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -352,6 +360,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("signin-google")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<ActionResult<TokenResponse>> GoogleSignIn([FromBody] GoogleLoginRequest loginRequest)
     {
         if (string.IsNullOrWhiteSpace(_configuration["Google:ClientId"]))
@@ -414,6 +423,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("complete-google-registration")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<ActionResult<TokenResponse>> CompleteGoogleRegistration([FromBody] CompleteGoogleRegistrationRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.TempToken))

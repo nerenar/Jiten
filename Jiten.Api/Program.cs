@@ -421,6 +421,18 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    options.AddPolicy("auth", context =>
+    {
+        var partitionKey = $"ip:{GetClientIp(context)}";
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10, Window = TimeSpan.FromSeconds(60),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
     options.OnRejected = async (context, token) =>
     {
         var origin = context.HttpContext.Request.Headers.Origin.FirstOrDefault();
@@ -613,6 +625,8 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
     await next();
 });
 
@@ -677,15 +691,7 @@ app.Run();
 
 static string GetClientIp(HttpContext context)
 {
-    // Traefik header precedence
-    var headers = new[]
-                  {
-                      "X-Forwarded-For", // Standard header Traefik uses
-                      "X-Real-IP", // Alternative header
-                      "CF-Connecting-IP" // If you're using Cloudflare
-                  };
-
-    foreach (var header in headers)
+    foreach (var header in Program._proxyHeaders)
     {
         var value = context.Request.Headers[header].FirstOrDefault();
         if (!string.IsNullOrEmpty(value))
@@ -703,4 +709,8 @@ static string GetClientIp(HttpContext context)
     return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }
 
-public partial class Program { }
+public partial class Program
+{
+    private static readonly string[] _proxyHeaders =
+        ["X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"];
+}

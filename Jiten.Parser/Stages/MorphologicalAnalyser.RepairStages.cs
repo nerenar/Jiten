@@ -393,6 +393,25 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Pattern 0b: [adjective-stem/prefix] + [くー/きー/etc. interjection]
+            // Sudachi splits i-adjective adverbial forms when followed by expressive ー
+            // e.g., 早くー → 早(prefix) + くー(interjection) → 早く
+            if (current.PartOfSpeech is PartOfSpeech.Interjection &&
+                current.Text.Length >= 2 && current.Text[^1] == 'ー' &&
+                current.Text[..^1].All(c => c >= '\u3040' && c <= '\u309F') &&
+                prev.PartOfSpeech is PartOfSpeech.Prefix or PartOfSpeech.IAdjective &&
+                prev.DictionaryForm.EndsWith('い'))
+            {
+                var adverbText = prev.Text + current.Text[..^1];
+                result[^1] = new WordInfo(prev)
+                {
+                    Text = adverbText, EndOffset = current.EndOffset,
+                    DictionaryForm = prev.DictionaryForm,
+                    PartOfSpeech = PartOfSpeech.IAdjective
+                };
+                continue;
+            }
+
             // Pattern 1: Token ending in "るう" that might be a misparsed verb + elongation
             // e.g., "かるう" could be part of "ぶつかる" + "う"
             if (current.Text.EndsWith("るう", StringComparison.Ordinal) && current.Text.Length >= 2)
@@ -965,6 +984,27 @@ public partial class MorphologicalAnalyser
                     continue;
                 }
 
+                // Sudachi parses 恋って as te-form of 恋う (archaic), but in modern Japanese
+                // it's almost always 恋(noun) + って(quotation particle)
+                if (w1 is { Text: "恋っ", PartOfSpeech: PartOfSpeech.Verb, DictionaryForm: "恋う" }
+                    && w2 is { Text: "て", PartOfSpeech: PartOfSpeech.Particle })
+                {
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = "恋", DictionaryForm = "恋", NormalizedForm = "恋",
+                        PartOfSpeech = PartOfSpeech.Noun, Reading = "コイ",
+                        EndOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1
+                    });
+                    newList.Add(new WordInfo(w2)
+                    {
+                        Text = "って", DictionaryForm = "って", NormalizedForm = "って",
+                        PartOfSpeech = PartOfSpeech.Particle,
+                        StartOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1
+                    });
+                    i += 2;
+                    continue;
+                }
+
                 // Sudachi misidentifies し as a conjunction (接続詞) in しようとして,
                 // splitting into し (conjunction) + ようとして (expression).
                 // Recombine into しようとして (te-form of しようとする).
@@ -976,6 +1016,26 @@ public partial class MorphologicalAnalyser
                         Text = "しようとして", EndOffset = w2.EndOffset,
                         Reading = w1.Reading + w2.Reading,
                         DictionaryForm = "しようとして", PartOfSpeech = PartOfSpeech.Verb
+                    });
+                    i += 2;
+                    continue;
+                }
+
+                // Sudachi splits そういう/こういう/ああいう/どういう into adverb + verb (いう).
+                // Combine them so the parser can match the dictionary entry (e.g., そういう = WordId 1394680).
+                // Preserve verb DictionaryForm so CombineInflections can absorb conjugation suffixes
+                // (e.g., そういった, そういって).
+                if (w1.PartOfSpeech == PartOfSpeech.Adverb &&
+                    w1.Text is "そう" or "こう" or "ああ" or "どう"
+                             or "そー" or "こー" or "あー" or "どー" &&
+                    w2.DictionaryForm is "いう" or "言う")
+                {
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = w1.Text + w2.Text, EndOffset = w2.EndOffset,
+                        Reading = w1.Reading + w2.Reading,
+                        DictionaryForm = w1.Text + w2.DictionaryForm,
+                        PartOfSpeech = PartOfSpeech.Verb
                     });
                     i += 2;
                     continue;

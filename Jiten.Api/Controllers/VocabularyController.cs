@@ -551,17 +551,19 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     private async Task<List<DictionaryEntryDto>> SearchByEnglishGloss(string query, int limit, int offset)
     {
         var regexPattern = $@"\m{SanitizeRegexInput(query)}\M";
-        var oversampleLimit = limit * 4;
+        var oversampleLimit = Math.Max(limit * 4, 100);
 
         var wordIds = await context.Database
             .SqlQueryRaw<int>(
                 """
-                SELECT DISTINCT "WordId" AS "Value" FROM jmdict."Definitions"
+                SELECT DISTINCT d."WordId" AS "Value"
+                FROM jmdict."Definitions" d
+                LEFT JOIN jmdict."WordFrequencies" f ON d."WordId" = f."WordId"
                 WHERE EXISTS (
-                    SELECT 1 FROM unnest("EnglishMeanings") AS m
+                    SELECT 1 FROM unnest(d."EnglishMeanings") AS m
                     WHERE m ~* {0}
                 )
-                ORDER BY "WordId"
+                ORDER BY f."FrequencyRank" ASC NULLS LAST
                 LIMIT {1}
                 """, regexPattern, oversampleLimit)
             .ToListAsync();

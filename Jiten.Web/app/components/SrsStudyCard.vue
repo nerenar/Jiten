@@ -158,6 +158,10 @@
 
   const tts = useTts();
 
+  watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
+    tts.stop();
+  });
+
   watch(() => props.isFlipped, (flipped) => {
     if (!flipped) return;
     const playWord = srsStore.studySettings.autoPlayWord;
@@ -485,6 +489,7 @@
 }
 .head-word :deep(rt) {
   font-size: 0.35em !important;
+  font-weight: 700;
   color: light-dark(var(--p-surface-700), var(--p-surface-400));
 }
 

@@ -82,6 +82,11 @@ public partial class MorphologicalAnalyser
             // ノリ in katakana → 乗り (riding/enthusiasm/vibe, nf07), not 海苔 (seaweed, nf38)
             if (word.Text == "ノリ")
                 word.PreMatchedWordId = 1354720;
+
+            // 頚木 is a kanji variant of 頸木 (くびき/yoke, 1831840) — not in JMDict lookups,
+            // so resegmentation would split it into 頚+木
+            if (word.Text == "頚木")
+                word.PreMatchedWordId = 1831840;
         }
 
         return wordInfos;
@@ -290,6 +295,25 @@ public partial class MorphologicalAnalyser
                 }
             }
 
+            // 来る: Sudachi sometimes classifies modern くる as archaic きたる (文語四段-ラ行),
+            // giving NormalizedForm=来たる and Reading=キタル. This causes the scorer to favor
+            // the きたる entry (1591270) over くる (1547720) via ReadingMatchScore.
+            // Handles two patterns:
+            //   1. Bare 来る/来 with NormalizedForm=来たる (Sudachi 文語四段 misclassification)
+            //   2. Combined tokens like 来たー/来た where Reading=キタ… from concatenation
+            //      (Sudachi correctly said カ行変格 for 来, but combined reading キタ… matches きたる)
+            // Preserve genuine archaic forms: 来り (continuative unique to きたる) is excluded.
+            if (word.NormalizedForm == "来たる" && word.Text is "来る" or "来")
+            {
+                word.Reading = word.Reading.Replace("キタ", "ク");
+                word.NormalizedForm = "来る";
+                word.DictionaryForm = "来る";
+            }
+            else if (word.Text.Length >= 2 && word.Text[0] == '来' && word.Text[1] != 'り'
+                     && word.DictionaryForm == "来る" && word.Reading.StartsWith("キタ"))
+            {
+                word.Reading = "ク" + word.Reading[2..];
+            }
         }
 
         return wordInfos;
