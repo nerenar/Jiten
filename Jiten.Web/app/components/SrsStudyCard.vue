@@ -489,6 +489,7 @@
 }
 .head-word :deep(rt) {
   font-size: 0.35em !important;
+  font-weight: 700;
   color: light-dark(var(--p-surface-700), var(--p-surface-400));
 }
 
