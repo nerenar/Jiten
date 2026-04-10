@@ -39,6 +39,12 @@
     return false;
   });
 
+  const canParse = computed(() => {
+    if (!hasMeaningfulParseResults.value) return false;
+    if (isLikelyEnglish.value) return false;
+    return true;
+  });
+
   const selectedWord = ref<DeckWord | undefined>();
 
   const activeSearchQuery = computed(() => String(searchContent.value));
@@ -57,6 +63,7 @@
       if (newText) {
         selectedWord.value = undefined;
         directMatchesShowAll.value = false;
+        showParseResultsManually.value = false;
         response.value = null;
         searchResponse.value = null;
         searchContent.value = newText;
@@ -64,10 +71,21 @@
     }
   );
 
+  const hasAnyDictionaryResults = computed(() => {
+    return (searchResponse.value?.results?.length ?? 0) > 0
+      || (searchResponse.value?.dictionaryResults?.length ?? 0) > 0;
+  });
+
+  const showParseResultsManually = ref(route.query.parsed === 'true');
+
   const showParseResults = computed(() => {
-    if (!hasMeaningfulParseResults.value) return false;
-    if (isLikelyEnglish.value) return false;
+    if (!canParse.value) return false;
+    if (hasAnyDictionaryResults.value && !showParseResultsManually.value) return false;
     return true;
+  });
+
+  const showParseLink = computed(() => {
+    return canParse.value && hasAnyDictionaryResults.value && !showParseResultsManually.value;
   });
 
   // Word-specific direct matches (separate from main search)
@@ -160,8 +178,8 @@
     const type = searchQueryType.value;
     if (type === 'english') return { prefix: 'Dictionary results', subject: '' };
     if (type === 'wildcard') return { prefix: 'Wildcard results', subject: '' };
-    if (showParseResults.value && selectedWord.value) return { prefix: 'Direct matches for', subject: selectedWord.value.originalText };
-    return { prefix: 'Direct matches for', subject: String(searchContent.value).trim() };
+    if (showParseResults.value && selectedWord.value) return { prefix: 'Direct matches for ', subject: selectedWord.value.originalText };
+    return { prefix: 'Direct matches for ', subject: String(searchContent.value).trim() };
   });
 
   const resultsTotalLabel = computed(() => {
@@ -261,7 +279,7 @@
   watch(
     () => status.value,
     (newStatus) => {
-      if (!selectedWord.value) {
+      if (showParseResults.value && !selectedWord.value) {
         selectedWord.value = words.value.find((word) => word.wordId != 0);
       } else if (newStatus === 'error' || newStatus === 'idle') {
         selectedWord.value = undefined;
@@ -292,6 +310,17 @@
 <template>
   <div>
     <OmniSearch />
+
+    <!-- Parse link: shown when dictionary results exist but parse is also available -->
+    <div v-if="showParseLink" class="mt-2 mb-2">
+      <button
+        class="inline-flex items-center gap-2 text-purple-600 dark:text-purple-400 hover:underline text-sm"
+        @click="navigateTo({ query: { ...route.query, parsed: 'true' } }, { replace: true }); showParseResultsManually = true"
+      >
+        <Icon name="material-symbols:frame-inspect" class="text-lg" />
+        View parse results for "{{ String(searchContent).trim() }}"
+      </button>
+    </div>
 
     <template v-if="showParseResults">
       <div class="flex items-center gap-0.5 flex-wrap">
@@ -415,4 +444,3 @@
     </div>
   </div>
 </template>
-
