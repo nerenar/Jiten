@@ -2308,10 +2308,8 @@ public class UserController(
         }
 
         var targetYear = year ?? DateTime.UtcNow.AddHours(offsetHours).Year;
-        var localYearStart = new DateTime(targetYear, 1, 1);
-        var localYearEnd = new DateTime(targetYear + 1, 1, 1);
-        var utcWindowStart = localYearStart.AddHours(-offsetHours);
-        var utcWindowEnd = localYearEnd.AddHours(-offsetHours);
+        var utcWindowStart = DateTime.SpecifyKind(new DateTime(targetYear, 1, 1).AddHours(-offsetHours), DateTimeKind.Utc);
+        var utcWindowEnd = DateTime.SpecifyKind(new DateTime(targetYear + 1, 1, 1).AddHours(-offsetHours), DateTimeKind.Utc);
 
         var dailyStats = await userContext.FsrsReviewLogs
             .AsNoTracking()
