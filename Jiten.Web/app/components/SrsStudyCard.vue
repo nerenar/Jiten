@@ -158,6 +158,10 @@
 
   const tts = useTts();
 
+  watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
+    tts.stop();
+  });
+
   watch(() => props.isFlipped, (flipped) => {
     if (!flipped) return;
     const playWord = srsStore.studySettings.autoPlayWord;
