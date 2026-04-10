@@ -33,6 +33,7 @@ public partial class MorphologicalAnalyser
             // Exclude AuxiliaryVerbStem words (みたい, そう, etc.) as they are grammatical suffixes, not standalone inflectable words
             bool isBase = (PosMapper.IsInflectableBase(currentWord.PartOfSpeech) ||
                            currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
+                           currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun) ||
                            (currentWord.PartOfSpeech == PartOfSpeech.Suffix &&
                             currentWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike)))
                           && currentWord.NormalizedForm != "物"

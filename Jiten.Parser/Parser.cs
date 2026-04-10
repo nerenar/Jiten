@@ -64,11 +64,11 @@ namespace Jiten.Parser
             (2394370, 4), (1203250, 2), (1537250, 2), (2783750, 1), (2654250, 0), (2609820, 1),
             (2080360, 3), (1333240, 2), (2035220, 2), (5616612, 5), (2249020, 1), (2783700, 1),
             (2411420, 0), (1604890, 2), (2602280, 1), (1407450, 1), (1595120, 1), (2083370, 1),
-            (2862482, 0), (2849996, 0), (1266970,2), (2574180,2), (2574180,1), (1550770,1),
-            (5626489,28), (5045509,3), (2029780,0), (5430309,1), (1496170,2), (2564800,1),
-            (2026870,1), (1585310,4), (1585310,5), (2252690,1), (2835861,0), (1223130,1), 
-            (1246880,1), (1246880,2), (1461140,8), (1461140,6), (2029700,0), (2594040,2),
-            (1324950,1), (1949190,1), (1344210,1), (2029730, 0), (5612068,1)
+            (2862482, 0), (2849996, 0), (1266970, 2), (2574180, 2), (2574180, 1), (1550770, 1),
+            (5626489, 28), (5045509, 3), (2029780, 0), (5430309, 1), (1496170, 2), (2564800, 1),
+            (2026870, 1), (1585310, 4), (1585310, 5), (2252690, 1), (2835861, 0), (1223130, 1),
+            (1246880, 1), (1246880, 2), (1461140, 8), (1461140, 6), (2029700, 0), (2594040, 2),
+            (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -869,8 +869,7 @@ namespace Jiten.Parser
                                                     WordId = preMatchedWordId, ReadingIndex = readingIndex,
                                                     OriginalText = wordData.wordInfo.Text, Occurrences = wordData.occurrences,
                                                     Conjugations = wordData.wordInfo.PreMatchedConjugations ?? [],
-                                                    PartsOfSpeech = preMatchedWord.CachedPOS,
-                                                    Origin = preMatchedWord.Origin
+                                                    PartsOfSpeech = preMatchedWord.CachedPOS, Origin = preMatchedWord.Origin
                                                 };
                                 resolvedMargin = ScoringPolicy.HighConfidenceThreshold;
                                 break;
@@ -1011,7 +1010,8 @@ namespace Jiten.Parser
                                 }
 
                                 bool nounIsPureNameEntry = nounResult.word != null &&
-                                    nounResult.word.PartsOfSpeech.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
+                                                           nounResult.word.PartsOfSpeech.All(p => p is PartOfSpeech.Name
+                                                                                                 or PartOfSpeech.Unknown);
                                 if (wordData.wordInfo.IsPersonNameContext && nounIsPureNameEntry)
                                 {
                                     processedWord = nounResult.word;
@@ -1228,7 +1228,8 @@ namespace Jiten.Parser
                     wordData.wordInfo.NormalizedForm != text)
                 {
                     var normalizedCollected = LookupCandidateCollector.CollectIds(_lookups, wordData.wordInfo.NormalizedForm,
-                                                                                  includeKanaNormalized: true, includeLongVowelStripped: true);
+                                                                                  includeKanaNormalized: true,
+                                                                                  includeLongVowelStripped: true);
                     if (normalizedCollected.Count > 0)
                         collected = collected.Concat(normalizedCollected).Distinct().ToList();
                 }
@@ -1555,10 +1556,10 @@ namespace Jiten.Parser
                 if (hasDictFormMatch)
                 {
                     filteredSuruNounIds = matches
-                        .Where(m => m.form.Process.Count == 0 &&
-                                    FormCandidateFactory.IsSuruNounWithoutExpression(m.word.PartsOfSpeech))
-                        .Select(m => m.word.WordId)
-                        .ToHashSet();
+                                          .Where(m => m.form.Process.Count == 0 &&
+                                                      FormCandidateFactory.IsSuruNounWithoutExpression(m.word.PartsOfSpeech))
+                                          .Select(m => m.word.WordId)
+                                          .ToHashSet();
                     if (filteredSuruNounIds.Count > 0)
                         matches.RemoveAll(m => filteredSuruNounIds.Contains(m.word.WordId));
                     else
@@ -1738,10 +1739,11 @@ namespace Jiten.Parser
             DeckWord deckWord = new()
                                 {
                                     WordId = bestPair.Word.WordId, OriginalText = wordData.wordInfo.Text,
-                                    ReadingIndex = bestPair.ReadingIndex, Occurrences = wordData.occurrences,
-                                    Conjugations = bestPair.DeconjForm?.Process is ["casual kind request"] && bestPair.Word.PartsOfSpeech.Contains("adj-na")
-                                        ? []
-                                        : bestPair.DeconjForm?.Process.ToList() ?? [],
+                                    ReadingIndex = bestPair.ReadingIndex, Occurrences = wordData.occurrences, Conjugations =
+                                        bestPair.DeconjForm?.Process is ["casual kind request"] &&
+                                        bestPair.Word.PartsOfSpeech.Contains("adj-na")
+                                            ? []
+                                            : bestPair.DeconjForm?.Process.ToList() ?? [],
                                     PartsOfSpeech = bestPair.Word.CachedPOS, Origin = bestPair.Word.Origin
                                 };
 
@@ -1964,6 +1966,7 @@ namespace Jiten.Parser
                                 break;
                             }
                         }
+
                         if (hasParticle) continue;
 
                         var candidateParts = sentence.Words
@@ -1999,6 +2002,29 @@ namespace Jiten.Parser
                             i = i - k;
                             merged = true;
                             break;
+                        }
+                    }
+
+                    // Fallback for るー / すー: compound verb forms (よそってあげる, 出てくれる)
+                    // don't exist in the lookups table, so the backward merge loop above fails.
+                    // Reattach the kana to the previous token when it's clearly a verb/aux continuation.
+                    if (!merged && i > 0 && (word.Text == "るー" || word.Text == "すー"))
+                    {
+                        var prevEntry = sentence.Words[i - 1];
+                        var prevWord = prevEntry.word;
+                        var kana = word.Text[0].ToString();
+                        var combined = prevWord.Text + kana;
+
+                        bool shouldMerge =
+                            TryLongVowelLookup(combined) || TryDeconjugatedLongVowelLookup(combined) ||
+                            (word.Text == "るー" && prevWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary) ||
+                            (word.Text == "すー" && prevWord.Text.EndsWith("で"));
+
+                        if (shouldMerge)
+                        {
+                            MergeLongVowelTokens(sentence, i - 1, i, combined);
+                            i = i - 1;
+                            merged = true;
                         }
                     }
 
@@ -2181,6 +2207,25 @@ namespace Jiten.Parser
 
                     bool found = false;
 
+                    // Priority 0: detached verb ending + ー (る/す classified as Noun after a Verb/Aux)
+                    // Sudachi splits e.g. あげる into あげ(Verb)+る(Noun) when followed by ー.
+                    // Reattach る/す to the preceding verb and discard ー.
+                    if (i >= 2)
+                    {
+                        var detached = sentence.Words[i - 1].word;
+                        var verbBefore = sentence.Words[i - 2].word;
+                        if (detached.Text is "る" or "す"
+                            && detached.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Verb or PartOfSpeech.Auxiliary
+                            && verbBefore.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary)
+                        {
+                            var reattached = verbBefore.Text + detached.Text;
+                            MergeLongVowelTokens(sentence, i - 2, i - 1, reattached);
+                            sentence.Words.RemoveAt(i - 1);
+                            i = i - 2;
+                            continue;
+                        }
+                    }
+
                     // Try combining preceding tokens (longest match first)
                     for (int combineCount = Math.Min(4, i); combineCount >= 1; combineCount--)
                     {
@@ -2324,7 +2369,7 @@ namespace Jiten.Parser
         {
             foreach (var sentence in sentences)
             {
-                if (sentence.Words.Count < 2)
+                if (sentence.Words.Count == 0)
                     continue;
 
                 bool anySplit = false;
@@ -2332,6 +2377,30 @@ namespace Jiten.Parser
 
                 foreach (var (word, position, length) in sentence.Words)
                 {
+                    // Split 〜的/〜的な suffix from nouns when the base word has a lookup but the full form doesn't.
+                    // e.g. 母性的な → 母性 + 的な (母性 has lookup, 母性的/母性的な doesn't)
+                    if (word.Text.Length >= 3 &&
+                        (word.Text.EndsWith("的") || word.Text.EndsWith("的な")) &&
+                        !HasLookup(word.Text))
+                    {
+                        var suffixLen = word.Text.EndsWith("的な") ? 2 : 1;
+                        var baseText = word.Text[..^suffixLen];
+                        var suffixText = word.Text[^suffixLen..];
+                        if (HasLookup(baseText))
+                        {
+                            var baseWord = new WordInfo(word) { Text = baseText, DictionaryForm = baseText, NormalizedForm = baseText };
+                            var suffixWord = new WordInfo(word)
+                            {
+                                Text = suffixText, DictionaryForm = suffixText, NormalizedForm = suffixText,
+                                PartOfSpeech = PartOfSpeech.Suffix, Reading = suffixLen == 2 ? "テキナ" : "テキ"
+                            };
+                            result.Add((baseWord, position, baseText.Length));
+                            result.Add((suffixWord, position + baseText.Length, suffixLen));
+                            anySplit = true;
+                            continue;
+                        }
+                    }
+
                     if (word.Text.Length >= 2 &&
                         PosMapper.IsNounForCompounding(word.PartOfSpeech) &&
                         word.Text.All(c => WanaKana.IsKanji(c.ToString())) &&
@@ -2390,7 +2459,7 @@ namespace Jiten.Parser
         private static bool HasNonNameLookup(string text)
         {
             if (_lookups.TryGetValue(text, out var ids) && ids.Count > 0
-                && !ids.All(id => _nameOnlyWordIds.Contains(id)))
+                                                        && !ids.All(id => _nameOnlyWordIds.Contains(id)))
                 return true;
             try
             {
@@ -2672,6 +2741,7 @@ namespace Jiten.Parser
                                 hasSupplementarySymbol = true;
                                 break;
                             }
+
                             if (w.PartOfSpeech == PartOfSpeech.Particle)
                                 hasParticle = true;
                         }
@@ -2680,7 +2750,7 @@ namespace Jiten.Parser
                             continue;
 
                         var combinedText = string.Concat(
-                            sentence.Words.Skip(i).Take(windowSize).Select(w => w.word.Text));
+                                                         sentence.Words.Skip(i).Take(windowSize).Select(w => w.word.Text));
 
                         if (ExpressionExclusions.Contains(combinedText))
                             continue;
@@ -2715,20 +2785,18 @@ namespace Jiten.Parser
                     {
                         var combinedText = matchedText!;
                         var combinedReading = string.Concat(
-                            sentence.Words.Skip(i).Take(bestMatch).Select(w => w.word.Reading));
+                                                            sentence.Words.Skip(i).Take(bestMatch).Select(w => w.word.Reading));
                         int combinedLength = 0;
                         for (int j = 0; j < bestMatch; j++)
                             combinedLength += sentence.Words[i + j].length;
 
                         var combinedWord = new WordInfo
-                        {
-                            Text = combinedText,
-                            DictionaryForm = combinedText,
-                            PartOfSpeech = PartOfSpeech.Expression,
-                            NormalizedForm = combinedText,
-                            Reading = KanaConverter.ToHiragana(combinedReading, convertLongVowelMark: false),
-                            PreMatchedWordId = null
-                        };
+                                           {
+                                               Text = combinedText, DictionaryForm = combinedText, PartOfSpeech = PartOfSpeech.Expression,
+                                               NormalizedForm = combinedText,
+                                               Reading = KanaConverter.ToHiragana(combinedReading, convertLongVowelMark: false),
+                                               PreMatchedWordId = null
+                                           };
 
                         result.Add((combinedWord, sentence.Words[i].position, combinedLength));
                         i += bestMatch;
@@ -2823,6 +2891,15 @@ namespace Jiten.Parser
             // Try Sudachi's dictionary form first
             var result = await TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, dictForm);
             if (result.HasValue) return result;
+
+            // Many JMDict expressions include the negative form (e.g. びくともしない, 関係ない).
+            // When the verb is a negative conjugation of する/ある, also try the negative base form.
+            if (dictForm is "する" or "ある")
+            {
+                var negForm = dictForm == "する" ? "しない" : "ない";
+                result = await TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, negForm);
+                if (result.HasValue) return result;
+            }
 
             // Try intermediate deconjugation forms for compound expressions whose JMDict entry
             // includes a conjugation stem (e.g. 臆病風に吹かれる: dictForm is 吹く but the
@@ -3220,7 +3297,9 @@ namespace Jiten.Parser
                     }
 
                     var newBest = FormCandidateSelector.PickTopCandidatesWithBonus(candidates,
-                                                                                   c => bonusCache.TryGetValue(c, out var cb) ? cb.bonus : 0);
+                                                                                   c => bonusCache.TryGetValue(c, out var cb)
+                                                                                       ? cb.bonus
+                                                                                       : 0);
                     var (newBestBonus, newBestRules) = newBest != null && bonusCache.TryGetValue(newBest, out var nb)
                         ? (nb.bonus, nb.rules)
                         : (0, (List<string>?)null);
@@ -3237,13 +3316,13 @@ namespace Jiten.Parser
 
                         diagnostics.AdjacentScoring.Add(new AdjacentScoringEntry
                                                         {
-                                                            Position = globalPos - 1, Surface = currentInfo.Text,
-                                                            LeftContext = prevInfo != null
-                                                                ? new AdjacentTokenInfo
-                                                                  {
-                                                                      Text = prevInfo.Text, Pos = prevInfo.PartOfSpeech
-                                                                  }
-                                                                : null,
+                                                            Position = globalPos - 1, Surface = currentInfo.Text, LeftContext =
+                                                                prevInfo != null
+                                                                    ? new AdjacentTokenInfo
+                                                                      {
+                                                                          Text = prevInfo.Text, Pos = prevInfo.PartOfSpeech
+                                                                      }
+                                                                    : null,
                                                             RightContext = nextInfo != null
                                                                 ? new AdjacentTokenInfo
                                                                   {
@@ -3275,10 +3354,12 @@ namespace Jiten.Parser
                         var newResult = new DeckWord
                                         {
                                             WordId = newBest.Word.WordId, OriginalText = currentInfo.Text,
-                                            ReadingIndex = newBest.ReadingIndex, Occurrences = currentResult.Occurrences,
-                                            Conjugations = newBest.DeconjForm?.Process is ["casual kind request"] && newBest.Word.PartsOfSpeech.Contains("adj-na")
-                                                ? []
-                                                : newBest.DeconjForm?.Process.ToList() ?? (wordIdChanged ? [] : currentResult.Conjugations),
+                                            ReadingIndex = newBest.ReadingIndex, Occurrences = currentResult.Occurrences, Conjugations =
+                                                newBest.DeconjForm?.Process is ["casual kind request"] &&
+                                                newBest.Word.PartsOfSpeech.Contains("adj-na")
+                                                    ? []
+                                                    : newBest.DeconjForm?.Process.ToList() ??
+                                                      (wordIdChanged ? [] : currentResult.Conjugations),
                                             PartsOfSpeech = newBest.Word.CachedPOS, Origin = newBest.Word.Origin,
                                             SudachiReading = currentInfo.Reading, SudachiPartOfSpeech = currentInfo.PartOfSpeech
                                         };

@@ -138,8 +138,11 @@ public partial class MorphologicalAnalyser
             if (i + 1 < wordInfos.Count)
             {
                 WordInfo nextWord = wordInfos[i + 1];
-                if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) &&
-                    nextWord.DictionaryForm == "する" && nextWord.Text != "する" && nextWord.Text != "しない")
+                bool isModernSuru = nextWord.DictionaryForm == "する" && nextWord.Text != "する" && nextWord.Text != "しない";
+                bool isLiterarySuru = nextWord.DictionaryForm == "す" && nextWord.NormalizedForm == "為る";
+                bool isSuruNoun = currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
+                                  currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun);
+                if (isSuruNoun && (isModernSuru || isLiterarySuru))
                 {
                     WordInfo combinedWord = new WordInfo(currentWord);
                     combinedWord.Text += nextWord.Text;
@@ -202,27 +205,63 @@ public partial class MorphologicalAnalyser
                                               nextWord.Text.EndsWith("いて");
                 if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
-                    nextWord.PartOfSpeech == PartOfSpeech.Verb &&
-                    nextWord.DictionaryForm != "おる" &&
                     !isClassicalWaRowTeForm)
                 {
-                    bool isKnownSubsidiary =
-                        (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
-                         nextWord.DictionaryForm is "いる" or "ない") ||
-                        TeFormSubsidiaryVerbs.Contains(nextWord.DictionaryForm) ||
-                        TeFormSubsidiaryVerbs.Contains(nextWord.NormalizedForm);
+                    bool isKnownSubsidiary = false;
 
-                    // Handle conjugated subsidiary verbs (e.g., あげられる = potential/passive of あげる)
-                    // Sudachi may tag these as standalone verbs rather than subsidiary forms
+                    if (nextWord.PartOfSpeech == PartOfSpeech.Verb &&
+                        nextWord.DictionaryForm != "おる")
+                    {
+                        isKnownSubsidiary =
+                            (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
+                             nextWord.DictionaryForm is "いる" or "ない") ||
+                            TeFormSubsidiaryVerbs.Contains(nextWord.DictionaryForm) ||
+                            TeFormSubsidiaryVerbs.Contains(nextWord.NormalizedForm);
+                    }
+
+                    // Deconjugate once and check both TeFormSubsidiaryVerbs and TeFormAuxChainVerbs.
+                    // The second check handles colloquial te-form auxiliaries where Sudachi misclassifies
+                    // conjugated forms of くる as pronouns (e.g., こん tagged as 代名詞/此れ).
                     if (!isKnownSubsidiary)
                     {
-                        var deconj = Deconjugator.Instance;
                         string nextHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(nextWord.Text));
-                        var forms = deconj.Deconjugate(nextHiragana);
-                        isKnownSubsidiary = forms.Any(f => TeFormSubsidiaryVerbs.Contains(f.Text));
+                        var forms = Deconjugator.Instance.Deconjugate(nextHiragana);
+                        isKnownSubsidiary = forms.Any(f =>
+                            TeFormSubsidiaryVerbs.Contains(f.Text) ||
+                            (TeFormAuxChainVerbs.Contains(f.Text) && f.Tags.Any(t => t.StartsWith("v"))));
                     }
 
                     if (isKnownSubsidiary)
+                    {
+                        WordInfo combinedWord = new WordInfo(currentWord);
+                        combinedWord.Text += nextWord.Text;
+                        combinedWord.EndOffset = nextWord.EndOffset;
+                        combinedWord.Reading += nextWord.Reading;
+                        newList.Add(combinedWord);
+                        i += 2;
+                        continue;
+                    }
+                }
+            }
+
+            // Pattern 3: Verb ending in っ (sokuonbin/geminate) + dialectal とる auxiliary (2 tokens)
+            // Handles っとる/っとらん/っとった patterns (dialectal ている contraction)
+            // e.g., 入っ + とらん → 入っとらん (= 入っていない)
+            if (i + 1 < wordInfos.Count)
+            {
+                WordInfo nextWord = wordInfos[i + 1];
+
+                if (currentWord.PartOfSpeech == PartOfSpeech.Verb &&
+                    currentWord.Text.EndsWith("っ") &&
+                    nextWord.DictionaryForm == "とる")
+                {
+                    string nextHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(nextWord.Text));
+                    var forms = Deconjugator.Instance.Deconjugate(nextHiragana);
+                    bool isTeOruForm = forms.Any(f =>
+                        f.Process.Any(p => p.Contains("toru (teoru)")) &&
+                        f.Tags.Any(t => t.StartsWith("v") || t.StartsWith("stem-te")));
+
+                    if (isTeOruForm)
                     {
                         WordInfo combinedWord = new WordInfo(currentWord);
                         combinedWord.Text += nextWord.Text;
