@@ -556,14 +556,17 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var wordIds = await context.Database
             .SqlQueryRaw<int>(
                 """
-                SELECT DISTINCT d."WordId" AS "Value"
-                FROM jmdict."Definitions" d
-                LEFT JOIN jmdict."WordFrequencies" f ON d."WordId" = f."WordId"
-                WHERE EXISTS (
-                    SELECT 1 FROM unnest(d."EnglishMeanings") AS m
-                    WHERE m ~* {0}
-                )
-                ORDER BY f."FrequencyRank" ASC NULLS LAST
+                SELECT w."WordId" AS "Value"
+                FROM (
+                    SELECT DISTINCT d."WordId", f."FrequencyRank"
+                    FROM jmdict."Definitions" d
+                    LEFT JOIN jmdict."WordFrequencies" f ON d."WordId" = f."WordId"
+                    WHERE EXISTS (
+                        SELECT 1 FROM unnest(d."EnglishMeanings") AS m
+                        WHERE m ~* {0}
+                    )
+                ) w
+                ORDER BY w."FrequencyRank" ASC NULLS LAST
                 LIMIT {1}
                 """, regexPattern, oversampleLimit)
             .ToListAsync();
