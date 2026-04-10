@@ -411,6 +411,82 @@ public class SrsController(
         });
     }
 
+    [HttpPost("settings/optimize")]
+    [EnableRateLimiting("compute")]
+    [SwaggerOperation(Summary = "Optimize FSRS parameters",
+                      Description = "Optimize FSRS parameters based on the user's review history, save them, and recompute scheduling.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> OptimizeParameters([FromQuery] bool reschedule = true)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        var reviewLogs = await userContext.FsrsReviewLogs
+            .Where(r => r.Card.UserId == userId)
+            .OrderBy(r => r.CardId)
+            .ThenBy(r => r.ReviewDateTime)
+            .Select(r => new { r.CardId, r.Rating, r.ReviewDateTime })
+            .ToListAsync();
+
+        var totalReviews = reviewLogs.Count;
+        if (totalReviews < FsrsOptimizer.MinimumReviews)
+            return Results.BadRequest(new
+            {
+                error = $"At least {FsrsOptimizer.MinimumReviews} reviews are required to optimise parameters. You have {totalReviews}."
+            });
+
+        var grouped = reviewLogs
+            .GroupBy(r => r.CardId)
+            .Where(g => g.Count() >= 2)
+            .ToList();
+
+        var items = new List<FsrsTrainingItem>();
+        foreach (var group in grouped)
+        {
+            var logs = group.ToList();
+            var reviews = new FsrsTrainingReview[logs.Count];
+            reviews[0] = new FsrsTrainingReview((int)logs[0].Rating, 0);
+            for (var i = 1; i < logs.Count; i++)
+            {
+                var deltaT = Math.Max(0, (logs[i].ReviewDateTime - logs[i - 1].ReviewDateTime).TotalDays);
+                reviews[i] = new FsrsTrainingReview((int)logs[i].Rating, deltaT);
+            }
+            items.Add(new FsrsTrainingItem(reviews));
+        }
+
+        if (items.Count == 0)
+            return Results.BadRequest(new { error = "Not enough review data to optimise." });
+
+        var result = FsrsOptimizer.Optimize(items);
+
+        var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+        var desiredRetention = GetDesiredRetention(settings);
+
+        if (settings == null)
+        {
+            settings = new UserFsrsSettings { UserId = userId };
+            userContext.UserFsrsSettings.Add(settings);
+        }
+        settings.Parameters = result.Parameters;
+        await userContext.SaveChangesAsync();
+
+        if (reschedule)
+            await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention);
+
+        return Results.Ok(new
+        {
+            parameters = SerializeParametersCsv(result.Parameters),
+            loss = Math.Round(result.Loss, 6),
+            reviewCount = result.ReviewCount,
+            isDefault = false,
+            desiredRetention,
+            rescheduled = reschedule
+        });
+    }
+
     [HttpPost("settings/recompute")]
     [SwaggerOperation(Summary = "Recompute FSRS scheduling",
                       Description = "Recompute scheduling for all cards using the stored settings (or defaults).")]

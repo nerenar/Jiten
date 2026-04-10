@@ -131,7 +131,7 @@ public class FsrsTests
                               FsrsRating.Good
                           };
 
-        var expectedIntervals = new[] { 0, 4, 14, 45, 135, 372, 0, 0, 2, 5, 10, 20, 40 };
+        var expectedIntervals = new[] { 0, 2, 11, 46, 163, 497, 0, 0, 2, 4, 7, 12, 20 };
         var actualIntervals = new List<int>();
 
         foreach (var FsrsRating in FsrsRatings)
@@ -194,8 +194,8 @@ public class FsrsTests
 
         (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, reviewDateTime);
 
-        Assert.Equal(49.4472, Math.Round(card.Stability!.Value, 4));
-        Assert.Equal(6.8271, Math.Round(card.Difficulty!.Value, 4));
+        Assert.Equal(53.3825, Math.Round(card.Stability!.Value, 4));
+        Assert.Equal(6.3809, Math.Round(card.Difficulty!.Value, 4));
     }
 
     [Fact]
