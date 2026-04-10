@@ -2284,16 +2284,41 @@ public class UserController(
                 return Results.NotFound(new { message = "Profile not found" });
         }
 
-        var targetYear = year ?? DateTime.UtcNow.Year;
-        var yearStart = new DateTime(targetYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var yearEnd = new DateTime(targetYear + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var fsrsSettingsJson = await userContext.UserFsrsSettings.AsNoTracking()
+                                               .Where(s => s.UserId == targetUserId)
+                                               .Select(s => s.SettingsJson)
+                                               .FirstOrDefaultAsync();
+
+        string? timezone = null;
+        if (!string.IsNullOrEmpty(fsrsSettingsJson) && fsrsSettingsJson != "{}")
+        {
+            try { timezone = JsonSerializer.Deserialize<StudySettingsDto>(fsrsSettingsJson)?.Timezone; }
+            catch (JsonException) { }
+        }
+
+        double offsetHours = 0;
+        if (!string.IsNullOrEmpty(timezone))
+        {
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+                offsetHours = tz.GetUtcOffset(DateTime.UtcNow).TotalHours;
+            }
+            catch (TimeZoneNotFoundException) { }
+        }
+
+        var targetYear = year ?? DateTime.UtcNow.AddHours(offsetHours).Year;
+        var localYearStart = new DateTime(targetYear, 1, 1);
+        var localYearEnd = new DateTime(targetYear + 1, 1, 1);
+        var utcWindowStart = localYearStart.AddHours(-offsetHours);
+        var utcWindowEnd = localYearEnd.AddHours(-offsetHours);
 
         var dailyStats = await userContext.FsrsReviewLogs
             .AsNoTracking()
             .Where(rl => rl.Card.UserId == targetUserId
-                         && rl.ReviewDateTime >= yearStart
-                         && rl.ReviewDateTime < yearEnd)
-            .GroupBy(rl => rl.ReviewDateTime.Date)
+                         && rl.ReviewDateTime >= utcWindowStart
+                         && rl.ReviewDateTime < utcWindowEnd)
+            .GroupBy(rl => rl.ReviewDateTime.AddHours(offsetHours).Date)
             .Select(g => new
             {
                 Date = g.Key,
@@ -2314,12 +2339,12 @@ public class UserController(
         var allReviewDates = await userContext.FsrsReviewLogs
             .AsNoTracking()
             .Where(rl => rl.Card.UserId == targetUserId)
-            .Select(rl => rl.ReviewDateTime.Date)
+            .Select(rl => rl.ReviewDateTime.AddHours(offsetHours).Date)
             .Distinct()
             .OrderByDescending(d => d)
             .ToListAsync();
 
-        var today = DateTime.UtcNow.Date;
+        var today = DateTime.UtcNow.AddHours(offsetHours).Date;
         var (currentStreak, longestStreak) = ComputeStreaks(allReviewDates, today);
 
         return Results.Ok(new StudyHeatmapResponse
