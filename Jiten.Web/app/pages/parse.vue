@@ -296,6 +296,18 @@
     }
   };
 
+  const autoOpenEntry = computed(() => {
+    if (searchStatus.value !== 'success') return null;
+    const isRomaji = !/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF]/.test(String(searchContent.value).trim());
+    if (isRomaji) {
+      // allResults is already ordered by frequencyRank by the backend
+      return allResults.value[0] ?? null;
+    }
+    if (dictionaryMatches.value.length > 0) return null;
+    if (directMatches.value.length === 0) return null;
+    return directMatches.value[0];
+  });
+
   const directMatchesExpanded = ref(true);
   const directMatchesShowAll = ref(false);
   const dictionaryMatchesExpanded = ref(true);
@@ -381,6 +393,7 @@
           v-for="entry in visibleDirectMatches"
           :key="`${entry.wordId}-${entry.readingIndex}`"
           :entry="entry"
+          :initial-expanded="autoOpenEntry?.wordId === entry.wordId && autoOpenEntry?.readingIndex === entry.readingIndex"
         />
         <button
           v-if="directMatchesTruncated"

@@ -478,7 +478,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                 if (romajiWordIds.Count > 0)
                 {
                     queryType = "romaji";
-                    results = await BuildDictionaryEntries(romajiWordIds, hiragana);
+                    results = await BuildDictionaryEntries(romajiWordIds, preferMostCommonForm: true);
 
                     var englishResults = await SearchByEnglishGloss(trimmed, limit, offset);
                     var existingWordIds = results.Select(r => r.WordId).ToHashSet();
@@ -580,7 +580,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             .ToList();
     }
 
-    private async Task<List<DictionaryEntryDto>> BuildDictionaryEntries(List<int> wordIds, string? matchText = null, string? englishQuery = null)
+    private async Task<List<DictionaryEntryDto>> BuildDictionaryEntries(List<int> wordIds, string? matchText = null, string? englishQuery = null, bool preferMostCommonForm = false)
     {
         if (wordIds.Count == 0) return [];
 
@@ -613,8 +613,19 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                     return null;
 
                 JmDictWordForm? bestForm = null;
-                if (matchText != null)
+                if (preferMostCommonForm)
+                {
+                    bestForm = forms
+                        .Where(f => !f.IsSearchOnly)
+                        .OrderByDescending(f => freqByWordReading.ContainsKey((w.WordId, f.ReadingIndex)) ? 1 : 0)
+                        .ThenBy(f => freqByWordReading.GetValueOrDefault((w.WordId, f.ReadingIndex))?.FrequencyRank ?? int.MaxValue)
+                        .ThenBy(f => f.ReadingIndex)
+                        .FirstOrDefault();
+                }
+                else if (matchText != null)
+                {
                     bestForm = forms.FirstOrDefault(f => f.Text == matchText);
+                }
                 bestForm ??= forms.OrderBy(f => f.ReadingIndex).First();
 
                 var freq = freqByWordReading.GetValueOrDefault((w.WordId, bestForm.ReadingIndex));
