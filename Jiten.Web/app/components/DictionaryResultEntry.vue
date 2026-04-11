@@ -1,14 +1,21 @@
 <script setup lang="ts">
   import type { DictionaryEntry } from '~/types';
 
-  defineProps<{
+  const props = defineProps<{
     entry: DictionaryEntry;
+    initialExpanded?: boolean;
   }>();
 
   const convertToRuby = useConvertToRuby();
-  const expanded = ref(false);
-  const hasBeenExpanded = ref(false);
-  const animateOpen = ref(false);
+  const expanded = ref(props.initialExpanded ?? false);
+  const hasBeenExpanded = ref(props.initialExpanded ?? false);
+  const animateOpen = ref(props.initialExpanded ?? false);
+
+  watch(() => props.initialExpanded, (val) => {
+    if (val && !expanded.value) {
+      expanded.value = true;
+    }
+  });
 
   watch(expanded, (val) => {
     if (val && !hasBeenExpanded.value) {

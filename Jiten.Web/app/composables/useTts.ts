@@ -107,6 +107,7 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
       const response = await fetch(url, { signal: abort.signal });
       if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
       const blob = await response.blob();
+      if (abort.signal.aborted) return;
       const blobUrl = URL.createObjectURL(blob);
       const audio = new Audio(blobUrl);
 

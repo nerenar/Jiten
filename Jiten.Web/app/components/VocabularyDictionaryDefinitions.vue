@@ -10,6 +10,8 @@
     readings?: Reading[];
   }>();
 
+  const store = useJitenStore();
+
   const singleJmDictOnly = computed(() =>
     props.resolvedGroups.length === 1 && props.resolvedGroups[0].isJmDict,
   );
@@ -86,7 +88,7 @@
           :readings="readings"
         />
       </template>
-      <template v-else-if="resolvedGroups[0].customDefinitions">
+      <template v-else-if="resolvedGroups[0].customDefinitions && !store.hideVocabularyDefinitions">
         <span class="custom-dict-compact text-sm" v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)" />
       </template>
       <span v-if="visibleGroupCount > 1" class="text-xs text-gray-400 dark:text-gray-500 ml-1">
