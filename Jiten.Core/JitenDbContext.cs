@@ -151,7 +151,7 @@ public class JitenDbContext : DbContext
                   .HasDatabaseName("IX_DeckWords_DeckId_WordId_ReadingIndex");
 
             entity.HasIndex(dw => dw.DeckId)
-                  .HasDatabaseName("IX_DeckId");
+                  .HasDatabaseName("IX_DeckWords_DeckId_IncWordIdReadingIndexOcc");
 
             entity.HasOne(dw => dw.Deck)
                   .WithMany(d => d.DeckWords)
