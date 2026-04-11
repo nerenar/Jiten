@@ -381,9 +381,12 @@ public class ComputationJob(
         logger.LogInformation("Coverage: parent_ids materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3b: Mature hits — nestloop from _parent_ids (12K) into DeckWords via
-        // IX_DeckWords_DeckId_IncWordIdReadingIndexOcc covering index (index-only scan),
-        // then memoized probe against _mature_known. Reads ~300K pages vs 1.57M for a full scan.
+        // Step 3b/3c: Compute mature and young hits.
+        // Disable seqscan to prevent the planner from choosing a full 187M-row sequential scan
+        // of DeckWords. With temp tables the planner underestimates join cardinality — especially
+        // for young (often <1K rows) — and picks seq scan + hash join over the fast nestloop path
+        // through IX_DeckWords_DeckId_IncWordIdReadingIndexOcc.
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off;");
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _mature_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
@@ -395,7 +398,6 @@ public class ComputationJob(
         logger.LogInformation("Coverage: mature_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3c: Young hits (fsrs_young is tiny so this is fast regardless)
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _young_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
@@ -404,6 +406,7 @@ public class ComputationJob(
             JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
             GROUP BY dw."DeckId";
             """);
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = on;");
         logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 

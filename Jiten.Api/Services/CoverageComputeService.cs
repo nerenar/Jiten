@@ -87,9 +87,10 @@ public static class CoverageComputeService
         await userContext.Database.ExecuteSqlRawAsync("ANALYZE _fsrs_young;");
     }
 
-    private static async Task<List<ChildCoverageRow>> ComputeCoverageRowsForIdsAsync(UserDbContext userContext, int[] deckIds)
+    private static async Task<List<ChildCoverageRow>> ComputeCoverageRowsAsync(
+        UserDbContext userContext, string whereClause, object param)
     {
-        return await userContext.Database.SqlQueryRaw<ChildCoverageRow>("""
+        var sql = $"""
             SELECT d."DeckId",
                    CASE WHEN d."WordCount" = 0 THEN 0::smallint
                         ELSE LEAST(ROUND(COALESCE(SUM(dw."Occurrences") FILTER (WHERE mk."WordId" IS NOT NULL), 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
@@ -107,34 +108,10 @@ public static class CoverageComputeService
             LEFT JOIN "jiten"."DeckWords" dw ON dw."DeckId" = d."DeckId"
             LEFT JOIN _mature_known mk ON mk."WordId" = dw."WordId" AND mk."ReadingIndex" = dw."ReadingIndex"
             LEFT JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
-            WHERE d."DeckId" = ANY({0})
+            WHERE {whereClause}
             GROUP BY d."DeckId", d."WordCount", d."UniqueWordCount"
-            """, deckIds).ToListAsync();
-    }
-
-    private static async Task<List<ChildCoverageRow>> ComputeCoverageRowsForChildrenAsync(UserDbContext userContext, int parentDeckId)
-    {
-        return await userContext.Database.SqlQueryRaw<ChildCoverageRow>("""
-            SELECT d."DeckId",
-                   CASE WHEN d."WordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(SUM(dw."Occurrences") FILTER (WHERE mk."WordId" IS NOT NULL), 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
-                   END AS "MatureCov",
-                   CASE WHEN d."UniqueWordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(COUNT(*) FILTER (WHERE mk."WordId" IS NOT NULL), 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
-                   END AS "MatureUCov",
-                   CASE WHEN d."WordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(SUM(dw."Occurrences") FILTER (WHERE yk."WordId" IS NOT NULL), 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
-                   END AS "YoungCov",
-                   CASE WHEN d."UniqueWordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(COUNT(*) FILTER (WHERE yk."WordId" IS NOT NULL), 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
-                   END AS "YoungUCov"
-            FROM "jiten"."Decks" d
-            LEFT JOIN "jiten"."DeckWords" dw ON dw."DeckId" = d."DeckId"
-            LEFT JOIN _mature_known mk ON mk."WordId" = dw."WordId" AND mk."ReadingIndex" = dw."ReadingIndex"
-            LEFT JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
-            WHERE d."ParentDeckId" = {0}
-            GROUP BY d."DeckId", d."WordCount", d."UniqueWordCount"
-            """, parentDeckId).ToListAsync();
+            """;
+        return await userContext.Database.SqlQueryRaw<ChildCoverageRow>(sql, param).ToListAsync();
     }
 
     // Efficient read-modify-write upsert: loads affected chunks once, updates slots in memory, writes back in bulk
@@ -209,7 +186,7 @@ public static class CoverageComputeService
         await using var tx = await userContext.Database.BeginTransactionAsync();
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL work_mem = '64MB';");
         await CreateKnownWordsTempTablesAsync(userContext, userGuid);
-        var rows = await ComputeCoverageRowsForIdsAsync(userContext, deckIds.ToArray());
+        var rows = await ComputeCoverageRowsAsync(userContext, """d."DeckId" = ANY({0})""", deckIds.ToArray());
         await UpsertCoverageChunksAsync(userContext, userId, rows, computedAt);
         await tx.CommitAsync();
     }
@@ -223,7 +200,7 @@ public static class CoverageComputeService
         await using var tx = await userContext.Database.BeginTransactionAsync();
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL work_mem = '64MB';");
         await CreateKnownWordsTempTablesAsync(userContext, userGuid);
-        var rows = await ComputeCoverageRowsForChildrenAsync(userContext, parentDeckId);
+        var rows = await ComputeCoverageRowsAsync(userContext, """d."ParentDeckId" = {0}""", parentDeckId);
         await UpsertCoverageChunksAsync(userContext, userId, rows, computedAt);
         await tx.CommitAsync();
     }
