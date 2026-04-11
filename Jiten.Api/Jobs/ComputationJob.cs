@@ -1,11 +1,12 @@
 using System.Text;
 using CsvHelper;
+using Hangfire;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
-using Hangfire;
 
 namespace Jiten.Api.Jobs;
 
@@ -233,6 +234,35 @@ public class ComputationJob(
         }
     }
 
+    [Queue("coverage")]
+    public async Task ComputeUserChildrenCoverage(string userId, int parentDeckId)
+    {
+        lock (CoverageComputeLock)
+        {
+            if (!CoverageComputingUserIds.Add(userId))
+                return;
+        }
+
+        await using var userContext = await userContextFactory.CreateDbContextAsync();
+
+        try
+        {
+            var hasSufficientFsrsCards = await userContext.FsrsCards.CountAsync(fc => fc.UserId == userId) >= 10;
+            var hasWordSetSubscriptions = await userContext.UserWordSetStates.AnyAsync(uwss => uwss.UserId == userId);
+            if (!hasSufficientFsrsCards && !hasWordSetSubscriptions)
+                return;
+
+            await CoverageComputeService.ComputeAllChildrenAsync(userContext, userId, parentDeckId);
+        }
+        finally
+        {
+            lock (CoverageComputeLock)
+            {
+                CoverageComputingUserIds.Remove(userId);
+            }
+        }
+    }
+
     private sealed class DeckCoverageBasisPoints
     {
         public short MatureCoverageBp { get; set; }
@@ -341,7 +371,7 @@ public class ComputationJob(
         logger.LogInformation("Coverage: fsrs_young materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3: Compute hits per deck
+        // Step 3: Compute hits per deck (parent decks only - children computed on-demand)
         // Force hash join for mature (778K+ rows makes nestloop too expensive)
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_nestloop = off;");
         await userContext.Database.ExecuteSqlRawAsync("""
@@ -349,6 +379,7 @@ public class ComputationJob(
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
             FROM "jiten"."DeckWords" dw
             JOIN _mature_known mk ON mk."WordId" = dw."WordId" AND mk."ReadingIndex" = dw."ReadingIndex"
+            JOIN "jiten"."Decks" pd ON pd."DeckId" = dw."DeckId" AND pd."ParentDeckId" IS NULL
             GROUP BY dw."DeckId";
             """);
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_nestloop = on;");
@@ -361,12 +392,13 @@ public class ComputationJob(
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
             FROM "jiten"."DeckWords" dw
             JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
+            JOIN "jiten"."Decks" pd ON pd."DeckId" = dw."DeckId" AND pd."ParentDeckId" IS NULL
             GROUP BY dw."DeckId";
             """);
         logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 4: Build per-deck coverage
+        // Step 4: Build per-deck coverage (parent decks only - child slots remain 0 to signal uncomputed)
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _deck_cov ON COMMIT DROP AS
             SELECT d."DeckId",
@@ -384,7 +416,8 @@ public class ComputationJob(
                    END AS y_ucov
             FROM "jiten"."Decks" d
             LEFT JOIN _mature_hits mh ON mh."DeckId" = d."DeckId"
-            LEFT JOIN _young_hits yh ON yh."DeckId" = d."DeckId";
+            LEFT JOIN _young_hits yh ON yh."DeckId" = d."DeckId"
+            WHERE d."ParentDeckId" IS NULL;
             """);
         await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _deck_cov ("DeckId");""");
         logger.LogInformation("Coverage: deck_cov built in {Elapsed}ms", sw.ElapsedMilliseconds);

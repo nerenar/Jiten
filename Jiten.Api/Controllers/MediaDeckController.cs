@@ -2,10 +2,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using AnkiNet;
+using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Enums;
 using Jiten.Api.Helpers;
+using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -38,7 +40,8 @@ public class MediaDeckController(
     ILogger<MediaDeckController> logger,
     IHttpClientFactory httpClientFactory,
     IDeckWordResolver deckWordResolver,
-    IDeckDownloadService downloadService) : ControllerBase
+    IDeckDownloadService downloadService,
+    IBackgroundJobClient backgroundJobClient) : ControllerBase
 {
     private record DeckIdWithCount(int DeckId, int TotalCount);
 
@@ -1336,6 +1339,23 @@ public class MediaDeckController(
             var userId = currentUserService.UserId!;
             var ids = new List<int> { mainDeckDto.DeckId };
             ids.AddRange(subdeckDtos.Select(d => d.DeckId));
+
+            // On-demand child coverage: child slots are 0 after a parent-only daily recompute.
+            // Compute the visible page inline immediately; enqueue a background job for all siblings.
+            var childIds = deck.ParentDeckId.HasValue
+                ? [deck.DeckId]                                      // visiting a child deck directly
+                : subdeckDtos.Select(d => d.DeckId).ToArray();      // visiting a parent deck
+
+            if (childIds.Length > 0 && await userContext.UserCoverageChunks.AnyAsync(c => c.UserId == userId))
+            {
+                var existingCoverage = await UserCoverageChunkHelper.GetCoverage(userContext, userId, childIds);
+                if (childIds.Any(cid => existingCoverage.MatureCoverage.GetValueOrDefault(cid) == 0f))
+                {
+                    var parentId = deck.ParentDeckId ?? deck.DeckId;
+                    await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, childIds);
+                    backgroundJobClient.Enqueue<ComputationJob>(job => job.ComputeUserChildrenCoverage(userId, parentId));
+                }
+            }
 
             var coverages = await UserCoverageChunkHelper.GetCoverage(userContext, userId, ids);
             var coverageDict = coverages.MatureCoverage;
