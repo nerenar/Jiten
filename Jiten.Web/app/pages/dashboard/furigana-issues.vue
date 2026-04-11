@@ -183,6 +183,150 @@
     }
   }
 
+  function isKana(ch: string): boolean {
+    const code = ch.charCodeAt(0);
+    return (code >= 0x3040 && code <= 0x309F) || (code >= 0x30A0 && code <= 0x30FF);
+  }
+
+  function toHiragana(ch: string): string {
+    const code = ch.charCodeAt(0);
+    if (code >= 0x30A1 && code <= 0x30F6) return String.fromCharCode(code - 0x60);
+    return ch;
+  }
+
+  function kanaEqual(a: string, b: string): boolean {
+    return toHiragana(a) === toHiragana(b);
+  }
+
+  function guessRubyText(kanjiText: string, kanaText: string): string | null {
+    const chars = [...kanjiText];
+    const kana = [...kanaText];
+
+    let prefixKana = 0;
+    while (prefixKana < chars.length && prefixKana < kana.length && isKana(chars[prefixKana]) && kanaEqual(chars[prefixKana], kana[prefixKana]))
+      prefixKana++;
+
+    let suffixKana = 0;
+    while (
+      suffixKana < chars.length - prefixKana
+      && suffixKana < kana.length - prefixKana
+      && isKana(chars[chars.length - 1 - suffixKana])
+      && kanaEqual(chars[chars.length - 1 - suffixKana], kana[kana.length - 1 - suffixKana])
+    )
+      suffixKana++;
+
+    const midKanji = chars.slice(prefixKana, chars.length - suffixKana);
+    const midKana = kana.slice(prefixKana, kana.length - suffixKana);
+
+    if (midKanji.length === 0 || midKana.length === 0) return null;
+
+    const kanjiRuns: { start: number; end: number }[] = [];
+    let i = 0;
+    while (i < midKanji.length) {
+      if (!isKana(midKanji[i])) {
+        const start = i;
+        while (i < midKanji.length && !isKana(midKanji[i])) i++;
+        kanjiRuns.push({ start, end: i });
+      } else {
+        i++;
+      }
+    }
+
+    if (kanjiRuns.length === 0) return null;
+
+    if (kanjiRuns.length === 1 && midKanji.every(ch => !isKana(ch))) {
+      const prefix = chars.slice(0, prefixKana).join('');
+      const suffix = chars.slice(chars.length - suffixKana).join('');
+      const kanjiPart = midKanji.join('');
+      const reading = midKana.join('');
+      return `${prefix}${kanjiPart}[${reading}]${suffix}`;
+    }
+
+    // Multiple kanji runs separated by kana — try to align the kana separators
+    const kanaSegments: string[] = [];
+    for (let j = 0; j < midKanji.length; j++) {
+      if (isKana(midKanji[j])) {
+        if (kanaSegments.length === 0 || !isKana(midKanji[j - 1])) kanaSegments.push('');
+        kanaSegments[kanaSegments.length - 1] += midKanji[j];
+      }
+    }
+
+    // Split midKana by the kana separators found in midKanji (normalize to hiragana for matching)
+    const midKanaStr = midKana.map(toHiragana).join('');
+    const parts: string[] = [];
+    let remaining = midKanaStr;
+    let valid = true;
+    for (const sep of kanaSegments) {
+      const normalizedSep = [...sep].map(toHiragana).join('');
+      const idx = remaining.indexOf(normalizedSep);
+      if (idx === -1) { valid = false; break; }
+      parts.push(remaining.slice(0, idx));
+      remaining = remaining.slice(idx + normalizedSep.length);
+    }
+    if (valid) parts.push(remaining);
+
+    if (!valid || parts.length !== kanjiRuns.length) return null;
+    if (parts.some(p => p.length === 0)) return null;
+
+    let result = chars.slice(0, prefixKana).join('');
+    let midIdx = 0;
+    let runIdx = 0;
+    for (let j = 0; j < midKanji.length; j++) {
+      if (!isKana(midKanji[j])) {
+        if (j === kanjiRuns[runIdx].start) {
+          const kanjiPart = midKanji.slice(kanjiRuns[runIdx].start, kanjiRuns[runIdx].end).join('');
+          result += `${kanjiPart}[${parts[runIdx]}]`;
+          j = kanjiRuns[runIdx].end - 1;
+          runIdx++;
+        }
+      } else {
+        result += midKanji[j];
+      }
+    }
+    result += chars.slice(chars.length - suffixKana).join('');
+    return result;
+  }
+
+  function findBestGuess(form: WordFormSummary): string | null {
+    if (form.formType !== 0) return null;
+    const kanaForms = editingForms.value.filter(f => f.formType === 1);
+    if (kanaForms.length === 0) return null;
+
+    const sameIndex = kanaForms.find(f => f.readingIndex === form.readingIndex);
+    if (sameIndex) {
+      const guess = guessRubyText(form.text, sameIndex.text);
+      if (guess) return guess;
+    }
+
+    for (const kf of kanaForms) {
+      if (kf === sameIndex) continue;
+      const guess = guessRubyText(form.text, kf.text);
+      if (guess) return guess;
+    }
+    return null;
+  }
+
+  function autoFillRubyText(form: WordFormSummary) {
+    const guess = findBestGuess(form);
+    if (guess) editingRubyTexts.value[form.readingIndex] = guess;
+  }
+
+  function canAutoFill(form: WordFormSummary): boolean {
+    return findBestGuess(form) !== null;
+  }
+
+  function autoFillAll() {
+    for (const form of editingForms.value) {
+      if (form.formType === 0 && !editingRubyTexts.value[form.readingIndex]?.includes('[')) {
+        autoFillRubyText(form);
+      }
+    }
+  }
+
+  const canAutoFillAny = computed(() =>
+    editingForms.value.some(f => f.formType === 0 && !editingRubyTexts.value[f.readingIndex]?.includes('[') && canAutoFill(f)),
+  );
+
   function getFormTypeLabel(formType: number) {
     return formType === 0 ? 'Kanji' : 'Kana';
   }
@@ -294,8 +438,16 @@
       :modal="true"
       class="w-full md:w-2/3 lg:w-1/2"
     >
-      <div class="mb-4 text-sm text-gray-500">
-        POS: {{ editingPartsOfSpeech.join(', ') }}
+      <div class="mb-4 flex items-center justify-between">
+        <span class="text-sm text-gray-500">POS: {{ editingPartsOfSpeech.join(', ') }}</span>
+        <Button
+          v-if="canAutoFillAny"
+          label="Auto-fill All"
+          icon="pi pi-sparkles"
+          size="small"
+          severity="help"
+          @click="autoFillAll"
+        />
       </div>
 
       <div class="flex flex-col gap-4">
@@ -313,11 +465,21 @@
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Ruby Text</label>
-            <InputText
-              v-model="editingRubyTexts[form.readingIndex]"
-              :placeholder="`e.g. ${form.text}`"
-              class="w-full"
-            />
+            <div class="flex gap-2">
+              <InputText
+                v-model="editingRubyTexts[form.readingIndex]"
+                :placeholder="`e.g. ${form.text}`"
+                class="w-full"
+              />
+              <Button
+                v-if="canAutoFill(form)"
+                icon="pi pi-sparkles"
+                size="small"
+                severity="help"
+                v-tooltip.top="'Guess furigana from kana form'"
+                @click="autoFillRubyText(form)"
+              />
+            </div>
             <div
               v-if="editingRubyTexts[form.readingIndex] !== originalRubyTexts[form.readingIndex]"
               class="text-xs mt-1 text-orange-500"

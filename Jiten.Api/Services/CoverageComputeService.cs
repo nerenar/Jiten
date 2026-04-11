@@ -206,8 +206,8 @@ public static class CoverageComputeService
     {
         var userGuid = Guid.Parse(userId);
         var computedAt = DateTime.UtcNow;
-        await userContext.Database.ExecuteSqlRawAsync("SET work_mem = '64MB';");
         await using var tx = await userContext.Database.BeginTransactionAsync();
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL work_mem = '64MB';");
         await CreateKnownWordsTempTablesAsync(userContext, userGuid);
         var rows = await ComputeCoverageRowsForIdsAsync(userContext, deckIds.ToArray());
         await UpsertCoverageChunksAsync(userContext, userId, rows, computedAt);
@@ -220,8 +220,8 @@ public static class CoverageComputeService
     {
         var userGuid = Guid.Parse(userId);
         var computedAt = DateTime.UtcNow;
-        await userContext.Database.ExecuteSqlRawAsync("SET work_mem = '64MB';");
         await using var tx = await userContext.Database.BeginTransactionAsync();
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL work_mem = '64MB';");
         await CreateKnownWordsTempTablesAsync(userContext, userGuid);
         var rows = await ComputeCoverageRowsForChildrenAsync(userContext, parentDeckId);
         await UpsertCoverageChunksAsync(userContext, userId, rows, computedAt);

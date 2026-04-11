@@ -371,28 +371,37 @@ public class ComputationJob(
         logger.LogInformation("Coverage: fsrs_young materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3: Compute hits per deck (parent decks only - children computed on-demand)
-        // Force hash join for mature (778K+ rows makes nestloop too expensive)
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_nestloop = off;");
+        // Step 3a: Materialise parent deck IDs (~10K rows)
+        await userContext.Database.ExecuteSqlRawAsync("""
+            CREATE TEMP TABLE _parent_ids ON COMMIT DROP AS
+            SELECT "DeckId" FROM "jiten"."Decks" WHERE "ParentDeckId" IS NULL;
+            """);
+        await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _parent_ids ("DeckId");""");
+        await userContext.Database.ExecuteSqlRawAsync("ANALYZE _parent_ids;");
+        logger.LogInformation("Coverage: parent_ids materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
+        sw.Restart();
+
+        // Step 3b: Mature hits — nestloop from _parent_ids (12K) into DeckWords via
+        // IX_DeckWords_DeckId_IncWordIdReadingIndexOcc covering index (index-only scan),
+        // then memoized probe against _mature_known. Reads ~300K pages vs 1.57M for a full scan.
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _mature_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
-            FROM "jiten"."DeckWords" dw
+            FROM _parent_ids pd
+            JOIN "jiten"."DeckWords" dw ON dw."DeckId" = pd."DeckId"
             JOIN _mature_known mk ON mk."WordId" = dw."WordId" AND mk."ReadingIndex" = dw."ReadingIndex"
-            JOIN "jiten"."Decks" pd ON pd."DeckId" = dw."DeckId" AND pd."ParentDeckId" IS NULL
             GROUP BY dw."DeckId";
             """);
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_nestloop = on;");
         logger.LogInformation("Coverage: mature_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Young set is small — nestloop with covering index is optimal
+        // Step 3c: Young hits (fsrs_young is tiny so this is fast regardless)
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _young_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
-            FROM "jiten"."DeckWords" dw
+            FROM _parent_ids pd
+            JOIN "jiten"."DeckWords" dw ON dw."DeckId" = pd."DeckId"
             JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
-            JOIN "jiten"."Decks" pd ON pd."DeckId" = dw."DeckId" AND pd."ParentDeckId" IS NULL
             GROUP BY dw."DeckId";
             """);
         logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
