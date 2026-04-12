@@ -15,6 +15,7 @@ public class ComputationJob(
     IDbContextFactory<UserDbContext> userContextFactory,
     IConfiguration configuration,
     IBackgroundJobClient backgroundJobs,
+    IPendingCoverageQueue pendingCoverageQueue,
     ILogger<ComputationJob> logger)
 {
     private static readonly object CoverageComputeLock = new();
@@ -95,12 +96,15 @@ public class ComputationJob(
     {
         await using var userContext = await userContextFactory.CreateDbContextAsync();
 
+        // Only refresh coverage for users who've been active recently. Inactive users get a
+        // catch-up compute on their next login/refresh via UserActivityTracker.
+        var activeThreshold = DateTime.UtcNow.AddDays(-UserActivityTracker.InactiveThresholdDays);
         var userIds = await (from u in userContext.Users.AsNoTracking()
                              join um in userContext.UserMetadatas.AsNoTracking()
-                                 on u.Id equals um.UserId into meta
-                             from um in meta.DefaultIfEmpty()
-                             where um == null || um.CoverageDirty ||
-                                   !userContext.UserCoverageChunks.Any(c => c.UserId == u.Id)
+                                 on u.Id equals um.UserId
+                             where um.LastActivity != null && um.LastActivity >= activeThreshold
+                                   && (um.CoverageDirty
+                                       || !userContext.UserCoverageChunks.Any(c => c.UserId == u.Id))
                              select u.Id).ToListAsync();
 
         foreach (var userId in userIds)
@@ -163,9 +167,19 @@ public class ComputationJob(
         }
     }
 
+    // Drains the Redis set of newly-parsed decks and fans out a single batch coverage job
+    // per eligible user covering all pending decks. Runs on a recurring schedule (~15min).
+    // This coalesces bursts of deck ingest so we enqueue O(users) jobs instead of O(users * decks).
     [Queue("coverage")]
-    public async Task ComputeDeckCoverageForAllUsers(int deckId)
+    public async Task SweepPendingCoverageDecks()
     {
+        var deckIds = await pendingCoverageQueue.DrainAsync();
+        if (deckIds.Count == 0)
+        {
+            logger.LogDebug("SweepPendingCoverageDecks: nothing to do");
+            return;
+        }
+
         await using var ctx = await userContextFactory.CreateDbContextAsync();
 
         var fsrsEligible = ctx.FsrsCards
@@ -177,7 +191,17 @@ public class ComputationJob(
             .Select(s => s.UserId)
             .Distinct();
 
-        var userIds = await fsrsEligible.Union(wordSetEligible).Distinct().ToListAsync();
+        // Restrict to recently-active users. Inactive users get caught up by UserActivityTracker
+        // when they next log in or refresh their token.
+        var activeThreshold = DateTime.UtcNow.AddDays(-UserActivityTracker.InactiveThresholdDays);
+        var activeUserIds = ctx.UserMetadatas
+            .Where(um => um.LastActivity != null && um.LastActivity >= activeThreshold)
+            .Select(um => um.UserId);
+
+        var userIds = await fsrsEligible.Union(wordSetEligible)
+            .Where(id => activeUserIds.Contains(id))
+            .Distinct()
+            .ToListAsync();
 
         // Users without any coverage rows need a full compute first; otherwise deck slot updates would make most decks appear as 0.
         var userIdsWithCoverage = await ctx.UserCoverageChunks
@@ -188,12 +212,86 @@ public class ComputationJob(
             .ToListAsync();
 
         var withCoverage = userIdsWithCoverage.ToHashSet();
+        var deckIdArray = deckIds.ToArray();
+
+        logger.LogInformation("SweepPendingCoverageDecks: draining {DeckCount} decks for {UserCount} eligible users",
+            deckIdArray.Length, userIds.Count);
+
         foreach (var userId in userIds)
         {
             if (!withCoverage.Contains(userId))
                 backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
             else
-                backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserDeckCoverage(userId, deckId));
+                backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserDeckCoverageBatch(userId, deckIdArray));
+        }
+    }
+
+    [Queue("coverage")]
+    public async Task ComputeUserDeckCoverageBatch(string userId, int[] deckIds)
+    {
+        if (deckIds is null || deckIds.Length == 0) return;
+
+        bool lockAcquired;
+        lock (CoverageComputeLock)
+        {
+            lockAcquired = CoverageComputingUserIds.Add(userId);
+        }
+
+        if (!lockAcquired)
+        {
+            // Another coverage computation is already running for this user. Re-queue the
+            // deckIds so the next sweep retries them — but bound the number of retries per
+            // user so a permanently-stuck lock can't cause an infinite re-queue loop.
+            const int maxContentionRetries = 5;
+            if (await pendingCoverageQueue.TryRecordContentionAsync(userId, maxContentionRetries))
+            {
+                await pendingCoverageQueue.AddManyAsync(deckIds);
+                logger.LogInformation(
+                    "ComputeUserDeckCoverageBatch: user {UserId} contended, re-queued {Count} decks for next sweep",
+                    userId, deckIds.Length);
+            }
+            else
+            {
+                // Retry budget exhausted — mark the user dirty so RefreshAllDirtyUsers will
+                // do a full recompute, which subsumes any dropped deck work.
+                await using var fallbackContext = await userContextFactory.CreateDbContextAsync();
+                var meta = await fallbackContext.UserMetadatas.FirstOrDefaultAsync(um => um.UserId == userId);
+                if (meta == null)
+                {
+                    meta = new UserMetadata { UserId = userId, CoverageDirty = true, CoverageDirtyAt = DateTime.UtcNow };
+                    fallbackContext.UserMetadatas.Add(meta);
+                }
+                else
+                {
+                    meta.CoverageDirty = true;
+                    meta.CoverageDirtyAt = DateTime.UtcNow;
+                }
+                await fallbackContext.SaveChangesAsync();
+                logger.LogWarning(
+                    "ComputeUserDeckCoverageBatch: user {UserId} contention budget exhausted; marked CoverageDirty and dropping {Count} deckIds",
+                    userId, deckIds.Length);
+            }
+            return;
+        }
+
+        await using var userContext = await userContextFactory.CreateDbContextAsync();
+
+        try
+        {
+            var hasSufficientFsrsCards = await userContext.FsrsCards.CountAsync(fc => fc.UserId == userId) >= 10;
+            var hasWordSetSubscriptions = await userContext.UserWordSetStates.AnyAsync(uwss => uwss.UserId == userId);
+
+            if (!hasSufficientFsrsCards && !hasWordSetSubscriptions)
+                return;
+
+            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds);
+        }
+        finally
+        {
+            lock (CoverageComputeLock)
+            {
+                CoverageComputingUserIds.Remove(userId);
+            }
         }
     }
 

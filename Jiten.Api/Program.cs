@@ -348,6 +348,8 @@ builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
 builder.Services.AddScoped<IDeckImportService, DeckImportService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
+builder.Services.AddSingleton<IPendingCoverageQueue, PendingCoverageQueue>();
+builder.Services.AddSingleton<IUserActivityTracker, UserActivityTracker>();
 builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(sp.GetRequiredService<IConfiguration>().GetConnectionString("Redis")!));
@@ -608,6 +610,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "difficulty-adjustment",
         job => job.ComputeAllAdjustments(),
         "0 */6 * * *");
+
+    recurringJobs.AddOrUpdate<ComputationJob>(
+        "coverage-sweep",
+        job => job.SweepPendingCoverageDecks(),
+        "*/15 * * * *");
 }
 
 app.UseResponseCompression();

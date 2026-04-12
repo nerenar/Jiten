@@ -7,4 +7,6 @@ public class UserMetadata
     public DateTime? CoverageRefreshedAt { get; set; }
     public bool CoverageDirty { get; set; }
     public DateTime? CoverageDirtyAt { get; set; }
+
+    public DateTime? LastActivity { get; set; }
 }

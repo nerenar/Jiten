@@ -1,3 +1,4 @@
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Providers;
@@ -8,7 +9,10 @@ using Jiten.Parser;
 
 namespace Jiten.Api.Jobs;
 
-public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgroundJobClient backgroundJobs)
+public class ParseJob(
+    IDbContextFactory<JitenDbContext> contextFactory,
+    IBackgroundJobClient backgroundJobs,
+    IPendingCoverageQueue pendingCoverageQueue)
 {
     [Queue("parse")]
     public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
@@ -130,8 +134,8 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
             await MetadataProviderHelper.ProcessRelations(relationContext, deck.DeckId, metadata.Relations);
         }
 
-        // Queue coverage computation for all eligible users
-        QueueCoverageComputationForDeckTree(deck);
+        // Enqueue decks for the periodic coverage sweeper (coalesces per-user work)
+        await QueueCoverageComputationForDeckTree(deck);
 
         // Queue coverage statistics computation for main deck and all children
         QueueStatsComputationForDeckTree(deck);
@@ -269,11 +273,18 @@ public class ParseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgro
         };
     }
 
-    private void QueueCoverageComputationForDeckTree(Deck deck)
+    private async Task QueueCoverageComputationForDeckTree(Deck deck)
     {
-        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeDeckCoverageForAllUsers(deck.DeckId));
+        var deckIds = new List<int>();
+        CollectDeckIds(deck, deckIds);
+        await pendingCoverageQueue.AddManyAsync(deckIds);
+    }
+
+    private static void CollectDeckIds(Deck deck, List<int> acc)
+    {
+        acc.Add(deck.DeckId);
         foreach (var child in deck.Children)
-            QueueCoverageComputationForDeckTree(child);
+            CollectDeckIds(child, acc);
     }
 
     private void QueueStatsComputationForDeckTree(Deck deck)

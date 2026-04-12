@@ -1,4 +1,5 @@
 using Hangfire;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ namespace Jiten.Api.Jobs;
 public class ParseNewSubdecksJob(
     IDbContextFactory<JitenDbContext> contextFactory,
     IBackgroundJobClient backgroundJobs,
+    IPendingCoverageQueue pendingCoverageQueue,
     ILogger<ParseNewSubdecksJob> logger)
 {
     [Queue("reparse")]
@@ -94,13 +96,12 @@ public class ParseNewSubdecksJob(
         var parentSentences = parentWithChildren.ExampleSentences?.ToList() ?? [];
         await JitenHelper.BulkInsertDeckData(contextFactory, parentDeckId, parentWords, parentSentences);
 
-        // Queue coverage and stats for new children + parent
+        // Enqueue decks for the periodic coverage sweeper (coalesces per-user work)
+        var pendingDeckIds = childrenWithText.Select(c => c.DeckId).Append(parentDeckId).ToList();
+        await pendingCoverageQueue.AddManyAsync(pendingDeckIds);
+
         foreach (var child in childrenWithText)
-        {
-            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeDeckCoverageForAllUsers(child.DeckId));
             backgroundJobs.Enqueue<StatsComputationJob>(job => job.ComputeDeckCoverageStats(child.DeckId));
-        }
-        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeDeckCoverageForAllUsers(parentDeckId));
         backgroundJobs.Enqueue<StatsComputationJob>(job => job.ComputeDeckCoverageStats(parentDeckId));
 
         // Queue difficulty — will skip children that already have difficulty computed
