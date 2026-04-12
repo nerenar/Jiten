@@ -36,6 +36,7 @@ public class AuthController : ControllerBase
     private readonly ApiKeyService _apiKeyService;
     private readonly ILogger<AuthController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IUserActivityTracker _activityTracker;
 
     public AuthController(
         UserManager<User> userManager,
@@ -49,7 +50,8 @@ public class AuthController : ControllerBase
         IMemoryCache memoryCache,
         ApiKeyService apiKeyService,
         ILogger<AuthController> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IUserActivityTracker activityTracker)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -63,6 +65,7 @@ public class AuthController : ControllerBase
         _apiKeyService = apiKeyService;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _activityTracker = activityTracker;
     }
 
     [HttpPost("register")]
@@ -194,6 +197,7 @@ public class AuthController : ControllerBase
 
         var tokens = await _tokenService.GenerateTokens(user);
         await _context.SaveChangesAsync(); // Save refresh token
+        await _activityTracker.BumpAsync(user.Id);
         _logger.LogInformation("User logged in: UserId={UserId}, Username={Username}", user.Id, user.UserName);
         return Ok(tokens);
     }
@@ -234,6 +238,7 @@ public class AuthController : ControllerBase
         var newTokens = await _tokenService.GenerateTokens(user);
 
         await _context.SaveChangesAsync(); // Saves both the used old token and the new token
+        await _activityTracker.BumpAsync(user.Id);
 
         return Ok(newTokens);
     }
@@ -400,6 +405,7 @@ public class AuthController : ControllerBase
             // User already exists, proceed with normal login
             var tokens = await _tokenService.GenerateTokens(user);
             await _context.SaveChangesAsync(); // Save refresh token
+            await _activityTracker.BumpAsync(user.Id);
             _logger.LogInformation("User logged in via Google: UserId={UserId}, Username={Username}", user.Id, user.UserName);
             return Ok(tokens);
         }
@@ -488,6 +494,7 @@ public class AuthController : ControllerBase
 
         var tokens = await _tokenService.GenerateTokens(user);
         await _context.SaveChangesAsync(); // Save refresh token
+        await _activityTracker.BumpAsync(user.Id);
         _logger.LogInformation("User registered via Google: UserId={UserId}, Username={Username}", user.Id, user.UserName);
         return Ok(tokens);
     }
