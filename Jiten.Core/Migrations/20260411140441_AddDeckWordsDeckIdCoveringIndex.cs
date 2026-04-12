@@ -19,6 +19,10 @@ namespace Jiten.Core.Migrations
             migrationBuilder.Sql("""
                                  DROP INDEX IF EXISTS "jiten"."IX_DeckId";
                                  """, suppressTransaction: true);
+
+            migrationBuilder.Sql("""
+                                 DROP INDEX IF EXISTS "jiten"."IX_WordReadingIndex";
+                                 """, suppressTransaction: true);
         }
 
         /// <inheritdoc />
@@ -31,6 +35,11 @@ namespace Jiten.Core.Migrations
             migrationBuilder.Sql("""
                                  CREATE INDEX IF NOT EXISTS "IX_DeckId"
                                  ON "jiten"."DeckWords" ("DeckId");
+                                 """, suppressTransaction: true);
+
+            migrationBuilder.Sql("""
+                                 CREATE INDEX IF NOT EXISTS "IX_WordReadingIndex"
+                                 ON "jiten"."DeckWords" ("WordId", "ReadingIndex");
                                  """, suppressTransaction: true);
         }
     }

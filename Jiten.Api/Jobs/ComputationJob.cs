@@ -120,6 +120,7 @@ public class ComputationJob(
         }
 
         await using var userContext = await userContextFactory.CreateDbContextAsync();
+        userContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
 
         try
         {
@@ -381,12 +382,15 @@ public class ComputationJob(
         logger.LogInformation("Coverage: parent_ids materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3b/3c: Compute mature and young hits.
-        // Disable seqscan to prevent the planner from choosing a full 187M-row sequential scan
-        // of DeckWords. With temp tables the planner underestimates join cardinality — especially
-        // for young (often <1K rows) — and picks seq scan + hash join over the fast nestloop path
-        // through IX_DeckWords_DeckId_IncWordIdReadingIndexOcc.
+        // Step 3b: Mature hits — drive from _parent_ids (12K) into DeckWords via DeckId covering
+        // index, then memoized probe against _mature_known (755K). Disable seqscan to prevent the
+        // planner from choosing a full 187M-row sequential scan of DeckWords.
+        // join_collapse_limit = 1 forces the written FROM order: drive from _parent_ids (13K)
+        // through the DeckId covering index, then hash-join _mature_known last. Without this
+        // the planner flips to driving from _mature_known via (WordId,ReadingIndex) once that
+        // set grows, producing 80M random heap reads (~330s).
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off;");
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 1;");
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _mature_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
@@ -398,6 +402,11 @@ public class ComputationJob(
         logger.LogInformation("Coverage: mature_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
+        // Step 3c: Young hits — same _parent_ids → DeckId covering index path as mature.
+        // Driving from _fsrs_young (~1K rows) via (WordId,ReadingIndex) would be faster in theory,
+        // but requires a fully-vacuumed visibility map for Index Only Scan. With stale visibility
+        // the heap fetches are random I/O across the entire table (29M reads). The DeckId path
+        // has semi-sequential I/O patterns that tolerate stale visibility much better.
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _young_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
@@ -406,6 +415,7 @@ public class ComputationJob(
             JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
             GROUP BY dw."DeckId";
             """);
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 8;");
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = on;");
         logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();

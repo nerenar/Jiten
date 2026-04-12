@@ -405,7 +405,7 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_DeckWords_DeckId_IncWordIdReadingIndexOcc");
 
                     b.HasIndex("WordId", "ReadingIndex")
-                        .HasDatabaseName("IX_WordReadingIndex");
+                        .HasDatabaseName("IX_DeckWords_WordId_ReadingIndex_IncDeckIdOcc");
 
                     b.HasIndex("DeckId", "WordId", "ReadingIndex")
                         .IsUnique()
