@@ -114,6 +114,12 @@ export default defineNuxtConfig({
       htmlAttrs: {
         lang: 'en',
       },
+      script: [
+        {
+          innerHTML: `(function(){try{var r=(document.cookie.match(/jiten-theme-mode=([^;]+)/)||[])[1];var m=r?decodeURIComponent(r).replace(/^"|"$/g,''):'auto';var d=m==='dark'||(m!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark-mode')}catch(e){}})()`,
+          tagPosition: 'head',
+        },
+      ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'preconnect', href: 'https://cdn.jiten.moe' },

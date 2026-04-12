@@ -323,9 +323,12 @@
                   </Tooltip>
                 </template>
               </div>
-              <div>
-                <div class="flex flex-col gap-x-6 gap-y-2" :class="isCompact ? '' : 'md:flex-row md:flex-wrap'">
-                  <div class="w-full md:w-64">
+              <div class="@container min-w-0 flex-1">
+                <div
+                  class="grid grid-cols-1 gap-x-6 gap-y-2 max-w-[51rem]"
+                  :class="isCompact ? '' : '@xl:grid-cols-2 @3xl:grid-cols-3'"
+                >
+                  <div class="min-w-0">
                     <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex justify-between flex-wrap stat-row">
                       <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + deck.characterCount.toLocaleString()">
                         <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Speech duration</span>
@@ -350,7 +353,7 @@
                     </div>
                   </div>
 
-                  <div class="w-full md:w-64">
+                  <div class="min-w-0">
                     <div class="flex justify-between flex-wrap stat-row">
                       <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Unique kanji</span>
                       <span class="tabular-nums font-semibold">{{ deck.uniqueKanjiCount.toLocaleString() }}</span>
@@ -383,7 +386,7 @@
                     </div>
                   </div>
 
-                  <div class="w-full md:w-64">
+                  <div class="min-w-0">
                     <div
                       v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100"
                       class="flex justify-between flex-wrap stat-row"
