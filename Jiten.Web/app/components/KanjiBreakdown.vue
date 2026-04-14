@@ -23,7 +23,7 @@
 </script>
 
 <template>
-  <div v-if="status === 'success' && kanjis && kanjis.length > 0" class="mt-4">
+  <div v-if="status === 'success' && kanjis && kanjis.length > 0" class="mt-2">
     <h3 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">Kanji breakdown</h3>
     <div class="flex flex-wrap gap-2">
       <NuxtLink
@@ -34,10 +34,13 @@
       >
         <span class="text-2xl font-medium" lang="ja">{{ kanji.character }}</span>
         <div class="flex flex-col text-xs">
-          <span class="text-surface-600 dark:text-surface-400">
+          <span class="text-surface-600 dark:text-surface-400 text-[10px]">
             {{ kanji.strokeCount }} strokes
           </span>
-          <span v-if="kanji.jlptLevel" class="text-primary-600 dark:text-primary-400">
+          <span v-if="kanji.meanings?.length" class="text-surface-700 dark:text-surface-300 text-sm max-w-[10rem] truncate">
+            {{ kanji.meanings[0] }}
+          </span>
+          <span v-if="kanji.jlptLevel" class="text-primary-600 dark:text-primary-400 text-[10px]">
            JLPT {{ jlptText(kanji.jlptLevel) }}
           </span>
         </div>
