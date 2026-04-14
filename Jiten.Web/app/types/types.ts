@@ -122,6 +122,16 @@ export interface Word {
   occurrences: number;
   pitchAccents: number[];
   knownStates?: KnownState[];
+  composedOf?: WordSummary[];
+  usedIn?: WordSummary[];
+  usedInTotal?: number;
+}
+
+export interface UsedInPage {
+  items: WordSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface Reading {
@@ -469,6 +479,7 @@ export interface WordSummary {
   readingFurigana: string;
   mainDefinition: string | null;
   frequencyRank: number | null;
+  matchSurface?: string | null;
 }
 
 export interface KanjiGridItem {

@@ -220,8 +220,6 @@
             </div>
           </ClientOnly>
 
-          <WordComposition v-if="response?.composedOf?.length" :components="response.composedOf" />
-
           <KanjiBreakdown :key="`${wordId}-${currentReadingIndex}`" :word-id="wordId" :reading-index="currentReadingIndex" />
         </div>
 
@@ -260,6 +258,18 @@
           </ClientOnly>
         </div>
       </div>
+
+      <WordComposition v-if="response?.composedOf?.length" :components="response.composedOf" />
+
+      <WordUsedIn
+        v-if="response?.usedInTotal"
+        :key="`usedin-${response.wordId}-${currentReadingIndex}`"
+        :word-id="response.wordId"
+        :reading-index="currentReadingIndex"
+        :initial-items="response.usedIn ?? []"
+        :total="response.usedInTotal"
+        :highlight="response.mainReading.text"
+      />
 
       <ClientOnly>
         <div v-if="exampleSentences.length > 0 || isLoadingExampleSentences">

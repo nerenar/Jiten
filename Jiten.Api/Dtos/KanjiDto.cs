@@ -21,6 +21,7 @@ public class WordSummaryDto
     public string ReadingFurigana { get; set; } = "";
     public string? MainDefinition { get; set; }
     public int? FrequencyRank { get; set; }
+    public string? MatchSurface { get; set; }
 }
 
 public class KanjiListDto
