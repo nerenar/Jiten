@@ -220,6 +220,8 @@
             </div>
           </ClientOnly>
 
+          <WordComposition v-if="response?.composedOf?.length" :components="response.composedOf" />
+
           <KanjiBreakdown :key="`${wordId}-${currentReadingIndex}`" :word-id="wordId" :reading-index="currentReadingIndex" />
         </div>
 

@@ -69,7 +69,9 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
         var knownStatesTask = currentUserService.GetKnownWordState(wordId, readingIndex);
 
-        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, usedInMediaByTypeTask, knownStatesTask);
+        var composedOfTask = CompositionHelper.LoadComposedOf(contextFactory, wordId, readingIndex);
+
+        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, usedInMediaByTypeTask, knownStatesTask, composedOfTask);
 
         var word = await wordTask;
         if (word == null)
@@ -98,7 +100,8 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask
+                              PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask,
+                              ComposedOf = await composedOfTask
                           });
     }
 
@@ -123,7 +126,9 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             .Where(wff => wff.WordId == wordId)
             .ToDictionaryAsync(wff => wff.ReadingIndex);
 
-        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask);
+        var composedOfTask = CompositionHelper.LoadComposedOf(contextFactory, wordId, readingIndex);
+
+        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, composedOfTask);
 
         var word = await wordTask;
         if (word == null)
@@ -151,7 +156,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents
+                              PitchAccents = word.PitchAccents, ComposedOf = await composedOfTask
                           });
     }
 

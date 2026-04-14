@@ -25,6 +25,7 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
+    public DbSet<JmDictWordComposition> WordCompositions { get; set; }
     
     public DbSet<ExampleSentence> ExampleSentences { get; set; }
     public DbSet<ExampleSentenceWord> ExampleSentenceWords { get; set; }
@@ -420,6 +421,32 @@ public class JitenDbContext : DbContext
                   .WithMany(k => k.WordKanjis)
                   .HasForeignKey(e => e.KanjiCharacter)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<JmDictWordComposition>(entity =>
+        {
+            entity.ToTable("WordCompositions", "jmdict");
+            entity.HasKey(e => new { e.WordId, e.ReadingIndex, e.Position });
+
+            entity.Property(e => e.ComponentSurface)
+                  .HasColumnType("text")
+                  .IsRequired();
+
+            entity.HasIndex(e => new { e.WordId, e.ReadingIndex })
+                  .HasDatabaseName("IX_WordComposition_WordId_ReadingIndex");
+
+            entity.HasIndex(e => e.ComponentWordId)
+                  .HasDatabaseName("IX_WordComposition_ComponentWordId");
+
+            entity.HasOne(e => e.Word)
+                  .WithMany()
+                  .HasForeignKey(e => e.WordId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Component)
+                  .WithMany()
+                  .HasForeignKey(e => e.ComponentWordId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ExampleSentence>(entity =>

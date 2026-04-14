@@ -196,6 +196,12 @@ public class Program
             await dictionaryCommands.PruneSudachiCsvFiles(options.PruneSudachiCsvDirectory);
         }
 
+        if (!string.IsNullOrEmpty(options.ImportWordCompositionDirectory))
+        {
+            await importCommands.ImportWordComposition(options);
+            return;
+        }
+
         // WordSet commands
         if (options.CreateWordSetFromPos)
         {
