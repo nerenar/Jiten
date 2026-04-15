@@ -68,7 +68,8 @@ namespace Jiten.Parser
             (5626489, 28), (5045509, 3), (2029780, 0), (5430309, 1), (1496170, 2), (2564800, 1),
             (2026870, 1), (1585310, 4), (1585310, 5), (2252690, 1), (2835861, 0), (1223130, 1),
             (1246880, 1), (1246880, 2), (1461140, 8), (1461140, 6), (2029700, 0), (2594040, 2),
-            (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1)
+            (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1),
+            (1533340,3)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -1065,8 +1066,22 @@ namespace Jiten.Parser
                                             // When form scoring already resolved the noun with high confidence (e.g. うえ → 上),
                                             // demand a much larger verb advantage to prevent spurious overrides (e.g. 飢える).
                                             int stemThreshold = nounResult.margin >= ScoringPolicy.HighConfidenceThreshold ? 30 : 15;
-                                            if (NounVerbScore(verbEntry, verbFallback.word.ReadingIndex) -
-                                                NounVerbScore(nounEntry, nounResult.word.ReadingIndex) > stemThreshold)
+                                            int nounEvidence = NounVerbScore(nounEntry, nounResult.word.ReadingIndex);
+                                            int verbEvidence = NounVerbScore(verbEntry, verbFallback.word.ReadingIndex);
+                                            // Sudachi explicitly locked the surface as its own dict entry (e.g. 備え noun, not 備える stem).
+                                            // Respect that tag when the noun itself has solid frequency evidence (nf rank <= 20),
+                                            // so a higher-priority verb can't override a well-attested noun reading.
+                                            // Skip the bias for rare-noun homographs like 抱え (nf23) where the verb 抱える is intended.
+                                            if (wordData.wordInfo.DictionaryForm == wordData.wordInfo.Text)
+                                            {
+                                                var nounNf = (nounEntry.Priorities ?? [])
+                                                    .FirstOrDefault(p => p.StartsWith("nf"));
+                                                if (nounNf is { Length: > 2 }
+                                                    && int.TryParse(nounNf[2..], out var nfRank)
+                                                    && nfRank <= 20)
+                                                    nounEvidence += 20;
+                                            }
+                                            if (verbEvidence - nounEvidence > stemThreshold)
                                             {
                                                 processedWord = verbFallback.word;
                                                 resolvedMargin = verbFallback.margin;
@@ -2894,7 +2909,12 @@ namespace Jiten.Parser
 
             // Many JMDict expressions include the negative form (e.g. びくともしない, 関係ない).
             // When the verb is a negative conjugation of する/ある, also try the negative base form.
-            if (dictForm is "する" or "ある")
+            // Only fire when the surface is actually negated — otherwise positive expressions like
+            // 資格がある incorrectly match the negative-form entry 資格がない (opposite polarity).
+            if (dictForm is "する" or "ある"
+                && (verb.Text.Contains("ない") || verb.Text.Contains("なかっ") || verb.Text.Contains("なく")
+                    || verb.Text.Contains("ねえ") || verb.Text.Contains("ねー") || verb.Text.Contains("ねぇ")
+                    || verb.Text.Contains("ませ") || verb.Text.EndsWith("ん") || verb.Text.EndsWith("ず")))
             {
                 var negForm = dictForm == "する" ? "しない" : "ない";
                 result = await TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, negForm);
@@ -3234,7 +3254,11 @@ namespace Jiten.Parser
                     globalPos++;
 
                     if (currentResult == null)
+                    {
+                        diagnostics?.LogDroppedToken(currentInfo.Text, currentInfo.PartOfSpeech,
+                            "Unresolved: no JMDict match found during lookup");
                         continue;
+                    }
 
                     if (!rederiveStates.TryGetValue((si, i), out var state))
                     {
@@ -3266,7 +3290,9 @@ namespace Jiten.Parser
                     var scoringContext = FormScoringContext.Create(
                                                                    currentInfo.Text, currentInfo.DictionaryForm, currentInfo.NormalizedForm,
                                                                    currentInfo.IsPersonNameContext, currentInfo.Reading,
-                                                                   isArchaicSentence, isSentenceInitial: i == 0);
+                                                                   isArchaicSentence,
+                                                                   isSentenceInitial: i == 0,
+                                                                   isSentenceFinal: i == sentenceWords.Count - 1);
 
                     bool anyNonZeroBonus = false;
                     var bonusCache = new Dictionary<FormCandidate, (int bonus, List<string> rules)>();

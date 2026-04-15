@@ -153,6 +153,15 @@ internal static class ResegmentationEngine
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
         Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWord> wordCache)
     {
+        // Refuse to apply a resegmentation where any segment has no WordId candidates
+        // or where the path doesn't cover the span from position 0. Without these guards
+        // user-visible text can silently disappear (e.g. ファルマ → ルマ with ファ dropping
+        // because IsComplete only checks end coverage, not start coverage).
+        if (path.Segments.Count == 0
+            || path.Segments[0].StartChar != 0
+            || path.Segments.Any(s => s.WordIds == null || s.WordIds.Count == 0))
+            return;
+
         var replacements = path.Segments.Select(seg =>
         {
             var text = span.Text.Substring(seg.StartChar, seg.Length);

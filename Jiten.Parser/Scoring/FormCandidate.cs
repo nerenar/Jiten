@@ -44,7 +44,8 @@ internal readonly record struct FormScoringContext(
     string? DictionaryFormHiragana,
     string? NormalizedFormHiragana,
     bool IsArchaicSentence = false,
-    bool IsSentenceInitial = false)
+    bool IsSentenceInitial = false,
+    bool IsSentenceFinal = false)
 {
     public static FormScoringContext Create(
         string surface,
@@ -53,7 +54,8 @@ internal readonly record struct FormScoringContext(
         bool isNameContext,
         string? sudachiReading,
         bool isArchaicSentence = false,
-        bool isSentenceInitial = false)
+        bool isSentenceInitial = false,
+        bool isSentenceFinal = false)
     {
         var surfaceHiragana = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: false);
         var surfaceHiraganaLoose = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: true);
@@ -76,7 +78,8 @@ internal readonly record struct FormScoringContext(
             dictionaryFormHiragana,
             normalizedFormHiragana,
             isArchaicSentence,
-            isSentenceInitial);
+            isSentenceInitial,
+            isSentenceFinal);
     }
 }
 

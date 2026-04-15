@@ -15,6 +15,8 @@ public partial class MorphologicalAnalyser
         ("に", "つい", "て", PartOfSpeech.Expression),
         ("いそう", "に", "ない", PartOfSpeech.Expression),
         ("か", "の", "ように", PartOfSpeech.Expression),
+        ("それ", "よ", "か", PartOfSpeech.Expression),
+        ("に", "劣ら", "ず", PartOfSpeech.Expression),
     ];
 
     private static readonly HashSet<string> AuxiliaryVerbs =
@@ -108,6 +110,9 @@ public partial class MorphologicalAnalyser
         ("何も", "かも", PartOfSpeech.Expression),
         ("に", "とって", PartOfSpeech.Expression),
         ("何と", "も", PartOfSpeech.Adverb),
+        ("何と", "なく", PartOfSpeech.Adverb),
+        ("中途", "半端", PartOfSpeech.Noun),
+        ("常", "に", PartOfSpeech.Adverb),
         ("なくて", "も", PartOfSpeech.Expression),
         ("なんに", "も", PartOfSpeech.Adverb),
         ("なし", "で", PartOfSpeech.Expression),
@@ -148,6 +153,8 @@ public partial class MorphologicalAnalyser
         ("びくと", "も", PartOfSpeech.Adverb),
         ("要する", "に", PartOfSpeech.Expression),
         ("この", "前", PartOfSpeech.Adverb),
+        ("ならび", "に", PartOfSpeech.Conjunction),
+        ("残虐", "非道", PartOfSpeech.NaAdjective),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

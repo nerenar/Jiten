@@ -11,7 +11,7 @@ internal static class FormCandidateScorer
         FormScoringContext context,
         IReadOnlySet<string> archaicPosTypes)
     {
-        int wordScore = WordPriorityScorer.Score(candidate, context.IsNameContext, context.IsArchaicSentence, archaicPosTypes, context.IsSentenceInitial);
+        int wordScore = WordPriorityScorer.Score(candidate, context.IsNameContext, context.IsArchaicSentence, archaicPosTypes, context.IsSentenceInitial, context.IsSentenceFinal);
         int entryPriorityScore = EntryPriorityScorer.Score(candidate);
         int formPriorityScore = FormPriorityScorer.Score(candidate, context.IsKanaSurface);
         int formFlagScore = FormFlagScorer.Score(candidate, context);
@@ -43,7 +43,10 @@ internal static class FormCandidateScorer
 
 internal static class WordPriorityScorer
 {
-    public static int Score(FormCandidate candidate, bool isNameContext, bool isArchaicSentence, IReadOnlySet<string> archaicPosTypes, bool isSentenceInitial = false)
+    private static readonly HashSet<string> SentenceFinalParticleSurfaces =
+        new() { "ね", "よ", "ぞ", "わ", "な", "さ", "か", "の", "かな", "かしら", "よね", "わよ", "わね", "のよ", "のね" };
+
+    public static int Score(FormCandidate candidate, bool isNameContext, bool isArchaicSentence, IReadOnlySet<string> archaicPosTypes, bool isSentenceInitial = false, bool isSentenceFinal = false)
     {
         var word = candidate.Word;
         int wordScore = 0;
@@ -86,6 +89,14 @@ internal static class WordPriorityScorer
         // Adverbs commonly start clauses; mild boost when sentence-initial.
         if (isSentenceInitial && word.PartsOfSpeech.Any(p => p is "adv" or "adv-to"))
             wordScore += 10;
+
+        // Sentence-final particles (ね/よ/ぞ/わ/な/さ/か/の …) get a bonus only at true
+        // end-of-sentence, matching Ichiran's :final flag in gen-score (dict.lisp:1120).
+        // Resolves homograph conflicts like 〜な (na-adj ending) vs. final 〜な (particle).
+        if (isSentenceFinal
+            && word.PartsOfSpeech.Any(p => p is "prt")
+            && SentenceFinalParticleSurfaces.Contains(candidate.FormTextHiragana))
+            wordScore += 25;
 
         // Unclass entries (JMnedict names with no category) are last-resort matches.
         // Penalise them when not in a name context so proper words score higher.
@@ -210,6 +221,13 @@ internal static class FormFlagScorer
         if (isPureKanaWord && form.FormType == JmDictFormType.KanaForm && context.IsKanaSurface)
             formFlagScore += 20;
 
+        // Colloquial expressions (e.g. こった = ことだ contraction, めでたいこった) are often
+        // tagged [exp, col]. When the surface exactly matches such an entry's form, prefer it
+        // over adjectival/nominal homographs (e.g. 1238990 こった "elaborate" adj-f) that happen
+        // to share the kana form — the colloquial reading is usually intended in running speech.
+        if (formMatchesSurface && word.PartsOfSpeech.Contains("col") && word.PartsOfSpeech.Contains("exp"))
+            formFlagScore += 15;
+
         // High-frequency kanji words (jiten priority) should not beat grammatical words
         // via a single-char kana match. Single-char kana tokens are virtually always
         // grammatical (copula/aux/particle); jiten content words like 打(だ) compete
@@ -234,6 +252,16 @@ internal static class SurfaceScorer
         if (surface == formText)
         {
             score += 300;
+            // Katakana-exact match usually indicates a gairaigo entry intentionally written in
+            // katakana; give a small edge over otherwise-equal hiragana forms of kanji words
+            // (e.g. タンゴ dance vs. 単語 hiragana form たんご).
+            bool isPureKatakana = surface.Length > 0;
+            foreach (var c in surface)
+            {
+                if (c is < '\u30A0' or > '\u30FF') { isPureKatakana = false; break; }
+            }
+            if (isPureKatakana)
+                score += 10;
         }
         else if (context.SurfaceHiragana == candidate.FormTextHiragana)
         {
@@ -443,6 +471,13 @@ internal static class PenaltyScorer
             // adj-ix (e.g. いい/よい) has irregular conjugations; its base forms are not conjugated
             // forms of other words, even if Sudachi misidentifies them (e.g. いい as verb いう).
             if (posToCheck.Any(p => p is "adj-ix"))
+                return false;
+
+            // High-priority fixed expressions (e.g. いけない "must not", exp+adj-i, ichi1) whose
+            // surface exactly matches their form should not be penalised just because Sudachi
+            // analysed them as a conjugation of a different verb (e.g. いけない → いける+ない).
+            bool isInflectableExpression = posToCheck.Any(p => p is "exp" or "on-mim");
+            if (isInflectableExpression && KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities))
                 return false;
 
             // Inflectable words whose forms include DictionaryForm (e.g. 食べ from 食べる)

@@ -21,6 +21,15 @@ public class ParserDiagnostics
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<TransitionViolationEntry>? TransitionViolations { get; private set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<DroppedTokenEntry>? DroppedTokens { get; private set; }
+
+    internal void LogDroppedToken(string text, PartOfSpeech pos, string reason)
+    {
+        DroppedTokens ??= [];
+        DroppedTokens.Add(new DroppedTokenEntry(text, pos, reason));
+    }
+
     internal void LogTransitionViolation(string ruleId, in TokenWindow window)
     {
         TransitionViolations ??= [];
@@ -34,6 +43,12 @@ public class ParserDiagnostics
     public IEnumerable<WordResult> GetLowConfidenceResults(int threshold = 15) =>
         Results.Where(r => r is not null && r.MarginToSecond.HasValue && r.MarginToSecond.Value < threshold);
 }
+
+public sealed record DroppedTokenEntry(
+    string Text,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))]
+    PartOfSpeech PartOfSpeech,
+    string Reason);
 
 public sealed record TransitionViolationEntry(
     string RuleId,
