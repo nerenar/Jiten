@@ -20,9 +20,10 @@ public partial class MorphologicalAnalyser
     /// <param name="diagnostics">Optional diagnostics container for verbose debug output.</param>
     /// <returns>A list of SentenceInfo objects representing the parsed output.</returns>
     public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false, bool preserveStopToken = false,
-                                                ParserDiagnostics? diagnostics = null)
+                                                ParserDiagnostics? diagnostics = null,
+                                                BenchmarkTimings? timings = null)
     {
-        var results = await ParseBatch([text], morphemesOnly, preserveStopToken, diagnostics);
+        var results = await ParseBatch([text], morphemesOnly, preserveStopToken, diagnostics, timings);
         return results.Count > 0 ? results[0] : [];
     }
 
@@ -36,7 +37,8 @@ public partial class MorphologicalAnalyser
     /// <param name="diagnostics">Optional diagnostics container for verbose debug output.</param>
     /// <returns>List of SentenceInfo lists, one per input text.</returns>
     public Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
-                                                     ParserDiagnostics? diagnostics = null)
+                                                     ParserDiagnostics? diagnostics = null,
+                                                     BenchmarkTimings? timings = null)
     {
         if (texts.Count == 0) return Task.FromResult<List<List<SentenceInfo>>>([]);
 
@@ -44,6 +46,8 @@ public partial class MorphologicalAnalyser
 
         var runtimeSettings = ParserRuntimeSettings.Current;
         var dic = runtimeSettings.DictionaryPath;
+
+        var sw = timings != null ? Stopwatch.StartNew() : null;
 
         // Preprocess each text separately (preserves transformations per-text)
         const int sudachiMaxBytes = 49_000;
@@ -73,6 +77,8 @@ public partial class MorphologicalAnalyser
             ? processedTexts[0]
             : string.Join($" {_batchDelimiter} ", processedTexts);
 
+        if (sw != null) { timings!.TextPreprocessMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
         // Single Sudachi call
         var configPath = morphemesOnly
             ? runtimeSettings.SudachiNoUserDicConfigPath
@@ -87,12 +93,16 @@ public partial class MorphologicalAnalyser
         if (diagnostics == null && SudachiInterop.StreamingAvailable)
         {
             allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode);
+
+            if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
         }
         else
         {
             // Fall back to string-based ProcessText (needed for diagnostics raw output)
             var rawOutput = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: mode);
             sudachiStopwatch?.Stop();
+
+            if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
             if (diagnostics != null)
             {
@@ -147,6 +157,8 @@ public partial class MorphologicalAnalyser
 
         allWordInfos = null!;
 
+        if (sw != null) { timings!.TokenParsingMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
         // Process each batch through normal pipeline
         var results = new List<List<SentenceInfo>>();
         for (int i = 0; i < batches.Count && i < originalTexts.Count; i++)
@@ -161,9 +173,16 @@ public partial class MorphologicalAnalyser
             }
 
             ComputeTokenOffsets(originalTexts[i], wordInfos);
+
+            if (sw != null) { timings!.OffsetRecoveryMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             wordInfos = RunPipeline(wordInfos, diagnostics);
 
+            if (sw != null) { timings!.PipelineMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             results.Add(SplitIntoSentences(originalTexts[i], wordInfos));
+
+            if (sw != null) { timings!.SentenceSplitMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
         }
 
         return Task.FromResult(results);

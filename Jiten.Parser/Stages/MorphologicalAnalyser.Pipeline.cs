@@ -8,46 +8,67 @@ public partial class MorphologicalAnalyser
 
     private IReadOnlyList<TokenStage> GetTokenStages() => _tokenStages ??= BuildTokenStages();
 
-    private static TokenStage Stage(TokenStageGroup group, Func<List<WordInfo>, List<WordInfo>> process) =>
-        new(process.Method.Name, group, process);
+    private static TokenStage Stage(
+        TokenStageGroup group,
+        Func<List<WordInfo>, List<WordInfo>> process,
+        TokenFeatures requires = TokenFeatures.None) =>
+        new(process.Method.Name, group, process, requires);
 
     private IReadOnlyList<TokenStage> BuildTokenStages() =>
     [
         Stage(TokenStageGroup.Split, SplitCompoundAuxiliaryVerbs),
-        Stage(TokenStageGroup.Split, SplitTatteParticle),
-        Stage(TokenStageGroup.Split, SplitTanSuffix),
-        Stage(TokenStageGroup.Split, SplitTawakeNoun),
-        Stage(TokenStageGroup.Repair, RepairHasaNoun),
+        Stage(TokenStageGroup.Split, SplitTatteParticle, TokenFeatures.TextTatte),
+        Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
+        Stage(TokenStageGroup.Split, SplitTawakeNoun, TokenFeatures.TextTawake),
+
+        Stage(TokenStageGroup.Repair, RepairHasaNoun, TokenFeatures.TextHasa),
         Stage(TokenStageGroup.Repair, RepairNTokenisation),
         Stage(TokenStageGroup.Repair, RepairVowelElongation),
         Stage(TokenStageGroup.Repair, ProcessSpecialCases),
-        Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee),
-        Stage(TokenStageGroup.Repair, RepairColloquialRanNai),
-        Stage(TokenStageGroup.Combine, CombinePrefixes),
+        Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee, TokenFeatures.Interjection),
+        Stage(TokenStageGroup.Repair, RepairColloquialRanNai, TokenFeatures.TextRan),
+
+        Stage(TokenStageGroup.Combine, CombinePrefixes, TokenFeatures.Prefix),
         Stage(TokenStageGroup.Combine, CombineInflections),
-        Stage(TokenStageGroup.Combine, CombineAmounts),
-        Stage(TokenStageGroup.Combine, CombineTte),
-        Stage(TokenStageGroup.Combine, CombineAuxiliaryVerbStem),
-        Stage(TokenStageGroup.Combine, CombineSuffix),
-        Stage(TokenStageGroup.Cleanup, ReclassifyOrphanedSuffixes),
-        Stage(TokenStageGroup.Combine, CombineConjunctiveParticle),
+        Stage(TokenStageGroup.Combine, CombineAmounts, TokenFeatures.NumericAmount),
+        Stage(TokenStageGroup.Combine, CombineTte, TokenFeatures.EndsWithTsu),
+        Stage(TokenStageGroup.Combine, CombineAuxiliaryVerbStem, TokenFeatures.AuxVerbStem),
+        Stage(TokenStageGroup.Combine, CombineSuffix, TokenFeatures.Suffix),
+        Stage(TokenStageGroup.Cleanup, ReclassifyOrphanedSuffixes, TokenFeatures.Suffix),
+        Stage(TokenStageGroup.Combine, CombineConjunctiveParticle, TokenFeatures.ConjParticle),
         Stage(TokenStageGroup.Combine, CombineAuxiliary),
         Stage(TokenStageGroup.Combine, CombineToNaru),
-        Stage(TokenStageGroup.Repair, RepairFusedInterjectionParticle),
+        Stage(TokenStageGroup.Repair, RepairFusedInterjectionParticle, TokenFeatures.Interjection),
         Stage(TokenStageGroup.Repair, RepairOrphanedAuxiliary),
-        Stage(TokenStageGroup.Combine, CombineAdverbialParticle),
+        Stage(TokenStageGroup.Combine, CombineAdverbialParticle, TokenFeatures.AdvParticle),
         Stage(TokenStageGroup.Combine, CombineVerbDependant),
         Stage(TokenStageGroup.Combine, CombineParticles),
         Stage(TokenStageGroup.Combine, CombineFinal),
-        Stage(TokenStageGroup.Repair, RepairTankaToTaNKa),
+        Stage(TokenStageGroup.Repair, RepairTankaToTaNKa, TokenFeatures.TextTanka),
+
         Stage(TokenStageGroup.Cleanup, FilterMisparse),
         Stage(TokenStageGroup.Disambiguation, FixReadingAmbiguity),
     ];
 
     private List<WordInfo> RunPipeline(List<WordInfo> wordInfos, ParserDiagnostics? diagnostics)
     {
+        var features = TokenFeatureScanner.Scan(wordInfos);
+
         foreach (var stage in GetTokenStages())
+        {
+            if (stage.RequiredFeatures != TokenFeatures.None &&
+                (features & stage.RequiredFeatures) == TokenFeatures.None)
+            {
+                diagnostics?.RecordSkippedStage(stage);
+                continue;
+            }
+
+            var prev = wordInfos;
             wordInfos = TrackStage(stage, wordInfos, diagnostics);
+
+            if (!ReferenceEquals(prev, wordInfos))
+                features = TokenFeatureScanner.Scan(wordInfos);
+        }
 
         return wordInfos;
     }
@@ -61,12 +82,6 @@ public partial class MorphologicalAnalyser
         return TrackStage(stage, input, diagnostics);
     }
 
-    internal List<WordInfo> RunPipelineForTesting(List<WordInfo> input, ParserDiagnostics? diagnostics = null)
-    {
-        var output = input;
-        foreach (var stage in GetTokenStages())
-            output = TrackStage(stage, output, diagnostics);
-
-        return output;
-    }
+    internal List<WordInfo> RunPipelineForTesting(List<WordInfo> input, ParserDiagnostics? diagnostics = null) =>
+        RunPipeline(input, diagnostics);
 }

@@ -485,6 +485,35 @@ public static class JmDictHelper
         }
     }
 
+    public static async Task<List<(int WordId, string[] PartsOfSpeech, string[]? Priorities, WordOrigin Origin)>>
+        LoadWordMetadataRaw(JitenDbContext context)
+    {
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = conn.State == ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
+        {
+            await using var cmd = new NpgsqlCommand(
+                """SELECT "WordId", "PartsOfSpeech", "Priorities", "Origin" FROM jmdict."Words" """, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var result = new List<(int, string[], string[]?, WordOrigin)>(220_000);
+            while (await reader.ReadAsync())
+            {
+                var wordId = reader.GetInt32(0);
+                var pos = (string[])reader.GetValue(1);
+                var pri = reader.IsDBNull(2) ? null : (string[])reader.GetValue(2);
+                var origin = reader.IsDBNull(3) ? WordOrigin.Unknown : (WordOrigin)reader.GetInt32(3);
+                result.Add((wordId, pos, pri, origin));
+            }
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
+    }
+
     public static List<string> ToHumanReadablePartsOfSpeech(this List<string> pos)
     {
         List<string> humanReadablePos = new();

@@ -4,7 +4,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Jiten.Parser.Data;
 using Jiten.Parser.Data.Redis;
 using Microsoft.EntityFrameworkCore;
 
@@ -58,7 +60,7 @@ internal sealed class ParserRuntime
             await new MorphologicalAnalyser().Parse("食べた");
         });
 
-        var (lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, lookupsMs, freqMs, nameOnlyMs) =
+        var (lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, lookupsMs, freqMs, nameOnlyMs, metaMs) =
             await LoadPreloadDataAsync(contextFactory);
         var dbWallMs = overallSw.ElapsedMilliseconds;
 
@@ -67,7 +69,7 @@ internal sealed class ParserRuntime
 
         log?.Invoke(
             $"Warmup phases — " +
-            $"lookups: {lookupsMs}ms, freqRanks: {freqMs}ms, nameOnlyIds: {nameOnlyMs}ms " +
+            $"lookups: {lookupsMs}ms, freqRanks: {freqMs}ms, nameOnlyIds: {nameOnlyMs}ms, wordMeta: {metaMs}ms " +
             $"(DB wall: {dbWallMs}ms) | sudachi: {sudachiSw.ElapsedMilliseconds}ms " +
             $"(waited {Math.Max(0, sudachiSw.ElapsedMilliseconds - dbWallMs)}ms after DB)");
 
@@ -75,21 +77,22 @@ internal sealed class ParserRuntime
         // works correctly even while the cache is still being populated on a cold start.
         _ = Task.Run(() => PrefillRedisCacheAsync(jmDictCache, contextFactory));
 
-        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds);
+        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta);
     }
 
     private static async Task<(Dictionary<string, List<int>> lookups, Dictionary<int, int> wordFrequencyRanks,
-        HashSet<int> nameOnlyWordIds, HashSet<int> expressionWordIds, long lookupsMs, long freqMs, long nameOnlyMs)>
+        HashSet<int> nameOnlyWordIds, HashSet<int> expressionWordIds, Dictionary<int, JmDictWordMeta> wordMeta,
+        long lookupsMs, long freqMs, long nameOnlyMs, long metaMs)>
         LoadPreloadDataAsync(IDbContextFactory<JitenDbContext> contextFactory)
     {
         await using var ctx1 = await contextFactory.CreateDbContextAsync();
         await using var ctx2 = await contextFactory.CreateDbContextAsync();
         await using var ctx3 = await contextFactory.CreateDbContextAsync();
         await using var ctx4 = await contextFactory.CreateDbContextAsync();
+        await using var ctx5 = await contextFactory.CreateDbContextAsync();
+        await using var ctx6 = await contextFactory.CreateDbContextAsync();
 
-        // ContinueWith captures elapsed time at the moment each individual task completes,
-        // giving the per-task duration even though all three run concurrently.
-        long lookupsMs = 0, freqMs = 0, nameOnlyMs = 0;
+        long lookupsMs = 0, freqMs = 0, nameOnlyMs = 0, metaMs = 0;
         var sw = Stopwatch.StartNew();
 
         var t1 = JmDictHelper.LoadLookupTable(ctx1)
@@ -102,10 +105,113 @@ internal sealed class ParserRuntime
             .ContinueWith(t => { nameOnlyMs = sw.ElapsedMilliseconds; return t.Result; },
                 TaskContinuationOptions.ExecuteSynchronously);
         var t4 = JmDictHelper.LoadExpressionWordIds(ctx4);
+        var t5 = JmDictHelper.LoadWordMetadataRaw(ctx5)
+            .ContinueWith(t => { metaMs = sw.ElapsedMilliseconds; return t.Result; },
+                TaskContinuationOptions.ExecuteSynchronously);
+        var t6 = JmDictHelper.LoadFullyArchaicWordIds(ctx6);
 
-        await Task.WhenAll(t1, t2, t3, t4);
+        await Task.WhenAll(t1, t2, t3, t4, t5, t6);
 
-        return (t1.Result, t2.Result, t3.Result, t4.Result, lookupsMs, freqMs, nameOnlyMs);
+        var wordMeta = BuildWordMetadata(t5.Result, t6.Result);
+
+        return (t1.Result, t2.Result, t3.Result, t4.Result, wordMeta, lookupsMs, freqMs, nameOnlyMs, metaMs);
+    }
+
+    private static Dictionary<int, JmDictWordMeta> BuildWordMetadata(
+        List<(int WordId, string[] PartsOfSpeech, string[]? Priorities, WordOrigin Origin)> raw,
+        HashSet<int> fullyArchaicIds)
+    {
+        var result = new Dictionary<int, JmDictWordMeta>(raw.Count);
+
+        foreach (var (wordId, posStrings, priorities, origin) in raw)
+        {
+            var pos = new PartOfSpeech[posStrings.Length];
+            bool hasUk = false;
+            bool hasName = false;
+            for (int i = 0; i < posStrings.Length; i++)
+            {
+                pos[i] = posStrings[i].ToPartOfSpeech();
+                if (posStrings[i] == "uk") hasUk = true;
+                if (pos[i] == PartOfSpeech.Name) hasName = true;
+            }
+
+            int baseScore = ComputePriorityBaseScore(priorities, hasName);
+            int ukDelta = hasUk ? 10 : 0;
+            bool isArchaic = fullyArchaicIds.Contains(wordId);
+
+            int kanaScore = baseScore + ukDelta;
+            int kanjiScore = baseScore - ukDelta;
+
+            if (isArchaic)
+            {
+                bool hasFreq = HasFrequencyMarker(priorities);
+                if (!hasFreq)
+                {
+                    kanaScore -= 350;
+                    kanjiScore -= 350;
+                }
+            }
+
+            result[wordId] = new JmDictWordMeta(pos,
+                (short)Math.Clamp(kanaScore, short.MinValue, short.MaxValue),
+                (short)Math.Clamp(kanjiScore, short.MinValue, short.MaxValue),
+                origin);
+        }
+
+        return result;
+    }
+
+    private static int ComputePriorityBaseScore(string[]? priorities, bool hasName)
+    {
+        int score = 0;
+        if (priorities is { Length: > 0 })
+        {
+            foreach (var p in priorities)
+            {
+                switch (p)
+                {
+                    case "jiten": score += 100; break;
+                    case "ichi1": score += 20; break;
+                    case "ichi2": score += 10; break;
+                    case "news1": score += 15; break;
+                    case "news2": score += 10; break;
+                    case "gai1": score += 15; break;
+                    case "gai2": score += 10; break;
+                    default:
+                        if (p.Length > 2 && p[0] == 'n' && p[1] == 'f')
+                        {
+                            if (int.TryParse(p.AsSpan(2), out int nfRank))
+                                score += Math.Max(0, 5 - (int)Math.Round(nfRank / 10f));
+                        }
+                        break;
+                }
+            }
+
+            if (score == 0)
+            {
+                foreach (var p in priorities)
+                {
+                    switch (p)
+                    {
+                        case "spec1": score += 15; break;
+                        case "spec2": score += 5; break;
+                    }
+                }
+            }
+        }
+
+        if (hasName) score -= 50;
+        return score;
+    }
+
+    private static bool HasFrequencyMarker(string[]? priorities)
+    {
+        if (priorities == null) return false;
+        foreach (var p in priorities)
+            if (p is "ichi1" or "ichi2" or "news1" or "news2" or "gai1" or "gai2" or "spec1" or "spec2"
+                || (p.Length > 2 && p[0] == 'n' && p[1] == 'f'))
+                return true;
+        return false;
     }
 
     private static async Task PrefillRedisCacheAsync(IJmDictCache jmDictCache, IDbContextFactory<JitenDbContext> contextFactory)
@@ -146,7 +252,8 @@ internal sealed class ParserRuntimeSnapshot(
     Dictionary<string, List<int>> lookups,
     Dictionary<int, int> wordFrequencyRanks,
     HashSet<int> nameOnlyWordIds,
-    HashSet<int> expressionWordIds)
+    HashSet<int> expressionWordIds,
+    Dictionary<int, JmDictWordMeta> wordMeta)
 {
     public IDeckWordCache DeckWordCache { get; } = deckWordCache;
     public IJmDictCache JmDictCache { get; } = jmDictCache;
@@ -154,4 +261,5 @@ internal sealed class ParserRuntimeSnapshot(
     public Dictionary<int, int> WordFrequencyRanks { get; } = wordFrequencyRanks;
     public HashSet<int> NameOnlyWordIds { get; } = nameOnlyWordIds;
     public HashSet<int> ExpressionWordIds { get; } = expressionWordIds;
+    public Dictionary<int, JmDictWordMeta> WordMeta { get; } = wordMeta;
 }

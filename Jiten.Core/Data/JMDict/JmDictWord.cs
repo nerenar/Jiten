@@ -21,6 +21,18 @@ public class JmDictWord
     public List<PartOfSpeech> CachedPOS => _cachedPartsOfSpeech ??= PartsOfSpeech.ToPartOfSpeech();
 
     [NotMapped]
+    private uint? _cachedPOSMask;
+
+    [NotMapped]
+    public uint CachedPOSMask => _cachedPOSMask ??= PosMask.FromList(CachedPOS);
+
+    [NotMapped]
+    private bool? _isSuruVerb;
+
+    [NotMapped]
+    public bool IsSuruVerb => _isSuruVerb ??= PartsOfSpeech.Exists(p => p is "vs" or "vs-i" or "vs-s");
+
+    [NotMapped]
     public bool IsFullyArchaic { get; set; }
 
     public int GetPriorityScore(bool isKana)

@@ -1,3 +1,5 @@
+using Jiten.Core.Data;
+
 namespace Jiten.Parser;
 
 internal enum TokenStageGroup
@@ -9,12 +11,115 @@ internal enum TokenStageGroup
     Disambiguation
 }
 
+[Flags]
+internal enum TokenFeatures : uint
+{
+    None            = 0,
+
+    // POS-based
+    Prefix          = 1 << 0,
+    Suffix          = 1 << 1,
+    Auxiliary        = 1 << 2,
+    Interjection    = 1 << 3,
+
+    // POS section-based
+    AuxVerbStem     = 1 << 4,
+    ConjParticle    = 1 << 5,
+    NumericAmount   = 1 << 6,
+    AdvParticle     = 1 << 7,
+    Dependant       = 1 << 8,
+    VerbLike        = 1 << 9,
+
+    // Text patterns
+    LongVowelMark   = 1 << 10,
+    EndsWithTsu     = 1 << 11,
+    TextTanSuffix   = 1 << 12,
+    TextTanka       = 1 << 13,
+    TextHasa        = 1 << 14,
+    TextTawake      = 1 << 15,
+    TextTatte       = 1 << 16,
+    TextRan         = 1 << 17,
+}
+
 internal sealed class TokenStage(
     string name,
     TokenStageGroup group,
-    Func<List<WordInfo>, List<WordInfo>> process)
+    Func<List<WordInfo>, List<WordInfo>> process,
+    TokenFeatures requiredFeatures = TokenFeatures.None)
 {
     public string Name { get; } = name;
     public TokenStageGroup Group { get; } = group;
+    public TokenFeatures RequiredFeatures { get; } = requiredFeatures;
     public List<WordInfo> Apply(List<WordInfo> input) => process(input);
+}
+
+internal static class TokenFeatureScanner
+{
+    public static TokenFeatures Scan(List<WordInfo> tokens)
+    {
+        var f = TokenFeatures.None;
+
+        foreach (var w in tokens)
+        {
+            switch (w.PartOfSpeech)
+            {
+                case PartOfSpeech.Prefix:       f |= TokenFeatures.Prefix; break;
+                case PartOfSpeech.Suffix:        f |= TokenFeatures.Suffix; break;
+                case PartOfSpeech.Auxiliary:      f |= TokenFeatures.Auxiliary; break;
+                case PartOfSpeech.Interjection:  f |= TokenFeatures.Interjection; break;
+            }
+
+            f |= SectionFeature(w.PartOfSpeechSection1);
+            f |= SectionFeature(w.PartOfSpeechSection2);
+            f |= SectionFeature(w.PartOfSpeechSection3);
+
+            var text = w.Text;
+
+            if (text.Contains('ー'))
+                f |= TokenFeatures.LongVowelMark;
+            if (text.Length > 0 && text[^1] == 'っ')
+                f |= TokenFeatures.EndsWithTsu;
+
+            switch (text)
+            {
+                case "たん" when w.PartOfSpeech == PartOfSpeech.Suffix:
+                    f |= TokenFeatures.TextTanSuffix;
+                    break;
+                case "たんか" when w.PartOfSpeech == PartOfSpeech.Noun:
+                    f |= TokenFeatures.TextTanka;
+                    break;
+                case "はさ" when w.PartOfSpeech == PartOfSpeech.Noun:
+                    f |= TokenFeatures.TextHasa;
+                    break;
+                case "たわけ":
+                    f |= TokenFeatures.TextTawake;
+                    break;
+                case "たって" or "だって" when w.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle):
+                    f |= TokenFeatures.TextTatte;
+                    break;
+                case "だな" when w.PartOfSpeech == PartOfSpeech.Noun:
+                    f |= TokenFeatures.TextTatte;
+                    break;
+                case "らん":
+                    f |= TokenFeatures.TextRan;
+                    break;
+            }
+        }
+
+        return f;
+    }
+
+    private static TokenFeatures SectionFeature(PartOfSpeechSection section) => section switch
+    {
+        PartOfSpeechSection.AuxiliaryVerbStem  => TokenFeatures.AuxVerbStem,
+        PartOfSpeechSection.ConjunctionParticle => TokenFeatures.ConjParticle,
+        PartOfSpeechSection.Amount              => TokenFeatures.NumericAmount,
+        PartOfSpeechSection.Numeral             => TokenFeatures.NumericAmount,
+        PartOfSpeechSection.AdverbialParticle   => TokenFeatures.AdvParticle,
+        PartOfSpeechSection.Dependant           => TokenFeatures.Dependant,
+        PartOfSpeechSection.PossibleDependant   => TokenFeatures.Dependant,
+        PartOfSpeechSection.VerbLike            => TokenFeatures.VerbLike,
+        PartOfSpeechSection.Suffix              => TokenFeatures.Suffix,
+        _                                       => TokenFeatures.None,
+    };
 }

@@ -210,6 +210,24 @@ internal static class TransitionRuleEngine
         return new TokenWindow(prev, words[i].word, next, i, words.Count);
     }
 
+    internal static int EvaluateSoftRulesBonus(ScoringWindow window)
+    {
+        int bonus = 0;
+        var ctx = ConditionContext.FromScoringWindow(window);
+
+        foreach (var rule in TransitionRuleSets.SoftRules)
+        {
+            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
+                continue;
+            if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
+            if (!MatchesAll(ctx, rule.ContextMatch)) continue;
+
+            bonus += rule.Delta;
+        }
+
+        return bonus;
+    }
+
     internal static (int bonus, List<string> rulesMatched) EvaluateSoftRules(ScoringWindow window)
     {
         int bonus = 0;
@@ -218,6 +236,8 @@ internal static class TransitionRuleEngine
 
         foreach (var rule in TransitionRuleSets.SoftRules)
         {
+            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
+                continue;
             if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
             if (!MatchesAll(ctx, rule.ContextMatch)) continue;
 
@@ -233,6 +253,8 @@ internal static class TransitionRuleEngine
         var ctx = ConditionContext.FromScoringWindow(window);
         foreach (var rule in TransitionRuleSets.SoftRules)
         {
+            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
+                continue;
             if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
             if (MatchesAll(ctx, rule.ContextMatch)) return true;
         }
@@ -247,9 +269,14 @@ internal static class TransitionRuleEngine
     {
         if (currentPOS.Count == 0) return false;
 
-        var ctx = new ConditionContext(currentPOS, currentText, prevPOS, prevText, nextPOS, nextText);
+        var ctx = new ConditionContext(
+            PosMask.FromList(currentPOS), currentText,
+            prevPOS != null ? PosMask.FromList(prevPOS) : 0, prevPOS != null, prevText,
+            nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText);
         foreach (var rule in TransitionRuleSets.SoftRules)
         {
+            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
+                continue;
             if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
             if (MatchesAll(ctx, rule.ContextMatch)) return true;
         }
@@ -258,22 +285,22 @@ internal static class TransitionRuleEngine
     }
 
     private readonly record struct ConditionContext(
-        List<PartOfSpeech> CandidatePOS,
+        uint CandidateMask,
         string CandidateText,
-        List<PartOfSpeech>? PrevPOS,
+        uint PrevMask,
+        bool HasPrev,
         string? PrevText,
-        List<PartOfSpeech>? NextPOS,
+        uint NextMask,
+        bool HasNext,
         string? NextText,
         bool CandidateIsSuruNounVal = false)
     {
         public static ConditionContext FromScoringWindow(ScoringWindow w) => new(
-            w.Candidate.Word.CachedPOS,
+            w.Candidate.Word.CachedPOSMask,
             w.Candidate.Form.Text,
-            w.PrevResolvedPOS,
-            w.PrevText,
-            w.NextResolvedPOS,
-            w.NextText,
-            w.Candidate.Word.PartsOfSpeech.Any(p => p is "vs" or "vs-i" or "vs-s"));
+            w.PrevMask, w.HasPrev, w.PrevText,
+            w.NextMask, w.HasNext, w.NextText,
+            w.Candidate.Word.IsSuruVerb);
     }
 
     private static bool MatchesAll(ConditionContext ctx, ScoringCondition[] conditions)
@@ -283,27 +310,25 @@ internal static class TransitionRuleEngine
             bool ok = c switch
             {
                 ScoringCondition.CandidateIsNounLike =>
-                    ctx.CandidatePOS.Any(p => p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                                                   or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
-                                                   or PartOfSpeech.Name or PartOfSpeech.NominalAdjective),
+                    PosMask.Has(ctx.CandidateMask, PosMask.NounLike),
 
                 ScoringCondition.CandidateIsNaAdj =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.NaAdjective),
+                    PosMask.Has(ctx.CandidateMask, PosMask.NaAdjective),
 
                 ScoringCondition.CandidateIsAdverb =>
-                    ctx.CandidatePOS.Any(p => p is PartOfSpeech.Adverb or PartOfSpeech.AdverbTo),
+                    PosMask.Has(ctx.CandidateMask, PosMask.AdverbGroup),
 
                 ScoringCondition.CandidateIsAuxiliary =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.Auxiliary),
+                    PosMask.Has(ctx.CandidateMask, PosMask.Auxiliary),
 
                 ScoringCondition.CandidateIsParticle =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.Particle),
+                    PosMask.Has(ctx.CandidateMask, PosMask.Particle),
 
                 ScoringCondition.CandidateIsSingleKanaNonParticle =>
-                    ctx.CandidateText.Length <= 1 && !ctx.CandidatePOS.Contains(PartOfSpeech.Particle),
+                    ctx.CandidateText.Length <= 1 && !PosMask.Has(ctx.CandidateMask, PosMask.Particle),
 
                 ScoringCondition.NextIsCommonParticle =>
-                    ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true
+                    PosMask.Has(ctx.NextMask, PosMask.Particle)
                     && ctx.NextText != null && TransitionRuleSets.CommonParticles.Contains(ctx.NextText),
 
                 ScoringCondition.NextIsCopula =>
@@ -313,54 +338,44 @@ internal static class TransitionRuleEngine
                     ctx.NextText is "な" or "に",
 
                 ScoringCondition.NextIsVerbOrIAdj =>
-                    ctx.NextPOS != null
-                    && (ctx.NextPOS.Contains(PartOfSpeech.Verb) || ctx.NextPOS.Contains(PartOfSpeech.IAdjective)),
+                    ctx.HasNext && PosMask.Has(ctx.NextMask, PosMask.VerbOrIAdj),
 
                 ScoringCondition.PrevIsVerbOrIAdj =>
-                    ctx.PrevPOS != null
-                    && (ctx.PrevPOS.Contains(PartOfSpeech.Verb) || ctx.PrevPOS.Contains(PartOfSpeech.IAdjective)),
+                    ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.VerbOrIAdj),
 
                 ScoringCondition.PrevIsParticle =>
-                    ctx.PrevPOS?.Contains(PartOfSpeech.Particle) == true,
+                    ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.Particle),
 
                 ScoringCondition.NextIsParticle =>
-                    ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true,
+                    ctx.HasNext && PosMask.Has(ctx.NextMask, PosMask.Particle),
 
                 ScoringCondition.PrevIsSingleKanaNonParticle =>
-                    ctx.PrevText is { Length: 1 } && ctx.PrevPOS?.Contains(PartOfSpeech.Particle) != true,
+                    ctx.PrevText is { Length: 1 } && !PosMask.Has(ctx.PrevMask, PosMask.Particle),
 
                 ScoringCondition.NextIsSingleKanaNonParticle =>
-                    ctx.NextText is { Length: 1 } && ctx.NextPOS?.Contains(PartOfSpeech.Particle) != true,
+                    ctx.NextText is { Length: 1 } && !PosMask.Has(ctx.NextMask, PosMask.Particle),
 
                 ScoringCondition.CandidateIsPredicateHost =>
-                    ctx.CandidatePOS.Any(p => p is PartOfSpeech.Verb
-                                                 or PartOfSpeech.IAdjective
-                                                 or PartOfSpeech.Auxiliary),
+                    PosMask.Has(ctx.CandidateMask, PosMask.PredicateHost),
 
                 ScoringCondition.CandidateIsNoParticle =>
-                    ctx.CandidateText == "の" && ctx.CandidatePOS.Contains(PartOfSpeech.Particle),
+                    ctx.CandidateText == "の" && PosMask.Has(ctx.CandidateMask, PosMask.Particle),
 
                 ScoringCondition.NextIsExplanatoryN =>
                     ctx.NextText != null
                     && TransitionRuleSets.ExplanatoryNForms.Contains(ctx.NextText),
 
                 ScoringCondition.PrevIsVerbAuxOrIAdj =>
-                    ctx.PrevPOS != null
-                    && (ctx.PrevPOS.Contains(PartOfSpeech.Verb)
-                        || ctx.PrevPOS.Contains(PartOfSpeech.Auxiliary)
-                        || ctx.PrevPOS.Contains(PartOfSpeech.IAdjective)),
+                    ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.VerbAuxOrIAdj),
 
                 ScoringCondition.CandidateIsCounter =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.Counter),
+                    PosMask.Has(ctx.CandidateMask, PosMask.Counter),
 
                 ScoringCondition.PrevIsNumeral =>
-                    ctx.PrevPOS?.Contains(PartOfSpeech.Numeral) == true,
+                    ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.Numeral),
 
                 ScoringCondition.PrevIsNotNumericLike =>
-                    ctx.PrevPOS == null
-                    || !ctx.PrevPOS.Any(p => p is PartOfSpeech.Numeral or PartOfSpeech.Noun
-                                                or PartOfSpeech.CommonNoun or PartOfSpeech.Pronoun
-                                                or PartOfSpeech.Name),
+                    !ctx.HasPrev || !PosMask.Has(ctx.PrevMask, PosMask.NumericLike),
 
                 ScoringCondition.CandidateIsSingleKanji =>
                     IsSingleKanji(ctx.CandidateText),
@@ -372,57 +387,52 @@ internal static class TransitionRuleEngine
                     IsSingleKanji(ctx.NextText),
 
                 ScoringCondition.NextIsConditionalParticle =>
-                    ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true
+                    PosMask.Has(ctx.NextMask, PosMask.Particle)
                     && ctx.NextText != null && TransitionRuleSets.ConditionalParticles.Contains(ctx.NextText),
 
                 ScoringCondition.CandidateIsAdvTo =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.AdverbTo),
+                    PosMask.Has(ctx.CandidateMask, PosMask.AdverbTo),
 
                 ScoringCondition.NextIsToParticle =>
-                    (ctx.NextText == "と" && ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true)
+                    (ctx.NextText == "と" && PosMask.Has(ctx.NextMask, PosMask.Particle))
                     || ctx.NextText == "という",
 
                 ScoringCondition.CandidateIsVerb =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.Verb),
+                    PosMask.Has(ctx.CandidateMask, PosMask.Verb),
 
                 ScoringCondition.NextIsTeFormAux =>
                     ctx.NextText != null && TransitionRuleSets.TeFormAuxiliaries.Contains(ctx.NextText),
 
                 ScoringCondition.PrevIsNoParticle =>
-                    ctx.PrevText == "の" && ctx.PrevPOS?.Contains(PartOfSpeech.Particle) == true,
+                    ctx.PrevText == "の" && PosMask.Has(ctx.PrevMask, PosMask.Particle),
 
                 ScoringCondition.NextIsNotNaAdjConnector =>
                     ctx.NextText != null
                     && ctx.NextText is not ("な" or "に" or "で" or "の")
                     && !TransitionRuleSets.CopulaForms.Contains(ctx.NextText)
-                    && ctx.NextPOS?.Contains(PartOfSpeech.Particle) != true
-                    && ctx.NextPOS?.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix) != true,
+                    && !PosMask.Has(ctx.NextMask, PosMask.Particle)
+                    && !PosMask.Has(ctx.NextMask, PosMask.SuffixGroup),
 
                 ScoringCondition.NextIsBaParticle =>
-                    ctx.NextText == "ば" && ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true,
+                    ctx.NextText == "ば" && PosMask.Has(ctx.NextMask, PosMask.Particle),
 
                 ScoringCondition.CandidateIsPrenounAdjectival =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.PrenounAdjectival),
+                    PosMask.Has(ctx.CandidateMask, PosMask.PrenounAdjectival),
 
                 ScoringCondition.NextIsNounLike =>
-                    ctx.NextPOS?.Any(p => p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                                            or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
-                                            or PartOfSpeech.Name or PartOfSpeech.NominalAdjective) == true,
+                    ctx.HasNext && PosMask.Has(ctx.NextMask, PosMask.NounLike),
 
                 ScoringCondition.NextIsNotNounLike =>
-                    ctx.NextPOS == null
-                    || !ctx.NextPOS.Any(p => p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                                               or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
-                                               or PartOfSpeech.Name or PartOfSpeech.NominalAdjective),
+                    !ctx.HasNext || !PosMask.Has(ctx.NextMask, PosMask.NounLike),
 
                 ScoringCondition.CandidateIsConjunction =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.Conjunction),
+                    PosMask.Has(ctx.CandidateMask, PosMask.Conjunction),
 
                 ScoringCondition.IsSentenceInitial =>
-                    ctx.PrevPOS == null && ctx.PrevText == null,
+                    !ctx.HasPrev && ctx.PrevText == null,
 
                 ScoringCondition.CandidateIsInterjection =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.Interjection)
+                    PosMask.Has(ctx.CandidateMask, PosMask.Interjection)
                     && TransitionRuleSets.Interjections.Contains(ctx.CandidateText),
 
                 ScoringCondition.CandidateIsSuruNoun =>
@@ -432,44 +442,40 @@ internal static class TransitionRuleEngine
                     ctx.NextText != null && TransitionRuleSets.SuruForms.Contains(ctx.NextText),
 
                 ScoringCondition.PrevIsCaseParticle =>
-                    ctx.PrevPOS?.Contains(PartOfSpeech.Particle) == true
+                    PosMask.Has(ctx.PrevMask, PosMask.Particle)
                     && ctx.PrevText != null && TransitionRuleSets.CaseMarkingParticles.Contains(ctx.PrevText),
 
                 ScoringCondition.CandidateIsName =>
-                    ctx.CandidatePOS.Contains(PartOfSpeech.Name),
+                    PosMask.Has(ctx.CandidateMask, PosMask.NameBit),
 
                 ScoringCondition.NextIsHonorific =>
                     ctx.NextText != null && TransitionRuleSets.HonorificSuffixes.Contains(ctx.NextText),
 
                 ScoringCondition.IsSentenceFinal =>
-                    ctx.NextPOS == null && ctx.NextText == null,
+                    !ctx.HasNext && ctx.NextText == null,
 
                 ScoringCondition.CandidateIsNounSuffix =>
-                    ctx.CandidatePOS.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix)
+                    PosMask.Has(ctx.CandidateMask, PosMask.SuffixGroup)
                     && TransitionRuleSets.NounSuffixes.Contains(ctx.CandidateText),
 
                 ScoringCondition.PrevIsNounLike =>
-                    ctx.PrevPOS?.Any(p => p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                                            or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
-                                            or PartOfSpeech.Name or PartOfSpeech.NominalAdjective) == true,
+                    ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.NounLike),
 
                 ScoringCondition.CandidateIsNotNounLike =>
-                    !ctx.CandidatePOS.Any(p => p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                                                   or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
-                                                   or PartOfSpeech.Name or PartOfSpeech.NominalAdjective),
+                    !PosMask.Has(ctx.CandidateMask, PosMask.NounLike),
 
                 ScoringCondition.CandidateIsNotAdverb =>
-                    !ctx.CandidatePOS.Any(p => p is PartOfSpeech.Adverb or PartOfSpeech.AdverbTo),
+                    !PosMask.Has(ctx.CandidateMask, PosMask.AdverbGroup),
 
                 ScoringCondition.CandidateIsHonorific =>
                     TransitionRuleSets.HonorificSuffixes.Contains(ctx.CandidateText) &&
-                    ctx.CandidatePOS.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix),
+                    PosMask.Has(ctx.CandidateMask, PosMask.SuffixGroup),
 
                 ScoringCondition.PrevIsName =>
-                    ctx.PrevPOS?.Contains(PartOfSpeech.Name) == true,
+                    ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.NameBit),
 
                 ScoringCondition.PrevIsAuxiliary =>
-                    ctx.PrevPOS?.Contains(PartOfSpeech.Auxiliary) == true,
+                    ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.Auxiliary),
 
                 _ => false
             };

@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
+
 namespace Jiten.Parser;
 
 public class KanaNormalizer
 {
     private static readonly Dictionary<char, char> KanaToVowel = BuildKanaToVowelMap();
+    private static readonly ConcurrentDictionary<string, string> Cache = new();
 
     private static Dictionary<char, char> BuildKanaToVowelMap()
     {
@@ -20,6 +23,9 @@ public class KanaNormalizer
         if (string.IsNullOrEmpty(input) || input.IndexOf('ー') == -1)
             return input;
 
+        if (Cache.TryGetValue(input, out var cached))
+            return cached;
+
         var sb = new System.Text.StringBuilder(input.Length);
 
         for (int i = 0; i < input.Length; i++)
@@ -36,6 +42,8 @@ public class KanaNormalizer
             }
         }
 
-        return sb.ToString();
+        var result = sb.ToString();
+        Cache.TryAdd(input, result);
+        return result;
     }
 }

@@ -260,19 +260,14 @@ public static class PosMapper
     /// Checks if a JMDict word's POS tags are compatible with a Sudachi-derived POS.
     /// Used when matching parsed tokens against dictionary entries.
     /// </summary>
-    /// <param name="jmDictPosTags">POS tags from JMDict entry (e.g., ["v1", "vt"])</param>
-    /// <param name="sudachiPos">POS from Sudachi morphological analysis</param>
-    /// <param name="allowInterjectionFallback">If true, also accepts Interjection POS</param>
     public static bool IsJmDictCompatibleWithSudachi(
-        IEnumerable<string> jmDictPosTags,
+        List<PartOfSpeech> convertedPosList,
         PartOfSpeech sudachiPos,
         bool allowInterjectionFallback = false)
     {
         // CommonNoun (orphaned suffixes reclassified by the analyser) should use Noun compatibility.
         if (sudachiPos == PartOfSpeech.CommonNoun)
             sudachiPos = PartOfSpeech.Noun;
-
-        var convertedPosList = jmDictPosTags.Select(FromJmDict).ToList();
 
         if (convertedPosList.Contains(sudachiPos))
             return true;
@@ -350,6 +345,14 @@ public static class PosMapper
             return true;
 
         return false;
+    }
+
+    public static bool IsJmDictCompatibleWithSudachi(
+        IEnumerable<string> jmDictPosTags,
+        PartOfSpeech sudachiPos,
+        bool allowInterjectionFallback = false)
+    {
+        return IsJmDictCompatibleWithSudachi(jmDictPosTags.Select(FromJmDict).ToList(), sudachiPos, allowInterjectionFallback);
     }
 
     /// <summary>

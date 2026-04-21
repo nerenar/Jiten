@@ -574,6 +574,7 @@ public partial class MorphologicalAnalyser
         [
             wordInfos[0]
         ];
+        bool changed = false;
 
         for (int i = 1; i < wordInfos.Count; i++)
         {
@@ -592,6 +593,7 @@ public partial class MorphologicalAnalyser
                     previousWord.Reading += currentWord.Reading;
                     previousWord.PartOfSpeech = currentWord.PartOfSpeech;
                     previousWord.DictionaryForm = "である";
+                    changed = true;
                 }
                 else
                 {
@@ -653,13 +655,15 @@ public partial class MorphologicalAnalyser
                 combined = true;
             }
 
+            if (combined) changed = true;
+
             if (!combined)
             {
                 newList.Add(currentWord);
             }
         }
 
-        return newList;
+        return changed ? newList : wordInfos;
     }
 
     private List<WordInfo> CombineAuxiliaryVerbStem(List<WordInfo> wordInfos)
@@ -790,6 +794,7 @@ public partial class MorphologicalAnalyser
             return wordInfos;
 
         List<WordInfo> newList = new List<WordInfo>();
+        bool changed = false;
         int i = 0;
         while (i < wordInfos.Count)
         {
@@ -808,6 +813,7 @@ public partial class MorphologicalAnalyser
                 combinedWord.PartOfSpeech = PartOfSpeech.Expression;
                 newList.Add(combinedWord);
                 i += 3;
+                changed = true;
                 continue;
             }
 
@@ -852,12 +858,14 @@ public partial class MorphologicalAnalyser
 
                             newList.Add(combinedWord);
                             i += consumed;
+                            changed = true;
                             continue;
                         }
                     }
 
                     newList.Add(combinedWord);
                     i += 2;
+                    changed = true;
                     continue;
                 }
             }
@@ -866,7 +874,7 @@ public partial class MorphologicalAnalyser
             i++;
         }
 
-        return newList;
+        return changed ? newList : wordInfos;
     }
 
     private List<WordInfo> CombineFinal(List<WordInfo> wordInfos)
@@ -875,6 +883,7 @@ public partial class MorphologicalAnalyser
             return wordInfos;
 
         List<WordInfo> newList = new List<WordInfo>();
+        bool changed = false;
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
@@ -891,11 +900,10 @@ public partial class MorphologicalAnalyser
                     currentWord.Reading += nextWord.Reading;
                     newList.Add(currentWord);
                     i++;
+                    changed = true;
                     continue;
                 }
 
-                // Re-evaluate SpecialCases2 for pairs created by earlier combine stages
-                // e.g., かも + しれない (しれない was merged from しれ+ない by CombineInflections)
                 foreach (var sc in SpecialCases2)
                 {
                     if (currentWord.Text == sc.Item1 && nextWord.Text == sc.Item2)
@@ -911,6 +919,7 @@ public partial class MorphologicalAnalyser
                             merged.PartOfSpeech = sc.Item3.Value;
                         newList.Add(merged);
                         i++;
+                        changed = true;
                         goto next;
                     }
                 }
@@ -920,7 +929,7 @@ public partial class MorphologicalAnalyser
             next:;
         }
 
-        return newList;
+        return changed ? newList : wordInfos;
     }
 
     /// <summary>
@@ -933,6 +942,7 @@ public partial class MorphologicalAnalyser
             return wordInfos;
 
         var newList = new List<WordInfo>(wordInfos.Count);
+        bool changed = false;
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
@@ -949,8 +959,6 @@ public partial class MorphologicalAnalyser
 
                 if (nextIsNaruForm && next.Text.Length <= 3)
                 {
-                    // Only merge when preceded by a noun/pronoun/counter/numeral (トラウマ/名詞 etc.)
-                    // to avoid merging grammatical patterns like verb + と + なる (〜するとなる)
                     bool prevIsNounLike = newList.Count > 0
                                          && newList[^1].PartOfSpeech is PartOfSpeech.Noun
                                              or PartOfSpeech.Pronoun
@@ -971,6 +979,7 @@ public partial class MorphologicalAnalyser
                         };
                         newList.Add(merged);
                         i++;
+                        changed = true;
                         continue;
                     }
                 }
@@ -979,7 +988,7 @@ public partial class MorphologicalAnalyser
             newList.Add(word);
         }
 
-        return newList;
+        return changed ? newList : wordInfos;
     }
 
 }

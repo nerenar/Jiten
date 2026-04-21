@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Jiten.Core.Data;
 
 public enum PartOfSpeech
@@ -29,6 +31,63 @@ public enum PartOfSpeech
     Counter = 24,
     AdverbTo = 25,
     NounSuffix = 26
+}
+
+public static class PosMask
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint Bit(PartOfSpeech pos) => 1u << (int)pos;
+
+    public static uint FromList(List<PartOfSpeech> list)
+    {
+        uint mask = 0;
+        foreach (var pos in list)
+            mask |= 1u << (int)pos;
+        return mask;
+    }
+
+    public const uint NounLike =
+        (1u << (int)PartOfSpeech.Noun) | (1u << (int)PartOfSpeech.CommonNoun) |
+        (1u << (int)PartOfSpeech.NaAdjective) | (1u << (int)PartOfSpeech.Pronoun) |
+        (1u << (int)PartOfSpeech.Name) | (1u << (int)PartOfSpeech.NominalAdjective);
+
+    public const uint PredicateHost =
+        (1u << (int)PartOfSpeech.Verb) | (1u << (int)PartOfSpeech.IAdjective) |
+        (1u << (int)PartOfSpeech.Auxiliary);
+
+    public const uint AdverbGroup =
+        (1u << (int)PartOfSpeech.Adverb) | (1u << (int)PartOfSpeech.AdverbTo);
+
+    public const uint VerbOrIAdj =
+        (1u << (int)PartOfSpeech.Verb) | (1u << (int)PartOfSpeech.IAdjective);
+
+    public const uint VerbAuxOrIAdj =
+        (1u << (int)PartOfSpeech.Verb) | (1u << (int)PartOfSpeech.Auxiliary) |
+        (1u << (int)PartOfSpeech.IAdjective);
+
+    public const uint NumericLike =
+        (1u << (int)PartOfSpeech.Numeral) | (1u << (int)PartOfSpeech.Noun) |
+        (1u << (int)PartOfSpeech.CommonNoun) | (1u << (int)PartOfSpeech.Pronoun) |
+        (1u << (int)PartOfSpeech.Name);
+
+    public const uint SuffixGroup =
+        (1u << (int)PartOfSpeech.Suffix) | (1u << (int)PartOfSpeech.NounSuffix);
+
+    public const uint Particle = 1u << (int)PartOfSpeech.Particle;
+    public const uint Auxiliary = 1u << (int)PartOfSpeech.Auxiliary;
+    public const uint Verb = 1u << (int)PartOfSpeech.Verb;
+    public const uint IAdjective = 1u << (int)PartOfSpeech.IAdjective;
+    public const uint NaAdjective = 1u << (int)PartOfSpeech.NaAdjective;
+    public const uint Counter = 1u << (int)PartOfSpeech.Counter;
+    public const uint Numeral = 1u << (int)PartOfSpeech.Numeral;
+    public const uint AdverbTo = 1u << (int)PartOfSpeech.AdverbTo;
+    public const uint PrenounAdjectival = 1u << (int)PartOfSpeech.PrenounAdjectival;
+    public const uint Conjunction = 1u << (int)PartOfSpeech.Conjunction;
+    public const uint Interjection = 1u << (int)PartOfSpeech.Interjection;
+    public const uint NameBit = 1u << (int)PartOfSpeech.Name;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool Has(uint mask, uint bits) => (mask & bits) != 0;
 }
 
 public enum PartOfSpeechSection

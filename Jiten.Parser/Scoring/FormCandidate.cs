@@ -17,6 +17,9 @@ internal sealed class FormCandidate(
     public DeconjugationForm? DeconjForm { get; } = deconjForm;
     public string FormTextHiragana { get; } = KanaScoringHelpers.ToNormalizedHiragana(form.Text, convertLongVowelMark: false);
 
+    private HashSet<string>? _cachedReadingPos;
+    public HashSet<string> CachedReadingPos => _cachedReadingPos ??= ReadingPosHelper.GetPosForReading(Word, ReadingIndex);
+
     public FormScoreTrace ScoreTrace { get; private set; }
     public bool IsPosIncompatibleDirectSurface { get; set; }
 
@@ -85,7 +88,6 @@ internal readonly record struct FormScoringContext(
 
 internal sealed record CandidateSelectionResult(
     FormCandidate? Best,
-    IReadOnlyList<FormCandidate> TopN,
     int? MarginToSecond)
 {
     public bool IsLowConfidence    => MarginToSecond.HasValue && MarginToSecond.Value < ScoringPolicy.LowConfidenceThreshold;

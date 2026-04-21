@@ -23,7 +23,7 @@ internal static class DeconjugationMatcher
 
                 if (strictPosCheck)
                 {
-                    if (!PosMapper.IsJmDictCompatibleWithSudachi(word.PartsOfSpeech, sudachiPos))
+                    if (!PosMapper.IsJmDictCompatibleWithSudachi(word.CachedPOS, sudachiPos))
                         continue;
                 }
                 else

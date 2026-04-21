@@ -280,12 +280,8 @@ public partial class MorphologicalAnalyser
 
     private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
     {
-        // Strip expressive internal ー from hiragana tokens when Sudachi's NormalizedForm contains kanji
-        // (e.g., なーい → ない via NormalizedForm=無い), or when the stripped form exactly matches the
-        // NormalizedForm (e.g., でーす → です via NormalizedForm=です).
-        // Tokens where NormalizedForm is kana-only and differs from the stripped form are left intact
-        // (e.g., おーい → おおい is a real word).
-        // Trailing ー (e.g., すげー, うるせー) is a valid colloquial form marker and is preserved.
+        bool changed = false;
+
         for (int i = 0; i < wordInfos.Count; i++)
         {
             var w = wordInfos[i];
@@ -324,6 +320,7 @@ public partial class MorphologicalAnalyser
                 DictionaryForm = w.DictionaryForm.Replace("ー", ""),
                 Reading = w.Reading.Replace("ー", ""),
             };
+            changed = true;
         }
 
         if (wordInfos.Count < 2) return wordInfos;
@@ -366,6 +363,7 @@ public partial class MorphologicalAnalyser
                 !prev.Text.EndsWith("ん"))
             {
                 result[^1] = new WordInfo(prev) { Text = prev.Text + "ん", EndOffset = current.EndOffset, PartOfSpeech = PartOfSpeech.Suffix };
+                changed = true;
                 continue;
             }
 
@@ -390,6 +388,7 @@ public partial class MorphologicalAnalyser
                         ? PartOfSpeechSection.PossibleDependant
                         : PartOfSpeechSection.None
                 };
+                changed = true;
                 continue;
             }
 
@@ -415,7 +414,7 @@ public partial class MorphologicalAnalyser
 
                 if (isValidVolitional)
                 {
-                    result.RemoveAt(result.Count - 1); // remove prev (ご)
+                    result.RemoveAt(result.Count - 1);
                     result[^1] = new WordInfo(stem)
                     {
                         Text = stem.Text + prev.Text + "う",
@@ -425,6 +424,7 @@ public partial class MorphologicalAnalyser
                         PartOfSpeech = PartOfSpeech.Verb,
                         EndOffset = current.EndOffset
                     };
+                    changed = true;
                     continue;
                 }
             }
@@ -445,6 +445,7 @@ public partial class MorphologicalAnalyser
                     DictionaryForm = prev.DictionaryForm,
                     PartOfSpeech = PartOfSpeech.IAdjective
                 };
+                changed = true;
                 continue;
             }
 
@@ -464,7 +465,6 @@ public partial class MorphologicalAnalyser
 
                 if (isValidRuVerb)
                 {
-                    // Replace the previous token with the combined verb
                     result[^1] = new WordInfo(prev)
                                  {
                                      Text = verbCandidate, DictionaryForm = verbCandidate, NormalizedForm = verbCandidate,
@@ -476,6 +476,7 @@ public partial class MorphologicalAnalyser
                     interjection.StartOffset = current.EndOffset >= 0 ? current.EndOffset - 1 : -1;
                     interjection.EndOffset = current.EndOffset;
                     result.Add(interjection);
+                    changed = true;
                     continue;
                 }
             }
@@ -501,6 +502,7 @@ public partial class MorphologicalAnalyser
                     interjection.StartOffset = current.StartOffset >= 0 ? current.StartOffset + 1 : -1;
                     interjection.EndOffset = current.EndOffset;
                     result.Add(interjection);
+                    changed = true;
                     continue;
                 }
             }
@@ -517,7 +519,7 @@ public partial class MorphologicalAnalyser
                     if (IsVerbPast(deconjugator.Deconjugate(prevHiragana)) && prev.PartOfSpeech != PartOfSpeech.Verb)
                     {
                         result[^1] = new WordInfo(prev) { PartOfSpeech = PartOfSpeech.Verb };
-                        // Keep ああ but as interjection (it already is, so just add it)
+                        changed = true;
                     }
                 }
             }
@@ -525,7 +527,7 @@ public partial class MorphologicalAnalyser
             result.Add(current);
         }
 
-        return result;
+        return changed ? result : wordInfos;
     }
 
     private List<WordInfo> RepairNTokenisation(List<WordInfo> wordInfos)
@@ -1392,6 +1394,7 @@ public partial class MorphologicalAnalyser
             return wordInfos;
 
         var result = new List<WordInfo>(wordInfos.Count + 2);
+        bool changed = false;
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
@@ -1458,11 +1461,13 @@ public partial class MorphologicalAnalyser
                 }
             }
 
+            if (repaired) changed = true;
+
             if (!repaired)
                 result.Add(word);
         }
 
-        return result;
+        return changed ? result : wordInfos;
     }
 
     private static void ApplyNounVerbSplit(

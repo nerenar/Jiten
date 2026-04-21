@@ -108,7 +108,7 @@ internal static class RederivationHelper
                 var posList = word.CachedPOS;
                 if (!posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))) continue;
                 bool isPosIncompat = matchedWordIds.Count > 0 &&
-                    !PosMapper.IsJmDictCompatibleWithSudachi(word.PartsOfSpeech, state.WordInfo.PartOfSpeech);
+                    !PosMapper.IsJmDictCompatibleWithSudachi(word.CachedPOS, state.WordInfo.PartOfSpeech);
                 var forms = FormCandidateFactory.EnumerateCandidateForms(word, state.TextInHiragana, allowLooseLvmMatch: true, surface: state.Text);
                 if (isPosIncompat)
                     foreach (var f in forms) f.IsPosIncompatibleDirectSurface = true;
@@ -122,7 +122,7 @@ internal static class RederivationHelper
         {
             if (!wordCache.TryGetValue(id, out var word)) continue;
             bool isNameWord = word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
-            if (!PosMapper.IsJmDictCompatibleWithSudachi(word.PartsOfSpeech, state.WordInfo.PartOfSpeech)
+            if (!PosMapper.IsJmDictCompatibleWithSudachi(word.CachedPOS, state.WordInfo.PartOfSpeech)
                 && !(state.WordInfo.IsPersonNameContext && isNameWord))
                 continue;
 

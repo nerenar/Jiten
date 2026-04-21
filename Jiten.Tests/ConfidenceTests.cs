@@ -28,7 +28,7 @@ public class ConfidenceTests
     [Fact]
     public void TwoCandidates_LargeGap_IsHighConfidence()
     {
-        var result = new CandidateSelectionResult(null, [], 40);
+        var result = new CandidateSelectionResult(null,40);
         result.IsHighConfidence.Should().BeTrue();
         result.IsMediumConfidence.Should().BeFalse();
         result.IsLowConfidence.Should().BeFalse();
@@ -51,7 +51,7 @@ public class ConfidenceTests
     [Fact]
     public void TwoCandidates_MediumGap_IsMediumConfidence()
     {
-        var result = new CandidateSelectionResult(null, [], 25);
+        var result = new CandidateSelectionResult(null,25);
         result.IsMediumConfidence.Should().BeTrue();
         result.IsHighConfidence.Should().BeFalse();
         result.IsLowConfidence.Should().BeFalse();
@@ -60,7 +60,7 @@ public class ConfidenceTests
     [Fact]
     public void TwoCandidates_SmallGap_IsLowConfidence()
     {
-        var result = new CandidateSelectionResult(null, [], 10);
+        var result = new CandidateSelectionResult(null,10);
         result.IsLowConfidence.Should().BeTrue();
         result.IsMediumConfidence.Should().BeFalse();
         result.IsHighConfidence.Should().BeFalse();
@@ -75,7 +75,6 @@ public class ConfidenceTests
 
         result.Best.Should().BeNull();
         result.MarginToSecond.Should().BeNull();
-        result.TopN.Should().BeEmpty();
     }
 
     [Fact]
