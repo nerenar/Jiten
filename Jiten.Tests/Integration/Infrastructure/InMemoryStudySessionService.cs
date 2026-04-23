@@ -8,30 +8,43 @@ public class InMemoryStudySessionService : IStudySessionService
     private readonly ConcurrentDictionary<string, string> _sessions = new();
     private readonly ConcurrentDictionary<string, string> _reviews = new();
 
-    public Task<string> CreateSessionAsync(string userId)
+    public Task<string> CreateSession(string userId)
     {
         var sessionId = Guid.NewGuid().ToString("N");
         _sessions[sessionId] = userId;
         return Task.FromResult(sessionId);
     }
 
-    public Task<bool> ValidateSessionAsync(string sessionId, string userId)
+    public Task<bool> ValidateSession(string sessionId, string userId)
     {
         if (!_sessions.TryGetValue(sessionId, out var owner)) return Task.FromResult(true);
         return Task.FromResult(owner == userId);
     }
 
-    public Task<string?> GetCachedReviewResultAsync(string sessionId, string clientRequestId)
+    public Task<string?> GetCachedReviewResult(string sessionId, string clientRequestId)
     {
         _reviews.TryGetValue($"{sessionId}:{clientRequestId}", out var result);
         return Task.FromResult(result);
     }
 
-    public Task StoreCachedReviewResultAsync(string sessionId, string clientRequestId, string resultJson)
+    public Task StoreCachedReviewResult(string sessionId, string clientRequestId, string resultJson)
     {
         _reviews[$"{sessionId}:{clientRequestId}"] = resultJson;
         return Task.CompletedTask;
     }
 
-    public Task RefreshSessionAsync(string sessionId) => Task.CompletedTask;
+    public Task RefreshSession(string sessionId) => Task.CompletedTask;
+
+    private readonly ConcurrentDictionary<string, long> _versions = new();
+
+    public Task<long> BumpStudyOverviewVersion(string userId)
+    {
+        var version = _versions.AddOrUpdate(userId, 1, (_, v) => v + 1);
+        return Task.FromResult(version);
+    }
+
+    public Task<long> GetStudyOverviewVersion(string userId)
+    {
+        return Task.FromResult(_versions.GetValueOrDefault(userId, 0));
+    }
 }

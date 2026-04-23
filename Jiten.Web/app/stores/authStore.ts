@@ -397,7 +397,7 @@ export const useAuthStore = defineStore('auth', () => {
   function onLoginSuccess() {
     const srs = useSrsStore();
     srs.fetchEnrollment();
-    srs.fetchStudyDecks();
+    srs.refreshOverview(true);
   }
 
   function initializeAuth() {

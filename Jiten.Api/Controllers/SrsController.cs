@@ -101,6 +101,7 @@ public class SrsController(
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User undid SRS review: WordId={WordId}, ReadingIndex={ReadingIndex}, CardDeleted={CardDeleted}",
                               request.WordId, request.ReadingIndex, cardDeleted);
@@ -131,10 +132,10 @@ public class SrsController(
 
         if (hasIdempotency)
         {
-            if (!await sessionService.ValidateSessionAsync(request.SessionId!, userId))
+            if (!await sessionService.ValidateSession(request.SessionId!, userId))
                 return Results.Unauthorized();
 
-            var cached = await sessionService.GetCachedReviewResultAsync(request.SessionId!, request.ClientRequestId!);
+            var cached = await sessionService.GetCachedReviewResult(request.SessionId!, request.ClientRequestId!);
             if (cached != null)
                 return Results.Content(cached, "application/json");
         }
@@ -178,6 +179,7 @@ public class SrsController(
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         var previewScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
         var intervals = previewScheduler.PreviewIntervals(cardAndLog.UpdatedCard, DateTime.UtcNow);
@@ -201,7 +203,7 @@ public class SrsController(
         if (hasIdempotency)
         {
             var resultJson = System.Text.Json.JsonSerializer.Serialize(resultObj);
-            _ = sessionService.StoreCachedReviewResultAsync(request.SessionId!, request.ClientRequestId!, resultJson);
+            _ = sessionService.StoreCachedReviewResult(request.SessionId!, request.ClientRequestId!, resultJson);
         }
 
         logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}",
@@ -403,6 +405,7 @@ public class SrsController(
             await userContext.SaveChangesAsync();
         }
 
+        await sessionService.BumpStudyOverviewVersion(userId);
         return Results.Ok(new FsrsParametersResponse
         {
             Parameters = SerializeParametersCsv(nextParameters),
@@ -475,6 +478,7 @@ public class SrsController(
 
         if (reschedule)
             await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new
         {
@@ -504,6 +508,7 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
     }
@@ -531,6 +536,7 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var result = await recomputeJob.RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, batchSize);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(result);
     }
@@ -661,6 +667,7 @@ public class SrsController(
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User set vocabulary state: WordId={WordId}, ReadingIndex={ReadingIndex}, State={State}",
                               request.WordId, request.ReadingIndex, request.State);
@@ -819,6 +826,7 @@ public class SrsController(
         }
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User executed mass action: Action={Action}, AffectedCount={Count}",
             request.Action, affected);
@@ -916,6 +924,7 @@ public class SrsController(
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User executed composition inference: Direction={Direction}, Target={Target}, Affected={Count}",
             request.Direction, target, affected);

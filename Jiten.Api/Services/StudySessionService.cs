@@ -6,14 +6,14 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
 {
     private static readonly TimeSpan SessionTtl = TimeSpan.FromHours(2);
     private static readonly TimeSpan IdempotencyTtl = TimeSpan.FromMinutes(10);
+    private readonly IDatabase _db = redis.GetDatabase();
 
-    public async Task<string> CreateSessionAsync(string userId)
+    public async Task<string> CreateSession(string userId)
     {
         var sessionId = Guid.NewGuid().ToString("N");
         try
         {
-            var db = redis.GetDatabase();
-            await db.StringSetAsync($"srs:session:{sessionId}", userId, SessionTtl);
+            await _db.StringSetAsync($"srs:session:{sessionId}", userId, SessionTtl);
         }
         catch (Exception ex)
         {
@@ -22,12 +22,11 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
         return sessionId;
     }
 
-    public async Task<bool> ValidateSessionAsync(string sessionId, string userId)
+    public async Task<bool> ValidateSession(string sessionId, string userId)
     {
         try
         {
-            var db = redis.GetDatabase();
-            var stored = await db.StringGetAsync($"srs:session:{sessionId}");
+            var stored = await _db.StringGetAsync($"srs:session:{sessionId}");
             if (stored.IsNullOrEmpty) return true;
             return stored == userId;
         }
@@ -37,12 +36,11 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
         }
     }
 
-    public async Task<string?> GetCachedReviewResultAsync(string sessionId, string clientRequestId)
+    public async Task<string?> GetCachedReviewResult(string sessionId, string clientRequestId)
     {
         try
         {
-            var db = redis.GetDatabase();
-            var cached = await db.StringGetAsync($"srs:review:{sessionId}:{clientRequestId}");
+            var cached = await _db.StringGetAsync($"srs:review:{sessionId}:{clientRequestId}");
             return cached.IsNullOrEmpty ? null : (string?)cached;
         }
         catch
@@ -51,12 +49,11 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
         }
     }
 
-    public async Task StoreCachedReviewResultAsync(string sessionId, string clientRequestId, string resultJson)
+    public async Task StoreCachedReviewResult(string sessionId, string clientRequestId, string resultJson)
     {
         try
         {
-            var db = redis.GetDatabase();
-            await db.StringSetAsync($"srs:review:{sessionId}:{clientRequestId}", resultJson, IdempotencyTtl);
+            await _db.StringSetAsync($"srs:review:{sessionId}:{clientRequestId}", resultJson, IdempotencyTtl);
         }
         catch (Exception ex)
         {
@@ -64,13 +61,38 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
         }
     }
 
-    public async Task RefreshSessionAsync(string sessionId)
+    public async Task RefreshSession(string sessionId)
     {
         try
         {
-            var db = redis.GetDatabase();
-            await db.KeyExpireAsync($"srs:session:{sessionId}", SessionTtl);
+            await _db.KeyExpireAsync($"srs:session:{sessionId}", SessionTtl);
         }
         catch { /* best effort */ }
+    }
+
+    public async Task<long> BumpStudyOverviewVersion(string userId)
+    {
+        try
+        {
+            return await _db.StringIncrementAsync($"srs:overview-version:{userId}");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to bump study overview version in Redis");
+            return -1;
+        }
+    }
+
+    public async Task<long> GetStudyOverviewVersion(string userId)
+    {
+        try
+        {
+            var val = await _db.StringGetAsync($"srs:overview-version:{userId}");
+            return val.IsNullOrEmpty ? 0 : (long)val;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 }
