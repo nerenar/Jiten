@@ -107,9 +107,9 @@
         <NuxtLink
           :to="`/vocabulary/${component.wordId}/${component.readingIndex}`"
           class="text-lg font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors whitespace-nowrap !no-underline hover:!no-underline self-end"
-          lang="ja"
-          v-html="renderParent(component)"
-        />
+        >
+          <span lang="ja" v-html="renderParent(component)" />
+        </NuxtLink>
         <div class="flex-1 min-w-0 flex flex-col">
           <span
             v-if="component.frequencyRank"

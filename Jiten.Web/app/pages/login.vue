@@ -23,14 +23,15 @@
     }
   });
 
+  function getSafeRedirect(): string | null {
+    const redirect = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect;
+    return redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : null;
+  }
+
   async function handleLoginSubmit() {
     const success = await authStore.login(credentials);
     if (success && authStore.isAuthenticated) {
-      if (route.query.redirect) {
-        await router.push(route.query.redirect);
-      } else {
-        await router.push('/');
-      }
+      await router.push(getSafeRedirect() ?? '/');
     }
   }
 
@@ -43,12 +44,7 @@
       if (result === 'requiresRegistration') {
         await router.push({ path: '/google-registration' });
       } else if (result === true) {
-        // Existing user login successful
-        if (route.query.redirect) {
-          await router.push(route.query.redirect);
-        } else {
-          await router.push('/');
-        }
+        await router.push(getSafeRedirect() ?? '/');
       } else {
         console.error('Login failed:', authStore.error);
       }

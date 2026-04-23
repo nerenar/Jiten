@@ -21,10 +21,6 @@ function findJapaneseVoice() {
   if (jaVoices.length === 0) return;
   jaVoices.sort((a, b) => scoreVoice(b) - scoreVoice(a));
   japaneseVoice = jaVoices[0];
-  if (import.meta.dev) {
-    console.log('[TTS] Available Japanese voices:', jaVoices.map(v => `${v.name} (score=${scoreVoice(v)})`));
-    console.log('[TTS] Selected:', japaneseVoice.name);
-  }
 }
 
 if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
