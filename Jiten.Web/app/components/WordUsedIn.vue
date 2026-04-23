@@ -7,6 +7,7 @@
     initialItems: WordSummary[];
     total: number;
     highlight?: string;
+    collapsedCount?: number;
   }>();
 
   const convertToRuby = useConvertToRuby();
@@ -28,23 +29,9 @@
         j++;
       }
       if (i === surface.length) {
-        // Keep consuming trailing kanji[furigana] groups so we don't split
-        // a pair of adjacent <ruby> siblings the browser would otherwise merge.
-        while (j < furigana.length) {
-          let k = j;
-          while (k < furigana.length && /[\u4E00-\u9FFF々]/.test(furigana[k])) k++;
-          if (k > j && k < furigana.length && furigana[k] === '[') {
-            j = k;
-            while (j < furigana.length && furigana[j] !== ']') j++;
-            if (j < furigana.length) j++;
-            continue;
-          }
-          if (furigana[j] === '[') {
-            while (j < furigana.length && furigana[j] !== ']') j++;
-            if (j < furigana.length) j++;
-            continue;
-          }
-          break;
+        if (j < furigana.length && furigana[j] === '[') {
+          while (j < furigana.length && furigana[j] !== ']') j++;
+          if (j < furigana.length) j++;
         }
         return [start, j];
       }
@@ -69,33 +56,34 @@
     return convertToRuby(marked);
   }
 
-  const collapsedCount = 4;
+  const collapsedCount = props.collapsedCount ?? 4;
   const expanded = ref(false);
-  const items = ref<WordSummary[]>(props.initialItems);
+  const fetchedItems = ref<WordSummary[] | null>(null);
   const loading = ref(false);
 
-  const visibleItems = computed(() =>
-    expanded.value ? items.value : items.value.slice(0, collapsedCount)
-  );
+  const visibleItems = computed(() => {
+    const source = fetchedItems.value ?? props.initialItems;
+    return expanded.value ? source : source.slice(0, collapsedCount);
+  });
 
   const remaining = computed(() => Math.max(0, props.total - collapsedCount));
 
   watch(() => [props.wordId, props.readingIndex], () => {
     expanded.value = false;
-    items.value = props.initialItems;
+    fetchedItems.value = null;
   });
 
   const { $api } = useNuxtApp();
 
   async function expand() {
     expanded.value = true;
-    if (props.total <= items.value.length) return;
+    if (props.total <= (fetchedItems.value ?? props.initialItems).length) return;
     loading.value = true;
     try {
       const data = await ($api as typeof $fetch)<UsedInPage>(
         `vocabulary/${props.wordId}/${props.readingIndex}/used-in`
       );
-      if (data) items.value = data.items;
+      if (data) fetchedItems.value = data.items;
     } finally {
       loading.value = false;
     }

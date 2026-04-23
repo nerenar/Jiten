@@ -65,6 +65,8 @@ export const useSrsStore = defineStore('srs', () => {
     blurExampleSentence: false,
     showFrequencyRank: true,
     showKanjiBreakdown: true,
+    showWordComposition: true,
+    showWordUsedIn: true,
     showNextInterval: false,
     showKeybinds: true,
     showElapsedTime: true,

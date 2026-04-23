@@ -72,6 +72,12 @@ public class StudySettingsDto
     [JsonPropertyName("showKanjiBreakdown")]
     public bool ShowKanjiBreakdown { get; set; } = true;
 
+    [JsonPropertyName("showWordComposition")]
+    public bool ShowWordComposition { get; set; } = true;
+
+    [JsonPropertyName("showWordUsedIn")]
+    public bool ShowWordUsedIn { get; set; } = true;
+
     [JsonPropertyName("showNextInterval")]
     public bool ShowNextInterval { get; set; }
 

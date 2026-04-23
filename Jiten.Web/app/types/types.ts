@@ -870,6 +870,8 @@ export interface StudySettingsDto {
   blurExampleSentence: boolean;
   showFrequencyRank: boolean;
   showKanjiBreakdown: boolean;
+  showWordComposition: boolean;
+  showWordUsedIn: boolean;
   showNextInterval: boolean;
   showKeybinds: boolean;
   showElapsedTime: boolean;

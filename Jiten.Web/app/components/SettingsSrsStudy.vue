@@ -302,6 +302,24 @@
               </Tooltip>
             </label>
           </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.showWordComposition" input-id="showWordComposition" />
+            <label for="showWordComposition" class="text-sm cursor-pointer">
+              Word composition
+              <Tooltip content="Show the component words that compose this word." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.showWordUsedIn" input-id="showWordUsedIn" />
+            <label for="showWordUsedIn" class="text-sm cursor-pointer">
+              Word used in
+              <Tooltip content="Show other words that contain this word." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
         </div>
       </div>
 

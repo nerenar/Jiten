@@ -468,6 +468,22 @@
 
         <KanjiBreakdown v-if="srsStore.studySettings.showKanjiBreakdown" :key="`${card.wordId}-${card.readingIndex}`" :word-id="card.wordId" :reading-index="card.readingIndex" />
 
+        <WordComposition
+          v-if="srsStore.studySettings.showWordComposition && wordData?.composedOf?.length"
+          :components="wordData.composedOf"
+        />
+
+        <WordUsedIn
+          v-if="srsStore.studySettings.showWordUsedIn && wordData?.usedInTotal"
+          :key="`usedin-${card.wordId}-${card.readingIndex}`"
+          :word-id="card.wordId"
+          :reading-index="card.readingIndex"
+          :initial-items="wordData.usedIn ?? []"
+          :total="wordData.usedInTotal"
+          :highlight="wordData.mainReading.text"
+          :collapsed-count="2"
+        />
+
         <!-- Deck occurrences -->
         <div v-if="card.deckOccurrences?.length || card.sourceDeckName" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
           <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500">
