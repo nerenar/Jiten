@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
+  import { useJitenStore } from '~/stores/jitenStore';
   import type { DeckDetail, Deck } from '~/types';
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
@@ -15,6 +16,7 @@
     data: response,
     status,
     error,
+    refresh: refreshDetail,
   } = await useApiFetchPaginated<DeckDetail>(url.value, {
     query: {
       offset: offset,
@@ -23,6 +25,11 @@
   });
 
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+
+  const jitenStore = useJitenStore();
+  watch(() => jitenStore.coverageVersion, () => {
+    refreshDetail();
+  });
 
   const updateMainDeck = (updatedDeck: Deck) => {
     if (response.value?.data?.mainDeck) {

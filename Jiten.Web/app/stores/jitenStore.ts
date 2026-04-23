@@ -85,6 +85,12 @@ export const useJitenStore = defineStore('jiten', () => {
     ensureInitialized();
   });
 
+  const coverageVersion = ref(0);
+
+  function bumpCoverageVersion() {
+    coverageVersion.value++;
+  }
+
   return {
     getKnownWordIds,
 
@@ -105,6 +111,8 @@ export const useJitenStore = defineStore('jiten', () => {
     quickMasterVocabulary,
     ttsVoice,
     difficultyDisplayStyle,
-    difficultyValueDisplayStyle
+    difficultyValueDisplayStyle,
+    coverageVersion,
+    bumpCoverageVersion,
   };
 });

@@ -6,6 +6,7 @@
   import InputText from 'primevue/inputtext';
   import { debounce } from 'perfect-debounce';
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
+  import { useJitenStore } from '~/stores/jitenStore';
   import MediaDeckCompactView from '~/components/MediaDeckCompactView.vue';
   import MediaDeckTableView from '~/components/MediaDeckTableView.vue';
   import { useAuthStore } from '~/stores/authStore';
@@ -488,6 +489,7 @@
     data: response,
     status,
     error,
+    refresh: refreshMediaList,
   } = useApiFetchPaginated<Deck[]>(url, {
     query: {
       offset: offset,
@@ -528,6 +530,11 @@
   });
 
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+
+  const jitenStore = useJitenStore();
+  watch(() => jitenStore.coverageVersion, () => {
+    refreshMediaList();
+  });
 
   const updateDeckInList = (updatedDeck: Deck) => {
     if (response.value?.data) {

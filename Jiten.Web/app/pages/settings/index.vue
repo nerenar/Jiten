@@ -68,7 +68,7 @@
 
     <SettingsWordSets class="mb-4" />
 
-    <Card v-if="srs.srsEnrolled" class="mb-4">
+    <Card v-if="srs.srsEnrolled === true" class="mb-4">
       <template #title>
         <h3 class="text-lg font-semibold">SRS</h3>
       </template>
@@ -82,7 +82,7 @@
       </template>
     </Card>
 
-    <Card v-else class="mb-4">
+    <Card v-else-if="srs.srsEnrolled === false" class="mb-4">
       <template #title>
         <h3 class="text-lg font-semibold">SRS <span class="text-sm font-normal text-orange-500">preview</span></h3>
       </template>

@@ -42,7 +42,7 @@ interface UndoSnapshot {
 export const useSrsStore = defineStore('srs', () => {
   const { $api } = useNuxtApp();
 
-  const srsEnrolled = ref(false);
+  const srsEnrolled = ref<boolean | null>(null);
   const studyDecks = ref<StudyDeckDto[]>([]);
   const sessionId = ref<string | null>(null);
   const currentBatch = ref<StudyCardDto[]>([]);
@@ -738,7 +738,9 @@ export const useSrsStore = defineStore('srs', () => {
       const res = await $api<{ enrolled: boolean }>('srs/enrolled');
       srsEnrolled.value = res.enrolled;
     } catch {
-      srsEnrolled.value = false;
+      if (srsEnrolled.value !== true) {
+        srsEnrolled.value = false;
+      }
     }
   }
 
