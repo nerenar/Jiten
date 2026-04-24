@@ -525,7 +525,8 @@ public class UserController(
             if (!logsByCard.TryGetValue(card.CardId, out var cardLogs) || cardLogs.Count == 0)
                 continue;
 
-            var overrideState = card.State is FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended
+            var overrideState = !request.OverwriteCardStates
+                                && card.State is FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended
                 ? card.State
                 : (FsrsState?)null;
 

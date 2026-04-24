@@ -3,6 +3,7 @@ namespace Jiten.Api.Dtos.Requests;
 public class ImportJpdbReviewsRequest
 {
     public List<JpdbReviewCard> Cards { get; set; } = [];
+    public bool OverwriteCardStates { get; set; }
 }
 
 public class JpdbReviewCard

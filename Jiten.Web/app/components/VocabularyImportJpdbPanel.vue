@@ -10,6 +10,7 @@
   const importAdditionalReadings = ref(true);
   const frequencyThreshold = ref(15000);
   const jpdbProgress = ref('');
+  const overwriteCardStates = ref(true);
   const reviewsFile = ref<File | null>(null);
 
   function onReviewsFileSelect(event: { files: File[] }) {
@@ -112,7 +113,7 @@
 
     const result = await $api<{ cardsProcessed: number; reviewsImported: number; skipped: number }>('user/vocabulary/import-jpdb-reviews', {
       method: 'POST',
-      body: JSON.stringify({ cards }),
+      body: JSON.stringify({ cards, overwriteCardStates: overwriteCardStates.value }),
       headers: { 'Content-Type': 'application/json' },
     });
 
@@ -179,6 +180,10 @@
             @select="onReviewsFileSelect"
             @clear="onReviewsFileClear"
           />
+          <div class="flex items-center mt-2">
+            <Checkbox id="overwriteCardStates" v-model="overwriteCardStates" :binary="true" />
+            <label for="overwriteCardStates" class="ml-2">Overwrite existing card states (mastered, blacklisted, suspended) with review history</label>
+          </div>
         </div>
 
         <Button label="Import from JPDB" icon="pi pi-download" :disabled="(!jpdbApiKey && !reviewsFile) || isLoading" class="w-full md:w-auto" @click="importFromJpdb" />
