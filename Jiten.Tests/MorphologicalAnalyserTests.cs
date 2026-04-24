@@ -905,6 +905,196 @@ public class MorphologicalAnalyserTests
 
         // Legitimate たわけ (戯け) should be preserved
         yield return ["この大たわけがっ", new[] { "この", "大", "たわけ", "が" }];
+
+        // === Gemination (っ) should not be split from compounds ===
+        yield return ["辺りは真っ暗", new[] { "辺り", "は", "真っ暗" }];
+        yield return ["手を突っ込んで", new[] { "手", "を", "突っ込んで" }];
+        yield return ["炬燵に顔を突っ込んでみたら", new[] { "炬燵", "に", "顔", "を", "突っ込んでみたら" }];
+        yield return ["すぐに奥へ引っ込むけど、", new[] { "すぐに", "奥", "へ", "引っ込む", "けど" }];
+        yield return ["黒沢は俺や金田の腕を引っ張って寄せてくる。", new[] { "黒沢", "は", "俺", "や", "金田", "の", "腕", "を", "引っ張って", "寄せてくる" }];
+        yield return ["話題を引っ張る。", new[] { "話題", "を", "引っ張る" }];
+        yield return ["ローブが木の枝に引っ掛かるのにもうんざりとした様子だった。", new[] { "ローブ", "が", "木", "の", "枝", "に", "引っ掛かる", "のに", "も", "うんざり", "と", "した", "様子", "だった" }];
+        yield return ["と素っ頓狂な", new[] { "と", "素っ頓狂な" }];
+        yield return ["膨れっ面", new[] { "膨れっ面" }];
+        yield return ["でぶっ倒れてる", new[] { "で", "ぶっ倒れてる" }];
+        yield return ["でぶっ飛ばす", new[] { "で", "ぶっ飛ばす" }];
+
+        // === Long vowel ー at end of sentence should not detach る ===
+        yield return ["よそってあげるー", new[] { "よそってあげる" }];
+        yield return ["出てくれるー", new[] { "出てくれる" }];
+        yield return ["思われてるー", new[] { "思われてる" }];
+
+        // === Sudachi mis-segmentation ===
+        yield return ["恋ってすごいですねー", new[] { "恋", "って", "すごい", "です", "ねー" }];
+        yield return ["恋って何色ですか？", new[] { "恋", "って", "何色", "ですか" }];
+
+        // === Colloquial ゆう for いう (normalized, then combined by pipeline) ===
+        yield return ["どーゆうこと", new[] { "どーいう", "こと" }];
+        yield return ["どうゆうこと", new[] { "どういう", "こと" }];
+        yield return ["そーゆうことは", new[] { "そーいう", "こと", "は" }];
+
+        // === Colloquial conjugations ===
+        yield return ["出てこん", new[] { "出てこん" }];
+        yield return ["入っとらん", new[] { "入っとらん" }];
+        yield return ["殺ス", new[] { "殺す" }];
+
+        // === すっごく/すっごい normalized to すごく/すごい ===
+        yield return ["舐められてるのもすっごく", new[] { "舐められてる", "の", "も", "すごく" }];
+        yield return ["足、すっごい熱いから", new[] { "足", "すごい", "熱い", "から" }];
+
+        // === Expressions that should be single words ===
+        yield return ["ビクともしません", new[] { "ビクともしません" }];
+        yield return ["びくともしません", new[] { "びくともしません" }];
+        yield return ["ビクともしねぇ", new[] { "ビクともしねぇ" }];
+        yield return ["ビクともせん", new[] { "ビクともせん" }];
+        yield return ["ゲームってのはいつもそういう性質のもの。", new[] { "ゲーム", "ってのは", "いつも", "そういう", "性質", "の", "もの" }];
+
+        // === 母性的な should be split: 母性 + 的な ===
+        yield return ["母性的な", new[] { "母性", "的な" }];
+
+        // === 要するに should be combined as a single expression ===
+        yield return ["要するに負ける要素なんざない訳で", new[] { "要するに", "負ける", "要素", "なんざ", "ない", "訳", "で" }];
+
+        // === 守銭奴 should be a single noun (め is consumed as a suffix) ===
+        yield return ["守銭奴め", new[] { "守銭奴" }];
+
+        // === この前 should be combined as a single adverb ===
+        yield return ["ついこの前えん罪で監禁されたばっかだしな", new[] { "つい", "この前", "えん罪", "で", "監禁された", "ばっか", "だ", "し", "な" }];
+
+        // === 頚木 should be a single word (variant of 頸木/くびき, user_dic normalizes kanji) ===
+        yield return ["頚木を超えて", new[] { "頸木", "を", "超えて" }];
+
+        // === 前出すぎ should split as 前 + 出すぎ, not 前出 + すぎ ===
+        yield return ["おまえだけ明らかに前出すぎだ", new[] { "おまえ", "だけ", "明らか", "に", "前", "出すぎ", "だ" }];
+
+        // === ふざっけんな should normalize to ふざけんな ===
+        yield return ["ふざっけんな！", new[] { "ふざけんな" }];
+
+        // === 早くー should parse as 早く (adjective adverbial form), not prefix+interjection ===
+        yield return ["ルーデウス早くー！", new[] { "ルー", "デウス", "早く" }];
+
+        // === Pending: need user_dic.xml entries (Sudachi splits these incorrectly) ===
+        // からかう: Sudachi splits as から(particle) + かう(verb)
+        yield return ["俺のことからかうから信用ない", new[] { "俺", "の", "こと", "からかう", "から", "信用", "ない" }];
+        // 満足すべき: Sudachi splits す from する conjugation
+        yield return ["満足すべき", new[] { "満足", "すべき" }];
+        // 涎たらす: Sudachi splits たらしたら as たら(conditional) + したら
+        yield return ["でも、涎たらしたら怒ります", new[] { "でも", "涎", "たらしたら", "怒ります" }];
+        // ですー: Sudachi splits です into で(particle) + す(noun) before ー
+        yield return ["困るですー", new[] { "困る", "です" }];
+        yield return ["一緒に回りたいですー！", new[] { "一緒に", "回りたい", "です" }];
+
+        // Shouldn't be split as 死ん-だの
+        yield return ["自分が死んだのを誰か", new[] { "自分","が","死んだ","の","を","誰か" }];
+        yield return ["いつ死んだの", new[] { "いつ","死んだ","の" }];
+
+        yield return ["共通しているのは、重要なエリア区画のみになるか。",
+            new[] { "共通している", "の", "は", "重要な", "エリア", "区画", "のみ", "に", "なる", "か" }];
+        yield return ["その様子を眺めながら、今の話について何となく考えを巡らせる。",
+            new[] { "その", "様子", "を", "眺めながら", "今", "の", "話", "について", "何となく", "考えを巡らせる" }];
+        yield return ["こんな…任務も中途半端なまんま全滅なんて…",
+            new[] { "こんな", "任務", "も", "中途半端", "な", "まんま", "全滅", "なんて" }];
+        yield return ["人海戦術は常に行っているもの足りないのは量じゃなくて質のほう",
+            new[] { "人海戦術", "は", "常に", "行っている", "もの足りない", "の", "は", "量", "じゃなくて", "質", "の", "ほう" }];
+
+        // === Currently failing — tracked in MISPARSES_TO_FIX.txt ===
+        // 張っ付いてん should stay together (currently split as 張+付いてん, loses っ)
+        yield return ["耳早いわねえ何なのあんたマジでずっとＢＢＳに張っ付いてんの？",
+            new[] { "耳", "早い", "わね", "え", "何なの", "あんた", "マジ", "で", "ずっと", "ＢＢＳ", "に", "張っ付いてん", "の" }];
+        // 引っ掛かる should stay as one token (currently split as 引+掛かる)
+        yield return ["が逆にそこが引っ掛かる、一貫し過ぎてるからな",
+            new[] { "が", "逆に", "そこ", "が", "引っ掛かる", "一貫し過ぎてる", "から", "な" }];
+        // 来なすった — archaic なさる past; compound merge with 来 not handled
+        yield return ["ほうどこから来なすった？",
+            new[] { "ほう", "どこ", "から", "来なすった" }];
+        // ああまた — Sudachi mis-splits as あ+あまた; should be ああ+また
+        yield return ["ああまたこれか", new[] { "ああ", "また", "これ", "か" }];
+        // 事を運ぶ idiom — should merge as a single expression
+        yield return ["スザンナに見つからないように事を運ばないと",
+            new[] { "スザンナ", "に", "見つからない", "ように", "事を運ばない", "と" }];
+
+        // 面の皮 — resegmenter picks 面の as Name instead of 面/の/皮
+        yield return ["さすがに分厚すぎるだろ、面の皮",
+            new[] { "さすがに", "分厚すぎる", "だろ", "面", "の", "皮" }];
+        // マンセーしすぎ — CombineVerbDependant merges into an unknown compound and drops everything
+        yield return ["マンセーしすぎ", new[] { "マンセー", "しすぎ" }];
+        // ならびに — should be merged as a single conjunction (JMDict 1521550)
+        yield return ["リヴァイ班ならびにハンジ班は鎧の巨人をしとめよ",
+            new[] { "リヴァイ", "班", "ならびに", "ハンジ", "班", "は", "鎧", "の", "巨人", "を", "しとめよ" }];
+        // 本の — Sudachi emits as prenominal 形動 (matching JMDict 1011740 "mere"), should be 本/の
+        yield return ["この本の制作に携わってくださった皆様",
+            new[] { "この", "本", "の", "制作", "に", "携わってくださった", "皆様" }];
+        // 残虐非道 — should merge as a single compound (JMDict 2170720)
+        yield return ["連中はまさしく悪魔で残虐非道なヤツらだったよ",
+            new[] { "連中", "は", "まさしく", "悪魔", "で", "残虐非道な", "ヤツら", "だった", "よ" }];
+        // 中の人 — Sudachi swallows の+人 into a 中の人 expression, breaking 世界中 compound
+        yield return ["マーレや世界中の人と話し合って誤解を解けば",
+            new[] { "マーレ", "や", "世界中", "の", "人", "と", "話し合って", "誤解", "を", "解けば" }];
+        // に劣らず — should merge as compound expression (JMDict 2834137)
+        yield return ["私に劣らずなかなか方向音痴のようです",
+            new[] { "私", "に劣らず", "なかなか", "方向音痴", "の", "ようです" }];
+        // それよか — should merge as single expression (JMDict 2207840)
+        yield return ["それよかもっと銃火器の訓練して",
+            new[] { "それよか", "もっと", "銃火器", "の", "訓練して" }];
+        // 我先に — resegmenter splits 我先 into 我+先 (JMDict 2220580 我先 exists)
+        yield return ["我先に逃げるなんてありえないの",
+            new[] { "我先に", "逃げる", "なんて", "ありえない", "の" }];
+        // まずいわね — Sudachi treats いわね as a person name (固有名詞)
+        yield return ["やっぱりまずいわねこのお酒",
+            new[] { "やっぱり", "まずい", "わね", "この", "お酒" }];
+        // 数えきれない — Sudachi steals 数 into 言葉数 compound, breaking 数えきれない
+        yield return ["こっちはそんな言葉数えきれないほど聞いているんだ",
+            new[] { "こっち", "は", "そんな", "言葉", "数えきれない", "ほど", "聞いている", "んだ" }];
+
+        // しょうがねぇ colloquial — currently split as しょう+が+ねぇ
+        yield return ["ったくしょうがねぇなぁ",
+            new[] { "ったく", "しょうがねぇ", "なぁ" }];
+        yield return ["しょうがねぇときってのがあらァ",
+            new[] { "しょうがねぇ", "とき", "って", "の", "が", "ある" }];
+        // でしょう auxiliary — currently split as で+しょう, and ファ is also being eaten from ファルマ
+        yield return ["あっ、何でしょうファルマ様",
+            new[] { "あっ", "何", "でしょう", "ファルマ", "様" }];
+        yield return ["……自称、でしょうに",
+            new[] { "自称", "でしょう", "に" }];
+        // 自称 written in kana — currently じ is dropped entirely, leaving only しょう
+        yield return ["じしょう未来人さん",
+            new[] { "じしょう", "未来人", "さん" }];
+        // 師匠 written in kana — currently ししょう split as し+しょう
+        yield return ["おれのししょうがいってた",
+            new[] { "おれ", "の", "ししょう", "が", "いってた" }];
+        // 亜人 compound — currently split as 亜 + 人たち (prefix not combined)
+        yield return ["道具を使う人間や亜人たちが誕生した。",
+            new[] { "道具", "を", "使う", "人間", "や", "亜人", "たち", "が", "誕生した" }];
+        // 悶え苦しむ compound verb — currently dropped entirely from output
+        yield return ["苦痛に悶え苦しむよりは幾分マシだった",
+            new[] { "苦痛", "に", "悶え苦しむ", "より", "は", "幾分", "マシ", "だった" }];
+        // Godan volitional with colloquial ー elongation: 泳ごー should merge to 泳ごう (one token)
+        // rather than split as 泳 + ご + ー. RepairVowelElongation pattern.
+        yield return ["手治ったら一緒に泳ごーね。",
+            new[] { "手", "治ったら", "一緒に", "泳ごう", "ね" }];
+
+        //  太鼓持ち+かい — Sudachi splits as 太鼓持 + ちかい (mis-analysed as 近い adj).
+        yield return ["生徒会長の太鼓持ちかい？",
+            new[] { "生徒会長", "の", "太鼓持ち", "かい" }];
+        // 半人前 — Sudachi glues で onto 人前, producing 半 + 人前で + も.
+        yield return ["例え半人前でも俺は魔術師なんだから",
+            new[] { "例え", "半人前", "でも", "俺", "は", "魔術師", "なんだ", "から" }];
+        // 貴様+に — Sudachi tags 貴 as prefix and glues 様+に → 貴 + 様に.
+        yield return ["貴様に用はないアサシン",
+            new[] { "貴様", "に", "用", "は", "ない", "アサシン" }];
+        // 放っておく — Sudachi pre-glues おけばいい. Should split as 放って + おけば + いい
+        // (放っておく is v5k; おけば is its provisional; いい follows as separate adjective).
+        yield return ["放っておけばいい。",
+            new[] { "放っておけば", "いい" }];
+        // なれ (命令/可能 of 成る) mis-tagged as 代名詞 (archaic pronoun 汝 "thou").
+        // First case: 冷静になれ forms a valid compound (冷静になる exp, 2557400), so the bare token
+        // collapses into the compound; segmentation reflects the compound match.
+        yield return ["それで冷静になれって、どんな修行僧よ。",
+            new[] { "それで", "冷静になれって", "どんな", "修行僧", "よ" }];
+        yield return ["誰だって、なろうと思えば、なれんだよ。",
+            new[] { "誰", "だって", "なろう", "と", "思えば", "なれ", "んだ", "よ" }];
+        yield return ["誰かの特別になんてなれやしない。",
+            new[] { "誰か", "の", "特別", "に", "なんて", "なれ", "や", "しない" }];
     }
 
     [Theory]
@@ -913,4 +1103,5 @@ public class MorphologicalAnalyserTests
     {
         (await Parse(text)).Should().Equal(expectedResult);
     }
+
 }

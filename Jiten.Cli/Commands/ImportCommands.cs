@@ -39,6 +39,15 @@ public class ImportCommands(CliContext context)
         await KanjidicHelper.PopulateWordKanji(context.ContextFactory);
     }
 
+    public async Task ImportWordComposition(CliOptions options)
+    {
+        await WordCompositionImporter.Import(
+            context.ContextFactory,
+            options.ImportWordCompositionDirectory!,
+            options.SplitType,
+            options.DryRun);
+    }
+
     public async Task ImportPitchAccents(CliOptions options)
     {
         Console.WriteLine("Importing pitch accents...");

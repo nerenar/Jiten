@@ -1,4 +1,4 @@
-import { MediaType } from '~/types';
+import { MediaType, MediaTypeGroup } from '~/types';
 
 export function getMediaTypeText(mediaType: MediaType): string {
   switch (mediaType) {
@@ -49,6 +49,21 @@ export function getChildrenCountText(mediaType: MediaType): string {
       return 'Chapters';
     case MediaType.Audio:
       return 'Entries';
+    default:
+      return 'Unknown';
+  }
+}
+
+export function getMediaTypeGroupText(group: MediaTypeGroup): string {
+  switch (group) {
+    case MediaTypeGroup.Prose:
+      return 'Prose';
+    case MediaTypeGroup.VisualText:
+      return 'Visual Text';
+    case MediaTypeGroup.AudioVisual:
+      return 'Audio Visual';
+    case MediaTypeGroup.NonFiction:
+      return 'Non-Fiction';
     default:
       return 'Unknown';
   }

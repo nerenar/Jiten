@@ -164,11 +164,21 @@
 
   onUnmounted(() => tts.stop());
 
+  const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
+
+  function revealExample() {
+    exampleRevealed.value = true;
+    const example = cardExample.value;
+    if (srsStore.studySettings.autoPlaySentence && example?.sentenceId) {
+      tts.speakSentence(example.sentenceId, example.text);
+    }
+  }
+
   watch(() => props.isFlipped, (flipped) => {
     if (!flipped) return;
     const playWord = srsStore.studySettings.autoPlayWord;
     const example = cardExample.value;
-    const playSentence = srsStore.studySettings.autoPlaySentence && example?.sentenceId;
+    const playSentence = srsStore.studySettings.autoPlaySentence && example?.sentenceId && !sentenceBlurred.value;
     const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
 
     if (playWord) {
@@ -269,7 +279,7 @@
           <blockquote
             class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
             :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
-            @click.stop="exampleRevealed = true"
+            @click.stop="revealExample()"
           >
             <div class="flex items-start gap-2">
               <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
@@ -387,7 +397,7 @@
             <blockquote
               class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
               :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
-              @click.stop="exampleRevealed = true"
+              @click.stop="revealExample()"
             >
               <div class="flex items-start gap-2">
                 <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
@@ -467,6 +477,22 @@
         </ClientOnly>
 
         <KanjiBreakdown v-if="srsStore.studySettings.showKanjiBreakdown" :key="`${card.wordId}-${card.readingIndex}`" :word-id="card.wordId" :reading-index="card.readingIndex" />
+
+        <WordComposition
+          v-if="srsStore.studySettings.showWordComposition && wordData?.composedOf?.length"
+          :components="wordData.composedOf"
+        />
+
+        <WordUsedIn
+          v-if="srsStore.studySettings.showWordUsedIn && wordData?.usedInTotal"
+          :key="`usedin-${card.wordId}-${card.readingIndex}`"
+          :word-id="card.wordId"
+          :reading-index="card.readingIndex"
+          :initial-items="wordData.usedIn ?? []"
+          :total="wordData.usedInTotal"
+          :highlight="wordData.mainReading.text"
+          :collapsed-count="2"
+        />
 
         <!-- Deck occurrences -->
         <div v-if="card.deckOccurrences?.length || card.sourceDeckName" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">

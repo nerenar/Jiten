@@ -26,6 +26,8 @@
 
   const cardsInfoFields = ['cardId', 'due', 'queue', 'type', 'interval', 'factor', 'reps', 'lapses', 'mod', 'flags', 'fields', 'modelName', 'deckName'];
 
+  const stripRuby = (text: string) => text.replace(/\[.*?\]/g, '');
+
   async function ankiInvoke(action: string, params: Record<string, any> = {}): Promise<any> {
     const res = await fetch('http://127.0.0.1:8765', {
       method: 'POST',
@@ -57,7 +59,7 @@
 
   const fieldsOptions = computed(() =>
     (fields.value || []).map((entry, idx) => ({
-      label: entry[0] + (entry[1].value ? ` (${entry[1].value.substring(0, 20)})` : ''),
+      label: entry[0] + (entry[1].value ? ` (${stripRuby(entry[1].value).substring(0, 20)})` : ''),
       value: idx,
     }))
   );
@@ -93,7 +95,7 @@
     if (card.queue === -1) return null; // Skip suspended
 
     const field = card.fields[fieldName];
-    const word = field?.value?.trim() || '';
+    const word = stripRuby(field?.value?.trim() || '');
     if (!word) return null;
 
     const reviews = reviewByCard.get(card.cardId) ?? [];

@@ -236,7 +236,7 @@
           {{ actionDescription }}
         </p>
 
-        <div class="flex justify-end">
+        <div>
           <Button label="Preview" icon="pi pi-eye" severity="warn" :loading="previewLoading" :disabled="!canPreview" @click="preview" />
         </div>
       </div>

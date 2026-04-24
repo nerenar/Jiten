@@ -1,4 +1,4 @@
-import { type ComparisonOutcome, type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
+import { type ComparisonOutcome, type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type MediaTypeGroup, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -122,6 +122,16 @@ export interface Word {
   occurrences: number;
   pitchAccents: number[];
   knownStates?: KnownState[];
+  composedOf?: WordSummary[];
+  usedIn?: WordSummary[];
+  usedInTotal?: number;
+}
+
+export interface UsedInPage {
+  items: WordSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface Reading {
@@ -469,6 +479,7 @@ export interface WordSummary {
   readingFurigana: string;
   mainDefinition: string | null;
   frequencyRank: number | null;
+  matchSurface?: string | null;
 }
 
 export interface KanjiGridItem {
@@ -714,6 +725,18 @@ export interface BlacklistedDeckDto {
   createdAt: string
 }
 
+export interface DifficultyRankGroupDto {
+  id: number
+  sortIndex: number
+  decks: DeckSummaryDto[]
+}
+
+export interface DifficultyRankingSectionDto {
+  group: MediaTypeGroup
+  groups: DifficultyRankGroupDto[]
+  unranked: DeckSummaryDto[]
+}
+
 // SRS Study types
 export interface StudyDeckDto {
   userStudyDeckId: number;
@@ -859,6 +882,8 @@ export interface StudySettingsDto {
   blurExampleSentence: boolean;
   showFrequencyRank: boolean;
   showKanjiBreakdown: boolean;
+  showWordComposition: boolean;
+  showWordUsedIn: boolean;
   showNextInterval: boolean;
   showKeybinds: boolean;
   showElapsedTime: boolean;

@@ -198,10 +198,6 @@
     },
   );
 
-  watch(step, (s) => {
-    if (s === 'filters' && selectedDeck.value) fetchPreviewCount();
-  });
-
   // Global Dynamic fields
   const globalName = ref('');
   const globalDescription = ref('');

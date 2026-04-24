@@ -106,6 +106,12 @@ public class CliOptions
     [Option(longName: "prune-sudachi", Required = false, HelpText = "Prune CSV files from sudachi directory")]
     public string? PruneSudachiCsvDirectory { get; set; }
 
+    [Option(longName: "import-word-composition", Required = false, HelpText = "Import word composition from SudachiDict CSVs at the given directory.")]
+    public string? ImportWordCompositionDirectory { get; set; }
+
+    [Option(longName: "split-type", Required = false, Default = "CB", HelpText = "SudachiDict split type to ingest (C, B, CB). Default CB.")]
+    public string SplitType { get; set; } = "CB";
+
     [Option(longName: "sync-jmnedict", Required = false, HelpText = "Sync missing JMNedict entries and update partial entries with missing readings/definitions.")]
     public string? SyncJMNedict { get; set; }
 

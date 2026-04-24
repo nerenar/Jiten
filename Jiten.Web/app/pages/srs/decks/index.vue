@@ -25,18 +25,19 @@
   const refreshing = ref(false);
 
   onMounted(async () => {
-    if (!srsStore.studyDecks.length) decksLoading.value = true;
-    await Promise.all([
-      srsStore.fetchStudyDecks().finally(() => { decksLoading.value = false; }),
-      srsStore.fetchDueSummary(),
-      srsStore.fetchDeckStreak(),
-      srsStore.fetchSettings(),
-    ]);
+    const isCold = !srsStore.studyDecks.length;
+    if (isCold) {
+      decksLoading.value = true;
+      await srsStore.refreshOverview(true);
+      decksLoading.value = false;
+    } else {
+      srsStore.refreshOverview();
+    }
   });
 
   async function refresh() {
     refreshing.value = true;
-    await Promise.all([srsStore.fetchStudyDecks(), srsStore.fetchDueSummary(), srsStore.fetchDeckStreak()]);
+    await srsStore.refreshOverview(true);
     refreshing.value = false;
   }
 

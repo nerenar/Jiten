@@ -13,6 +13,7 @@ public partial class MorphologicalAnalyser
     private List<WordInfo> SplitCompoundAuxiliaryVerbs(List<WordInfo> wordInfos)
     {
         var result = new List<WordInfo>(wordInfos.Count + 4);
+        bool changed = false;
 
         foreach (var word in wordInfos)
         {
@@ -95,9 +96,10 @@ public partial class MorphologicalAnalyser
 
             result.Add(mainVerb);
             result.Add(auxVerb);
+            changed = true;
         }
 
-        return result;
+        return changed ? result : wordInfos;
     }
 
     /// <summary>

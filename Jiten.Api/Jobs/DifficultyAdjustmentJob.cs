@@ -26,10 +26,12 @@ public class DifficultyAdjustmentJob(
     private const decimal SINGLE_USER_CONFIDENCE_THRESHOLD = 0.7m;
     private const decimal SINGLE_USER_ADJUSTMENT_RATIO = 0.25m;
     private const decimal PER_USER_DIMINISHING_SCALE = 1.5m;
+    private const decimal SOURCE_WEIGHT_FLOOR = 0.3m;
+    private const decimal SOURCE_FULL_TRUST_VOTES = 100m;
     private const decimal USER_WEIGHT_AGE_FULL = 60m;
     private const decimal USER_WEIGHT_MEDIA_FULL = 15m;
 
-    private record VoteData(int Id, string UserId, int DeckLowId, int DeckHighId, ComparisonOutcome Outcome);
+    private record VoteData(int Id, string UserId, int DeckLowId, int DeckHighId, ComparisonOutcome Outcome, DifficultyVoteSource Source);
 
     private record RatingData(string UserId, int DeckId, int Rating);
 
@@ -42,7 +44,7 @@ public class DifficultyAdjustmentJob(
 
         var votes = await context.DifficultyVotes
                                  .Where(v => v.IsValid)
-                                 .Select(v => new VoteData(v.Id, v.UserId, v.DeckLowId, v.DeckHighId, v.Outcome))
+                                 .Select(v => new VoteData(v.Id, v.UserId, v.DeckLowId, v.DeckHighId, v.Outcome, v.Source))
                                  .ToListAsync();
 
         var ratings = await context.DifficultyRatings
@@ -107,6 +109,11 @@ public class DifficultyAdjustmentJob(
             userWeights[userId] = ageFactor * mediaFactor;
         }
 
+        var manualVoteCounts = filteredVotes
+                              .Where(v => v.Source == DifficultyVoteSource.Manual)
+                              .GroupBy(v => v.UserId)
+                              .ToDictionary(g => g.Key, g => (decimal)g.Count());
+
         var voteTypeWeights = filteredVotes
                               .Select(v => MediaTypeGroups.GetComparisonWeight(
                                                                                deckInfo.GetValueOrDefault(v.DeckLowId),
@@ -129,7 +136,11 @@ public class DifficultyAdjustmentJob(
             var dimHigh = 1m / (1m + cumHigh / PER_USER_DIMINISHING_SCALE);
             var wDim = Math.Min(dimLow, dimHigh);
 
-            finalVoteWeights[i] = wType * wUser * wDim;
+            var wSource = v.Source == DifficultyVoteSource.WeakOrder
+                ? Math.Min(1.0m, SOURCE_WEIGHT_FLOOR + (1m - SOURCE_WEIGHT_FLOOR) * Math.Min(manualVoteCounts.GetValueOrDefault(v.UserId, 0m) / SOURCE_FULL_TRUST_VOTES, 1m))
+                : 1.0m;
+
+            finalVoteWeights[i] = wType * wUser * wDim * wSource;
 
             userDeckCumulative[keyLow] = cumLow + finalVoteWeights[i];
             userDeckCumulative[keyHigh] = cumHigh + finalVoteWeights[i];

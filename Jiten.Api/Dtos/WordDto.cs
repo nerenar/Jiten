@@ -13,6 +13,17 @@ public class WordDto
     public int Occurrences { get; set; }
     public List<int>? PitchAccents { get; set; }
     public List<KnownState> KnownStates { get; set; } = new();
+    public List<WordSummaryDto>? ComposedOf { get; set; }
+    public List<WordSummaryDto>? UsedIn { get; set; }
+    public int UsedInTotal { get; set; }
+}
+
+public class UsedInPageDto
+{
+    public List<WordSummaryDto> Items { get; set; } = new();
+    public int Total { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
 }
 
 public class WordFormDto

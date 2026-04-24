@@ -25,6 +25,7 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
+    public DbSet<JmDictWordComposition> WordCompositions { get; set; }
     
     public DbSet<ExampleSentence> ExampleSentences { get; set; }
     public DbSet<ExampleSentenceWord> ExampleSentenceWords { get; set; }
@@ -45,6 +46,8 @@ public class JitenDbContext : DbContext
     public DbSet<DifficultyRating> DifficultyRatings { get; set; }
     public DbSet<SkippedComparison> SkippedComparisons { get; set; }
     public DbSet<BlacklistedComparisonDeck> BlacklistedComparisonDecks { get; set; }
+    public DbSet<DifficultyRankGroup> DifficultyRankGroups { get; set; }
+    public DbSet<DifficultyRankItem> DifficultyRankItems { get; set; }
 
     public DbSet<MediaRequest> MediaRequests { get; set; }
     public DbSet<MediaRequestUpvote> MediaRequestUpvotes { get; set; }
@@ -422,6 +425,32 @@ public class JitenDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<JmDictWordComposition>(entity =>
+        {
+            entity.ToTable("WordCompositions", "jmdict");
+            entity.HasKey(e => new { e.WordId, e.ReadingIndex, e.Position });
+
+            entity.Property(e => e.ComponentSurface)
+                  .HasColumnType("text")
+                  .IsRequired();
+
+            entity.HasIndex(e => new { e.WordId, e.ReadingIndex })
+                  .HasDatabaseName("IX_WordComposition_WordId_ReadingIndex");
+
+            entity.HasIndex(e => e.ComponentWordId)
+                  .HasDatabaseName("IX_WordComposition_ComponentWordId");
+
+            entity.HasOne(e => e.Word)
+                  .WithMany()
+                  .HasForeignKey(e => e.WordId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Component)
+                  .WithMany()
+                  .HasForeignKey(e => e.ComponentWordId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<ExampleSentence>(entity =>
         {
             entity.ToTable("ExampleSentences", "jiten");
@@ -779,6 +808,7 @@ public class JitenDbContext : DbContext
             entity.Property(e => e.UserId).IsRequired().HasMaxLength(450);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.IsValid).HasDefaultValue(true);
+            entity.Property(e => e.Source).HasDefaultValue(DifficultyVoteSource.Manual);
 
             entity.HasOne(e => e.DeckLow)
                 .WithMany().HasForeignKey(e => e.DeckLowId).OnDelete(DeleteBehavior.Cascade);
@@ -847,6 +877,46 @@ public class JitenDbContext : DbContext
             entity.HasIndex(e => new { e.UserId, e.DeckId })
                 .IsUnique()
                 .HasDatabaseName("IX_BlacklistedComparisonDecks_UserDeck");
+        });
+
+        modelBuilder.Entity<DifficultyRankGroup>(entity =>
+        {
+            entity.ToTable("DifficultyRankGroups", "jiten");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(e => new { e.UserId, e.MediaTypeGroup, e.SortIndex })
+                .IsUnique()
+                .HasDatabaseName("IX_DifficultyRankGroups_UserGroupSort");
+        });
+
+        modelBuilder.Entity<DifficultyRankItem>(entity =>
+        {
+            entity.ToTable("DifficultyRankItems", "jiten");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasOne(e => e.Group)
+                .WithMany(g => g.Items)
+                .HasForeignKey(e => e.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Deck)
+                .WithMany()
+                .HasForeignKey(e => e.DeckId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.DeckId })
+                .IsUnique()
+                .HasDatabaseName("IX_DifficultyRankItems_UserDeck");
+
+            entity.HasIndex(e => e.GroupId)
+                .HasDatabaseName("IX_DifficultyRankItems_GroupId");
         });
 
         base.OnModelCreating(modelBuilder);

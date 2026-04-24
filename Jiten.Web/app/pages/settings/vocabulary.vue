@@ -123,6 +123,8 @@
 
     <SettingsVocabularyMassActionsCard class="mt-4" @changed="onPanelChanged" />
 
+    <SettingsCompositionInferenceCard class="mt-4" @changed="onPanelChanged" />
+
     <SettingsVocabularyDangerZoneCard class="mt-4" @changed="onPanelChanged" />
 
   </div>

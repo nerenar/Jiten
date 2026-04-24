@@ -33,6 +33,17 @@ public class StudyController(
     IStudySessionService sessionService,
     ILogger<StudyController> logger) : ControllerBase
 {
+    [HttpGet("overview-version")]
+    [SwaggerOperation(Summary = "Get current overview version for cache validation")]
+    public async Task<IResult> GetOverviewVersion()
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var version = await sessionService.GetStudyOverviewVersion(userId);
+        return Results.Ok(new { version });
+    }
+
     [HttpGet("study-decks")]
     [SwaggerOperation(Summary = "Get user's studied decks")]
     public async Task<IResult> GetStudyDecks()
@@ -379,8 +390,7 @@ public class StudyController(
 
         userContext.UserStudyDecks.Add(studyDeck);
         await userContext.SaveChangesAsync();
-
-
+        await sessionService.BumpStudyOverviewVersion(userId);
         logger.LogInformation("User added study deck: DeckType={DeckType}, DeckId={DeckId}", request.DeckType, request.DeckId);
         return Results.Ok(new { studyDeck.UserStudyDeckId });
     }
@@ -435,6 +445,7 @@ public class StudyController(
         }
 
         await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
     }
@@ -452,7 +463,7 @@ public class StudyController(
 
         userContext.UserStudyDecks.Remove(studyDeck);
         await userContext.SaveChangesAsync();
-
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User removed study deck: UserStudyDeckId={UserStudyDeckId}", studyDeck.UserStudyDeckId);
         return Results.Ok(new { success = true });
@@ -494,6 +505,7 @@ public class StudyController(
         }
 
         await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
     }
@@ -523,7 +535,8 @@ public class StudyController(
             existing.Occurrences += Math.Max(1, request.Occurrences);
             await userContext.SaveChangesAsync();
             await transaction.CommitAsync();
-    
+            await sessionService.BumpStudyOverviewVersion(userId);
+
             return Results.Ok(new { success = true });
         }
 
@@ -541,7 +554,7 @@ public class StudyController(
         });
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
-
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
     }
@@ -612,6 +625,8 @@ public class StudyController(
         if (added > 0 || updated > 0)
             await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
+        if (added > 0 || updated > 0)
+            await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { added, updated });
     }
@@ -635,6 +650,9 @@ public class StudyController(
     [SwaggerOperation(Summary = "Remove a word from a static deck")]
     public async Task<IResult> RemoveDeckWord(int id, int wordId, int readingIndex)
     {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
         var (_, error) = await GetStaticDeckForUser(id, "removed from");
         if (error != null) return error;
 
@@ -644,7 +662,7 @@ public class StudyController(
 
         userContext.UserStudyDeckWords.Remove(word);
         await userContext.SaveChangesAsync();
-
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
     }
@@ -653,6 +671,9 @@ public class StudyController(
     [SwaggerOperation(Summary = "Update word occurrences in a static deck")]
     public async Task<IResult> UpdateDeckWord(int id, int wordId, int readingIndex, UpdateDeckWordRequest request)
     {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
         var (_, error) = await GetStaticDeckForUser(id, "updated");
         if (error != null) return error;
 
@@ -662,6 +683,7 @@ public class StudyController(
 
         word.Occurrences = Math.Max(1, request.Occurrences);
         await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
     }
@@ -1172,7 +1194,7 @@ public class StudyController(
 
         var result = await importService.CommitImport(userId, request);
         if (result.Error != null) return Results.BadRequest(result.Error);
-
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { userStudyDeckId = result.DeckId });
     }
@@ -1208,6 +1230,7 @@ public class StudyController(
 
         var result = await importService.ImportToExistingDeck(userId, id, request);
         if (result.Error != null) return Results.BadRequest(result.Error);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { added = result.DeckId != null });
     }
@@ -1340,10 +1363,10 @@ public class StudyController(
         if (aheadMinutes.HasValue) aheadMinutes = Math.Clamp(aheadMinutes.Value, 60, 10080);
         if (mistakeDays.HasValue) mistakeDays = Math.Clamp(mistakeDays.Value, 1, 7);
 
-        if (!string.IsNullOrEmpty(sessionId) && await sessionService.ValidateSessionAsync(sessionId, userId))
-            await sessionService.RefreshSessionAsync(sessionId);
+        if (!string.IsNullOrEmpty(sessionId) && await sessionService.ValidateSession(sessionId, userId))
+            await sessionService.RefreshSession(sessionId);
         else
-            sessionId = await sessionService.CreateSessionAsync(userId);
+            sessionId = await sessionService.CreateSession(userId);
 
         var settings = await LoadStudySettings(userId);
         limit = Math.Clamp(limit, 1, settings.BatchSize);
@@ -1987,6 +2010,7 @@ public class StudyController(
 
         fsrsSettings.SettingsJson = JsonSerializer.Serialize(request);
         await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(request);
     }

@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
 using Jiten.Core.Data;
+using Jiten.Parser.Diagnostics;
 
 namespace Jiten.Cli.Commands;
 
@@ -49,6 +50,7 @@ public class BenchmarkCommands(CliContext context)
         }
 
         var results = new List<BenchmarkFileResult>();
+        var aggregateTimings = new BenchmarkTimings();
         var stopwatch = new Stopwatch();
 
         Console.WriteLine("=== Benchmark Results ===");
@@ -62,13 +64,16 @@ public class BenchmarkCommands(CliContext context)
             var content = await File.ReadAllTextAsync(filePath);
             var characterCount = content.Length;
 
+            var fileTimings = new BenchmarkTimings();
             stopwatch.Restart();
-            var deck = await Jiten.Parser.Parser.ParseTextToDeck(context.ContextFactory, content, false, false, deckType);
+            var deck = await Jiten.Parser.Parser.ParseTextToDeck(context.ContextFactory, content, false, false, deckType, timings: fileTimings);
             stopwatch.Stop();
 
             var elapsedMs = stopwatch.ElapsedMilliseconds;
             var wordCount = deck.DeckWords.Count;
             var charsPerSecond = elapsedMs > 0 ? (double)characterCount / elapsedMs * 1000 : 0;
+
+            aggregateTimings.Accumulate(fileTimings);
 
             results.Add(new BenchmarkFileResult
             {
@@ -76,10 +81,13 @@ public class BenchmarkCommands(CliContext context)
                 CharacterCount = characterCount,
                 WordCount = wordCount,
                 ElapsedMs = elapsedMs,
-                CharsPerSecond = charsPerSecond
+                CharsPerSecond = charsPerSecond,
+                Timings = fileTimings
             });
 
             Console.WriteLine($"  {i + 1,3}. {fileName} - {characterCount:N0} chars, {wordCount:N0} words, {elapsedMs:N0} ms ({charsPerSecond:N0} chars/sec)");
+            Console.WriteLine($"       MorphAnalysis: {fileTimings.MorphologicalAnalysisMs:N1}ms [TextPrep={fileTimings.TextPreprocessMs:N1} FFI={fileTimings.SudachiFFIMs:N1} Parse={fileTimings.TokenParsingMs:N1} Offsets={fileTimings.OffsetRecoveryMs:N1} Pipeline={fileTimings.PipelineMs:N1} SentSplit={fileTimings.SentenceSplitMs:N1}]");
+            Console.WriteLine($"       Preprocess: {fileTimings.PreprocessingMs:N1}ms | Deconj/Lookup: {fileTimings.DeconjugationLookupMs:N1}ms | Reseg: {fileTimings.ResegmentationMs:N1}ms | AdjScore: {fileTimings.AdjacentScoringMs:N1}ms | Stats: {fileTimings.StatsBuildMs:N1}ms");
         }
 
         Console.WriteLine();
@@ -102,6 +110,22 @@ public class BenchmarkCommands(CliContext context)
         Console.WriteLine($"  Avg chars/sec:   {averageCharsPerSecond:N0}");
         Console.WriteLine($"  Min time:        {minTimeMs:N0} ms");
         Console.WriteLine($"  Max time:        {maxTimeMs:N0} ms");
+        Console.WriteLine();
+        Console.WriteLine("Time Breakdown (aggregate):");
+        var t = aggregateTimings;
+        Console.WriteLine($"  Morph. Analysis: {t.MorphologicalAnalysisMs:N1} ms ({Pct(t.MorphologicalAnalysisMs, t.TotalMs)})");
+        Console.WriteLine($"    Text Preproc:  {t.TextPreprocessMs:N1} ms ({Pct(t.TextPreprocessMs, t.TotalMs)})");
+        Console.WriteLine($"    Sudachi FFI:   {t.SudachiFFIMs:N1} ms ({Pct(t.SudachiFFIMs, t.TotalMs)})");
+        Console.WriteLine($"    Token Parsing: {t.TokenParsingMs:N1} ms ({Pct(t.TokenParsingMs, t.TotalMs)})");
+        Console.WriteLine($"    Offsets:       {t.OffsetRecoveryMs:N1} ms ({Pct(t.OffsetRecoveryMs, t.TotalMs)})");
+        Console.WriteLine($"    Pipeline:      {t.PipelineMs:N1} ms ({Pct(t.PipelineMs, t.TotalMs)})");
+        Console.WriteLine($"    Sent. Split:   {t.SentenceSplitMs:N1} ms ({Pct(t.SentenceSplitMs, t.TotalMs)})");
+        Console.WriteLine($"  Preprocessing:   {t.PreprocessingMs:N1} ms ({Pct(t.PreprocessingMs, t.TotalMs)})");
+        Console.WriteLine($"  Deconj/Lookup:   {t.DeconjugationLookupMs:N1} ms ({Pct(t.DeconjugationLookupMs, t.TotalMs)})");
+        Console.WriteLine($"  Resegmentation:  {t.ResegmentationMs:N1} ms ({Pct(t.ResegmentationMs, t.TotalMs)})");
+        Console.WriteLine($"  Adj. Scoring:    {t.AdjacentScoringMs:N1} ms ({Pct(t.AdjacentScoringMs, t.TotalMs)})");
+        Console.WriteLine($"  Stats Build:     {t.StatsBuildMs:N1} ms ({Pct(t.StatsBuildMs, t.TotalMs)})");
+        Console.WriteLine($"  Tracked Total:   {t.TotalMs:N1} ms");
 
         if (!string.IsNullOrEmpty(options.Output))
         {
@@ -117,7 +141,8 @@ public class BenchmarkCommands(CliContext context)
                     AverageTimePerFileMs = averageTimePerFileMs,
                     AverageCharsPerSecond = averageCharsPerSecond,
                     MinTimeMs = minTimeMs,
-                    MaxTimeMs = maxTimeMs
+                    MaxTimeMs = maxTimeMs,
+                    AggregateTimings = aggregateTimings
                 }
             };
 
@@ -134,6 +159,9 @@ public class BenchmarkCommands(CliContext context)
         }
     }
 
+    private static string Pct(double part, double total) =>
+        total > 0 ? $"{part / total * 100:N1}%" : "0.0%";
+
     private class BenchmarkFileResult
     {
         public string FileName { get; set; } = "";
@@ -141,6 +169,7 @@ public class BenchmarkCommands(CliContext context)
         public int WordCount { get; set; }
         public long ElapsedMs { get; set; }
         public double CharsPerSecond { get; set; }
+        public BenchmarkTimings Timings { get; set; } = new();
     }
 
     private class BenchmarkSummary
@@ -153,6 +182,7 @@ public class BenchmarkCommands(CliContext context)
         public double AverageCharsPerSecond { get; set; }
         public long MinTimeMs { get; set; }
         public long MaxTimeMs { get; set; }
+        public BenchmarkTimings AggregateTimings { get; set; } = new();
     }
 
     private class BenchmarkOutput

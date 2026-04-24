@@ -42,8 +42,9 @@ interface UndoSnapshot {
 export const useSrsStore = defineStore('srs', () => {
   const { $api } = useNuxtApp();
 
-  const srsEnrolled = ref(false);
+  const srsEnrolled = ref<boolean | null>(null);
   const studyDecks = ref<StudyDeckDto[]>([]);
+  const overviewVersion = ref<number>(0);
   const sessionId = ref<string | null>(null);
   const currentBatch = ref<StudyCardDto[]>([]);
   const currentCardIndex = ref(0);
@@ -65,6 +66,8 @@ export const useSrsStore = defineStore('srs', () => {
     blurExampleSentence: false,
     showFrequencyRank: true,
     showKanjiBreakdown: true,
+    showWordComposition: true,
+    showWordUsedIn: true,
     showNextInterval: false,
     showKeybinds: true,
     showElapsedTime: true,
@@ -220,6 +223,27 @@ export const useSrsStore = defineStore('srs', () => {
     }
   }
 
+  let refreshOverviewPromise: Promise<void> | null = null;
+
+  async function refreshOverview(force = false) {
+    if (refreshOverviewPromise) return refreshOverviewPromise;
+    refreshOverviewPromise = (async () => {
+      try {
+        let serverVersion = 0;
+        try {
+          const { version } = await $api<{ version: number }>('srs/overview-version');
+          serverVersion = version;
+          if (!force && overviewVersion.value > 0 && version === overviewVersion.value) return;
+        } catch { /* fall through to full refresh */ }
+        await Promise.all([fetchStudyDecks(), fetchDueSummary(), fetchDeckStreak(), fetchSettings()]);
+        overviewVersion.value = serverVersion;
+      } finally {
+        refreshOverviewPromise = null;
+      }
+    })();
+    return refreshOverviewPromise;
+  }
+
   async function addStudyDeck(request: AddStudyDeckRequest) {
     const result = await $api<{ userStudyDeckId: number }>('srs/study-decks', {
       method: 'POST',
@@ -254,7 +278,7 @@ export const useSrsStore = defineStore('srs', () => {
       suspendedCount: 0,
       dueReviewCount: 0,
     });
-    fetchStudyDecks();
+    refreshOverview();
     invalidateSession();
     return result;
   }
@@ -280,7 +304,7 @@ export const useSrsStore = defineStore('srs', () => {
       deck.maxGlobalFrequency = request.maxGlobalFrequency;
       deck.posFilter = request.posFilter;
     }
-    fetchStudyDecks();
+    refreshOverview();
     invalidateSession();
   }
 
@@ -288,6 +312,7 @@ export const useSrsStore = defineStore('srs', () => {
     await $api(`srs/study-decks/${id}`, { method: 'DELETE' });
     studyDecks.value = studyDecks.value.filter(d => d.userStudyDeckId !== id);
     invalidateSession();
+    refreshOverview();
   }
 
   async function addDeckWord(deckId: number, wordId: number, readingIndex: number, occurrences = 1) {
@@ -295,10 +320,12 @@ export const useSrsStore = defineStore('srs', () => {
       method: 'POST',
       body: { wordId, readingIndex, occurrences },
     });
+    refreshOverview();
   }
 
   async function removeDeckWord(deckId: number, wordId: number, readingIndex: number) {
     await $api(`srs/study-decks/${deckId}/words/${wordId}/${readingIndex}`, { method: 'DELETE' });
+    refreshOverview();
   }
 
   async function updateDeckWordOccurrences(deckId: number, wordId: number, readingIndex: number, occurrences: number) {
@@ -306,6 +333,7 @@ export const useSrsStore = defineStore('srs', () => {
       method: 'PATCH',
       body: { occurrences },
     });
+    refreshOverview();
   }
 
   async function importPreview(file: File, parseFullText = false) {
@@ -327,7 +355,7 @@ export const useSrsStore = defineStore('srs', () => {
       method: 'POST',
       body: { previewToken, name, description, excludeWordIds },
     });
-    fetchStudyDecks();
+    refreshOverview();
     invalidateSession();
     return result;
   }
@@ -344,7 +372,7 @@ export const useSrsStore = defineStore('srs', () => {
       method: 'POST',
       body: { previewToken, excludeWordIds },
     });
-    fetchStudyDecks();
+    refreshOverview();
     invalidateSession();
     return result;
   }
@@ -736,7 +764,9 @@ export const useSrsStore = defineStore('srs', () => {
       const res = await $api<{ enrolled: boolean }>('srs/enrolled');
       srsEnrolled.value = res.enrolled;
     } catch {
-      srsEnrolled.value = false;
+      if (srsEnrolled.value !== true) {
+        srsEnrolled.value = false;
+      }
     }
   }
 
@@ -759,6 +789,7 @@ export const useSrsStore = defineStore('srs', () => {
       body: settings,
     });
     invalidateSession();
+    refreshOverview();
   }
 
   function clearSessionState() {
@@ -819,6 +850,7 @@ export const useSrsStore = defineStore('srs', () => {
     currentCard,
     hasCards,
     progress,
+    refreshOverview,
     fetchStudyDecks,
     fetchDueSummary,
     fetchDeckStreak,

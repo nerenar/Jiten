@@ -315,6 +315,19 @@ onMounted(async () => {
       />
     </Transition>
 
+    <!-- Ranking flow CTA -->
+    <div class="mt-6 border border-surface-200 dark:border-surface-700 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-surface-50 dark:bg-surface-800">
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-sm">Short on time? Rank in bulk</div>
+        <p class="text-xs text-muted-color mt-1">
+          Drag your completed titles into a tier list instead of comparing one pair at a time. Cover more ground quickly with the ranking flow.
+        </p>
+      </div>
+      <NuxtLink to="/ratings/ranking">
+        <Button label="Rank difficulties" icon="pi pi-list" size="small" />
+      </NuxtLink>
+    </div>
+
     <!-- Manual comparison -->
     <Panel
       v-if="completedDecks.length >= 2"

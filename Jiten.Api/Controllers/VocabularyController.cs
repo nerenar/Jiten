@@ -69,7 +69,10 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
         var knownStatesTask = currentUserService.GetKnownWordState(wordId, readingIndex);
 
-        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, usedInMediaByTypeTask, knownStatesTask);
+        var composedOfTask = CompositionHelper.LoadComposedOf(contextFactory, wordId, readingIndex);
+        var usedInTask = CompositionHelper.LoadUsedIn(contextFactory, wordId, readingIndex, 0, 20);
+
+        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, usedInMediaByTypeTask, knownStatesTask, composedOfTask, usedInTask);
 
         var word = await wordTask;
         if (word == null)
@@ -98,7 +101,10 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask
+                              PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask,
+                              ComposedOf = await composedOfTask,
+                              UsedIn = usedInTask.Result.Items,
+                              UsedInTotal = usedInTask.Result.Total
                           });
     }
 
@@ -123,7 +129,10 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             .Where(wff => wff.WordId == wordId)
             .ToDictionaryAsync(wff => wff.ReadingIndex);
 
-        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask);
+        var composedOfTask = CompositionHelper.LoadComposedOf(contextFactory, wordId, readingIndex);
+        var usedInTask = CompositionHelper.LoadUsedIn(contextFactory, wordId, readingIndex, 0, 20);
+
+        await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, composedOfTask, usedInTask);
 
         var word = await wordTask;
         if (word == null)
@@ -151,8 +160,21 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents
+                              PitchAccents = word.PitchAccents, ComposedOf = await composedOfTask,
+                              UsedIn = usedInTask.Result.Items,
+                              UsedInTotal = usedInTask.Result.Total
                           });
+    }
+
+    [HttpGet("{wordId}/{readingIndex}/used-in")]
+    [SwaggerOperation(Summary = "Get words that contain this word as a component",
+                      Description = "Full list of compound words whose composition includes this (wordId, readingIndex) as a component, ordered by frequency.")]
+    [ProducesResponseType(typeof(UsedInPageDto), StatusCodes.Status200OK)]
+    [ResponseCache(Duration = 3600)]
+    public async Task<UsedInPageDto> GetWordUsedIn([FromRoute] int wordId, [FromRoute] short readingIndex)
+    {
+        var (items, total) = await CompositionHelper.LoadUsedIn(contextFactory, wordId, readingIndex, 0, int.MaxValue);
+        return new UsedInPageDto { Items = items, Total = total, Page = 1, PageSize = total };
     }
 
     [HttpGet("{wordId}/{readingIndex}/media-frequency")]

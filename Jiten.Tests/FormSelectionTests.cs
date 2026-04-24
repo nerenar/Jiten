@@ -750,12 +750,123 @@ public class FormSelectionTests
         yield return ["どうしてたわけ", "わけ", 1538330, (byte)1];
         // Legitimate たわけ (戯け) should match 戯け
         yield return ["この大たわけがっ", "たわけ", 2644710, (byte)2];
+
+        // === ニッと should be にっと (with a grin, 2747260), not 日 name (5579910) ===
+        yield return ["ニッと笑った", "ニッと", 2747260, (byte)0];
+
+        // === よる in にもよるが should be 依る (1168660), not 夜 (1536350) ===
+        yield return ["懐具合にもよるが", "よる", 1168660, (byte)4];
+        yield return ["規模にもよるが、", "よる", 1168660, (byte)4];
+        yield return ["迷惑の定義にもよるわね。", "よる", 1168660, (byte)4];
+
+        // === 捩る in body movement context should be 捩る/nejiru (1611090), not もじる (2793790) ===
+        yield return ["二人が胸元を押さえながらショックを受けたように身体を捩る。", "捩る", 1611090, (byte)0];
+        yield return ["腰を捩って", "捩って", 1611090, (byte)0];
+
+        // === 立て in を立て should be 立てる (1551530), not prefix たて (2081610) ===
+        yield return ["結合部が淫らな水音を立て、部屋に響く。", "立て", 1551530, (byte)0];
+        yield return ["俺だけに見えるように親指を立て、屋敷を出ていった。", "立て", 1551530, (byte)0];
+
+        // === 来る should be くる (1547720), not きたる (1591270) in modern contexts ===
+        yield return ["来るわけねえだろ", "来る", 1547720, (byte)0];
+        yield return ["ヘンな眼鏡がこっち来たー！", "来たー", 1547720, (byte)0];
+        yield return ["別の場所で泣いてから来るべきだ。", "来る", 1547720, (byte)0];
+
+        // === 来る in archaic context should stay きたる (1591270) ===
+        yield return ["冬来りなば春遠からじ。", "来りなば", 1591270, (byte)0];
+
+        // === 一列 should be いちれつ (1167430), not the name かずなみ (5126363) ===
+        yield return ["横一列に並んだブリューナクのメンバーたちは", "一列", 1167430, (byte)0];
+
+        // 何となく merged from 何と+なく (SpecialCases2)
+        yield return ["その様子を眺めながら、今の話について何となく考えを巡らせる。", "何となく", 1599730, (byte)0];
+        // 中途半端 merged from 中途+半端 (SpecialCases2)
+        yield return ["こんな…任務も中途半端なまんま全滅なんて…", "中途半端", 1425050, (byte)0];
+        // 常に merged from 常+に (SpecialCases2)
+        yield return ["人海戦術は常に行っているもの足りないのは量じゃなくて質のほう", "常に", 1355970, (byte)0];
+
+        // === Currently failing — tracked in MISPARSES_TO_FIX.txt ===
+        // 各 in 各色 context should read かく (1204860), not おのおの (2826190)
+        yield return ["号令に合わせて各色の閃光が奔り、次の瞬間には周囲一帯を劈く轟音が響き渡っていた。", "各", 1204860, (byte)0];
+        // 大仰 should be おおぎょう (1413470, adj-na), not the place name Oonoki (5490075)
+        yield return ["誠実どころか大仰すぎんぞ", "大仰", 1413470, (byte)0];
+
+        // === Misparses batch 2026-04-14 (tracked in MISPARSES_TO_FIX.txt) ===
+        // いけない as "must not" (1000730, exp/adj-i) — currently matches いける (1587190) instead
+        yield return ["ここから出てはいけない", "いけない", 1000730, (byte)1];
+        yield return ["他にしなきゃいけないことは", "いけない", 1000730, (byte)1];
+        // タンゴ as tango dance (2019220) — currently matches 単語 (1417330) due to near-tie scoring
+        yield return ["タンゴを踊る", "タンゴ", 2019220, (byte)0];
+        // トム as the given name Tom (5055293) — currently picks 1496740 (wrong word)
+        yield return ["トム・ソーヤーは読んだことあるって言ってたね", "トム", 5055293, (byte)0];
+        // 汝 should resolve to 2015140 (汝/爾/なんじ, pn/arch/poet), not 1631650 (汝/己/うぬ, vulg)
+        yield return ["古の誓約により、我が銃身は汝のものとなり", "汝", 2015140, (byte)0];
+
+        // カッコウ (katakana stylisation of 格好 "appearance") should resolve to 格好 (1590480),
+        // not to 郭公 cuckoo (1206270). User_dic sets NormalizedForm=格好.
+        yield return ["どうしてそんなカッコウを？", "カッコウ", 1590480, (byte)2];
+
+        // 泳ごー (volitional with elongated ー → う) should resolve to 泳ぐ (1174340) volitional,
+        // not be split into 泳 (Name) + ご (Numeral) + ー. Pattern added in RepairVowelElongation.
+        yield return ["手治ったら一緒に泳ごーね。", "泳ごう", 1174340, (byte)0];
+
+        // そう + 言って (kanji 言) must NOT merge into そう言って/沿う (1176700 "to run along").
+        // ProcessSpecialCases restricts the そう+いう merge to kana 言 (そういう/そういって).
+        // Here そう is adverb (2137720) + 言って is 言う verb (1587040).
+        yield return ["そう言ってありがたいです", "そう", 2137720, (byte)1];
+        yield return ["そう言ってありがたいです", "言って", 1587040, (byte)0];
+        // Regression: kana-form そういう as "such" still merges into WID 1394680.
+        yield return ["そういう事だ", "そういう", 1394680, (byte)2];
+
+        // === Group A: Sudachi mis-tagging ===
+        // #2: 太鼓持ち noun (1585720), not 太鼓持 + ちかい (近い)
+        yield return ["生徒会長の太鼓持ちかい？", "太鼓持ち", 1585720, (byte)0];
+        // #7: 半人前 noun (1479520), not 半 + 人前で
+        yield return ["例え半人前でも俺は魔術師なんだから", "半人前", 1479520, (byte)0];
+        // #10: 貴様 pronoun (1223620), not 貴 prefix + 様に
+        yield return ["貴様に用はないアサシン", "貴様", 1223620, (byte)0];
+        // #17: なれ as 成る (1375610) potential/imperative, not 汝 pronoun (2174460)
+        // (First sentence 冷静になれって collapses into the 冷静になる compound, 2557400)
+        yield return ["それで冷静になれって、どんな修行僧よ。", "冷静になれって", 2557400, (byte)0];
+        yield return ["誰だって、なろうと思えば、なれんだよ。", "なれ", 1375610, (byte)2];
+        yield return ["誰かの特別になんてなれやしない。", "なれ", 1375610, (byte)2];
+
+        // 殺し続ける: Sudachi mis-tags 殺 as Prefix (reading サツ) and merges し into し続ける.
+        // Repair in ProcessSpecialCases: kanji-prefix whose +す is a verb → split into 殺し + 続ける.
+        yield return ["殺し続ける存在だ", "殺し", 1299030, (byte)0];
+        yield return ["殺し続ける存在だ", "続ける", 1405800, (byte)0];
+
+        // 備え (noun 1485630) must win over 備える verb-stem match consistently — both occurrences.
+        // Sudachi locks DictionaryForm=備え explicitly; the verb 備える should not override via stem.
+        yield return ["現実は備えに備えを重ねた", "備え", 1485630, (byte)0];
+        yield return ["備えに備えを重ねた", "備え", 1485630, (byte)0];
+
+        // Positive 資格がある must not collapse to negative expression 資格がない (2159140).
+        // Parser.cs negative-fallback gate requires surface to be actually negated.
+        yield return ["お前はまだ継承者としての資格がある", "資格", 1312690, (byte)0];
+        // Regression: genuinely negative expressions still compound-match via ない fallback
+        yield return ["それは俺には関係ない", "関係ない", 2076040, (byte)0];
+        yield return ["彼はびくともしません", "びくともしません", 1010720, (byte)0];
+
+        // Sentence-final particle bonus (Ichiran-style :final flag) — sentence-final な/ね/よ/ぞ
+        // should resolve to the prt entry, not a homographic noun/name/interjection.
+        yield return ["そうだな", "な", 2029110, (byte)0];
+        yield return ["行くぞ", "ぞ", 2029130, (byte)0];
+        yield return ["いいよ", "よ", 2029090, (byte)0];
+        yield return ["うるさいわ", "わ", 2029100, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
     {
         // Kana surface ざと should not match kanji 里 — ざと is not a valid standalone reading
         yield return ["次第に周りからざわざと声が聞こえてくる。", "ざと"];
+
+        // あん in moans/exclamations should not match 案 (1154770)
+        yield return ["んぅっ、あん、あぁっ", "あん"];
+        yield return ["ミレーニアさんあんやだぁふぐぐぐぐぐ…。", "あん"];
+
+        // Positive 資格がある must not match as a combined compound at all (no JMDict entry exists).
+        yield return ["お前はまだ継承者としての資格がある", "資格がある"];
     }
 
     [Theory]

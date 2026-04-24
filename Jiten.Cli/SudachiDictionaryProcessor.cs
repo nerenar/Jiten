@@ -355,7 +355,7 @@ public class SudachiDictionaryProcessor
         }
     }
 
-    private static void LoadAllRecords(string[] filePaths, PruningContext context)
+    public static void LoadAllRecords(string[] filePaths, PruningContext context)
     {
         foreach (var filePath in filePaths)
         {

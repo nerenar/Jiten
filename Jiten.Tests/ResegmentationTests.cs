@@ -1,9 +1,8 @@
 using System.Diagnostics;
 using FluentAssertions;
 using Jiten.Core.Data;
-using Jiten.Core.Data.JMDict;
 using Jiten.Parser;
-using Jiten.Parser.Data.Redis;
+using Jiten.Parser.Data;
 using Jiten.Parser.Resegmentation;
 using Xunit;
 
@@ -11,7 +10,7 @@ namespace Jiten.Tests;
 
 public class ResegmentationTests
 {
-    private static readonly IJmDictCache StubCache = new StubJmDictCache();
+    private static readonly Dictionary<int, JmDictWordMeta> EmptyMeta = new();
 
     // ─── BuildEdges ───────────────────────────────────────────────────────────
 
@@ -129,7 +128,7 @@ public class ResegmentationTests
     // ─── ResegmentationEngine ─────────────────────────────────────────────────
 
     [Fact]
-    public async Task ResegmentationEngine_ReplacesTokenWithHighFrequencyPath()
+    public void ResegmentationEngine_ReplacesTokenWithHighFrequencyPath()
     {
         // WordIds 1 and 2 are high-frequency (rank ≤ 5000)
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
@@ -139,7 +138,7 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえ");
         sentence.Words.Add((word, 0, 4));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(2);
         sentence.Words[0].word.Text.Should().Be("あい");
@@ -147,7 +146,7 @@ public class ResegmentationTests
     }
 
     [Fact]
-    public async Task ResegmentationEngine_RejectsLowFrequencyPath()
+    public void ResegmentationEngine_RejectsLowFrequencyPath()
     {
         // WordIds have no frequency data → score too low
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
@@ -157,13 +156,13 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえ");
         sentence.Words.Add((word, 0, 4));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(1, "path with no frequency data should be rejected");
     }
 
     [Fact]
-    public async Task ResegmentationEngine_RejectsSingleCharHiraganaSegment()
+    public void ResegmentationEngine_RejectsSingleCharHiraganaSegment()
     {
         // Path "あ" + "いう" — single-char hiragana segment should be rejected
         var lookups = Dict(("あ", [1]), ("いう", [2]));
@@ -173,13 +172,13 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいう");
         sentence.Words.Add((word, 0, 3));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(1, "paths with single-char hiragana segments should be rejected");
     }
 
     [Fact]
-    public async Task ResegmentationEngine_AllowsSingleCharKatakanaSegment()
+    public void ResegmentationEngine_AllowsSingleCharKatakanaSegment()
     {
         // "だったら" + "おまえ" + "が" via katakana input — single-char katakana particle should be allowed
         // Lookups keyed by hiragana, input is katakana (BuildEdges converts katakana→hiragana for lookup)
@@ -190,7 +189,7 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("ダッタラオマエガ");
         sentence.Words.Add((word, 0, 8));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(3, "single-char katakana particle at end of all-katakana span should be allowed");
         sentence.Words[0].word.Text.Should().Be("ダッタラ");
@@ -199,7 +198,7 @@ public class ResegmentationTests
     }
 
     [Fact]
-    public async Task ResegmentationEngine_AllowsSingleCharKanjiSegment()
+    public void ResegmentationEngine_AllowsSingleCharKanjiSegment()
     {
         // "大学" + "生" — single-char kanji is fine (生 is a common standalone word)
         var lookups = Dict(("大学", [1]), ("生", [2]));
@@ -209,7 +208,7 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("大学生");
         sentence.Words.Add((word, 0, 3));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(2, "single-char kanji segments should be allowed");
         sentence.Words[0].word.Text.Should().Be("大学");
@@ -217,7 +216,7 @@ public class ResegmentationTests
     }
 
     [Fact]
-    public async Task ResegmentationEngine_RejectsTooManySegments()
+    public void ResegmentationEngine_RejectsTooManySegments()
     {
         // 4-char span split into 4 segments (count > length/2) should be rejected
         var lookups = Dict(("あ", [1]), ("い", [2]), ("う", [3]), ("え", [4]));
@@ -227,7 +226,7 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえ");
         sentence.Words.Add((word, 0, 4));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(1, "too many segments relative to span length should be rejected");
     }
@@ -284,7 +283,7 @@ public class ResegmentationTests
     // ─── ReplaceSpan field contracts ─────────────────────────────────────
 
     [Fact]
-    public async Task ResegmentationEngine_ReplacedTokens_HavePreMatchedWordIdAndDictionaryFormEqualToText()
+    public void ResegmentationEngine_ReplacedTokens_HavePreMatchedWordIdAndDictionaryFormEqualToText()
     {
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
         var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
@@ -293,7 +292,7 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえ");
         sentence.Words.Add((word, 0, 4));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(2);
         sentence.Words[0].word.PreMatchedWordId.Should().Be(1, "best-frequency WordId for first segment must be pre-matched");
@@ -305,7 +304,7 @@ public class ResegmentationTests
     // ─── Constrained candidate set (PreMatchedWordId) through adjacent-rescore ──
 
     [Fact]
-    public async Task ResegmentationEngine_ResegmentedToken_PreMatchedIdPreservedOnSecondPass()
+    public void ResegmentationEngine_ResegmentedToken_PreMatchedIdPreservedOnSecondPass()
     {
         // First pass resegments "あいうえ" → "あい"(wid=1) + "うえ"(wid=2), setting PreMatchedWordId.
         // A second pass (simulating the adjacent-rescore phase) must not touch pre-matched tokens.
@@ -316,13 +315,13 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえ");
         sentence.Words.Add((word, 0, 4));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
         sentence.Words.Should().HaveCount(2);
         int wid0 = sentence.Words[0].word.PreMatchedWordId!.Value;
         int wid1 = sentence.Words[1].word.PreMatchedWordId!.Value;
 
         // Second pass — adjacent-rescore phase
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(2, "second pass must not alter already-resegmented tokens");
         sentence.Words[0].word.PreMatchedWordId.Should().Be(wid0,
@@ -332,7 +331,7 @@ public class ResegmentationTests
     }
 
     [Fact]
-    public async Task ConfidenceReseg_ResegmentedToken_CandidateSetConstrainedDuringAdjacentRescore()
+    public void ConfidenceReseg_ResegmentedToken_CandidateSetConstrainedDuringAdjacentRescore()
     {
         // A resegmented token (PreMatchedWordId=1) has high-frequency split candidates:
         // "あ" (wid=99) + "い" (wid=88). Adjacent rescoring with a low margin must NOT
@@ -346,8 +345,8 @@ public class ResegmentationTests
 
         var marginMap = new Dictionary<(int, int), int?> { [(0, 0)] = 5 };
 
-        bool changed = await ResegmentationEngine.TryResegmentLowConfidenceTokens(
-            [sentence], lookups, freqs, marginMap, StubCache);
+        bool changed = ResegmentationEngine.TryResegmentLowConfidenceTokens(
+            [sentence], lookups, freqs, marginMap, EmptyMeta);
 
         changed.Should().BeFalse("pre-matched token must not be re-segmented even when high-frequency alternatives exist");
         sentence.Words.Should().HaveCount(1, "constrained candidate set must remain inside the pre-matched word id");
@@ -358,7 +357,7 @@ public class ResegmentationTests
     // ─── No-split safety ─────────────────────────────────────────────────
 
     [Fact]
-    public async Task ResegmentationEngine_TokenFoundInLookups_IsNotResegmented()
+    public void ResegmentationEngine_TokenFoundInLookups_IsNotResegmented()
     {
         // "あいうえ" is directly in lookups → UncertaintyDetector skips it → no split
         var lookups = Dict(("あいうえ", [99]), ("あい", [1]), ("うえ", [2]));
@@ -368,13 +367,13 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえ");
         sentence.Words.Add((word, 0, 4));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(1, "a token whose text is found in the lookups dict must not be resegmented");
     }
 
     [Fact]
-    public async Task ResegmentationEngine_TokenWithDictionaryFormInLookups_IsNotResegmented()
+    public void ResegmentationEngine_TokenWithDictionaryFormInLookups_IsNotResegmented()
     {
         // Text "あいうえ" is not in lookups, but DictionaryForm "あいうえる" is → skip
         var lookups = Dict(("あいうえる", [99]), ("あい", [1]), ("うえ", [2]));
@@ -384,13 +383,13 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえ");
         sentence.Words.Add((word, 0, 4));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(1, "a token whose DictionaryForm is in the lookups dict must not be resegmented");
     }
 
     [Fact]
-    public async Task ResegmentationEngine_AtMinAcceptScore_AcceptsPath()
+    public void ResegmentationEngine_AtMinAcceptScore_AcceptsPath()
     {
         // 2 segs: "あいう" (rank 25000 ≤ 30000 → +5) + "えお" (no freq → +0), both ≥ 2 chars (+50)
         // Score = -15*2 + 5 + 0 + 50 = 25 == MinAcceptScore → score < 25 is false → accepted
@@ -401,7 +400,7 @@ public class ResegmentationTests
         var sentence = new SentenceInfo("あいうえお");
         sentence.Words.Add((word, 0, 5));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, EmptyMeta);
 
         sentence.Words.Should().HaveCount(2, "path scoring exactly at MinAcceptScore (25) must be accepted");
     }
@@ -429,7 +428,7 @@ public class ResegmentationTests
     // ─── ConfidenceReseg ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ConfidenceReseg_LowMarginHighScoringPath_Resegments()
+    public void ConfidenceReseg_LowMarginHighScoringPath_Resegments()
     {
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
         var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
@@ -440,8 +439,8 @@ public class ResegmentationTests
 
         var marginMap = new Dictionary<(int, int), int?> { [(0, 0)] = 5 };
 
-        bool changed = await ResegmentationEngine.TryResegmentLowConfidenceTokens(
-            [sentence], lookups, freqs, marginMap, StubCache);
+        bool changed = ResegmentationEngine.TryResegmentLowConfidenceTokens(
+            [sentence], lookups, freqs, marginMap, EmptyMeta);
 
         changed.Should().BeTrue();
         sentence.Words.Should().HaveCount(2);
@@ -450,7 +449,7 @@ public class ResegmentationTests
     }
 
     [Fact]
-    public async Task ConfidenceReseg_LowMarginMediumScoringPath_DoesNotResegment()
+    public void ConfidenceReseg_LowMarginMediumScoringPath_DoesNotResegment()
     {
         // Score passes no-match threshold (25) but not confidence threshold (50)
         var lookups = Dict(("あいう", [1]), ("えお", [2]));
@@ -462,15 +461,15 @@ public class ResegmentationTests
 
         var marginMap = new Dictionary<(int, int), int?> { [(0, 0)] = 5 };
 
-        bool changed = await ResegmentationEngine.TryResegmentLowConfidenceTokens(
-            [sentence], lookups, freqs, marginMap, StubCache);
+        bool changed = ResegmentationEngine.TryResegmentLowConfidenceTokens(
+            [sentence], lookups, freqs, marginMap, EmptyMeta);
 
         changed.Should().BeFalse("score between 25-49 should not pass confidence threshold");
         sentence.Words.Should().HaveCount(1);
     }
 
     [Fact]
-    public async Task ConfidenceReseg_MarginAboveThreshold_Skipped()
+    public void ConfidenceReseg_MarginAboveThreshold_Skipped()
     {
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
         var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
@@ -481,15 +480,15 @@ public class ResegmentationTests
 
         var marginMap = new Dictionary<(int, int), int?> { [(0, 0)] = 15 };
 
-        bool changed = await ResegmentationEngine.TryResegmentLowConfidenceTokens(
-            [sentence], lookups, freqs, marginMap, StubCache);
+        bool changed = ResegmentationEngine.TryResegmentLowConfidenceTokens(
+            [sentence], lookups, freqs, marginMap, EmptyMeta);
 
         changed.Should().BeFalse("margin >= 15 should not trigger resegmentation");
         sentence.Words.Should().HaveCount(1);
     }
 
     [Fact]
-    public async Task ConfidenceReseg_PreMatchedWordId_Skipped()
+    public void ConfidenceReseg_PreMatchedWordId_Skipped()
     {
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
         var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
@@ -500,15 +499,15 @@ public class ResegmentationTests
 
         var marginMap = new Dictionary<(int, int), int?> { [(0, 0)] = 5 };
 
-        bool changed = await ResegmentationEngine.TryResegmentLowConfidenceTokens(
-            [sentence], lookups, freqs, marginMap, StubCache);
+        bool changed = ResegmentationEngine.TryResegmentLowConfidenceTokens(
+            [sentence], lookups, freqs, marginMap, EmptyMeta);
 
         changed.Should().BeFalse("PreMatchedWordId tokens should be skipped");
         sentence.Words.Should().HaveCount(1);
     }
 
     [Fact]
-    public async Task ConfidenceReseg_VerbPos_Skipped()
+    public void ConfidenceReseg_VerbPos_Skipped()
     {
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
         var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
@@ -519,15 +518,15 @@ public class ResegmentationTests
 
         var marginMap = new Dictionary<(int, int), int?> { [(0, 0)] = 5 };
 
-        bool changed = await ResegmentationEngine.TryResegmentLowConfidenceTokens(
-            [sentence], lookups, freqs, marginMap, StubCache);
+        bool changed = ResegmentationEngine.TryResegmentLowConfidenceTokens(
+            [sentence], lookups, freqs, marginMap, EmptyMeta);
 
         changed.Should().BeFalse("Verb POS should be skipped");
         sentence.Words.Should().HaveCount(1);
     }
 
     [Fact]
-    public async Task ConfidenceReseg_NullMargin_Skipped()
+    public void ConfidenceReseg_NullMargin_Skipped()
     {
         var lookups = Dict(("あい", [1]), ("うえ", [2]));
         var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
@@ -538,8 +537,8 @@ public class ResegmentationTests
 
         var marginMap = new Dictionary<(int, int), int?> { [(0, 0)] = null };
 
-        bool changed = await ResegmentationEngine.TryResegmentLowConfidenceTokens(
-            [sentence], lookups, freqs, marginMap, StubCache);
+        bool changed = ResegmentationEngine.TryResegmentLowConfidenceTokens(
+            [sentence], lookups, freqs, marginMap, EmptyMeta);
 
         changed.Should().BeFalse("null margin (single candidate) should be skipped");
         sentence.Words.Should().HaveCount(1);
@@ -616,18 +615,15 @@ public class ResegmentationTests
     // ─── Engine: POS scoring with real cache data ─────────────────────────────
 
     [Fact]
-    public async Task ResegmentationEngine_PosScoreSavesLowFreqPath_NounBeforeParticle()
+    public void ResegmentationEngine_PosScoreSavesLowFreqPath_NounBeforeParticle()
     {
-        // freqScore alone = -30 + 0 + 0 + 50 = 20 (below MinAcceptScore=25)
-        // posScore = +20 (noun-like last before Particle) + +10 (allNounLike) = +30
-        // combined = 50 ≥ 25 → accepted
         var lookups  = Dict(("あい", [1]), ("うえ", [2]));
         var freqs    = new Dictionary<int, int>();
-        var cache    = new MockJmDictCache(new Dictionary<int, JmDictWord>
+        var meta     = new Dictionary<int, JmDictWordMeta>
         {
-            [1] = new JmDictWord { WordId = 1, PartsOfSpeech = ["n"] },
-            [2] = new JmDictWord { WordId = 2, PartsOfSpeech = ["n"] },
-        });
+            [1] = new([ PartOfSpeech.Noun ], 0, 0, WordOrigin.Unknown),
+            [2] = new([ PartOfSpeech.Noun ], 0, 0, WordOrigin.Unknown),
+        };
 
         var word     = new WordInfo { Text = "あいうえ", PartOfSpeech = PartOfSpeech.Noun };
         var particle = new WordInfo { Text = "が", PartOfSpeech = PartOfSpeech.Particle };
@@ -635,7 +631,7 @@ public class ResegmentationTests
         sentence.Words.Add((word, 0, 4));
         sentence.Words.Add((particle, 4, 1));
 
-        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, cache);
+        ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, meta);
 
         sentence.Words.Should().HaveCount(3, "POS bonus from noun-before-particle should save a borderline-frequency path");
         sentence.Words[0].word.Text.Should().Be("あい");
@@ -667,27 +663,4 @@ public class ResegmentationTests
         }
         return sentence;
     }
-}
-
-file sealed class StubJmDictCache : IJmDictCache
-{
-    public Task<JmDictWord?> GetWordAsync(int wordId) => Task.FromResult<JmDictWord?>(null);
-    public Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds)
-        => Task.FromResult(new Dictionary<int, JmDictWord>());
-    public Task<bool> SetWordAsync(int wordId, JmDictWord word) => Task.FromResult(true);
-    public Task<bool> SetWordsAsync(Dictionary<int, JmDictWord> words) => Task.FromResult(true);
-    public Task<bool> IsCacheInitializedAsync() => Task.FromResult(true);
-    public Task SetCacheInitializedAsync() => Task.CompletedTask;
-}
-
-file sealed class MockJmDictCache(Dictionary<int, JmDictWord> words) : IJmDictCache
-{
-    public Task<JmDictWord?> GetWordAsync(int wordId)
-        => Task.FromResult(words.GetValueOrDefault(wordId));
-    public Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds)
-        => Task.FromResult(wordIds.Where(words.ContainsKey).ToDictionary(id => id, id => words[id]));
-    public Task<bool> SetWordAsync(int wordId, JmDictWord word) => Task.FromResult(true);
-    public Task<bool> SetWordsAsync(Dictionary<int, JmDictWord> w) => Task.FromResult(true);
-    public Task<bool> IsCacheInitializedAsync() => Task.FromResult(true);
-    public Task SetCacheInitializedAsync() => Task.CompletedTask;
 }

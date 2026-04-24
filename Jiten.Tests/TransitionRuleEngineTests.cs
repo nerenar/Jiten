@@ -49,7 +49,9 @@ public class TransitionRuleEngineTests
         FormCandidate candidate,
         List<PartOfSpeech>? prevPOS = null, List<PartOfSpeech>? nextPOS = null,
         string? prevText = null, string? nextText = null)
-        => new(candidate, prevPOS, nextPOS, prevText, nextText);
+        => new(candidate,
+            prevPOS != null ? PosMask.FromList(prevPOS) : 0, prevPOS != null, prevText,
+            nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText);
 
     // -----------------------------------------------------------------------
     // Phase 1: leading-aux-strip
@@ -900,7 +902,7 @@ public class TransitionRuleEngineTests
     [Fact]
     public void CandidateSelectionResult_HighConfidence_At40()
     {
-        var result = new CandidateSelectionResult(null, [], 40);
+        var result = new CandidateSelectionResult(null,40);
         result.IsHighConfidence.Should().BeTrue();
         result.IsMediumConfidence.Should().BeFalse();
         result.IsLowConfidence.Should().BeFalse();
@@ -909,7 +911,7 @@ public class TransitionRuleEngineTests
     [Fact]
     public void CandidateSelectionResult_LowConfidence_Below15()
     {
-        var result = new CandidateSelectionResult(null, [], 14);
+        var result = new CandidateSelectionResult(null,14);
         result.IsLowConfidence.Should().BeTrue();
         result.IsHighConfidence.Should().BeFalse();
     }
@@ -917,7 +919,7 @@ public class TransitionRuleEngineTests
     [Fact]
     public void CandidateSelectionResult_MediumConfidence_Between15And39()
     {
-        var result = new CandidateSelectionResult(null, [], 25);
+        var result = new CandidateSelectionResult(null,25);
         result.IsMediumConfidence.Should().BeTrue();
         result.IsLowConfidence.Should().BeFalse();
         result.IsHighConfidence.Should().BeFalse();
@@ -926,7 +928,7 @@ public class TransitionRuleEngineTests
     [Fact]
     public void CandidateSelectionResult_NullMargin_AllFalse()
     {
-        var result = new CandidateSelectionResult(null, [], null);
+        var result = new CandidateSelectionResult(null,null);
         result.IsLowConfidence.Should().BeFalse();
         result.IsMediumConfidence.Should().BeFalse();
         result.IsHighConfidence.Should().BeFalse();

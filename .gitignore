@@ -294,3 +294,5 @@ __pycache__/
 .claude/
 nul
 user_dic.xml
+
+Shared/resources/conjugations.bin

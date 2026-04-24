@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import type { CompleteGoogleRegistrationRequest, GoogleSignInResponse, GoogleRegistrationData, LoginRequest, TokenResponse } from '~/types/types';
 import { TabSyncManager } from '~/utils/tabSync';
 import { CookieMonitor } from '~/utils/cookieMonitor';
+import { useSrsStore } from '~/stores/srsStore';
 
 export const useAuthStore = defineStore('auth', () => {
   const tokenCookie = useCookie('token', {
@@ -269,9 +270,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       if ('accessToken' in data && 'refreshToken' in data) {
         setTokens(data.accessToken, data.refreshToken);
-        //wait 500ms for timing
         await new Promise((resolve) => setTimeout(resolve, 500));
         await fetchCurrentUser();
+        onLoginSuccess();
       } else {
         throw new Error('Login failed: No token received.');
       }
@@ -309,6 +310,7 @@ export const useAuthStore = defineStore('auth', () => {
         // Existing user - complete login
         setTokens(data.accessToken, data.refreshToken);
         await fetchCurrentUser();
+        onLoginSuccess();
         return true;
       } else {
         throw new Error('Google login failed: Invalid response.');
@@ -334,6 +336,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (data.accessToken && data.refreshToken) {
         setTokens(data.accessToken, data.refreshToken);
         await fetchCurrentUser();
+        onLoginSuccess();
         return true;
       } else {
         throw new Error('Registration failed: No tokens received.');
@@ -391,6 +394,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function onLoginSuccess() {
+    const srs = useSrsStore();
+    srs.fetchEnrollment();
+    srs.refreshOverview(true);
+  }
+
   function initializeAuth() {
     console.log('Initializing auth...');
 
@@ -407,11 +416,13 @@ export const useAuthStore = defineStore('auth', () => {
         refreshAccessToken().then((success) => {
           if (success) {
             fetchCurrentUser();
+            onLoginSuccess();
           }
         });
       } else {
         console.log('Token valid on init, fetching user...');
         fetchCurrentUser();
+        onLoginSuccess();
       }
     } else {
       console.log('No token on init');

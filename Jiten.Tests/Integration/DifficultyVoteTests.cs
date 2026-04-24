@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Jiten.Api.Dtos;
 using Jiten.Api.Jobs;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -196,6 +197,65 @@ public class DifficultyVoteTests(JitenWebApplicationFactory factory)
             .WithJsonContent(new { deckAId = 1, deckBId = 3, outcome = (int)ComparisonOutcome.Easier });
         var response = await _client.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task RankingMove_ReaddingDeckToGroup_PutsItAtTop()
+    {
+        await SeedTestData();
+
+        int rankGroupId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var group = new DifficultyRankGroup
+            {
+                UserId = TestUsers.UserA,
+                MediaTypeGroup = MediaTypeGroup.AudioVisual,
+                SortIndex = 0,
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-10)
+            };
+            db.DifficultyRankGroups.Add(group);
+            await db.SaveChangesAsync();
+
+            rankGroupId = group.Id;
+            db.DifficultyRankItems.AddRange(
+                new DifficultyRankItem
+                {
+                    UserId = TestUsers.UserA,
+                    GroupId = rankGroupId,
+                    DeckId = 1,
+                    CreatedAt = DateTimeOffset.UtcNow.AddDays(-10),
+                    UpdatedAt = DateTimeOffset.UtcNow.AddDays(-10)
+                },
+                new DifficultyRankItem
+                {
+                    UserId = TestUsers.UserA,
+                    GroupId = rankGroupId,
+                    DeckId = 2,
+                    CreatedAt = DateTimeOffset.UtcNow.AddDays(-5),
+                    UpdatedAt = DateTimeOffset.UtcNow.AddDays(-5)
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var unrankRequest = new HttpRequestMessage(HttpMethod.Post, "/api/difficulty-rankings/move")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckId = 1, mode = (int)DifficultyRankingMoveMode.Unrank });
+        var unrankResponse = await _client.SendAsync(unrankRequest);
+        unrankResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var mergeRequest = new HttpRequestMessage(HttpMethod.Post, "/api/difficulty-rankings/move")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckId = 1, mode = (int)DifficultyRankingMoveMode.Merge, targetGroupId = rankGroupId });
+        var mergeResponse = await _client.SendAsync(mergeRequest);
+        mergeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await mergeResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var audioVisualSection = body.EnumerateArray().First(s => s.GetProperty("group").GetInt32() == (int)MediaTypeGroup.AudioVisual);
+        var firstGroup = audioVisualSection.GetProperty("groups")[0];
+        var firstDeckId = firstGroup.GetProperty("decks")[0].GetProperty("id").GetInt32();
+        firstDeckId.Should().Be(1);
     }
 
     [Fact]

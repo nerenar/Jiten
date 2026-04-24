@@ -13,6 +13,12 @@ internal static class FormCandidateFactory
     {
         var candidates = new List<FormCandidate>();
         var targetNormalized = KanaNormalizer.Normalize(targetHiragana);
+        var targetLoose = allowLooseLvmMatch
+            ? KanaNormalizer.Normalize(KanaConverter.ToHiragana(targetHiragana))
+            : null;
+        string? targetStripped = allowLooseLvmMatch && targetHiragana.Contains('ー')
+            ? targetHiragana.Replace("ー", "")
+            : null;
 
         foreach (var form in word.Forms)
         {
@@ -26,13 +32,11 @@ internal static class FormCandidateFactory
 
             if (!phoneticMatch && allowLooseLvmMatch)
             {
-                var targetLoose = KanaNormalizer.Normalize(KanaConverter.ToHiragana(targetHiragana));
                 var formLoose = KanaNormalizer.Normalize(KanaConverter.ToHiragana(form.Text));
                 phoneticMatch = formLoose == targetLoose;
 
-                if (!phoneticMatch && targetHiragana.Contains('ー'))
+                if (!phoneticMatch && targetStripped != null)
                 {
-                    var targetStripped = targetHiragana.Replace("ー", "");
                     var formStripped = formHiragana.Replace("ー", "");
                     phoneticMatch = targetStripped.Length > 0 && targetStripped == formStripped;
                 }

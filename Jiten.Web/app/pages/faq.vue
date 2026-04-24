@@ -6,7 +6,7 @@
   const faqData = ref([
     {
       question: 'What can I use the decks for?',
-      answer: `Feel free to use them for anything you want, but I'll respectfully ask you to not scrape them to start a competing website. If you redistribute the decks, I'd appreciate a linkback to the website! :)`,
+      answer: `Decks, frequency lists, and derived data are licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. You're free to use, share, and adapt them for any purpose — including commercial — as long as you give attribution and share any adaptations under the same license.`,
     },
     {
       question: 'Why is X missing?',

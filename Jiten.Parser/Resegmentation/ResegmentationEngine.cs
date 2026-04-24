@@ -1,7 +1,6 @@
 using Jiten.Core;
 using Jiten.Core.Data;
-using Jiten.Core.Data.JMDict;
-using Jiten.Parser.Data.Redis;
+using Jiten.Parser.Data;
 using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Resegmentation;
@@ -11,13 +10,12 @@ internal static class ResegmentationEngine
     private const int MinAcceptScore = 25;
     private const int MinAcceptScoreConfidence = 50;
 
-    public static async Task TryImproveUncertainSpans(
+    public static void TryImproveUncertainSpans(
         List<SentenceInfo> sentences,
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int> frequencyRanks,
-        IJmDictCache jmDictCache)
+        Dictionary<int, JmDictWordMeta> wordMeta)
     {
-        // Phase 1: collect all valid (sentence, span, path) tuples — pure CPU, no I/O
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
 
         foreach (var sentence in sentences)
@@ -34,8 +32,6 @@ internal static class ResegmentationEngine
                     continue;
                 if (path.Segments.Any(s => s.Length == 1 && IsHiragana(span.Text[s.StartChar])))
                     continue;
-                // Pre-filter: paths with negative freqScore have no chance even with maximum posScore bonus.
-                // Paths with freqScore between 0 and MinAcceptScore may still be saved by POS context.
                 if (ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0)
                     continue;
 
@@ -48,34 +44,31 @@ internal static class ResegmentationEngine
 
         if (pending.Count == 0) return;
 
-        // Phase 2: one batch fetch for all word IDs across all sentences
-        var allWordIds = pending.SelectMany(p => p.path.Segments.SelectMany(s => s.WordIds)).Distinct().ToList();
-        var wordCache = await jmDictCache.GetWordsAsync(allWordIds);
+        var allWordIds = pending.SelectMany(p => p.path.Segments.SelectMany(s => s.WordIds)).Distinct();
+        var wordPosByWordId = new Dictionary<int, PartOfSpeech>();
+        foreach (var id in allWordIds)
+        {
+            if (wordMeta.TryGetValue(id, out var meta))
+                wordPosByWordId[id] = meta.GetPrimaryPos();
+        }
 
-        var wordPosByWordId = wordCache.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.CachedPOS
-                       .FirstOrDefault(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown), PartOfSpeech.Noun));
-
-        // Phase 3: apply replacements (already in reverse word-index order per sentence from the loop above)
         foreach (var (sentence, span, path, prevPos, nextPos) in pending)
         {
             var freqScore = ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text);
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScore)
                 continue;
-            ReplaceSpan(sentence, span, path, frequencyRanks, wordCache);
+            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta);
         }
     }
 
-    public static async Task<bool> TryResegmentLowConfidenceTokens(
+    public static bool TryResegmentLowConfidenceTokens(
         List<SentenceInfo> sentences,
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int> frequencyRanks,
         Dictionary<(int sentenceIndex, int wordIndex), int?> marginMap,
-        IJmDictCache jmDictCache)
+        Dictionary<int, JmDictWordMeta> wordMeta)
     {
-        // Phase 1: collect all valid replacements — pure CPU, no I/O
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
 
         for (int si = 0; si < sentences.Count; si++)
@@ -122,16 +115,14 @@ internal static class ResegmentationEngine
 
         if (pending.Count == 0) return false;
 
-        // Phase 2: one batch fetch for all word IDs across all sentences
-        var allWordIds = pending.SelectMany(p => p.path.Segments.SelectMany(s => s.WordIds)).Distinct().ToList();
-        var wordCache = await jmDictCache.GetWordsAsync(allWordIds);
+        var allWordIds = pending.SelectMany(p => p.path.Segments.SelectMany(s => s.WordIds)).Distinct();
+        var wordPosByWordId = new Dictionary<int, PartOfSpeech>();
+        foreach (var id in allWordIds)
+        {
+            if (wordMeta.TryGetValue(id, out var meta))
+                wordPosByWordId[id] = meta.GetPrimaryPos();
+        }
 
-        var wordPosByWordId = wordCache.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.CachedPOS
-                       .FirstOrDefault(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown), PartOfSpeech.Noun));
-
-        // Phase 3: apply replacements (already in reverse word-index order per sentence from the loop above)
         bool anyApplied = false;
         foreach (var (sentence, span, path, prevPos, nextPos) in pending)
         {
@@ -139,7 +130,7 @@ internal static class ResegmentationEngine
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScoreConfidence)
                 continue;
-            ReplaceSpan(sentence, span, path, frequencyRanks, wordCache);
+            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta);
             anyApplied = true;
         }
 
@@ -151,8 +142,13 @@ internal static class ResegmentationEngine
     private static bool IsHiragana(char c) => JapaneseTextHelper.IsHiragana(c);
 
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
-        Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWord> wordCache)
+        Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta)
     {
+        if (path.Segments.Count == 0
+            || path.Segments[0].StartChar != 0
+            || path.Segments.Any(s => s.WordIds == null || s.WordIds.Count == 0))
+            return;
+
         var replacements = path.Segments.Select(seg =>
         {
             var text = span.Text.Substring(seg.StartChar, seg.Length);
@@ -162,11 +158,8 @@ internal static class ResegmentationEngine
                 .FirstOrDefault();
 
             var pos = PartOfSpeech.Noun;
-            if (bestWordId.HasValue && wordCache.TryGetValue(bestWordId.Value, out var jmWord))
-            {
-                var posList = jmWord.CachedPOS;
-                pos = posList.FirstOrDefault(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown), PartOfSpeech.Noun);
-            }
+            if (bestWordId.HasValue && wordMeta.TryGetValue(bestWordId.Value, out var meta))
+                pos = meta.GetPrimaryPos();
 
             var replacement = new WordInfo
             {

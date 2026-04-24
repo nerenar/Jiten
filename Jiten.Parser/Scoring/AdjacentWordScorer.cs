@@ -6,10 +6,35 @@ namespace Jiten.Parser.Scoring;
 internal static class AdjacentWordScorer
 {
     internal readonly record struct AdjacentContext(
-        List<PartOfSpeech>? PrevResolvedPOS,
-        List<PartOfSpeech>? NextResolvedPOS,
+        uint PrevMask,
+        bool HasPrev,
         string? PrevText,
-        string? NextText);
+        uint NextMask,
+        bool HasNext,
+        string? NextText)
+    {
+        public static AdjacentContext Create(
+            List<PartOfSpeech>? prevPOS, string? prevText,
+            List<PartOfSpeech>? nextPOS, string? nextText) => new(
+            prevPOS != null ? PosMask.FromList(prevPOS) : 0,
+            prevPOS != null,
+            prevText,
+            nextPOS != null ? PosMask.FromList(nextPOS) : 0,
+            nextPOS != null,
+            nextText);
+    }
+
+    internal static int CalculateContextBonusOnly(
+        FormCandidate candidate,
+        AdjacentContext context)
+    {
+        var window = new ScoringWindow(
+            candidate,
+            context.PrevMask, context.HasPrev, context.PrevText,
+            context.NextMask, context.HasNext, context.NextText);
+
+        return TransitionRuleEngine.EvaluateSoftRulesBonus(window);
+    }
 
     internal static (int bonus, List<string> rulesMatched) CalculateContextBonus(
         FormCandidate candidate,
@@ -17,10 +42,8 @@ internal static class AdjacentWordScorer
     {
         var window = new ScoringWindow(
             candidate,
-            context.PrevResolvedPOS,
-            context.NextResolvedPOS,
-            context.PrevText,
-            context.NextText);
+            context.PrevMask, context.HasPrev, context.PrevText,
+            context.NextMask, context.HasNext, context.NextText);
 
         return TransitionRuleEngine.EvaluateSoftRules(window);
     }

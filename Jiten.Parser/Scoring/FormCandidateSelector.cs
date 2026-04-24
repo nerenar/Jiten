@@ -17,15 +17,14 @@ internal static class FormCandidateSelector
         List<FormCandidate> allCandidates,
         FormScoringContext context,
         IReadOnlySet<string> archaicPosTypes,
-        ParserDiagnostics? diagnostics = null,
-        int topN = 5)
+        ParserDiagnostics? diagnostics = null)
     {
         if (context.IsKanaSurface)
             allCandidates.RemoveAll(c =>
                 KanaScoringHelpers.IsKanaSurfaceWithNoMatchingReading(context, c.Word, c.Form.Text));
 
         if (allCandidates.Count == 0)
-            return new CandidateSelectionResult(null, [], null);
+            return new CandidateSelectionResult(null, null);
 
         // POS-incompatible direct-surface candidates (e.g. noun 1197950 "artistry" competing with
         // adj-na 2653620 "serious" when Sudachi tags the token as NaAdjective) get a -15 penalty
@@ -53,22 +52,36 @@ internal static class FormCandidateSelector
             }
         }
 
-        var sorted = allCandidates.OrderByDescending(EffectiveScore).ToList();
-        var top = sorted.Take(topN).ToList();
+        // Compute margin via linear scan for the second-best alternate (different WordId).
         // Filter out POS-incompatible runners-up so their -15 penalty doesn't produce a false low margin.
-        // Fallback: if ALL candidates are POS-incompatible, use the full pool (WordId != guard prevents self-comparison).
-        var legitimateCandidates = sorted.Where(c => !c.IsPosIncompatibleDirectSurface).ToList();
-        var alternatePool = legitimateCandidates.Count > 0 ? legitimateCandidates : sorted;
+        // Fallback: if ALL candidates are POS-incompatible, use the full pool.
         int? margin = null;
         if (best != null)
         {
-            var bestAlternate = alternatePool.FirstOrDefault(c => c.Word.WordId != best.Word.WordId);
-            if (bestAlternate != null)
-                margin = ScoringPolicy.EffectiveScore(best) - ScoringPolicy.EffectiveScore(bestAlternate);
+            bool hasLegitimate = false;
+            int bestLegitimateScore = int.MinValue;
+            int bestAnyScore = int.MinValue;
+
+            foreach (var c in allCandidates)
+            {
+                if (c.Word.WordId == best.Word.WordId) continue;
+                int s = EffectiveScore(c);
+                if (!c.IsPosIncompatibleDirectSurface)
+                {
+                    hasLegitimate = true;
+                    if (s > bestLegitimateScore) bestLegitimateScore = s;
+                }
+                if (s > bestAnyScore) bestAnyScore = s;
+            }
+
+            int secondBest = hasLegitimate ? bestLegitimateScore : bestAnyScore;
+            if (secondBest > int.MinValue)
+                margin = EffectiveScore(best) - secondBest;
         }
 
         if (diagnostics != null && best != null)
         {
+            var sorted = allCandidates.OrderByDescending(EffectiveScore).ToList();
             var topCandidates = sorted
                                 .Take(10)
                                 .Select(c => new FormCandidateDiagnostic
@@ -100,7 +113,7 @@ internal static class FormCandidateSelector
                                     });
         }
 
-        return new CandidateSelectionResult(best, top, margin);
+        return new CandidateSelectionResult(best, margin);
     }
 
     /// Selects the best candidate using pre-scored candidates + a per-candidate bonus function.

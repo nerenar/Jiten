@@ -124,6 +124,10 @@
       <template #title>Frequency Lists</template>
       <template #content>
         <div class="mb-3">Download frequency lists as a frequency dictionary for use with Yomitan or as a CSV.</div>
+        <div class="mb-3 text-sm text-surface-500">
+          All frequency lists are licensed under
+          <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" class="underline">CC BY-SA 4.0</a>.
+        </div>
         <DataTable :value="deckTypes" class="p-datatable-sm frequency-table" striped-rows responsive-layout="scroll" show-gridlines row-hover>
           <Column field="name" header="Type" class="font-medium" header-style="background-color: var(--surface-100); font-weight: 600;" />
           <Column

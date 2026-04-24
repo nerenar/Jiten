@@ -9,6 +9,7 @@
 
   const { $api } = useNuxtApp();
   const toast = useToast();
+  const store = useJitenStore();
 
   let lastRefresh = ref<Date>();
 
@@ -51,6 +52,7 @@
             lastRefresh.value = result.coverageRefreshedAt ? new Date(result.coverageRefreshedAt) : undefined;
             clearInterval(interval);
             isRefreshing.value = false;
+            store.bumpCoverageVersion();
             showSuccessToast(toast, 'Coverage successfully refreshed!');
           } else if (Date.now() - startTime >= 60000) {
             clearInterval(interval);

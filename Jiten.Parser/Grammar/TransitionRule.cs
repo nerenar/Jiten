@@ -115,11 +115,45 @@ internal sealed record ScoringRule(
     string Id,
     ScoringCondition[] CandidateMatch,
     ScoringCondition[] ContextMatch,
-    int Delta);
+    int Delta)
+{
+    internal uint RequiredCandidateMask { get; init; } = ComputeRequiredCandidateMask(CandidateMatch);
+
+    private static uint ComputeRequiredCandidateMask(ScoringCondition[] conditions)
+    {
+        uint mask = 0;
+        foreach (var c in conditions)
+        {
+            mask |= c switch
+            {
+                ScoringCondition.CandidateIsNounLike => PosMask.NounLike,
+                ScoringCondition.CandidateIsNaAdj => PosMask.NaAdjective,
+                ScoringCondition.CandidateIsAdverb => PosMask.AdverbGroup,
+                ScoringCondition.CandidateIsAuxiliary => PosMask.Auxiliary,
+                ScoringCondition.CandidateIsParticle => PosMask.Particle,
+                ScoringCondition.CandidateIsPredicateHost => PosMask.PredicateHost,
+                ScoringCondition.CandidateIsCounter => PosMask.Counter,
+                ScoringCondition.CandidateIsAdvTo => PosMask.AdverbTo,
+                ScoringCondition.CandidateIsVerb => PosMask.Verb,
+                ScoringCondition.CandidateIsPrenounAdjectival => PosMask.PrenounAdjectival,
+                ScoringCondition.CandidateIsConjunction => PosMask.Conjunction,
+                ScoringCondition.CandidateIsInterjection => PosMask.Interjection,
+                ScoringCondition.CandidateIsName => PosMask.NameBit,
+                ScoringCondition.CandidateIsNoParticle => PosMask.Particle,
+                ScoringCondition.CandidateIsNounSuffix => PosMask.SuffixGroup,
+                ScoringCondition.CandidateIsHonorific => PosMask.SuffixGroup,
+                _ => 0u
+            };
+        }
+        return mask;
+    }
+}
 
 internal readonly record struct ScoringWindow(
     FormCandidate Candidate,
-    List<PartOfSpeech>? PrevResolvedPOS,
-    List<PartOfSpeech>? NextResolvedPOS,
+    uint PrevMask,
+    bool HasPrev,
     string? PrevText,
+    uint NextMask,
+    bool HasNext,
     string? NextText);

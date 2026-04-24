@@ -21,6 +21,15 @@ public class ParserDiagnostics
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<TransitionViolationEntry>? TransitionViolations { get; private set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<DroppedTokenEntry>? DroppedTokens { get; private set; }
+
+    internal void LogDroppedToken(string text, PartOfSpeech pos, string reason)
+    {
+        DroppedTokens ??= [];
+        DroppedTokens.Add(new DroppedTokenEntry(text, pos, reason));
+    }
+
     internal void LogTransitionViolation(string ruleId, in TokenWindow window)
     {
         TransitionViolations ??= [];
@@ -31,9 +40,26 @@ public class ParserDiagnostics
             window.Prev?.PartOfSpeech));
     }
 
+    internal void RecordSkippedStage(TokenStage stage)
+    {
+        TokenStages.Add(new TokenProcessingStage
+        {
+            StageName = stage.Name,
+            StageGroup = stage.Group.ToString(),
+            ElapsedMs = 0,
+            Skipped = true
+        });
+    }
+
     public IEnumerable<WordResult> GetLowConfidenceResults(int threshold = 15) =>
         Results.Where(r => r is not null && r.MarginToSecond.HasValue && r.MarginToSecond.Value < threshold);
 }
+
+public sealed record DroppedTokenEntry(
+    string Text,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))]
+    PartOfSpeech PartOfSpeech,
+    string Reason);
 
 public sealed record TransitionViolationEntry(
     string RuleId,
@@ -95,6 +121,9 @@ public class TokenProcessingStage
     public int InputTokenCount { get; set; }
     public int OutputTokenCount { get; set; }
     public List<TokenModification> Modifications { get; set; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Skipped { get; set; }
 }
 
 /// <summary>

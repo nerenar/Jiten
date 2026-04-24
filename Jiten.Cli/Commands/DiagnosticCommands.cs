@@ -65,7 +65,9 @@ public class DiagnosticCommands(CliContext context)
                 w.Conjugations
             }).ToList(),
             FormScoring = diagnostics.Results,
-            AdjacentScoring = diagnostics.AdjacentScoring
+            AdjacentScoring = diagnostics.AdjacentScoring,
+            DroppedTokens = diagnostics.DroppedTokens,
+            TransitionViolations = diagnostics.TransitionViolations
         };
 
         var jsonOptions = new JsonSerializerOptions

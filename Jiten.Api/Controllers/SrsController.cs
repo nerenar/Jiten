@@ -101,6 +101,7 @@ public class SrsController(
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User undid SRS review: WordId={WordId}, ReadingIndex={ReadingIndex}, CardDeleted={CardDeleted}",
                               request.WordId, request.ReadingIndex, cardDeleted);
@@ -131,10 +132,10 @@ public class SrsController(
 
         if (hasIdempotency)
         {
-            if (!await sessionService.ValidateSessionAsync(request.SessionId!, userId))
+            if (!await sessionService.ValidateSession(request.SessionId!, userId))
                 return Results.Unauthorized();
 
-            var cached = await sessionService.GetCachedReviewResultAsync(request.SessionId!, request.ClientRequestId!);
+            var cached = await sessionService.GetCachedReviewResult(request.SessionId!, request.ClientRequestId!);
             if (cached != null)
                 return Results.Content(cached, "application/json");
         }
@@ -178,6 +179,7 @@ public class SrsController(
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         var previewScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
         var intervals = previewScheduler.PreviewIntervals(cardAndLog.UpdatedCard, DateTime.UtcNow);
@@ -201,7 +203,7 @@ public class SrsController(
         if (hasIdempotency)
         {
             var resultJson = System.Text.Json.JsonSerializer.Serialize(resultObj);
-            _ = sessionService.StoreCachedReviewResultAsync(request.SessionId!, request.ClientRequestId!, resultJson);
+            _ = sessionService.StoreCachedReviewResult(request.SessionId!, request.ClientRequestId!, resultJson);
         }
 
         logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}",
@@ -403,6 +405,7 @@ public class SrsController(
             await userContext.SaveChangesAsync();
         }
 
+        await sessionService.BumpStudyOverviewVersion(userId);
         return Results.Ok(new FsrsParametersResponse
         {
             Parameters = SerializeParametersCsv(nextParameters),
@@ -475,6 +478,7 @@ public class SrsController(
 
         if (reschedule)
             await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new
         {
@@ -504,6 +508,7 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
     }
@@ -531,6 +536,7 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var result = await recomputeJob.RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, batchSize);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(result);
     }
@@ -661,6 +667,7 @@ public class SrsController(
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User set vocabulary state: WordId={WordId}, ReadingIndex={ReadingIndex}, State={State}",
                               request.WordId, request.ReadingIndex, request.State);
@@ -819,11 +826,250 @@ public class SrsController(
         }
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User executed mass action: Action={Action}, AffectedCount={Count}",
             request.Action, affected);
 
         return Results.Json(new { success = true, affectedCount = affected });
+    }
+
+    [HttpPost("composition-inference/preview")]
+    [SwaggerOperation(Summary = "Preview composition inference",
+                      Description = "Returns words that can be inferred as known via word-composition relationships with the user's already-known words.")]
+    public async Task<IResult> CompositionInferencePreview(CompositionInferenceRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var inferred = await ComputeInferredPairs(userId, request.Direction);
+        if (inferred == null) return Results.BadRequest($"Invalid direction: {request.Direction}");
+
+        var total = inferred.Count;
+        var limit = Math.Clamp(request.Limit, 1, 100);
+        var offset = Math.Max(0, request.Offset);
+        var page = inferred.Skip(offset).Take(limit).ToList();
+
+        var dtos = await HydrateInferredPairs(userId, page);
+        return Results.Ok(new PaginatedResponse<List<MassActionCardDto>>(dtos, total, limit, offset));
+    }
+
+    [HttpPost("composition-inference/execute")]
+    [SwaggerOperation(Summary = "Execute composition inference",
+                      Description = "Marks all (or a specified subset of) inferred words as Mastered or Blacklisted.")]
+    public async Task<IResult> CompositionInferenceExecute(CompositionInferenceExecuteRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        FsrsState target = request.TargetState switch
+        {
+            "mastered" => FsrsState.Mastered,
+            "blacklisted" => FsrsState.Blacklisted,
+            _ => (FsrsState)0
+        };
+        if (target == 0) return Results.BadRequest($"Invalid targetState: {request.TargetState}");
+
+        List<(int WordId, byte ReadingIndex)> pairs;
+        if (request.WordKeys is { Count: > 0 })
+        {
+            pairs = request.WordKeys
+                .Select(k => (k.WordId, k.ReadingIndex))
+                .Distinct()
+                .ToList();
+        }
+        else
+        {
+            var inferred = await ComputeInferredPairs(userId, request.Direction);
+            if (inferred == null) return Results.BadRequest($"Invalid direction: {request.Direction}");
+            pairs = inferred;
+        }
+
+        if (pairs.Count == 0) return Results.Json(new { success = true, affectedCount = 0 });
+
+        var wordIds = pairs.Select(p => p.WordId).Distinct().ToList();
+        var existing = await userContext.FsrsCards
+            .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
+            .ToListAsync();
+        var existingDict = existing.ToDictionary(c => (c.WordId, c.ReadingIndex));
+
+        var now = DateTime.UtcNow;
+        var affected = 0;
+        foreach (var (wid, ri) in pairs)
+        {
+            if (existingDict.TryGetValue((wid, ri), out var card))
+            {
+                if (card.State == target) continue;
+                card.State = target;
+                if (target == FsrsState.Mastered)
+                {
+                    card.Due = now;
+                    card.LastReview = now;
+                }
+            }
+            else
+            {
+                card = target == FsrsState.Mastered
+                    ? new FsrsCard(userId, wid, ri, due: now, lastReview: now, state: FsrsState.Mastered)
+                    : new FsrsCard(userId, wid, ri, state: FsrsState.Blacklisted);
+                await userContext.FsrsCards.AddAsync(card);
+            }
+
+            if (target == FsrsState.Mastered)
+            {
+                await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, userId, wid, ri);
+            }
+            affected++;
+        }
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        logger.LogInformation("User executed composition inference: Direction={Direction}, Target={Target}, Affected={Count}",
+            request.Direction, target, affected);
+
+        return Results.Json(new { success = true, affectedCount = affected });
+    }
+
+    private async Task<List<(int WordId, byte ReadingIndex)>?> ComputeInferredPairs(string userId, string direction)
+    {
+        var (known, blocked) = await LoadKnownAndBlockedSets(userId);
+
+        if (known.Count == 0)
+            return new List<(int, byte)>();
+
+        if (direction == "compound-to-components")
+        {
+            var knownWordIds = known.Select(k => k.WordId).Distinct().ToList();
+            var raw = await context.WordCompositions
+                .AsNoTracking()
+                .Where(c => knownWordIds.Contains(c.WordId))
+                .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
+                .ToListAsync();
+
+            return raw
+                .Where(r => known.Contains((r.WordId, (byte)r.ReadingIndex)))
+                .Select(r => (WordId: r.ComponentWordId, ReadingIndex: (byte)r.ComponentReadingIndex))
+                .Distinct()
+                .Where(p => !blocked.Contains(p))
+                .OrderBy(p => p.WordId).ThenBy(p => p.ReadingIndex)
+                .ToList();
+        }
+
+        if (direction == "components-to-compound")
+        {
+            var knownComponentIds = known.Select(k => k.WordId).Distinct().ToList();
+
+            var candidatePairs = await context.WordCompositions
+                .AsNoTracking()
+                .Where(c => knownComponentIds.Contains(c.ComponentWordId))
+                .Select(c => new { c.WordId, c.ReadingIndex })
+                .Distinct()
+                .ToListAsync();
+
+            if (candidatePairs.Count == 0)
+                return new List<(int, byte)>();
+
+            var candidateWordIds = candidatePairs.Select(r => r.WordId).Distinct().ToList();
+            var candidateSet = candidatePairs.Select(r => (r.WordId, r.ReadingIndex)).ToHashSet();
+
+            var allRows = await context.WordCompositions
+                .AsNoTracking()
+                .Where(c => candidateWordIds.Contains(c.WordId))
+                .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
+                .ToListAsync();
+
+            return allRows
+                .Where(r => candidateSet.Contains((r.WordId, r.ReadingIndex)))
+                .GroupBy(r => (r.WordId, r.ReadingIndex))
+                .Where(g => g.Count() >= 2
+                            && g.All(r => known.Contains((r.ComponentWordId, (byte)r.ComponentReadingIndex))))
+                .Select(g => (WordId: g.Key.WordId, ReadingIndex: (byte)g.Key.ReadingIndex))
+                .Where(p => !blocked.Contains(p))
+                .OrderBy(p => p.WordId).ThenBy(p => p.ReadingIndex)
+                .ToList();
+        }
+
+        return null;
+    }
+
+    private async Task<(HashSet<(int WordId, byte ReadingIndex)> Known, HashSet<(int WordId, byte ReadingIndex)> Blocked)>
+        LoadKnownAndBlockedSets(string userId)
+    {
+        var threshold = TimeSpan.FromDays(21);
+        var raw = await userContext.FsrsCards
+            .Where(c => c.UserId == userId
+                        && (c.State == FsrsState.Mastered
+                            || c.State == FsrsState.Blacklisted
+                            || (c.State == FsrsState.Review && c.LastReview != null)))
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Due, c.LastReview })
+            .ToListAsync();
+
+        var known = new HashSet<(int, byte)>();
+        var blocked = new HashSet<(int, byte)>();
+
+        foreach (var c in raw)
+        {
+            var pair = (c.WordId, c.ReadingIndex);
+            if (c.State == FsrsState.Mastered)
+            {
+                known.Add(pair);
+                blocked.Add(pair);
+            }
+            else if (c.State == FsrsState.Blacklisted)
+            {
+                blocked.Add(pair);
+            }
+            else if (c.LastReview != null && c.Due - c.LastReview.Value >= threshold)
+            {
+                known.Add(pair);
+            }
+        }
+
+        return (known, blocked);
+    }
+
+    private async Task<List<MassActionCardDto>> HydrateInferredPairs(
+        string userId, List<(int WordId, byte ReadingIndex)> pairs)
+    {
+        if (pairs.Count == 0) return new List<MassActionCardDto>();
+        var wordIds = pairs.Select(p => p.WordId).Distinct().ToList();
+
+        var formDict = await WordFormHelper.LoadWordForms(context, wordIds);
+        var freqDict = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+        var words = await context.JMDictWords
+            .AsNoTracking()
+            .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
+            .Where(w => wordIds.Contains(w.WordId))
+            .ToDictionaryAsync(w => w.WordId);
+
+        var cardStates = await userContext.FsrsCards
+            .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State })
+            .ToListAsync();
+        var stateDict = cardStates
+            .ToDictionary(c => (c.WordId, c.ReadingIndex), c => c.State);
+
+        return pairs.Select(p =>
+        {
+            var form = formDict.GetValueOrDefault((p.WordId, (short)p.ReadingIndex));
+            var freq = freqDict.GetValueOrDefault((p.WordId, (short)p.ReadingIndex));
+            var mainDef = words.GetValueOrDefault(p.WordId)?.Definitions
+                .FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
+            var state = stateDict.GetValueOrDefault((p.WordId, p.ReadingIndex), (FsrsState)0);
+            return new MassActionCardDto
+            {
+                WordId = p.WordId,
+                ReadingIndex = p.ReadingIndex,
+                Reading = form?.RubyText ?? form?.Text ?? "",
+                MainDefinition = mainDef,
+                FrequencyRank = freq?.FrequencyRank ?? 0,
+                State = state,
+                Due = default,
+                CreatedAt = default,
+            };
+        }).ToList();
     }
 
     private IQueryable<FsrsCard> BuildMassActionQuery(string userId, MassActionRequest request)

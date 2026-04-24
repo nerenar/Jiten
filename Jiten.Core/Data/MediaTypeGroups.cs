@@ -69,7 +69,7 @@ public static class MediaTypeGroups
         return 0m;
     }
 
-    private static MediaTypeGroup GetGroup(MediaType t)
+    public static MediaTypeGroup GetGroup(MediaType t)
     {
         if (Prose.Contains(t)) return MediaTypeGroup.Prose;
         if (VisualText.Contains(t)) return MediaTypeGroup.VisualText;
