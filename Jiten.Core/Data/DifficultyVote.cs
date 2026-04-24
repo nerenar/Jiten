@@ -9,6 +9,12 @@ public enum ComparisonOutcome
     MuchHarder = 2
 }
 
+public enum DifficultyVoteSource
+{
+    Manual = 0,
+    WeakOrder = 1
+}
+
 public class DifficultyVote
 {
     public int Id { get; set; }
@@ -18,6 +24,8 @@ public class DifficultyVote
     public int DeckHighId { get; set; }
 
     public ComparisonOutcome Outcome { get; set; }
+
+    public DifficultyVoteSource Source { get; set; } = DifficultyVoteSource.Manual;
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }

@@ -270,6 +270,9 @@ onMounted(async () => {
         <p class="text-muted-color text-sm mt-1">
           Help improve difficulty ratings by comparing pairs of media you have completed.
         </p>
+        <NuxtLink to="/ratings/ranking" class="text-sm text-muted-color hover:text-primary-500">
+          Try the new ranking flow
+        </NuxtLink>
       </div>
       <div v-if="stats" class="flex items-center gap-4">
         <div class="text-center">
