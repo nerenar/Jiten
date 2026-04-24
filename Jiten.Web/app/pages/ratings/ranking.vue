@@ -55,6 +55,7 @@ function rankColor(index: number, total: number): string {
 let ghost: HTMLElement | null = null;
 let offsetX = 0;
 let offsetY = 0;
+let dragRaf = 0;
 
 function deckTitle(deck: DeckSummaryDto): string {
   if (jitenStore.titleLanguage === TitleLanguage.English)
@@ -101,6 +102,7 @@ function cancelDrag() {
   document.removeEventListener('pointerup', onPointerUp);
   document.removeEventListener('pointercancel', onPointerUp);
   window.removeEventListener('blur', cancelDrag);
+  cancelAnimationFrame(dragRaf);
 
   if (ghost) {
     ghost.remove();
@@ -115,6 +117,8 @@ function cancelDrag() {
 function onPointerDown(deck: DeckSummaryDto, fromGroupId: number | null, ev: PointerEvent) {
   if (ev.button !== 0) return;
   ev.preventDefault();
+
+  if (ghost) cancelDrag();
 
   draggingDeck.value = deck;
   draggingFromGroupId.value = fromGroupId;
@@ -135,6 +139,7 @@ function onPointerDown(deck: DeckSummaryDto, fromGroupId: number | null, ev: Poi
   clone.style.pointerEvents = 'none';
   clone.style.opacity = '0.9';
   clone.style.boxShadow = '0 10px 24px rgba(0,0,0,0.25)';
+  clone.style.willChange = 'transform';
   clone.style.transform = 'scale(1.02)';
   document.body.appendChild(clone);
   ghost = clone;
@@ -146,7 +151,9 @@ function onPointerDown(deck: DeckSummaryDto, fromGroupId: number | null, ev: Poi
 }
 
 function updateDropTarget(ev: PointerEvent) {
+  if (ghost) ghost.style.display = 'none';
   const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+  if (ghost) ghost.style.display = '';
   if (!el) {
     dragOver.value = null;
     return;
@@ -176,8 +183,14 @@ function updateDropTarget(ev: PointerEvent) {
 function onPointerMove(ev: PointerEvent) {
   if (!ghost) return;
   ev.preventDefault();
-  ghost.style.left = `${ev.clientX - offsetX}px`;
-  ghost.style.top = `${ev.clientY - offsetY}px`;
+  const x = ev.clientX;
+  const y = ev.clientY;
+  cancelAnimationFrame(dragRaf);
+  dragRaf = requestAnimationFrame(() => {
+    if (!ghost) return;
+    ghost.style.left = `${x - offsetX}px`;
+    ghost.style.top = `${y - offsetY}px`;
+  });
   updateDropTarget(ev);
 }
 
@@ -221,9 +234,22 @@ async function handleDrop() {
   }
 }
 
+async function mergeWithRank(deckId: number, targetGroupId: number) {
+  await applyMove({ deckId, mode: DifficultyRankingMoveMode.Merge, targetGroupId });
+}
+
+async function insertNewRank(deckId: number, displayGapIndex: number) {
+  if (!activeSection.value) return;
+  const totalGroups = activeSection.value.groups.length;
+  await applyMove({ deckId, mode: DifficultyRankingMoveMode.Insert, insertIndex: totalGroups - displayGapIndex });
+}
+
 async function onPointerUp() {
-  await handleDrop();
-  cancelDrag();
+  try {
+    await handleDrop();
+  } finally {
+    cancelDrag();
+  }
 }
 
 onMounted(loadRankings);
@@ -355,6 +381,22 @@ onUnmounted(cancelDrag);
                       <div class="flex-1 min-w-0">
                         <div class="truncate text-sm font-medium">{{ deckTitle(deck) }}</div>
                       </div>
+                      <Tooltip :content="`↑↑ New rank above\n↑ Move to rank above\n↓ Move to rank below\n↓↓ New rank below`" block>
+                        <div class="rank-actions" @pointerdown.stop>
+                          <button class="rank-btn" :disabled="isUpdating || group.decks.length === 1" @click.stop="insertNewRank(deck.id, index)">
+                            <i class="pi pi-angle-double-up" />
+                          </button>
+                          <button class="rank-btn" :disabled="isUpdating || index === 0" @click.stop="mergeWithRank(deck.id, displayGroups[index - 1].id)">
+                            <i class="pi pi-angle-up" />
+                          </button>
+                          <button class="rank-btn" :disabled="isUpdating || index === displayGroups.length - 1" @click.stop="mergeWithRank(deck.id, displayGroups[index + 1].id)">
+                            <i class="pi pi-angle-down" />
+                          </button>
+                          <button class="rank-btn" :disabled="isUpdating || group.decks.length === 1" @click.stop="insertNewRank(deck.id, index + 1)">
+                            <i class="pi pi-angle-double-down" />
+                          </button>
+                        </div>
+                      </Tooltip>
                     </div>
                     <button
                       v-if="group.decks.length > 3"
@@ -406,6 +448,42 @@ onUnmounted(cancelDrag);
 .deck-pill:hover {
   border-color: var(--primary-300);
   background: var(--surface-50);
+}
+
+.rank-actions {
+  display: flex;
+  gap: 2px;
+  shrink: 0;
+}
+
+.rank-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--surface-400);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+  touch-action: manipulation;
+}
+
+.rank-btn:hover:not(:disabled) {
+  color: var(--primary-500);
+  background: var(--primary-50);
+}
+
+.rank-btn:active:not(:disabled) {
+  background: var(--primary-100);
+}
+
+.rank-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
 .expand-toggle {
