@@ -1,4 +1,4 @@
-import { type ComparisonOutcome, type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
+import { type ComparisonOutcome, type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type MediaTypeGroup, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -723,6 +723,18 @@ export interface BlacklistedDeckDto {
   coverUrl: string | null
   mediaType: MediaType
   createdAt: string
+}
+
+export interface DifficultyRankGroupDto {
+  id: number
+  sortIndex: number
+  decks: DeckSummaryDto[]
+}
+
+export interface DifficultyRankingSectionDto {
+  group: MediaTypeGroup
+  groups: DifficultyRankGroupDto[]
+  unranked: DeckSummaryDto[]
 }
 
 // SRS Study types

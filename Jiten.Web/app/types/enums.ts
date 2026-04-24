@@ -11,6 +11,20 @@ export enum MediaType {
   Audio = 10,
 }
 
+export enum MediaTypeGroup {
+  Prose = 0,
+  VisualText = 1,
+  AudioVisual = 2,
+  NonFiction = 3,
+  Unknown = 4,
+}
+
+export enum DifficultyRankingMoveMode {
+  Merge = 0,
+  Insert = 1,
+  Unrank = 2,
+}
+
 export enum LinkType {
   Web = 1,
   Vndb = 2,
