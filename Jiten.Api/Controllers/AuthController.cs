@@ -305,7 +305,9 @@ public class AuthController : ControllerBase
         var result = await _userManager.ResetPasswordAsync(user, decodedToken, model.NewPassword);
         if (result.Succeeded)
         {
-            // Optionally, revoke all refresh tokens for the user upon password reset for security
+            await _userManager.ResetAccessFailedCountAsync(user);
+            await _userManager.SetLockoutEndDateAsync(user, null);
+
             var userRefreshTokens = await _context.RefreshTokens
                                                   .Where(rt => rt.UserId == user.Id && !rt.IsRevoked && !rt.IsUsed)
                                                   .ToListAsync();
