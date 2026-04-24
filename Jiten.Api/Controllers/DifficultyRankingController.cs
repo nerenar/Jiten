@@ -86,12 +86,11 @@ public class DifficultyRankingController(
             foreach (var g in groupsForSection)
             {
                 var decks = g.Items
+                    .Where(i => deckMap.ContainsKey(i.DeckId))
                     .OrderByDescending(i => i.UpdatedAt)
                     .ThenByDescending(i => i.CreatedAt)
                     .ThenBy(i => deckMap[i.DeckId].Summary.Title)
-                    .Select(i => deckMap.GetValueOrDefault(i.DeckId))
-                    .Where(d => d != null)
-                    .Select(d => d!.Summary)
+                    .Select(i => deckMap[i.DeckId].Summary)
                     .ToList();
 
                 foreach (var d in decks) rankedDeckIds.Add(d.Id);
@@ -334,7 +333,15 @@ public class DifficultyRankingController(
         }
 
         context.DifficultyRankGroups.AddRange(groups);
-        await context.SaveChangesAsync();
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            context.ChangeTracker.Clear();
+            return false;
+        }
         return true;
     }
 

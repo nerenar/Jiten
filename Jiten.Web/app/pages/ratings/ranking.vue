@@ -21,6 +21,37 @@ const draggingDeck = ref<DeckSummaryDto | null>(null);
 const draggingFromGroupId = ref<number | null>(null);
 const dragOver = ref<{ kind: 'group'; groupId: number } | { kind: 'gap'; index: number } | { kind: 'unranked' } | null>(null);
 
+const expandedGroups = ref(new Set<number>());
+
+const displayGroups = computed(() => {
+  if (!activeSection.value) return [];
+  return [...activeSection.value.groups].reverse();
+});
+
+const tierQuality = computed(() => {
+  if (!activeSection.value) return null;
+  const groups = activeSection.value.groups.length;
+  const ranked = activeSection.value.groups.reduce((sum, g) => sum + g.decks.length, 0);
+  if (ranked < 2) return null;
+
+  const ideal = Math.min(Math.max(Math.ceil(ranked / 5), 3), 10);
+  const progress = Math.min(Math.round((groups / ideal) * 100), 100);
+  const remaining = ideal - groups;
+
+  let label: string;
+  if (groups >= ideal) label = 'Good granularity';
+  else label = `Add ${remaining} more rank${remaining > 1 ? 's' : ''} for better accuracy`;
+
+  return { progress, label };
+});
+
+function rankColor(index: number, total: number): string {
+  if (total <= 1) return 'hsl(210, 50%, 50%)';
+  const t = index / (total - 1);
+  const hue = t * 130;
+  return `hsl(${hue}, 65%, 45%)`;
+}
+
 let ghost: HTMLElement | null = null;
 let offsetX = 0;
 let offsetY = 0;
@@ -181,10 +212,11 @@ async function handleDrop() {
   }
 
   if (dragOver.value.kind === 'gap') {
+    const totalGroups = activeSection.value.groups.length;
     await applyMove({
       deckId,
       mode: DifficultyRankingMoveMode.Insert,
-      insertIndex: dragOver.value.index,
+      insertIndex: totalGroups - dragOver.value.index,
     });
   }
 }
@@ -200,16 +232,14 @@ onUnmounted(cancelDrag);
 
 <template>
   <div class="p-2 md:p-4 overflow-hidden">
-    <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-3">
-      <div>
+    <div class="mb-6">
+      <div class="flex items-center gap-2">
+        <Button icon="pi pi-arrow-left" class="p-button-text" @click="navigateTo('/ratings')" />
         <h1 class="text-2xl font-bold">Rank Difficulties</h1>
-        <p class="text-muted-color text-sm mt-1">
-          Drag titles into order. Drop between groups to create a new rank, or stack to mark a tie.
-        </p>
       </div>
-      <NuxtLink to="/ratings" class="text-sm text-muted-color hover:text-primary-500">
-        Back to comparisons
-      </NuxtLink>
+      <p class="text-muted-color text-sm mt-1">
+        Drag media to rank them. Drop on a group if they're about the same difficulty, or between groups to create a new rank.
+      </p>
     </div>
 
     <div v-if="isLoading" class="flex justify-center py-12">
@@ -232,6 +262,11 @@ onUnmounted(cancelDrag);
         />
       </div>
 
+      <div v-if="tierQuality" class="mb-3 flex items-center gap-3">
+        <ProgressBar :value="tierQuality.progress" :showValue="false" style="height: 6px; width: 120px" />
+        <span class="text-xs" :class="tierQuality.progress >= 100 ? 'text-green-500' : 'text-muted-color'">{{ tierQuality.label }}</span>
+      </div>
+
       <div v-if="activeSection" class="grid grid-cols-1 lg:grid-cols-[minmax(0,340px)_1fr] gap-4">
         <!-- Unranked -->
         <Card class="min-w-0" data-drop-unranked :class="{ 'is-drop-active': dragOver?.kind === 'unranked' }">
@@ -250,6 +285,7 @@ onUnmounted(cancelDrag);
                 class="deck-pill"
                 @pointerdown="onPointerDown(deck, null, $event)"
               >
+                <i class="pi pi-bars drag-handle" />
                 <img :src="deck.coverUrl || '/img/nocover.jpg'" :alt="deckTitle(deck)" class="h-10 w-7 rounded object-cover" />
                 <div class="flex-1 min-w-0">
                   <div class="truncate text-sm font-medium">{{ deckTitle(deck) }}</div>
@@ -261,9 +297,11 @@ onUnmounted(cancelDrag);
 
         <!-- Ranked groups -->
         <div class="min-w-0">
-          <div class="text-xs text-muted-color mb-2">Top is easiest, bottom is hardest.</div>
+          <div v-if="displayGroups.length > 0" class="flex items-center gap-2 mb-2 text-xs font-semibold uppercase tracking-wide" :style="{ color: rankColor(0, displayGroups.length) }">
+            <i class="pi pi-arrow-up text-[0.6rem]" /> Hardest
+          </div>
           <div
-            v-if="activeSection.groups.length === 0"
+            v-if="displayGroups.length === 0"
             class="empty-drop text-muted-color"
             :class="{ 'is-active': dragOver?.kind === 'gap' && dragOver.index === 0 }"
             :data-drop-gap="0"
@@ -271,40 +309,60 @@ onUnmounted(cancelDrag);
             Drop here to create the first rank.
           </div>
 
-          <div v-else class="flex flex-col gap-3">
+          <div v-else class="flex flex-col" :class="{ 'is-dragging': draggingDeck }">
             <div
-              v-for="(group, index) in activeSection.groups"
+              v-for="(group, index) in displayGroups"
               :key="group.id"
-              class="flex flex-col gap-3"
             >
               <div
                 class="drop-gap"
                 :class="{ 'is-active': dragOver?.kind === 'gap' && dragOver.index === index }"
                 :data-drop-gap="index"
-              />
+              >
+                <div class="drop-gap-line" />
+                <span class="drop-gap-label">Drop to create a new rank</span>
+                <div class="drop-gap-line" />
+              </div>
 
               <Card
                 class="rank-group min-w-0"
                 :class="{ 'is-active': dragOver?.kind === 'group' && dragOver.groupId === group.id }"
+                :style="{ borderLeft: `3px solid ${rankColor(index, displayGroups.length)}` }"
                 :data-drop-group="group.id"
               >
                 <template #content>
                   <div class="flex items-center justify-between mb-2">
-                    <div class="text-xs uppercase tracking-wide text-muted-color">Rank {{ index + 1 }}</div>
-                    <div class="text-xs text-muted-color">{{ group.decks.length }}</div>
+                    <div class="text-xs uppercase tracking-wide font-semibold" :style="{ color: rankColor(index, displayGroups.length) }">Rank {{ index + 1 }}</div>
+                    <Transition name="fade-label">
+                      <div
+                        v-if="draggingDeck && dragOver?.kind === 'group' && dragOver.groupId === group.id"
+                        class="drop-tie-label"
+                      >
+                        Drop to tie
+                      </div>
+                      <div v-else class="text-xs text-muted-color">{{ group.decks.length > 1 ? `${group.decks.length} tied` : '' }}</div>
+                    </Transition>
                   </div>
-                  <div class="rank-group-list flex flex-col gap-2">
+                  <div class="flex flex-col gap-2">
                     <div
-                      v-for="deck in group.decks"
+                      v-for="deck in (expandedGroups.has(group.id) ? group.decks : group.decks.slice(0, 3))"
                       :key="deck.id"
                       class="deck-pill"
                       @pointerdown="onPointerDown(deck, group.id, $event)"
                     >
+                      <i class="pi pi-bars drag-handle" />
                       <img :src="deck.coverUrl || '/img/nocover.jpg'" :alt="deckTitle(deck)" class="h-10 w-7 rounded object-cover" />
                       <div class="flex-1 min-w-0">
                         <div class="truncate text-sm font-medium">{{ deckTitle(deck) }}</div>
                       </div>
                     </div>
+                    <button
+                      v-if="group.decks.length > 3"
+                      class="expand-toggle"
+                      @click="expandedGroups.has(group.id) ? expandedGroups.delete(group.id) : expandedGroups.add(group.id)"
+                    >
+                      {{ expandedGroups.has(group.id) ? 'Show less' : `+${group.decks.length - 3} more` }}
+                    </button>
                   </div>
                 </template>
               </Card>
@@ -312,9 +370,17 @@ onUnmounted(cancelDrag);
 
             <div
               class="drop-gap"
-              :class="{ 'is-active': dragOver?.kind === 'gap' && dragOver.index === activeSection.groups.length }"
-              :data-drop-gap="activeSection.groups.length"
-            />
+              :class="{ 'is-active': dragOver?.kind === 'gap' && dragOver.index === displayGroups.length }"
+              :data-drop-gap="displayGroups.length"
+            >
+              <div class="drop-gap-line" />
+              <span class="drop-gap-label">Drop to create a new rank</span>
+              <div class="drop-gap-line" />
+            </div>
+          </div>
+
+          <div v-if="displayGroups.length > 0" class="flex items-center gap-2 mt-2 text-xs font-semibold uppercase tracking-wide" :style="{ color: rankColor(displayGroups.length - 1, displayGroups.length) }">
+            <i class="pi pi-arrow-down text-[0.6rem]" /> Easiest
           </div>
         </div>
       </div>
@@ -323,28 +389,6 @@ onUnmounted(cancelDrag);
 </template>
 
 <style scoped>
-.rank-group-list {
-  --rank-pill-height: 58px;
-  max-height: calc(var(--rank-pill-height) * 3 + 1rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 0.25rem;
-  scrollbar-gutter: stable;
-}
-
-.rank-group-list::-webkit-scrollbar {
-  width: 8px;
-}
-
-.rank-group-list::-webkit-scrollbar-thumb {
-  background: var(--surface-300);
-  border-radius: 999px;
-}
-
-.rank-group-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .deck-pill {
   display: flex;
   align-items: center;
@@ -355,6 +399,8 @@ onUnmounted(cancelDrag);
   background: var(--surface-0);
   cursor: grab;
   transition: border-color 0.2s ease, background-color 0.2s ease;
+  user-select: none;
+  touch-action: none;
 }
 
 .deck-pill:hover {
@@ -362,24 +408,108 @@ onUnmounted(cancelDrag);
   background: var(--surface-50);
 }
 
-.rank-group.is-active,
-.deck-pill.is-active {
+.expand-toggle {
+  background: none;
+  border: 1px dashed var(--surface-300);
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--primary-500);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.expand-toggle:hover {
   border-color: var(--primary-400);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  background: var(--primary-50);
+}
+
+.drag-handle {
+  font-size: 0.75rem;
+  color: var(--surface-300);
+  transition: color 0.15s;
+}
+
+.deck-pill:hover .drag-handle {
+  color: var(--surface-500);
+}
+
+.drop-tie-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--primary-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fade-label-enter-active,
+.fade-label-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.fade-label-enter-from,
+.fade-label-leave-to {
+  opacity: 0;
+}
+
+.rank-group.is-active {
+  outline: 2px solid var(--primary-400);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+:deep(.rank-group.is-active .p-card-body) {
+  position: relative;
 }
 
 .drop-gap {
-  height: 12px;
-  border-radius: 999px;
-  background: transparent;
-  border: 1px dashed transparent;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 8px;
   transition: all 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.drop-gap.is-active {
-  height: 18px;
-  border-color: var(--primary-400);
-  background: rgba(59, 130, 246, 0.08);
+.drop-gap-line {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--primary-300);
+}
+
+.drop-gap-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--primary-400);
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.is-dragging .drop-gap {
+  opacity: 0.5;
+  height: 28px;
+  padding: 4px 8px;
+  pointer-events: auto;
+}
+
+.is-dragging .drop-gap:hover,
+.is-dragging .drop-gap.is-active {
+  opacity: 1;
+  height: 36px;
+}
+
+.is-dragging .drop-gap.is-active .drop-gap-line {
+  height: 3px;
+  background: var(--primary-500);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+.is-dragging .drop-gap.is-active .drop-gap-label {
+  color: var(--primary-500);
 }
 
 .empty-drop {
@@ -403,5 +533,10 @@ onUnmounted(cancelDrag);
 :deep(.rank-group .p-card-body),
 :deep(.rank-group .p-card-content) {
   padding: 0.75rem;
+}
+
+.rank-group {
+  border-radius: 0.5rem;
+  overflow: hidden;
 }
 </style>

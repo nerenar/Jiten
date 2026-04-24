@@ -86,9 +86,10 @@ public static class DifficultyRankingSync
             for (var j = i + 1; j < orderedGroups.Count; j++)
             {
                 var harderGroup = orderedGroups[j];
+                var outcome = j - i >= 2 ? ComparisonOutcome.MuchEasier : ComparisonOutcome.Easier;
                 foreach (var easier in easierGroup)
                 foreach (var harder in harderGroup)
-                    AddPair(easier, harder, ComparisonOutcome.Easier);
+                    AddPair(easier, harder, outcome);
             }
         }
 
@@ -157,9 +158,12 @@ public static class DifficultyRankingSync
         {
             var rankLow = rankIndexByDeckId[vote.DeckLowId];
             var rankHigh = rankIndexByDeckId[vote.DeckHighId];
-            var outcome = rankLow == rankHigh
+            var dist = Math.Abs(rankLow - rankHigh);
+            var outcome = dist == 0
                 ? ComparisonOutcome.Same
-                : rankLow < rankHigh ? ComparisonOutcome.Easier : ComparisonOutcome.Harder;
+                : rankLow < rankHigh
+                    ? (dist >= 2 ? ComparisonOutcome.MuchEasier : ComparisonOutcome.Easier)
+                    : (dist >= 2 ? ComparisonOutcome.MuchHarder : ComparisonOutcome.Harder);
 
             if (vote.Outcome != outcome || vote.Source != DifficultyVoteSource.WeakOrder)
             {
