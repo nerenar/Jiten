@@ -149,8 +149,9 @@
   };
 
   const handleClick = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (isMobile.value) {
-      e.stopPropagation();
       toggle();
     }
   };
