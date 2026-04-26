@@ -20,7 +20,7 @@ public partial class MorphologicalAnalyser
         return false;
     }
 
-    private static readonly HashSet<char> DictionaryVerbEndings =
+    internal static readonly HashSet<char> DictionaryVerbEndings =
         ['う', 'く', 'ぐ', 'す', 'つ', 'ぬ', 'ぶ', 'む', 'る'];
 
     internal static string? TryGodanDictForm(string text)
@@ -107,7 +107,10 @@ public partial class MorphologicalAnalyser
                 nextWord.Text != currentWord.Text &&
                 !isClassicalWaRowTeForm &&
                 (nextWord.DictionaryForm is "得る" or "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす" ||
-                 (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith("た") || currentWord.Text.EndsWith("だ")))))
+                 (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith("た") || currentWord.Text.EndsWith("だ"))) ||
+                 (nextWord.DictionaryForm == "付く" && HasCompoundLookup != null &&
+                  currentWord.DictionaryForm.Length >= 2 &&
+                  HasCompoundLookup(currentWord.DictionaryForm[..^1] + "り付く"))))
             {
                 currentWord.Text += nextWord.Text;
                 currentWord.EndOffset = nextWord.EndOffset;
@@ -138,7 +141,8 @@ public partial class MorphologicalAnalyser
             if (i + 1 < wordInfos.Count)
             {
                 WordInfo nextWord = wordInfos[i + 1];
-                bool isModernSuru = nextWord.DictionaryForm == "する" && nextWord.Text != "する" && nextWord.Text != "しない";
+                bool isModernSuru = nextWord.DictionaryForm == "する" && nextWord.Text != "する" && nextWord.Text != "しない"
+                                   && !nextWord.Text.EndsWith("すぎ") && !nextWord.Text.EndsWith("過ぎ");
                 bool isLiterarySuru = nextWord.DictionaryForm == "す" && nextWord.NormalizedForm == "為る";
                 bool isSuruNoun = currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                                   currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun);
@@ -205,7 +209,8 @@ public partial class MorphologicalAnalyser
                                               nextWord.Text.EndsWith("いて");
                 if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
-                    !isClassicalWaRowTeForm)
+                    !isClassicalWaRowTeForm &&
+                    nextWord.PartOfSpeech != PartOfSpeech.IAdjective)
                 {
                     bool isKnownSubsidiary = false;
 

@@ -28,6 +28,7 @@ internal static class FormCandidateScorer
         int readingMatchScore = ReadingScorer.Score(candidate, context,
             conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied,
             archaicPosTypes);
+        int posAffinityScore = PosAffinityScorer.Score(candidate, context);
 
         return new FormScoreTrace(
                                   wordScore,
@@ -37,6 +38,7 @@ internal static class FormCandidateScorer
                                   surfaceMatchScore,
                                   scriptScore,
                                   readingMatchScore,
+                                  posAffinityScore,
                                   conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied);
     }
 }
@@ -61,7 +63,12 @@ internal static class WordPriorityScorer
         {
             bool hasFrequencyMarker = KanaScoringHelpers.HasFrequencyMarker(word.Priorities);
             if (!hasFrequencyMarker)
-                wordScore -= isArchaicSentence ? 50 : 350;
+            {
+                // Archaic pronouns (汝 なんじ, 我 われ, etc.) appear regularly in literary/fantasy
+                // prose without the sentence being fully classical. Softer penalty for pronouns.
+                bool isPronoun = word.CachedPOS.Contains(PartOfSpeech.Pronoun);
+                wordScore -= isArchaicSentence ? 50 : (isPronoun ? 100 : 350);
+            }
         }
 
         // Only penalise when the word has NO non-archaic primary POS.
@@ -102,6 +109,12 @@ internal static class WordPriorityScorer
         // Penalise them when not in a name context so proper words score higher.
         if (!isNameContext && word.PartsOfSpeech.All(p => p is "unclass"))
             wordScore -= 40;
+
+        // Pure counters (words whose only real POS is "ctr") almost always follow a number.
+        // Penalise them so noun/adjective homophones win in non-numeric contexts
+        // (e.g. 色/ショク counter vs 色/いろ noun).
+        if (word.PartsOfSpeech.All(p => p is "ctr"))
+            wordScore -= 10;
 
         // Shorter deconjugation chains are preferred for morphological plausibility.
         int chainCount = candidate.DeconjForm?.Process.Count ?? 0;
@@ -176,13 +189,13 @@ internal static class FormPriorityScorer
         if (nf is { Length: > 2 } && int.TryParse(nf[2..], out var nfRank))
             formPriorityScore += Math.Max(0, 3 - (int)Math.Round(nfRank / 10f));
 
-        if (priorities.Contains("jiten")) formPriorityScore += 25;
-
         if (formPriorityScore == 0)
         {
             if (priorities.Contains("spec1")) formPriorityScore += 8;
             if (priorities.Contains("spec2")) formPriorityScore += 3;
         }
+
+        if (priorities.Contains("jiten")) formPriorityScore += 25;
 
         // "uk" (usually-kana) bias, scaled by whether the word has stronger frequency evidence.
         if (word.PartsOfSpeech.Contains("uk"))
@@ -402,6 +415,13 @@ internal static class PenaltyScorer
                 bool isExpression = posToCheck.Any(p => p is "exp" or "on-mim");
                 if (isExpression) return false;
 
+                // Standalone adverbs with frequency evidence (e.g. 悪しからず ichi1) are not
+                // conjugated forms — they're fixed expressions found via direct lookup.
+                // The DictionaryForm comes from a Sudachi sub-token and is irrelevant.
+                bool isAdverb = posToCheck.Any(p => p is "adv" or "adv-to");
+                if (isAdverb && KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities))
+                    return false;
+
                 // Particles are function words whose surface form IS their canonical form.
                 // Sudachi may give DictionaryForm=だ for で (etymological), but で the particle
                 // is not a conjugation — don't penalise it.
@@ -437,12 +457,9 @@ internal static class PenaltyScorer
                         return true;
                     }
 
-                    // If the noun's kana reading exactly matches Sudachi's reading, it IS the right word
-                    // for this surface — use a softer penalty so reading evidence still counts.
-                    // E.g. 生き (noun いき, DictForm=生きる): reading match confirms the noun entry.
-                    // Only for ichidan verb stems (DictForm = Surface + る): these commonly stand alone
-                    // as nouns/prefixes (生き, 食べ). Godan masu-stems (立ち from 立つ, 持ち from 持つ)
-                    // are almost always verbal and should get the full penalty.
+                    // Ichidan verb stems (DictForm = Surface + る) commonly stand alone as nouns
+                    // (目覚め, 答え, 始め) or prefixes (生き). Softer penalty when reading matches.
+                    // Godan masu-stems (立ち from 立つ, 持ち from 持つ) are almost always verbal.
                     if (!string.IsNullOrEmpty(context.SudachiReading) && !context.IsKanaSurface
                         && context.DictionaryForm == context.Surface + "る")
                     {
@@ -450,10 +467,20 @@ internal static class PenaltyScorer
                         bool hasExactReadingMatch = candidate.Word.Forms
                             .Where(f => f.FormType == JmDictFormType.KanaForm)
                             .Any(f => KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false) == sudachiHira);
-                        if (hasExactReadingMatch && candidate.Word.PartsOfSpeech.Contains("pref"))
+                        if (hasExactReadingMatch)
                         {
-                            surfaceMatchScore -= 100;
-                            return false;
+                            bool isPrefixLike = candidate.Word.PartsOfSpeech.Contains("pref");
+                            bool isNounLike = candidate.Word.PartsOfSpeech.Any(p => p is "n" or "n-adv" or "n-t");
+                            if (isPrefixLike)
+                            {
+                                surfaceMatchScore -= 100;
+                                return false;
+                            }
+                            if (isNounLike)
+                            {
+                                surfaceMatchScore -= context.SudachiPOS == PartOfSpeech.Verb ? 200 : 110;
+                                return false;
+                            }
                         }
                     }
 
@@ -789,5 +816,63 @@ internal static class KanaScoringHelpers
             if (p.StartsWith("nf")) return true;
         }
         return false;
+    }
+}
+
+internal static class PosAffinityScorer
+{
+    public static int Score(FormCandidate candidate, FormScoringContext context)
+    {
+        if (context.SudachiPOS is PartOfSpeech.Unknown)
+            return 0;
+
+        bool isHighConfidencePOS = context.SudachiPOS is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+            or PartOfSpeech.Suffix or PartOfSpeech.Interjection;
+
+        if (!isHighConfidencePOS)
+            return 0;
+
+        bool compatible = PosMapper.IsJmDictCompatibleWithSudachi(
+            candidate.Word.CachedPOS, context.SudachiPOS);
+
+        if (!compatible)
+            return context.SudachiPOS == PartOfSpeech.Interjection ? -250 : -20;
+
+        int score = 25;
+
+        // Verb-class matching: when Sudachi identifies a specific godan row via DictionaryForm,
+        // penalize candidates from a different row (e.g. こく→v5k vs こる→v5r).
+        // Only for unambiguous endings (る is ambiguous between v5r and v1).
+        if (context.SudachiPOS == PartOfSpeech.Verb
+            && context.DictionaryForm is { Length: > 0 }
+            && context.DictionaryForm != context.Surface)
+        {
+            var expectedTag = InferGodanTag(context.DictionaryForm);
+            if (expectedTag != null)
+            {
+                bool hasMatchingTag = candidate.Word.PartsOfSpeech.Contains(expectedTag);
+                if (!hasMatchingTag)
+                    score -= 45;
+            }
+        }
+
+        return score;
+    }
+
+    private static string? InferGodanTag(string dictionaryForm)
+    {
+        if (dictionaryForm.Length == 0) return null;
+        return dictionaryForm[^1] switch
+        {
+            'く' => "v5k",
+            'ぐ' => "v5g",
+            'す' => "v5s",
+            'つ' => "v5t",
+            'ぬ' => "v5n",
+            'ぶ' => "v5b",
+            'む' => "v5m",
+            'う' => "v5u",
+            _ => null // る is ambiguous (v5r vs v1), others not godan
+        };
     }
 }

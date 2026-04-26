@@ -69,7 +69,7 @@ public partial class MorphologicalAnalyser
                         afterNa.DictionaryForm is "すぎる" or "過ぎる";
                 }
 
-                if (nextWord.Text is "は" or "よ" or "し" or "を" or "が" or "ください" or "かな")
+                if (nextWord.Text is "は" or "よ" or "し" or "を" or "が" or "か" or "ください" or "かな")
                     break;
                 if (nextWord.Text == "な" && !isNegativeStemBeforeDependant)
                     break;

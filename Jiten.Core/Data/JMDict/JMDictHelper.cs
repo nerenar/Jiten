@@ -470,7 +470,7 @@ public static class JmDictHelper
             await using var cmd = new NpgsqlCommand("""
                 SELECT "WordId"
                 FROM jmdict."Words"
-                WHERE "PartsOfSpeech" = ARRAY['exp']::text[]
+                WHERE "PartsOfSpeech" && ARRAY['exp']::text[]
                 """, conn);
             await using var reader = await cmd.ExecuteReaderAsync();
 

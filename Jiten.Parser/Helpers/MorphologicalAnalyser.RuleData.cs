@@ -4,7 +4,7 @@ namespace Jiten.Parser;
 
 public partial class MorphologicalAnalyser
 {
-    private static HashSet<(string, string, string, PartOfSpeech?)> SpecialCases3 =
+    private static readonly HashSet<(string, string, string, PartOfSpeech?)> SpecialCases3 =
     [
         ("な", "の", "で", PartOfSpeech.Expression),
         ("それ", "で", "も", PartOfSpeech.Conjunction),
@@ -17,6 +17,8 @@ public partial class MorphologicalAnalyser
         ("か", "の", "ように", PartOfSpeech.Expression),
         ("それ", "よ", "か", PartOfSpeech.Expression),
         ("に", "劣ら", "ず", PartOfSpeech.Expression),
+        ("しょう", "が", "ねぇ", PartOfSpeech.IAdjective),
+        ("しょう", "が", "ねー", PartOfSpeech.IAdjective),
     ];
 
     private static readonly HashSet<string> AuxiliaryVerbs =
@@ -65,7 +67,7 @@ public partial class MorphologicalAnalyser
         { "終える", "終え" }, { "出す", "出" }, { "かける", "かけ" },
     };
 
-    private static HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
+    private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
         ("じゃ", "ない", PartOfSpeech.Expression),
         ("だ", "けど", PartOfSpeech.Conjunction),
@@ -155,6 +157,25 @@ public partial class MorphologicalAnalyser
         ("この", "前", PartOfSpeech.Adverb),
         ("ならび", "に", PartOfSpeech.Conjunction),
         ("残虐", "非道", PartOfSpeech.NaAdjective),
+        ("一緒", "に", PartOfSpeech.Adverb),
+        ("別", "に", PartOfSpeech.Adverb),
+        ("先", "に", PartOfSpeech.Adverb),
+        ("仮", "に", PartOfSpeech.Adverb),
+        ("滅多", "に", PartOfSpeech.Adverb),
+        ("何", "で", PartOfSpeech.Adverb),
+        ("何", "か", PartOfSpeech.Pronoun),
+        ("何", "も", PartOfSpeech.Pronoun),
+        ("実", "は", PartOfSpeech.Expression),
+        ("後", "で", PartOfSpeech.Expression),
+        ("元", "は", PartOfSpeech.Expression),
+        ("当", "の", PartOfSpeech.NominalAdjective),
+        ("真", "の", PartOfSpeech.NominalAdjective),
+        ("大", "の", PartOfSpeech.NominalAdjective),
+        ("例", "の", PartOfSpeech.Adverb),
+        ("誰", "が", PartOfSpeech.Expression),
+        ("か", "い", PartOfSpeech.Particle),
+        ("露", "にして", PartOfSpeech.Expression),
+        ("なれ", "ど", PartOfSpeech.Conjunction),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
@@ -166,10 +187,13 @@ public partial class MorphologicalAnalyser
         ["だ", "です", "じゃ", "なら", "ても", "でも", "だろ", "だろう", "だって", "だけど", "だけ", "だが", "だし", "だから"];
 
     private static readonly HashSet<string> DaCompoundSuffixes =
-        ["が", "けど", "けれど", "けれども", "から", "し", "って"];
+        ["が", "けど", "けれど", "けれども", "から", "し", "って", "の"];
 
     private static readonly HashSet<string> VerbIndicatingAuxiliaries =
         ["られる", "れる", "せる", "させる"];
 
     private static readonly string[] GodanVerbEndings = ["る", "す", "つ", "く", "ぐ", "む", "ぶ", "ぬ", "う"];
+
+    internal static readonly HashSet<char> GodanVolitionalOKana =
+        ['お', 'こ', 'ご', 'そ', 'ぞ', 'と', 'ど', 'の', 'ほ', 'ぼ', 'ぽ', 'も', 'よ', 'ろ'];
 }

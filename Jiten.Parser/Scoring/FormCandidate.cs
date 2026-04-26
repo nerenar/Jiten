@@ -1,3 +1,4 @@
+using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using WanaKanaShaapu;
 
@@ -31,6 +32,7 @@ internal sealed class FormCandidate(
     public int SurfaceMatchScore => ScoreTrace.SurfaceMatchScore;
     public int ScriptScore => ScoreTrace.ScriptScore;
     public int ReadingMatchScore => ScoreTrace.ReadingMatchScore;
+    public int PosAffinityScore => ScoreTrace.PosAffinityScore;
 
     public void SetScoreTrace(FormScoreTrace scoreTrace) => ScoreTrace = scoreTrace;
 }
@@ -46,6 +48,7 @@ internal readonly record struct FormScoringContext(
     string SurfaceHiraganaLoose,
     string? DictionaryFormHiragana,
     string? NormalizedFormHiragana,
+    PartOfSpeech SudachiPOS = PartOfSpeech.Unknown,
     bool IsArchaicSentence = false,
     bool IsSentenceInitial = false,
     bool IsSentenceFinal = false)
@@ -58,7 +61,8 @@ internal readonly record struct FormScoringContext(
         string? sudachiReading,
         bool isArchaicSentence = false,
         bool isSentenceInitial = false,
-        bool isSentenceFinal = false)
+        bool isSentenceFinal = false,
+        PartOfSpeech sudachiPOS = PartOfSpeech.Unknown)
     {
         var surfaceHiragana = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: false);
         var surfaceHiraganaLoose = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: true);
@@ -80,6 +84,7 @@ internal readonly record struct FormScoringContext(
             surfaceHiraganaLoose,
             dictionaryFormHiragana,
             normalizedFormHiragana,
+            sudachiPOS,
             isArchaicSentence,
             isSentenceInitial,
             isSentenceFinal);
@@ -103,9 +108,10 @@ internal readonly record struct FormScoreTrace(
     int SurfaceMatchScore,
     int ScriptScore,
     int ReadingMatchScore,
+    int PosAffinityScore,
     bool IdentityPenaltyApplied)
 {
     public int TotalScore =>
         WordScore + EntryPriorityScore + FormPriorityScore + FormFlagScore + SurfaceMatchScore + ScriptScore +
-        ReadingMatchScore;
+        ReadingMatchScore + PosAffinityScore;
 }

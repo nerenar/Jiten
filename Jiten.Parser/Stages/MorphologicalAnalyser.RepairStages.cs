@@ -278,6 +278,9 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
+    private static readonly HashSet<string> KnownParticlesAndConjunctions =
+        ["けど", "けども", "けれど", "けれども", "ので", "のに", "から", "まで"];
+
     private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
     {
         bool changed = false;
@@ -285,6 +288,54 @@ public partial class MorphologicalAnalyser
         for (int i = 0; i < wordInfos.Count; i++)
         {
             var w = wordInfos[i];
+
+            // Strip trailing ー from particles/conjunctions (colloquial elongation like けどー)
+            if (w.Text.Length >= 2 && w.Text[^1] == 'ー'
+                && w.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Conjunction)
+            {
+                var prtStripped = w.Text[..^1];
+                bool allHiragana = true;
+                foreach (var c in prtStripped)
+                {
+                    if (c is < '぀' or > 'ゟ') { allHiragana = false; break; }
+                }
+                if (allHiragana)
+                {
+                    wordInfos[i] = new WordInfo(w) { Text = prtStripped };
+                    changed = true;
+                    continue;
+                }
+            }
+
+            // Normalize katakana tokens with trailing ー that are actually particles
+            // (e.g. ケドー matched as KEDO organization → should be けど conjunction)
+            if (w.Text.Length >= 2 && w.Text[^1] == 'ー' && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+            {
+                var body = w.Text[..^1];
+                bool allKatakana = body.Length > 0;
+                foreach (var c in body)
+                {
+                    if (c is < '゠' or > 'ヿ') { allKatakana = false; break; }
+                }
+                if (allKatakana)
+                {
+                    var hiragana = KanaConverter.ToHiragana(body);
+                    if (KnownParticlesAndConjunctions.Contains(hiragana))
+                    {
+                        wordInfos[i] = new WordInfo(w)
+                        {
+                            Text = hiragana,
+                            DictionaryForm = hiragana,
+                            NormalizedForm = hiragana,
+                            Reading = body,
+                            PartOfSpeech = PartOfSpeech.Conjunction
+                        };
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+
             if (!w.Text.Contains('ー') || w.Text[^1] == 'ー') continue;
 
             bool allHiraganaOrBar = true;
@@ -399,7 +450,7 @@ public partial class MorphologicalAnalyser
             if (current is { PartOfSpeech: PartOfSpeech.SupplementarySymbol, Text: "ー" } &&
                 result.Count >= 2 &&
                 prev.Text.Length == 1 &&
-                prev.Text[0] is 'お' or 'こ' or 'ご' or 'そ' or 'ぞ' or 'と' or 'ど' or 'の' or 'ほ' or 'ぼ' or 'ぽ' or 'も' or 'よ' or 'ろ' &&
+                GodanVolitionalOKana.Contains(prev.Text[0]) &&
                 prev.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun &&
                 result[^2].Text.Length >= 1 &&
                 result[^2].Text.All(c => c >= '\u4E00' && c <= '\u9FFF'))
@@ -421,6 +472,37 @@ public partial class MorphologicalAnalyser
                         DictionaryForm = volitionalCandidate,
                         NormalizedForm = volitionalCandidate,
                         Reading = KanaConverter.ToHiragana(stem.Reading + prev.Reading + "う"),
+                        PartOfSpeech = PartOfSpeech.Verb,
+                        EndOffset = current.EndOffset
+                    };
+                    changed = true;
+                    continue;
+                }
+            }
+
+            // Pattern 0d: [kanji noun] + [o-kana+ー as single token] → godan volitional
+            // Like 0c but the ー is embedded in the second token instead of separate.
+            // e.g., 遊ぼー → 遊(noun) + ぼー(adverb) → 遊ぼう (volitional of 遊ぶ)
+            if (current.Text.Length == 2 && current.Text[^1] == 'ー' &&
+                GodanVolitionalOKana.Contains(current.Text[0]) &&
+                prev.Text.Length >= 1 && prev.Text.All(c => c >= '一' && c <= '鿿'))
+            {
+                var oKana = current.Text[0].ToString();
+                var volitionalCandidate = prev.Text + oKana + "う";
+                var volitionalHiragana = NormalizeToHiragana(prev.Reading + oKana + "う");
+                var forms = deconjugator.Deconjugate(volitionalHiragana);
+                bool isValidVolitional = forms.Any(f =>
+                    f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) &&
+                    f.Process.Any(p => p.Contains("volitional", StringComparison.Ordinal)));
+
+                if (isValidVolitional)
+                {
+                    result[^1] = new WordInfo(prev)
+                    {
+                        Text = prev.Text + oKana + "う",
+                        DictionaryForm = volitionalCandidate,
+                        NormalizedForm = volitionalCandidate,
+                        Reading = KanaConverter.ToHiragana(prev.Reading + oKana + "う"),
                         PartOfSpeech = PartOfSpeech.Verb,
                         EndOffset = current.EndOffset
                     };
@@ -733,6 +815,8 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count == 0)
             return wordInfos;
 
+        wordInfos = RepairChimauFragments(wordInfos);
+
         List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
 
 
@@ -774,6 +858,29 @@ public partial class MorphologicalAnalyser
                     Reading = "カイ",
                     StartOffset = kaiStart,
                     EndOffset = w1.EndOffset,
+                });
+                i++;
+                continue;
+            }
+
+            if (w1.PartOfSpeech == PartOfSpeech.IAdjective
+                && w1.Text.Length > 1 && w1.Text[0] == 'て'
+                && newList.Count > 0
+                && newList[^1] is { Text: "なん", PartOfSpeech: PartOfSpeech.Pronoun })
+            {
+                var remainder = w1.Text[1..];
+                int mid = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1;
+                newList.Add(new WordInfo
+                {
+                    Text = "て", DictionaryForm = "て", NormalizedForm = "て",
+                    PartOfSpeech = PartOfSpeech.Particle, Reading = "テ",
+                    StartOffset = w1.StartOffset, EndOffset = mid,
+                });
+                newList.Add(new WordInfo
+                {
+                    Text = remainder, DictionaryForm = remainder, NormalizedForm = remainder,
+                    PartOfSpeech = PartOfSpeech.IAdjective, Reading = w1.Reading.Length > 1 ? w1.Reading[1..] : "",
+                    StartOffset = mid, EndOffset = w1.EndOffset,
                 });
                 i++;
                 continue;
@@ -846,6 +953,21 @@ public partial class MorphologicalAnalyser
 
             if (w1 is { PartOfSpeech: PartOfSpeech.Conjunction or PartOfSpeech.Auxiliary, Text: "で" })
             {
+                if (i + 1 < wordInfos.Count && wordInfos[i + 1] is { Text: "しょう", PartOfSpeech: PartOfSpeech.Noun })
+                {
+                    var w2 = wordInfos[i + 1];
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = "でしょう", EndOffset = w2.EndOffset,
+                        DictionaryForm = "でしょう", NormalizedForm = "です",
+                        PartOfSpeech = PartOfSpeech.Expression,
+                        PartOfSpeechSection1 = PartOfSpeechSection.None,
+                        Reading = "デショウ"
+                    });
+                    i += 2;
+                    continue;
+                }
+
                 bool nextIsMo = i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "も";
                 if (!nextIsMo)
                 {
@@ -1079,6 +1201,29 @@ public partial class MorphologicalAnalyser
             {
                 WordInfo w2 = wordInfos[i + 1];
 
+                // Sudachi parses 何でしょう as 何で(noun) + しょう(noun).
+                // Split into 何(pronoun) + でしょう(expression).
+                if (w1 is { Text: "何で", PartOfSpeech: PartOfSpeech.Noun } && w2 is { Text: "しょう", PartOfSpeech: PartOfSpeech.Noun })
+                {
+                    int mid = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1;
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = "何", DictionaryForm = "何", NormalizedForm = "何",
+                        PartOfSpeech = PartOfSpeech.Pronoun, Reading = "ナニ",
+                        EndOffset = mid
+                    });
+                    newList.Add(new WordInfo(w2)
+                    {
+                        Text = "でしょう", DictionaryForm = "でしょう", NormalizedForm = "です",
+                        PartOfSpeech = PartOfSpeech.Expression,
+                        PartOfSpeechSection1 = PartOfSpeechSection.None,
+                        Reading = "デショウ",
+                        StartOffset = mid, EndOffset = w2.EndOffset
+                    });
+                    i += 2;
+                    continue;
+                }
+
                 // Special case: ん + だ + DaCompoundSuffix should become ん + だ[suffix]
                 // e.g., 飲んだけど → 飲ん + だけど (verb ん)
                 // BUT: そうなんだけど → そう + なんだ + けど (explanatory ん - 準体助詞)
@@ -1172,6 +1317,19 @@ public partial class MorphologicalAnalyser
                     continue;
                 }
 
+                if (w1 is { Text: "しよう", PartOfSpeech: PartOfSpeech.Noun } &&
+                    w2 is { Text: "として" })
+                {
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = "しようとして", EndOffset = w2.EndOffset,
+                        Reading = "シヨウトシテ",
+                        DictionaryForm = "しようとする", PartOfSpeech = PartOfSpeech.Verb
+                    });
+                    i += 2;
+                    continue;
+                }
+
                 // Sudachi parses 恋って as te-form of 恋う (archaic), but in modern Japanese
                 // it's almost always 恋(noun) + って(quotation particle)
                 if (w1 is { Text: "恋っ", PartOfSpeech: PartOfSpeech.Verb, DictionaryForm: "恋う" }
@@ -1188,6 +1346,36 @@ public partial class MorphologicalAnalyser
                         Text = "って", DictionaryForm = "って", NormalizedForm = "って",
                         PartOfSpeech = PartOfSpeech.Particle,
                         StartOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1
+                    });
+                    i += 2;
+                    continue;
+                }
+
+                // Sudachi splits 逆に as 逆(名詞) + に(助動詞/だ). In modern Japanese
+                // 逆に is almost always a single adverb ("conversely, on the contrary").
+                if (w1 is { Text: "逆", PartOfSpeech: PartOfSpeech.Noun } &&
+                    w2 is { Text: "に", DictionaryForm: "だ" })
+                {
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = "逆に", EndOffset = w2.EndOffset,
+                        DictionaryForm = "逆に", PartOfSpeech = PartOfSpeech.Adverb,
+                        Reading = "ギャクニ"
+                    });
+                    i += 2;
+                    continue;
+                }
+
+                // Sudachi splits 来なすった as 来(動詞) + なすった(動詞/なさる).
+                // Combine into a single compound honorific verb.
+                if (w1 is { Text: "来", PartOfSpeech: PartOfSpeech.Verb, DictionaryForm: "来る" } &&
+                    w2 is { DictionaryForm: "なさる" })
+                {
+                    newList.Add(new WordInfo(w1)
+                    {
+                        Text = w1.Text + w2.Text, EndOffset = w2.EndOffset,
+                        DictionaryForm = "来なさる", PartOfSpeech = PartOfSpeech.Verb,
+                        Reading = "キナスッタ"
                     });
                     i += 2;
                     continue;
@@ -1341,6 +1529,22 @@ public partial class MorphologicalAnalyser
                     w1.PartOfSpeech = PartOfSpeech.Auxiliary;
                     newList.Add(w1);
                     i = j;
+                    continue;
+                }
+
+                // Sudachi splits なし into な(copula) + し(conjunction). When preceded by a na-adjective,
+                // this would incorrectly merge noun+な while orphaning し. Detect and recombine as なし.
+                bool followedByShi = i + 1 < wordInfos.Count
+                    && wordInfos[i + 1] is { Text: "し", PartOfSpeech: PartOfSpeech.Conjunction };
+                if (followedByShi && newList.Count > 0 && IsNaAdjectiveToken(newList[^1]))
+                {
+                    newList.Add(new WordInfo
+                    {
+                        Text = "なし", DictionaryForm = "なし", NormalizedForm = "無し",
+                        PartOfSpeech = PartOfSpeech.Noun, Reading = "ナシ",
+                        StartOffset = w1.StartOffset, EndOffset = wordInfos[i + 1].EndOffset
+                    });
+                    i += 2;
                     continue;
                 }
 
@@ -1598,4 +1802,97 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
+    /// <summary>
+    /// Sudachi doesn't know ちまう (colloquial てしまう) and fragments it.
+    /// e.g., やっちまえー → や(particle) + っち(suffix) + ま(filler) + えー(filler).
+    /// Reassemble the fragments into a single verb token so CombineInflections can handle it.
+    /// </summary>
+    private static List<WordInfo> RepairChimauFragments(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 3)
+            return wordInfos;
+
+        bool hasChimau = false;
+        foreach (var w in wordInfos)
+            if (w is { Text: "っち", PartOfSpeech: PartOfSpeech.Suffix }) { hasChimau = true; break; }
+        if (!hasChimau) return wordInfos;
+
+        var result = new List<WordInfo>(wordInfos.Count);
+        int i = 0;
+
+        while (i < wordInfos.Count)
+        {
+            if (i + 2 < wordInfos.Count
+                && wordInfos[i] is { Text: "っち", PartOfSpeech: PartOfSpeech.Suffix }
+                && wordInfos[i + 1] is { Text: "ま", PartOfSpeech: PartOfSpeech.Filler or PartOfSpeech.Interjection })
+            {
+                string tail = wordInfos[i + 2].Text;
+                string chimauSurface;
+                string chimauReading;
+                int tokensConsumed;
+
+                if (tail is "え" or "えー" or "えぇ")
+                {
+                    chimauSurface = "っちまえ";
+                    chimauReading = "ッチマエ";
+                    tokensConsumed = 3;
+                }
+                else if (tail is "う" or "うー")
+                {
+                    chimauSurface = "っちまう";
+                    chimauReading = "ッチマウ";
+                    tokensConsumed = 3;
+                }
+                else if (tail is "っ" && i + 3 < wordInfos.Count)
+                {
+                    chimauSurface = "っちまっ" + wordInfos[i + 3].Text;
+                    chimauReading = "ッチマッ" + WanaKana.ToKatakana(wordInfos[i + 3].Text);
+                    tokensConsumed = 4;
+                }
+                else
+                {
+                    result.Add(wordInfos[i]);
+                    i++;
+                    continue;
+                }
+
+                if (result.Count > 0 && result[^1].Text.Length == 1
+                    && (WanaKana.IsHiragana(result[^1].Text) || WanaKana.IsKatakana(result[^1].Text)))
+                {
+                    var stem = result[^1];
+                    result[^1] = new WordInfo
+                    {
+                        Text = stem.Text + chimauSurface,
+                        DictionaryForm = stem.Text + "っちまう",
+                        NormalizedForm = stem.Text + "っちまう",
+                        PartOfSpeech = PartOfSpeech.Verb,
+                        Reading = stem.Reading + chimauReading,
+                        StartOffset = stem.StartOffset,
+                        EndOffset = wordInfos[i + tokensConsumed - 1].EndOffset
+                    };
+                }
+                else
+                {
+                    result.Add(new WordInfo
+                    {
+                        Text = chimauSurface,
+                        DictionaryForm = "っちまう",
+                        NormalizedForm = "っちまう",
+                        PartOfSpeech = PartOfSpeech.Auxiliary,
+                        Reading = chimauReading,
+                        StartOffset = wordInfos[i].StartOffset,
+                        EndOffset = wordInfos[i + tokensConsumed - 1].EndOffset
+                    });
+                }
+
+                i += tokensConsumed;
+                continue;
+            }
+
+            result.Add(wordInfos[i]);
+            i++;
+        }
+
+        return result;
+    }
 }
