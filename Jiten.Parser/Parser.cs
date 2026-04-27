@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -8,6 +9,7 @@ using Jiten.Core.Utils;
 using Jiten.Parser.Data.Redis;
 using Jiten.Parser.Diagnostics;
 using Jiten.Parser.Grammar;
+using Jiten.Parser.Misparse;
 using Jiten.Parser.Resegmentation;
 using Jiten.Parser.Resolution;
 using Jiten.Parser.Runtime;
@@ -94,11 +96,12 @@ namespace Jiten.Parser
         }
 
         private static async Task PreprocessSentences(List<SentenceInfo> sentences,
-                                                      ParserDiagnostics? diagnostics = null)
+                                                      ParserDiagnostics? diagnostics = null,
+                                                      HashSet<string>? protectedSurfaces = null)
         {
             CleanSentenceTokens(sentences);
             SplitSuruInflectionsForNounCompounding(sentences);
-            SplitUnknownNounTokens(sentences);
+            SplitUnknownNounTokens(sentences, protectedSurfaces);
             CombineNounCompounds(sentences);
             await CombineCompounds(sentences);
             CombineExpressions(sentences);
@@ -136,7 +139,7 @@ namespace Jiten.Parser
             IReadOnlyList<(WordInfo word, DeckWord? result, int? margin)> sentenceWords)
             => sentenceWords.Any(w => ClassicalMarkerSurfaces.Contains(w.word.Text));
 
-        private static readonly HashSet<string> PersonHonorifics = ["さん", "ちゃん", "くん", "氏", "様"];
+        private static readonly HashSet<string> PersonHonorifics = ["さん", "ちゃん", "くん", "たん", "氏", "様", "殿", "先生", "課長", "部長"];
 
         private static readonly HashSet<string> HonorificExclusions =
         [
@@ -419,7 +422,8 @@ namespace Jiten.Parser
             List<(WordInfo wordInfo, int occurrences)> words,
             Deconjugator deconjugator,
             int batchSize = 1000,
-            ParserDiagnostics? diagnostics = null)
+            ParserDiagnostics? diagnostics = null,
+            Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null)
         {
             List<(DeckWord? word, int? margin, List<FormCandidate>? candidates)> allProcessedWords = new();
 
@@ -483,10 +487,50 @@ namespace Jiten.Parser
                 }
 
                 for (int j = 0; j < batch.Count; j++)
-                    allProcessedWords.Add((batchResults[j].Word, batchResults[j].Margin, batchResults[j].FirstPassCandidates));
+                {
+                    var result = batchResults[j];
+                    var surface = batch[j].wordInfo.Text;
+
+                    if (dictionaryEntriesBySurface != null &&
+                        dictionaryEntriesBySurface.TryGetValue(surface, out var dictEntry))
+                    {
+                        var overrideWord = dictEntry.EntryType switch
+                        {
+                            DeckDictionaryEntryType.Name =>
+                                await ResolveAsNameEntry(surface, batch[j].occurrences, batchWordCache),
+                            _ => null
+                        };
+                        allProcessedWords.Add((overrideWord, overrideWord != null ? int.MaxValue : null, null));
+                        continue;
+                    }
+
+                    allProcessedWords.Add((result.Word, result.Margin, result.FirstPassCandidates));
+                }
             }
 
             return allProcessedWords;
+        }
+
+        private static async Task<DeckWord?> ResolveAsNameEntry(string surface, int occurrences,
+                                                                 ConcurrentDictionary<int, JmDictWord>? batchWordCache)
+        {
+            if (!_lookups.TryGetValue(surface, out var candidates) || candidates.Count == 0)
+                return null;
+
+            var wordCache = await GetWordsWithCache(candidates, batchWordCache);
+
+            foreach (var id in candidates)
+            {
+                if (!wordCache.TryGetValue(id, out var word)) continue;
+                if (word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown))
+                    return new DeckWord
+                    {
+                        WordId = word.WordId, OriginalText = surface, ReadingIndex = 0,
+                        Occurrences = occurrences, PartsOfSpeech = word.CachedPOS, Origin = word.Origin
+                    };
+            }
+
+            return null;
         }
 
         public static async Task<List<DeckWord>> ParseText(IDbContextFactory<JitenDbContext> contextFactory, string text,
@@ -568,6 +612,7 @@ namespace Jiten.Parser
             }
 
             var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, candidateLookup, diagnostics);
+            corrected = await ApplyMisparseGates(sentences, corrected, diagnostics);
             return ExcludeFinalMisparses(corrected);
         }
 
@@ -579,39 +624,46 @@ namespace Jiten.Parser
                                                        bool predictDifficulty = true,
                                                        MediaType mediatype = MediaType.Novel,
                                                        ParserDiagnostics? diagnostics = null,
-                                                       BenchmarkTimings? timings = null)
+                                                       BenchmarkTimings? timings = null,
+                                                       List<DeckDictionaryEntry>? dictionaryEntries = null)
         {
-            var results = await ParseTextsToDeck(contextFactory, [text], storeRawText, predictDifficulty, mediatype, diagnostics, timings);
+            var results = await ParseTextsToDeck(contextFactory, [text], storeRawText, predictDifficulty, mediatype, diagnostics, timings, dictionaryEntries);
             return results.Count > 0 ? results[0] : new Deck();
         }
 
-        /// <summary>
-        /// Parses multiple texts into Decks in a single batch for efficiency.
-        /// </summary>
         public static async Task<List<Deck>> ParseTextsToDeck(IDbContextFactory<JitenDbContext> contextFactory,
                                                               List<string> texts,
                                                               bool storeRawText = false,
                                                               bool predictDifficulty = true,
                                                               MediaType mediatype = MediaType.Novel,
                                                               ParserDiagnostics? diagnostics = null,
-                                                              BenchmarkTimings? timings = null)
+                                                              BenchmarkTimings? timings = null,
+                                                              List<DeckDictionaryEntry>? dictionaryEntries = null)
         {
             if (texts.Count == 0) return [];
 
             await EnsureInitializedAsync(contextFactory);
+
+            var userDictCsv = BuildUserDictCsv(dictionaryEntries);
+            var protectedSurfaces = dictionaryEntries is { Count: > 0 }
+                ? new HashSet<string>(dictionaryEntries.Select(e => e.Surface.Trim()))
+                : null;
+            var dictionaryEntriesBySurface = dictionaryEntries is { Count: > 0 }
+                ? dictionaryEntries.ToDictionary(e => e.Surface.Trim())
+                : null;
 
             var timer = new Stopwatch();
             timer.Start();
 
             // Batch morphological analysis
             var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
-            var batchedSentences = await parser.ParseBatch(texts, diagnostics: diagnostics, timings: timings);
+            var batchedSentences = await parser.ParseBatch(texts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv);
 
             timer.Restart();
 
             // Pass 1: Preprocess all texts, then propagate person names across all texts
             for (int textIndex = 0; textIndex < batchedSentences.Count; textIndex++)
-                await PreprocessSentences(batchedSentences[textIndex], diagnostics);
+                await PreprocessSentences(batchedSentences[textIndex], diagnostics, protectedSurfaces);
 
             PropagatePersonNameContexts(batchedSentences);
 
@@ -626,7 +678,7 @@ namespace Jiten.Parser
             {
                 var sentences = batchedSentences[textIndex];
                 var text = texts[textIndex];
-                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings);
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface);
                 decks.Add(deck);
                 batchedSentences[textIndex] = null!;
             }
@@ -645,14 +697,15 @@ namespace Jiten.Parser
             bool storeRawText,
             bool predictDifficulty,
             MediaType mediatype,
-            BenchmarkTimings? timings = null)
+            BenchmarkTimings? timings = null,
+            Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null)
         {
             var sw = timings != null ? Stopwatch.StartNew() : null;
 
             var wordInfos = ExtractWordInfos(sentences);
             var uniqueWords = CountUniqueWords(wordInfos);
 
-            var allProcessedWithMargins = await ProcessWordsInBatches(uniqueWords, deconjugator);
+            var allProcessedWithMargins = await ProcessWordsInBatches(uniqueWords, deconjugator, dictionaryEntriesBySurface: dictionaryEntriesBySurface);
 
             // Build lookup by direct 1:1 index mapping
             var resultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)>();
@@ -699,6 +752,7 @@ namespace Jiten.Parser
             if (sw != null) { timings!.ResegmentationMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
             var corrected = await ApplyAdjacentScoring(sentences, resultLookup, candidateLookup);
+            corrected = await ApplyMisparseGates(sentences, corrected);
 
             if (sw != null) { timings!.AdjacentScoringMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
@@ -2421,7 +2475,7 @@ namespace Jiten.Parser
         /// e.g. Sudachi gives 各党 + 幹部, but 各党 has no lookup. Splitting into 各 + 党 lets
         /// CombineNounCompounds find 党幹部 in lookups and produce 各 + 党幹部.
         /// </summary>
-        private static void SplitUnknownNounTokens(List<SentenceInfo> sentences)
+        private static void SplitUnknownNounTokens(List<SentenceInfo> sentences, HashSet<string>? protectedSurfaces = null)
         {
             foreach (var sentence in sentences)
             {
@@ -2433,6 +2487,12 @@ namespace Jiten.Parser
 
                 foreach (var (word, position, length) in sentence.Words)
                 {
+                    if (protectedSurfaces != null && protectedSurfaces.Contains(word.Text))
+                    {
+                        result.Add((word, position, length));
+                        continue;
+                    }
+
                     // Split 〜的/〜的な suffix from nouns when the base word has a lookup but the full form doesn't.
                     // e.g. 母性的な → 母性 + 的な (母性 has lookup, 母性的/母性的な doesn't)
                     if (word.Text.Length >= 3 &&
@@ -3038,6 +3098,54 @@ namespace Jiten.Parser
             CleanCompoundCache();
             if (CompoundExpressionCache.TryAdd(key, value))
                 CompoundCacheOrder.AddLast(key);
+        }
+
+        private static async Task<List<DeckWord>> ApplyMisparseGates(
+            List<SentenceInfo> sentences, List<DeckWord> corrected, ParserDiagnostics? diagnostics = null)
+        {
+            if (corrected.Count == 0) return corrected;
+
+            var wordIds = corrected.Select(w => w.WordId).Distinct();
+            var wordData = await JmDictCache.GetWordsAsync(wordIds);
+
+            var flatTokens = sentences
+                .SelectMany(s => s.Words)
+                .Where(w => w.word.PartOfSpeech != PartOfSpeech.SupplementarySymbol)
+                .Select(w => w.word)
+                .ToList();
+
+            var result = new List<DeckWord>(corrected.Count);
+            int ci = 0;
+
+            for (int i = 0; i < flatTokens.Count && ci < corrected.Count; i++)
+            {
+                var token = flatTokens[i];
+                if (token.ResolvedWordId == null) continue;
+
+                var deckWord = corrected[ci++];
+
+                wordData.TryGetValue(deckWord.WordId, out var jmWord);
+                var (isUk, hasKanji, readingIsIchi) = MisparseGates.GetWordFlags(jmWord, deckWord.ReadingIndex);
+
+                var prev = i > 0 ? flatTokens[i - 1] : null;
+                var next = i < flatTokens.Count - 1 ? flatTokens[i + 1] : null;
+                var ctx = new MisparseGateContext(token, deckWord, prev, next, isUk, hasKanji, readingIsIchi);
+
+                var decision = MisparseGates.Evaluate(in ctx);
+                if (decision.IsMisparsed)
+                {
+                    diagnostics?.LogDroppedToken(token.Text, token.PartOfSpeech,
+                        $"misparsed:{decision.GateId}");
+                    continue;
+                }
+
+                result.Add(deckWord);
+            }
+
+            while (ci < corrected.Count)
+                result.Add(corrected[ci++]);
+
+            return result;
         }
 
         private static List<DeckWord> ExcludeFinalMisparses(IEnumerable<DeckWord> words)
@@ -3711,5 +3819,32 @@ namespace Jiten.Parser
         }
 
         #endregion
+
+        private static byte[]? BuildUserDictCsv(List<DeckDictionaryEntry>? entries)
+        {
+            if (entries is not { Count: > 0 }) return null;
+
+            var sb = new StringBuilder();
+            foreach (var entry in entries)
+            {
+                var surface = entry.Surface.Trim();
+                if (surface.Length < 2 || surface.Contains(',') || surface.Contains('\n')) continue;
+
+                // surface,leftId,rightId,cost,headword,POS1-6,reading,normalizedForm,*,*,*,*,*
+                var pos = entry.EntryType switch
+                {
+                    DeckDictionaryEntryType.Name => "名詞,固有名詞,人名,一般,*,*",
+                    _ => "名詞,普通名詞,一般,*,*,*"
+                };
+                sb.Append(surface).Append(",5146,5146,3000,")
+                  .Append(surface).Append(',')
+                  .Append(pos).Append(',')
+                  .Append(surface).Append(',')
+                  .Append(surface)
+                  .AppendLine(",*,*,*,*,*");
+            }
+
+            return sb.Length > 0 ? Encoding.UTF8.GetBytes(sb.ToString()) : null;
+        }
     }
 }

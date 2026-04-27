@@ -20,4 +20,5 @@ public class Metadata
     public List<MetadataRelation> Relations { get; set; } = new();
     public long? SpeechDuration { get; set; }
     public long? SpeechMoraCount { get; set; }
+    public List<DeckDictionaryEntry> DictionaryEntries { get; set; } = new();
 }

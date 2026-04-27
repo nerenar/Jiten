@@ -29,6 +29,14 @@ static class SudachiInterop
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void FreeContextDelegate(IntPtr ctx);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate IntPtr CreateContextWithUserCsvDelegate(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string configPath,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string dictionaryPath,
+        IntPtr csvPtr,
+        nuint csvLen,
+        out IntPtr ctx);
+
     // Streaming processor delegate
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private unsafe delegate IntPtr ProcessTextCtxStreamUtf8V2Delegate(
@@ -52,6 +60,7 @@ static class SudachiInterop
     private static CreateContextDelegate? _createContext;
     private static FreeContextDelegate? _freeContext;
     private static ProcessTextCtxStreamUtf8V2Delegate? _processTextCtxStreamV2;
+    private static CreateContextWithUserCsvDelegate? _createContextWithUserCsv;
 
     private static readonly IntPtr _libHandle;
 
@@ -59,6 +68,9 @@ static class SudachiInterop
     private static IntPtr _sudachiContext = IntPtr.Zero;
     private static long _contextCallCount;
     private const long ContextRecycleThreshold = 5_000;
+
+    // Dynamic user dictionary CSV bytes (set per-deck, used at context creation)
+    private static byte[]? _dynamicUserDictCsv;
 
     // Limit concurrent Sudachi processing to match parse worker count (ProcessorCount / 4, min 1)
     // This reduces lock contention by gating how many threads attempt to acquire ProcessTextLock
@@ -223,6 +235,8 @@ static class SudachiInterop
             _processTextCtxStreamV2 = Marshal.GetDelegateForFunctionPointer<ProcessTextCtxStreamUtf8V2Delegate>(streamV2Ptr);
         if (NativeLibrary.TryGetExport(_libHandle, "free_context_ffi", out IntPtr freeCtxPtr))
             _freeContext = Marshal.GetDelegateForFunctionPointer<FreeContextDelegate>(freeCtxPtr);
+        if (NativeLibrary.TryGetExport(_libHandle, "create_context_with_user_csv_ffi", out IntPtr createCtxCsvPtr))
+            _createContextWithUserCsv = Marshal.GetDelegateForFunctionPointer<CreateContextWithUserCsvDelegate>(createCtxCsvPtr);
     }
 
     private static readonly object ProcessTextLock = new object();
@@ -284,6 +298,7 @@ static class SudachiInterop
 
     /// <summary>
     /// Process text using streaming FFI, parsing WordInfo objects incrementally without building the full output string.
+    /// When userDictCsv is provided, the Sudachi context is rebuilt with the extra dictionary entries.
     /// </summary>
     public static List<WordInfo> ProcessTextStreaming(
         string configPath,
@@ -291,7 +306,8 @@ static class SudachiInterop
         string dictionaryPath,
         char mode = 'C',
         bool printAll = true,
-        bool wakati = false)
+        bool wakati = false,
+        byte[]? userDictCsv = null)
     {
         if (_processTextCtxStreamV2 == null)
             throw new InvalidOperationException("Streaming FFI not available in this build");
@@ -301,6 +317,11 @@ static class SudachiInterop
         {
             lock (ProcessTextLock)
             {
+                if (!CsvUnchanged(_dynamicUserDictCsv, userDictCsv))
+                {
+                    _dynamicUserDictCsv = userDictCsv;
+                    RecycleContext();
+                }
                 // Clean up text using fast lookup table filter
                 inputText = FilterAllowedChars(inputText);
 
@@ -377,15 +398,45 @@ static class SudachiInterop
         }
     }
 
+    private static bool CsvUnchanged(byte[]? a, byte[]? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a == null || b == null || a.Length != b.Length) return false;
+        return a.AsSpan().SequenceEqual(b);
+    }
+
     private static IntPtr GetOrCreateContext(string configPath, string dictionaryPath)
     {
         if (_sudachiContext != IntPtr.Zero)
             return _sudachiContext;
 
-        if (_createContext == null)
-            return IntPtr.Zero;
+        IntPtr errPtr;
+        IntPtr ctx;
 
-        IntPtr errPtr = _createContext(configPath, dictionaryPath, out IntPtr ctx);
+        if (_dynamicUserDictCsv is { Length: > 0 } && _createContextWithUserCsv != null)
+        {
+            var handle = GCHandle.Alloc(_dynamicUserDictCsv, GCHandleType.Pinned);
+            try
+            {
+                errPtr = _createContextWithUserCsv(
+                    configPath, dictionaryPath,
+                    handle.AddrOfPinnedObject(), (nuint)_dynamicUserDictCsv.Length,
+                    out ctx);
+            }
+            finally
+            {
+                handle.Free();
+            }
+        }
+        else if (_createContext != null)
+        {
+            errPtr = _createContext(configPath, dictionaryPath, out ctx);
+        }
+        else
+        {
+            return IntPtr.Zero;
+        }
+
         string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
         _freeString(errPtr);
 

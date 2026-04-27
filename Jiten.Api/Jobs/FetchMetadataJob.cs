@@ -26,6 +26,7 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 .Include(deck => deck.Titles)
                 .Include(d => d.DeckGenres)
                 .Include(d => d.DeckTags)
+                .Include(d => d.DictionaryEntries)
                 .First(d => d.DeckId == deckId);
             var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Anilist);
 
@@ -45,7 +46,7 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
 
             if (string.IsNullOrEmpty(deck.Description))
-                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
+                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;
 
             if (metadata.Rating != null)
                 deck.ExternalRating = (byte)metadata.Rating;
@@ -55,6 +56,8 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
                     deck.Titles.Add(new DeckTitle(){DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias});
             }
+
+            MergeDictionaryEntries(deck, metadata.DictionaryEntries);
 
             await MetadataProviderHelper.ApplyGenreAndTagMappings(context, deck, metadata, LinkType.Anilist);
 
@@ -103,7 +106,7 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
 
             if (string.IsNullOrEmpty(deck.Description))
-                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
+                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;
 
             if (metadata.Rating != null)
                 deck.ExternalRating = (byte)metadata.Rating;
@@ -136,6 +139,7 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 .Include(deck => deck.Titles)
                 .Include(d => d.DeckGenres)
                 .Include(d => d.DeckTags)
+                .Include(d => d.DictionaryEntries)
                 .First(d => d.DeckId == deckId);
             var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Vndb);
 
@@ -155,7 +159,7 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
 
             if (string.IsNullOrEmpty(deck.Description))
-                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;;
+                deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;
 
             if (metadata.Rating != null)
                 deck.ExternalRating = (byte)metadata.Rating;
@@ -165,6 +169,8 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
                     deck.Titles.Add(new DeckTitle(){DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias});
             }
+
+            MergeDictionaryEntries(deck, metadata.DictionaryEntries);
 
             await MetadataProviderHelper.ApplyGenreAndTagMappings(context, deck, metadata, LinkType.Vndb);
 
@@ -286,6 +292,18 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
         finally
         {
             await Task.Delay(TimeSpan.FromSeconds(IGDB_DELAY));
+        }
+    }
+
+    private static void MergeDictionaryEntries(Deck deck, List<DeckDictionaryEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (deck.DictionaryEntries.All(e => e.Surface != entry.Surface))
+            {
+                entry.DeckId = deck.DeckId;
+                deck.DictionaryEntries.Add(entry);
+            }
         }
     }
 }

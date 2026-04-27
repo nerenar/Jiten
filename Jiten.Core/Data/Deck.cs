@@ -156,10 +156,9 @@ public class Deck
     /// </summary>
     public int DeckOrder { get; set; }
 
-    /// <summary>
-    /// Child decks
-    ///  </summary>
     public ICollection<Deck> Children { get; set; } = new List<Deck>();
+
+    public List<DeckDictionaryEntry> DictionaryEntries { get; set; } = new();
 
     /// <summary>
     /// List of words that appear in this deck

@@ -258,6 +258,7 @@ public partial class AdminController(
                             .Include(d => d.DeckGenres)
                             .Include(d => d.DeckTags)
                             .ThenInclude(dt => dt.Tag)
+                            .Include(d => d.DictionaryEntries)
                             .Include(d => d.RelationshipsAsSource)
                             .ThenInclude(r => r.TargetDeck)
                             .Include(d => d.RelationshipsAsTarget)
@@ -304,6 +305,7 @@ public partial class AdminController(
                                   .Include(d => d.DeckGenres)
                                   .Include(d => d.DeckTags)
                                   .ThenInclude(dt => dt.Tag)
+                                  .Include(d => d.DictionaryEntries)
                                   .Include(d => d.RelationshipsAsSource)
                                   .FirstOrDefaultAsync(d => d.DeckId == model.DeckId);
 
@@ -397,6 +399,23 @@ public partial class AdminController(
                 {
                     deck.Titles.Add(new DeckTitle { DeckId = deck.DeckId, Title = trimmed, TitleType = DeckTitleType.Alias });
                 }
+            }
+        }
+
+        // Update dictionary entries (character names etc.)
+        {
+            var newSurfaces = model.DictionaryEntries
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToHashSet();
+
+            var entriesToRemove = deck.DictionaryEntries.Where(e => !newSurfaces.Contains(e.Surface));
+            dbContext.RemoveRange(entriesToRemove);
+
+            foreach (var surface in newSurfaces)
+            {
+                if (deck.DictionaryEntries.All(e => e.Surface != surface))
+                    deck.DictionaryEntries.Add(new DeckDictionaryEntry { DeckId = deck.DeckId, Surface = surface, EntryType = DeckDictionaryEntryType.Name });
             }
         }
 

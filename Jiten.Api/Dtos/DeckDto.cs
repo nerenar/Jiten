@@ -31,6 +31,7 @@ public class DeckDto
     public int? ParentDeckId { get; set; }
     public List<Link> Links { get; set; } = new();
     public List<string> Aliases { get; set; } = new();
+    public List<DeckDictionaryEntryDto> DictionaryEntries { get; set; } = new();
     public int ChildrenDeckCount { get; set; }
     public int SelectedWordOccurrences { get; set; }
     public float DialoguePercentage { get; set; }
@@ -88,6 +89,7 @@ public class DeckDto
         DialoguePercentage = deck.DialoguePercentage;
         HideDialoguePercentage = deck.HideDialoguePercentage;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
+        DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;
         ExampleSentence = exampleSentence;
         Genres = deck.DeckGenres.Select(dg => dg.Genre).OrderBy(g => g.ToString()).ToList();
@@ -133,6 +135,7 @@ public class DeckDto
         DialoguePercentage = deck.DialoguePercentage;
         HideDialoguePercentage = deck.HideDialoguePercentage;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
+        DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;
         ExampleSentence = exampleSentence;
         Genres = deck.DeckGenres.Select(dg => dg.Genre).OrderBy(g => g.ToString()).ToList();

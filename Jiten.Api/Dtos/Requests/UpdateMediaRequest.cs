@@ -18,6 +18,7 @@ public class UpdateMediaRequest
     public IFormFile? File { get; set; }
     public List<Link> Links { get; set; } = new List<Link>();
     public List<string> Aliases { get; set; } = new List<string>();
+    public List<string> DictionaryEntries { get; set; } = new List<string>();
     public List<int> Genres { get; set; } = new List<int>();
     public List<UpdateMediaRequestTag> Tags { get; set; } = new List<UpdateMediaRequestTag>();
     public List<UpdateMediaRequestSubdeck>? Subdecks { get; set; } = new List<UpdateMediaRequestSubdeck>();

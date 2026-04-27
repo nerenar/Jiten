@@ -60,7 +60,8 @@ public static partial class MetadataProviderHelper
                                Rating = (int)Math.Round(requestResult.Rating ?? 0), Genres = tags.Select(t => t.Name).ToList(), Tags = tags,
                                IsAdultOnly = isAdultOnly,
                                IsNotOriginallyJapanese = requestResult.Olang != "ja",
-                               Relations = MapVndbRelations(requestResult.Relations)
+                               Relations = MapVndbRelations(requestResult.Relations),
+                               DictionaryEntries = await FetchVndbCharacters(requestResult.Id!)
                            };
 
             metadatas.Add(metadata);
@@ -116,8 +117,58 @@ public static partial class MetadataProviderHelper
                    Image = requestResult.Image?.Url, Aliases = requestResult.Aliases, Rating = (int)Math.Round(requestResult.Rating ?? 0),
                    Genres = tags.Select(t => t.Name).ToList(), Tags = tags, IsAdultOnly = isAdultOnly,
                    IsNotOriginallyJapanese = requestResult.Olang != "ja",
-                   Relations = MapVndbRelations(requestResult.Relations)
+                   Relations = MapVndbRelations(requestResult.Relations),
+                   DictionaryEntries = await FetchVndbCharacters(requestResult.Id!)
                };
+    }
+
+    private static async Task<List<DeckDictionaryEntry>> FetchVndbCharacters(string vnId)
+    {
+        try
+        {
+            var http = new HttpClient();
+            var serializerOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var allResults = new List<VndbCharacterResult>();
+            int page = 1;
+
+            while (true)
+            {
+                var requestContent = new StringContent(JsonSerializer.Serialize(new
+                {
+                    filters = new object[] { "vn", "=", new object[] { "id", "=", vnId } },
+                    fields = "name,original",
+                    results = 100,
+                    page
+                }));
+                requestContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+                var response = await http.PostAsync("https://api.vndb.org/kana/character", requestContent);
+                if (!response.IsSuccessStatusCode) break;
+
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<VndbCharacterPageResult>(json, serializerOptions);
+                if (result?.Results == null || result.Results.Count == 0) break;
+
+                allResults.AddRange(result.Results);
+                if (!result.More) break;
+
+                page++;
+                await Task.Delay(500);
+            }
+
+            if (allResults.Count == 0) return [];
+
+            var names = allResults
+                .Where(c => !string.IsNullOrWhiteSpace(c.Original))
+                .Select(c => (c.Original, (string?)null, (string?)null))
+                .ToList();
+
+            return BuildDictionaryEntriesFromNames(names);
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private static List<MetadataRelation> MapVndbRelations(List<VndbRelation>? relations)

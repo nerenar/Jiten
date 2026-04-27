@@ -17,6 +17,7 @@ public class AnilistMedia
     public bool IsAdult { get; set; }
     public string? CountryOfOrigin { get; set; }
     public AnilistRelations? Relations { get; set; }
+    public AnilistCharacterConnection? Characters { get; set; }
 
     public DateTime ReleaseDate => new(
                                        StartDate.Year.GetValueOrDefault(1),
