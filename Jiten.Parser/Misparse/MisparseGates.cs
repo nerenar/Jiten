@@ -28,10 +28,64 @@ internal static class MisparseGates
         if (IsShortKanaNameWithoutContext(in ctx))
             return new(true, "short-kana-name");
 
+        if (IsRepeatedKanaStuttering(in ctx))
+            return new(true, "repeated-kana-stutter");
+
+        if (IsKanaStutterBeforeWord(in ctx))
+            return new(true, "kana-stutter-before-word");
+
         if (IsShortKanaTokenWithoutJustification(in ctx))
             return new(true, "short-kana-unjustified");
 
         return default;
+    }
+
+    private static bool IsRepeatedKanaStuttering(in MisparseGateContext ctx)
+    {
+        string surface = ctx.Token.Text;
+        if (surface.Length < 2 || !WanaKana.IsKana(surface)) return false;
+
+        char first = surface[0];
+        for (int i = 1; i < surface.Length; i++)
+            if (surface[i] != first) return false;
+
+        // Common vocabulary — trust the match (パパ, ママ, もも, みみ, etc.)
+        if (ctx.ReadingIsIchi || ctx.IsUsuallyKana) return false;
+
+        char katakanaChar = first >= 'ぁ' && first <= 'ん'
+            ? (char)(first + 0x60) // hiragana → katakana
+            : first;
+
+        // Prev token contains the same kana
+        if (ctx.Prev != null && ctx.Prev.Text.IndexOf(first) >= 0)
+            return true;
+
+        // Next token's Sudachi reading starts with the same kana (catches ぼぼ僕: Reading=ボク)
+        if (ctx.Next?.Reading is { Length: > 0 } reading && reading[0] == katakanaChar)
+            return true;
+
+        // Both neighbours are single kana (onomatopoeia context like ちゅぼぼっ)
+        if (ctx.Prev is { Text.Length: <= 2 } && WanaKana.IsKana(ctx.Prev.Text)
+            && ctx.Next is { Text.Length: <= 2 } && WanaKana.IsKana(ctx.Next.Text))
+            return true;
+
+        return false;
+    }
+
+    private static bool IsKanaStutterBeforeWord(in MisparseGateContext ctx)
+    {
+        string surface = ctx.Token.Text;
+        if (surface.Length > 3 || !WanaKana.IsKana(surface)) return false;
+
+        if (ctx.ReadingIsIchi || ctx.IsUsuallyKana) return false;
+
+        if (ctx.Next?.Reading is not { Length: > 0 } nextReading) return false;
+
+        string katakana = surface.Length == 1
+            ? new string(surface[0] >= 'ぁ' && surface[0] <= 'ん' ? (char)(surface[0] + 0x60) : surface[0], 1)
+            : WanaKana.ToKatakana(surface);
+
+        return nextReading.StartsWith(katakana, StringComparison.Ordinal);
     }
 
     private static bool IsShortKanaNameWithoutContext(in MisparseGateContext ctx)

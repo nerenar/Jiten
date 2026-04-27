@@ -59,6 +59,18 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"どし(?=[たてよ])")]
     private static partial Regex ColloquialDoshiRegex();
 
+    // 3+ identical kana with optional break chars (っ/ッ/、/comma/space) between reps.
+    // No Japanese word has 3+ identical kana — this is always stuttering or sound effects.
+    // Range ぁ-んァ-ヶ excludes ー (U+30FC) which is handled by MultipleLongVowelRegex.
+    [GeneratedRegex(@"([ぁ-んァ-ヶ])([\s、,，っッ]*\1){2,}")]
+    private static partial Regex StutteringRunRegex();
+
+    // 3+ identical digraph mora (じょじょじょ, ちゅちゅちゅ, しょしょしょ, etc.)
+    // Small kana (ぁぃぅぇぉっゃゅょゎ / ァィゥェォッャュョヮ) cannot start a mora,
+    // so (normal kana + small kana) captures exactly one digraph mora.
+    [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\s、,，っッ]*\1){2,}")]
+    private static partial Regex StutteringDigraphRunRegex();
+
     private void PreprocessText(ref string text, bool preserveStopToken)
     {
         text = text.Replace("<", " ").Replace(">", " ");
@@ -86,6 +98,9 @@ public partial class MorphologicalAnalyser
 
         text = TildeAfterKanaRegex().Replace(text, "ー");
         text = MultipleLongVowelRegex().Replace(text, "ー");
+
+        text = StutteringDigraphRunRegex().Replace(text, _stopToken);
+        text = StutteringRunRegex().Replace(text, _stopToken);
 
         text = text
             .Replace("垣間見", $"垣間{_stopToken}見")

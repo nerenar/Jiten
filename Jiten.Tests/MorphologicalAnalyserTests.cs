@@ -774,7 +774,7 @@ public class MorphologicalAnalyserTests
         // いっしょ (一緒) must NOT be affected by っしょ splitting
         yield return ["いっしょに遊ぼう", new[] { "いっしょに", "遊ぼう" }];
         // Repeated verb phrases — CombineVerbDependant must not merge identical tokens
-        yield return ["ししてないしてない", new[] { "し", "してない", "してない" }];
+        yield return ["ししてないしてない", new[] { "してない", "してない" }];
         // RepairOrphanedAuxiliary — Sudachi merges noun+verb into compound noun, orphaning the conjugation
         yield return ["足蹴られた", new[] { "足", "蹴られた" }];  // 足蹴(noun) + られた(aux) → 足 + 蹴られた(passive past)
         yield return ["肉食う", new[] { "肉", "食う" }];  // 肉食(noun) + う(filler) → 肉 + 食う(verb)
@@ -1161,6 +1161,24 @@ public class MorphologicalAnalyserTests
 
         // === 地母神 should be 1 word, 様 separate ===
         yield return ["地母神様にお供えしたいのです。", new[] { "地母神", "様", "に", "お", "供え", "したい", "の", "です" }];
+
+        // === Stuttering: 3+ identical kana runs should not produce matches ===
+        yield return ["ぼぼぼぼぼ", new string[] { }];
+        yield return ["そして数秒後、ぼぼぼぼぼぼん", new[] { "そして", "数秒", "後", "ん" }];
+        yield return ["ぼっ、ぼぼぼぼぼぼくはぼくは学園都市第六位", new[] { "は", "ぼく", "は", "学園都市", "第六", "位" }];
+
+        // === Stuttering: comma-separated reps (3+ with breaks) ===
+        yield return ["ぼ、ぼぼ僕一人で", new[] { "僕", "一人", "で" }];
+
+        // === Stuttering: repeated digraph mora (じょ = 2 kana but 1 mora) ===
+        yield return ["じょじょじょ、冗談だよ！", new[] { "冗談", "だ", "よ" }];
+
+        // === Stuttering gate: 2-char repeated kana dropped when next token reading matches ===
+        yield return ["恋愛ですかぼぼ、僕は、", new[] { "恋愛", "ですか", "僕", "は" }];
+
+        // === Stuttering gate: single mora stutter before word with matching reading ===
+        yield return ["じょ、助教授", new[] { "助教授" }];
+        yield return ["じょ、冗談", new[] { "冗談" }];
     }
 
     [Theory]
