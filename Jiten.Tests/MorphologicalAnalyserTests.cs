@@ -610,20 +610,20 @@ public class MorphologicalAnalyserTests
         yield return ["普通は驚いたり恐がったり無視したりするものなのに", new[] { "普通", "は", "驚いたり", "恐がったり", "無視したり", "する", "もの", "なのに" }];
         // Vowel elongation tests - verb + う elongation
         // Pattern 1: Token ending in るう misparsed as adjective ウ音便 (e.g., かるう → 軽い)
-        yield return ["ぶつかるう", new[] { "ぶつかる", "う" }];  // ぶつ + かるう → ぶつかる + う
-        yield return ["とまるう", new[] { "とまる", "う" }];  // と + まるう → とまる + う
+        yield return ["ぶつかるう", new[] { "ぶつかる" }];  // う is gated (meaningless elongation)
+        yield return ["とまるう", new[] { "とまる" }];
         // Pattern 2: Standalone るう token misparsed as name
-        yield return ["わかるう", new[] { "わかる", "う" }];  // わか + るう → わかる + う
-        yield return ["やるう", new[] { "やる", "う" }];  // や + るう → やる + う
-        yield return ["あたるう", new[] { "あたる", "う" }];  // あた + るう → あたる + う
-        yield return ["はしるう", new[] { "はしる", "う" }];  // はし + るう → はしる + う
+        yield return ["わかるう", new[] { "わかる" }];
+        yield return ["やるう", new[] { "やる" }];
+        yield return ["あたるう", new[] { "あたる" }];
+        yield return ["はしるう", new[] { "はしる" }];
         // Vowel elongation tests - verb past tense + あ elongation
         // Pattern 3: Token + たあ misparsed as particle と
         yield return ["おきたあ", new[] { "おきた", "あ" }];  // おき + たあ → おきた + あ (past of 起きる)
         yield return ["でたあ", new[] { "でた", "あ" }];  // で + たあ → でた + あ (past of 出る)
         yield return ["ねたあ", new[] { "ねた", "あ" }];  // ね + たあ → ねた + あ (past of 寝る)
         // Pattern 4: Token ending in た + ああ where token is misparsed as non-verb
-        yield return ["いきたああ", new[] { "いきた", "ああ" }];  // いきた (nominal adj) + ああ → いきた (verb past) + ああ
+        yield return ["いきたああ", new[] { "いきた" }];  // ああ is gated (archaic kanji 嗚呼, meaningless elongation)
         // Vowel elongation tests - verb + ー (long vowel mark)
         // Pattern 5: Verb + separate ー token (handled by RepairLongVowelTokens in Parser)
         yield return ["ぶつかるー", new[] { "ぶつかる" }];  // ぶつ + か + る + ー → ぶつかる (ー stripped, word doesn't contain it)
@@ -1007,7 +1007,7 @@ public class MorphologicalAnalyserTests
         yield return ["ほうどこから来なすった？",
             new[] { "ほう", "どこ", "から", "来なすった" }];
         // ああまた — Sudachi mis-splits as あ+あまた; should be ああ+また
-        yield return ["ああまたこれか", new[] { "ああ", "また", "これ", "か" }];
+        yield return ["ああまたこれか", new[] { "また", "これ", "か" }];  // ああ is gated (archaic kanji 嗚呼)
         // 事を運ぶ idiom — should merge as a single expression
         yield return ["スザンナに見つからないように事を運ばないと",
             new[] { "スザンナ", "に", "見つからない", "ように", "事を運ばない", "と" }];
