@@ -103,9 +103,11 @@
   });
 
   const exampleRevealed = ref(false);
+  const occExpanded = ref(false);
 
   watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
     exampleRevealed.value = false;
+    occExpanded.value = false;
   });
 
   const extraSentences = ref<ExampleSentence[]>([]);
@@ -496,7 +498,10 @@
 
         <!-- Deck occurrences -->
         <div v-if="card.deckOccurrences?.length || card.sourceDeckName" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
-          <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500">
+          <div
+            class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500 overflow-hidden transition-[max-height] duration-200"
+            :class="occExpanded ? 'max-h-none' : 'max-h-[3.75rem]'"
+          >
             <template v-if="card.deckOccurrences?.length">
               <span v-for="occ in card.deckOccurrences" :key="occ.deckId">
                 ×{{ occ.occurrences }}
@@ -505,6 +510,14 @@
             </template>
             <span v-else-if="card.sourceDeckName">{{ card.sourceDeckName }}</span>
           </div>
+          <button
+            v-if="card.deckOccurrences && card.deckOccurrences.length > 3"
+            type="button"
+            class="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+            @click="occExpanded = !occExpanded"
+          >
+            {{ occExpanded ? '- View less' : `+ View all ${card.deckOccurrences.length}` }}
+          </button>
         </div>
 
       </div>

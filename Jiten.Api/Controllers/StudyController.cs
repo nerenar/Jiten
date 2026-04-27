@@ -1856,7 +1856,6 @@ public class StudyController(
                 DeckOccurrences = occurrenceMap.TryGetValue(exKey, out var occs)
                     ? occs
                         .OrderByDescending(o => o.Occurrences)
-                        .Take(5)
                         .Where(o => occurrenceDecks.ContainsKey(o.DeckId))
                         .Select(o =>
                         {
