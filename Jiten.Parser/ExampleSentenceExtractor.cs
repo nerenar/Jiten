@@ -144,7 +144,8 @@ public static class ExampleSentenceExtractor
                 var sentence = candidateSentences[i];
                 var exampleSentence = new ExampleSentence
                                       {
-                                          Text = sentence.Text, Position = sentencePositions[sentence],
+                                          Text = BalanceBrackets(NormalizeTrailingPunctuation(sentence.Text)),
+                                          Position = sentencePositions[sentence],
                                           Words = new List<ExampleSentenceWord>()
                                       };
 
@@ -262,5 +263,40 @@ public static class ExampleSentenceExtractor
         }
 
         return exampleSentences;
+    }
+
+    private static readonly (char open, char close)[] BracketPairs =
+        [('「', '」'), ('『', '』'), ('（', '）'), ('(', ')')];
+
+    private static string BalanceBrackets(string text)
+    {
+        foreach (var (open, close) in BracketPairs)
+        {
+            int balance = 0;
+            foreach (char c in text)
+            {
+                if (c == open) balance++;
+                else if (c == close) balance--;
+            }
+
+            if (balance > 0)
+                text += new string(close, balance);
+            else if (balance < 0)
+                text = new string(open, -balance) + text;
+        }
+
+        return text;
+    }
+
+    private static string NormalizeTrailingPunctuation(string text)
+    {
+        if (text.Length < 2) return text;
+
+        int end = text.Length;
+        while (end >= 2 && text[end - 1] == text[end - 2] &&
+               text[end - 1] is '。' or '！' or '？' or '!' or '?' or '.' or '…' or '‥')
+            end--;
+
+        return end == text.Length ? text : text[..end];
     }
 }
