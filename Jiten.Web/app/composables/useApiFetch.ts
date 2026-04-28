@@ -1,4 +1,4 @@
-import { PaginatedResponse } from '~/types/types';
+import type { PaginatedResponse } from '~/types/types';
 import type { AsyncDataRequestStatus, UseFetchOptions } from '#app';
 
 function setup401ErrorHandler(
@@ -102,13 +102,7 @@ export function useApiFetch<T>(
 export  function useApiFetchPaginated<T>(
   request: string | (() => string),
   opts?: any
-): {
-  data: Ref<PaginatedResponse<T> | null | undefined>;
-  status: Ref<AsyncDataRequestStatus>;
-  error: Ref<Error | null | undefined>;
-  refresh: (opts?: any) => Promise<void>;
-  execute: (opts?: any) => Promise<void>;
-} {
+)  {
   const config = useRuntimeConfig();
   const authStore = useAuthStore();
   const options = buildFetchOptions(opts, authStore, request);
@@ -116,33 +110,13 @@ export  function useApiFetchPaginated<T>(
   const { data, status, error, refresh, execute } = useFetch<PaginatedResponse<T>>(request, {
     baseURL: config.public.baseURL,
     ...options,
+    deep: false,
   });
 
   setup401ErrorHandler(error, execute, request, authStore);
 
-  const paginatedData = computed({
-    get: () => {
-      if (data.value) {
-        return new PaginatedResponse<T>(
-          data.value.data,
-          data.value.totalItems,
-          data.value.pageSize,
-          data.value.currentOffset
-        );
-      }
-      return null;
-    },
-    set: (newValue) => {
-      if (newValue) {
-        data.value = { data: newValue.data, totalItems: newValue.totalItems, pageSize: newValue.pageSize, currentOffset: newValue.currentOffset } as any;
-      } else {
-        data.value = null;
-      }
-    }
-  });
-
   return {
-    data: paginatedData,
+    data,
     status,
     error,
     refresh,
