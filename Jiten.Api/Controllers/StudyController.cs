@@ -1542,7 +1542,7 @@ public class StudyController(
                         foreach (var gd in globalDynamicDecks)
                         {
                             studyDeckWordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                                gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds));
+                                gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana));
                         }
                     }
                 }
@@ -3296,7 +3296,7 @@ public class StudyController(
                     foreach (var gd in globalDynamicDecks)
                     {
                         wordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds));
+                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana));
                     }
                 }
             }

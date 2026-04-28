@@ -357,12 +357,16 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return keys.ToHashSet();
     }
 
-    public async Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds)
+    public async Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds, bool excludeKana = false)
     {
         if (wordIds.Count == 0) return [];
 
         var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter)
             .Where(wff => wordIds.Contains(wff.WordId));
+
+        if (excludeKana)
+            query = query.Where(wff => context.WordForms
+                .Any(wf => wf.WordId == wff.WordId && wf.ReadingIndex == wff.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
 
         var keys = await query
             .Select(wff => ((long)wff.WordId << 8) | (byte)wff.ReadingIndex)

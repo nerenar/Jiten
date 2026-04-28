@@ -734,6 +734,12 @@ public class UserController(
             var difficulty = Math.Clamp(wrapper.Card.Difficulty ?? 5.0, 1.0, 10.0);
             var state = wrapper.Card.State;
 
+            if (state == FsrsState.New)
+            {
+                skippedCount++;
+                continue;
+            }
+
             // Check if card already exists
             if (existingCardsMap.TryGetValue(key, out var existingCard))
             {

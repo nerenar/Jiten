@@ -622,13 +622,13 @@
       </template>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Parts of Speech <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">Only include parts of speech <span class="text-gray-400">(optional)</span></label>
         <MultiSelect
           v-model="mediaPosFilter"
           :options="posOptions"
           option-label="label"
           option-value="value"
-          placeholder="All parts of speech"
+          placeholder="All (no filter)"
           class="w-full"
           :max-selected-labels="3"
           display="chip"
@@ -689,13 +689,13 @@
       </div>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Parts of Speech <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">Only include parts of speech <span class="text-gray-400">(optional)</span></label>
         <MultiSelect
           v-model="globalPosFilter"
           :options="posOptions"
           option-label="label"
           option-value="value"
-          placeholder="All parts of speech"
+          placeholder="All (no filter)"
           class="w-full"
           :max-selected-labels="3"
           display="chip"
