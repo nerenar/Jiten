@@ -56,9 +56,24 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex KatakanaInterjectionTsuRegex();
 
+    [GeneratedRegex(@"どし(?=[たてよ])")]
+    private static partial Regex ColloquialDoshiRegex();
+
+    // 3+ identical kana with optional break chars (っ/ッ/、/comma/space) between reps.
+    // No Japanese word has 3+ identical kana — this is always stuttering or sound effects.
+    // Range ぁ-んァ-ヶ excludes ー (U+30FC) which is handled by MultipleLongVowelRegex.
+    [GeneratedRegex(@"([ぁ-んァ-ヶ])([\s、,，っッ]*\1){2,}")]
+    private static partial Regex StutteringRunRegex();
+
+    // 3+ identical digraph mora (じょじょじょ, ちゅちゅちゅ, しょしょしょ, etc.)
+    // Small kana (ぁぃぅぇぉっゃゅょゎ / ァィゥェォッャュョヮ) cannot start a mora,
+    // so (normal kana + small kana) captures exactly one digraph mora.
+    [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\s、,，っッ]*\1){2,}")]
+    private static partial Regex StutteringDigraphRunRegex();
+
     private void PreprocessText(ref string text, bool preserveStopToken)
     {
-        text = text.Replace("<", " ").Replace(">", " ");
+        text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
         text = text.ToFullWidthDigits();
         text = NonJapaneseCharRegex().Replace(text, "");
 
@@ -84,7 +99,12 @@ public partial class MorphologicalAnalyser
         text = TildeAfterKanaRegex().Replace(text, "ー");
         text = MultipleLongVowelRegex().Replace(text, "ー");
 
-        text = text.Replace("垣間見", $"垣間{_stopToken}見");
+        text = StutteringDigraphRunRegex().Replace(text, _stopToken);
+        text = StutteringRunRegex().Replace(text, _stopToken);
+
+        text = text
+            .Replace("垣間見", $"垣間{_stopToken}見")
+            .Replace("今手", $"今{_stopToken}手");
         text = HayameWithoutWoRegex().Replace(text, $"は{_stopToken}やめ");
         text = text.Replace("もやる", $"も{_stopToken}やる");
         text = HayaruWithoutGaRegex().Replace(text, $"は{_stopToken}やる");
@@ -99,7 +119,9 @@ public partial class MorphologicalAnalyser
             .Replace("この手紙", $"この{_stopToken}手紙")
             .Replace("少女の手", $"少女{_stopToken}の手")
             .Replace("はたまたま", $"は{_stopToken}たまたま")
-            .Replace("涎たら", $"涎{_stopToken}たら");
+            .Replace("悶え苦しむ", $"悶え{_stopToken}苦しむ")
+            .Replace("悶え苦しん", $"悶え{_stopToken}苦しん")
+            ;
 
         text = ColloquialGeminationRegex().Replace(text, "");
 
@@ -136,11 +158,14 @@ public partial class MorphologicalAnalyser
             .Replace("とんでもねえ", "とんでもない")
             .Replace("しょうがねえ", "しょうがない")
             .Replace("にちがいねえ", "にちがいない")
-            .Replace("せぇ", "さい");
+            .Replace("せぇ", "さい")
+            .Replace("ですー", "です")
+            .Replace("ですぅ", "です");
 
         text = text.Replace("できんよう", $"できん{_stopToken}よう");
         text = ColloquialSshoRegex().Replace(text, $"{_stopToken}っしょ");
 
+        text = ColloquialDoshiRegex().Replace(text, "どうし");
         text = ColloquialYuuRegex().Replace(text, "いう");
         text = text
             .Replace("殺ス", "殺す")

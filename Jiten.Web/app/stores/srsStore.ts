@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto } from '~/types';
+import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto } from '~/types';
 import { FsrsRating } from '~/types';
 
 interface SessionReview {
@@ -77,6 +77,8 @@ export const useSrsStore = defineStore('srs', () => {
     furiganaOnFrontNewOnly: false,
     autoPlayWord: true,
     autoPlaySentence: true,
+    showReviewActivity: true,
+    showReviewForecast: true,
     timezone: 'Europe/London',
   });
   const sessionStats = ref({
@@ -100,6 +102,7 @@ export const useSrsStore = defineStore('srs', () => {
   const fetchError = ref<string | null>(null);
   const dueSummary = ref<DueSummaryDto | null>(null);
   const deckStreak = ref<DeckStreakDto | null>(null);
+  const reviewForecast30d = ref<ReviewForecast30dDto | null>(null);
   const studyMoreParams = ref<StudyMoreParams | null>(null);
   const exampleCache = ref(new Map<string, StudyExampleSentenceDto | null>());
   const examplePrefetchedUpTo = ref(-1);
@@ -220,6 +223,14 @@ export const useSrsStore = defineStore('srs', () => {
       deckStreak.value = await $api<DeckStreakDto>('srs/deck-streak');
     } catch {
       deckStreak.value = null;
+    }
+  }
+
+  async function fetchReviewForecast30d() {
+    try {
+      reviewForecast30d.value = await $api<ReviewForecast30dDto>('srs/review-forecast-30d');
+    } catch {
+      reviewForecast30d.value = null;
     }
   }
 
@@ -846,6 +857,8 @@ export const useSrsStore = defineStore('srs', () => {
     fetchError,
     dueSummary,
     deckStreak,
+    reviewForecast30d,
+    fetchReviewForecast30d,
     canUndo,
     currentCard,
     hasCards,

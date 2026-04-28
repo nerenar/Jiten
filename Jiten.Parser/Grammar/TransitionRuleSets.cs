@@ -56,6 +56,14 @@ internal static class TransitionRuleSets
         "的", "性", "化", "中", "用", "式", "風"
     ];
 
+    // Noun→verb collocations: when a nearby resolved token matches the key wordId,
+    // the target verb candidate gets a scoring bonus to beat homophones.
+    // (contextWordId) → (targetWordId, bonus)
+    internal static readonly Dictionary<int, (int TargetWordId, int Bonus)> NounVerbCollocations = new()
+    {
+        { 1172400, (1444150, 30) }, // 嘘 → 吐く (to tell a lie), not 点く/付く
+    };
+
     internal static readonly ScoringRule[] SoftRules =
     [
         new("noun-particle-synergy",
@@ -196,7 +204,12 @@ internal static class TransitionRuleSets
         new("verb-after-case-particle-synergy",
             [ScoringCondition.CandidateIsVerb],
             [ScoringCondition.PrevIsCaseParticle],
-            15),
+            35),
+
+        new("noun-after-case-particle-demotion",
+            [ScoringCondition.CandidateIsNounLike],
+            [ScoringCondition.PrevIsCaseParticle],
+            -25),
 
         new("name-honorific-synergy",
             [ScoringCondition.CandidateIsName],

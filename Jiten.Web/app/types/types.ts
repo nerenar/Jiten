@@ -153,37 +153,11 @@ export interface Definition {
   field?: string[];
 }
 
-export class PaginatedResponse<T> {
-  constructor(
-    public readonly data: T,
-    public readonly totalItems: number,
-    public readonly pageSize: number,
-    public readonly currentOffset: number
-  ) {}
-
-  get totalPages(): number {
-    return Math.ceil(this.totalItems / this.pageSize);
-  }
-
-  get currentPage(): number {
-    return Math.floor(this.currentOffset / this.pageSize) + 1;
-  }
-
-  get hasPreviousPage(): boolean {
-    return this.currentPage > 1;
-  }
-
-  get hasNextPage(): boolean {
-    return this.currentPage < this.totalPages;
-  }
-
-  get previousOffset(): number | null {
-    return this.hasPreviousPage ? Math.max(0, this.currentOffset - this.pageSize) : null;
-  }
-
-  get nextOffset(): number | null {
-    return this.hasNextPage ? Math.min(this.totalItems, this.currentOffset + this.pageSize) : null;
-  }
+export interface PaginatedResponse<T> {
+  data: T;
+  totalItems: number;
+  pageSize: number;
+  currentOffset: number;
 }
 
 export interface GlobalStats {
@@ -894,6 +868,8 @@ export interface StudySettingsDto {
   furiganaOnFrontNewOnly: boolean;
   autoPlayWord: boolean;
   autoPlaySentence: boolean;
+  showReviewActivity: boolean;
+  showReviewForecast: boolean;
   timezone: string | null;
 }
 
@@ -914,6 +890,10 @@ export interface ReviewForecastDto {
   dueToday: number;
   dueTomorrow: number;
   nextReviewAt: string | null;
+}
+
+export interface ReviewForecast30dDto {
+  days: { date: string; count: number }[];
 }
 
 export interface SessionStreakDto {

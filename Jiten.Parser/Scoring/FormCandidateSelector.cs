@@ -97,7 +97,8 @@ internal static class FormCandidateSelector
                                                  FormFlagScore = c.FormFlagScore,
                                                  SurfaceMatchScore = c.SurfaceMatchScore,
                                                  ScriptScore = c.ScriptScore,
-                                                 ReadingMatchScore = c.ReadingMatchScore
+                                                 ReadingMatchScore = c.ReadingMatchScore,
+                                                 PosAffinityScore = c.PosAffinityScore
                                              })
                                 .ToList();
 

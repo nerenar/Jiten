@@ -21,24 +21,17 @@ public partial class MorphologicalAnalyser
     /// <returns>A list of SentenceInfo objects representing the parsed output.</returns>
     public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false, bool preserveStopToken = false,
                                                 ParserDiagnostics? diagnostics = null,
-                                                BenchmarkTimings? timings = null)
+                                                BenchmarkTimings? timings = null,
+                                                byte[]? userDictCsv = null)
     {
-        var results = await ParseBatch([text], morphemesOnly, preserveStopToken, diagnostics, timings);
+        var results = await ParseBatch([text], morphemesOnly, preserveStopToken, diagnostics, timings, userDictCsv);
         return results.Count > 0 ? results[0] : [];
     }
 
-    /// <summary>
-    /// Parses multiple texts in a single Sudachi call for efficiency.
-    /// This is the main implementation - Parse() delegates here.
-    /// </summary>
-    /// <param name="texts">List of texts to parse.</param>
-    /// <param name="morphemesOnly">A boolean indicating whether the parsing should output only morphemes.</param>
-    /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved.</param>
-    /// <param name="diagnostics">Optional diagnostics container for verbose debug output.</param>
-    /// <returns>List of SentenceInfo lists, one per input text.</returns>
     public Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
                                                      ParserDiagnostics? diagnostics = null,
-                                                     BenchmarkTimings? timings = null)
+                                                     BenchmarkTimings? timings = null,
+                                                     byte[]? userDictCsv = null)
     {
         if (texts.Count == 0) return Task.FromResult<List<List<SentenceInfo>>>([]);
 
@@ -92,7 +85,7 @@ public partial class MorphologicalAnalyser
         // Use streaming when available and not in diagnostics mode
         if (diagnostics == null && SudachiInterop.StreamingAvailable)
         {
-            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode);
+            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode, userDictCsv: userDictCsv);
 
             if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
         }

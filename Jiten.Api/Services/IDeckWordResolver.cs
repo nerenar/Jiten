@@ -37,7 +37,7 @@ public interface IDeckWordResolver
     Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
     Task<HashSet<long>> GetGlobalDynamicWordKeys(int? minFreq, int? maxFreq, string? posFilter);
-    Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds);
+    Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds, bool excludeKana = false);
     Task<(int Count, bool WasTruncated)> CountGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
     Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana);

@@ -83,10 +83,12 @@ public static class WordFormHelper
 
     public static async Task<Dictionary<(int, short), JmDictWordForm>> LoadWordForms(JitenDbContext context, List<int> wordIds)
     {
-        return await context.WordForms
+        var forms = await context.WordForms
             .AsNoTracking()
             .Where(wf => wordIds.Contains(wf.WordId))
             .ToDictionaryAsync(wf => (wf.WordId, wf.ReadingIndex));
+        RubyTextHelper.EnrichForms(forms);
+        return forms;
     }
 
     public static async Task<Dictionary<(int, short), JmDictWordFormFrequency>> LoadWordFormFrequencies(JitenDbContext context, List<int> wordIds)
@@ -149,10 +151,12 @@ public static class WordFormHelper
 
     public static async Task<List<JmDictWordForm>> LoadWordFormsForWord(JitenDbContext context, int wordId)
     {
-        return await context.WordForms
+        var forms = await context.WordForms
             .AsNoTracking()
             .Where(wf => wf.WordId == wordId)
             .OrderBy(wf => wf.ReadingIndex)
             .ToListAsync();
+        RubyTextHelper.EnrichForms(forms);
+        return forms;
     }
 }

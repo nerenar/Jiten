@@ -188,6 +188,20 @@ internal static class TransitionRuleEngine
                     }, prevPos, prevLen + auxLen);
                     words.RemoveAt(i);
                 }
+                else if (prevWord.PartOfSpeech == PartOfSpeech.Noun &&
+                         hasLookup(prevWord.Text + "る"))
+                {
+                    var auxLen = words[i].len;
+                    var verbDictForm = prevWord.Text + "る";
+                    words[i - 1] = (new WordInfo(prevWord)
+                    {
+                        Text = merged,
+                        DictionaryForm = verbDictForm,
+                        NormalizedForm = verbDictForm,
+                        PartOfSpeech = PartOfSpeech.Verb
+                    }, prevPos, prevLen + auxLen);
+                    words.RemoveAt(i);
+                }
                 else
                 {
                     words.RemoveAt(i);

@@ -419,9 +419,9 @@ public class FormSelectionTests
         yield return ["やつらの思うつぼだ", "やつら", 1913290, (byte)4];
 
         // ガラ (katakana) → 柄/character (1508300), not gala (2834398)
-        // Pure kana-script difference scoring lets high-priority 柄 overcome the exact-match advantage of gala
-        yield return ["ガラじゃないしさ", "ガラ", 1508300, (byte)1];
-        yield return ["俺だってガラじゃないのは分かってるんだから", "ガラ", 1508300, (byte)1];
+        // Katakana surface matches the katakana form (RI=2) rather than the hiragana canonical (RI=1)
+        yield return ["ガラじゃないしさ", "ガラ", 1508300, (byte)2];
+        yield return ["俺だってガラじゃないのは分かってるんだから", "ガラ", 1508300, (byte)2];
 
         // くすん → sniff/sniffle onomatopoeia (2130690), not くすむ/to be dull (1957380)
         // User dic overrides Sudachi 動詞(くすむ撥音便)→副詞 for the common onomatopoeia
@@ -854,6 +854,117 @@ public class FormSelectionTests
         yield return ["行くぞ", "ぞ", 2029130, (byte)0];
         yield return ["いいよ", "よ", 2029090, (byte)0];
         yield return ["うるさいわ", "わ", 2029100, (byte)0];
+
+        // 営 as standalone noun — Sudachi suffix reclassified to noun via user_dic
+        yield return ["官の営による一大事業", "営", 1173410, (byte)0];
+
+        // もと (元) as prefix "former" — Sudachi must not split into も+と particles
+        yield return ["もと御同期の方", "もと", 1260670, (byte)5];
+
+        // 眼差し (まなざし) — Sudachi must not split as 眼+差し向ける
+        yield return ["眼差し向けるであろう", "眼差し", 1217200, (byte)0];
+
+        // === Multi-word expressions spanning particles ===
+        // 飴と鞭 (carrot and stick) — expression with particle と in the middle
+        yield return ["飴と鞭", "飴と鞭", 1970680, (byte)0];
+
+        // 腹に据えかねる — expression spanning に particle
+        yield return ["腹に据えかねている", "腹に据えかねている", 2126260, (byte)0];
+
+        // 合点がいく — expression spanning が particle; いった must not be 言った
+        yield return ["合点がいった", "合点がいった", 1285130, (byte)0];
+
+        // === Colloquial contractions ===
+        // やっちまえ = やっちまう (1012780) imperative — Sudachi splits や/っち/ま/えー
+        yield return ["やっちまえー！", "やっちまえ", 1012780, (byte)0];
+
+        // === Onomatopoeia with と ===
+        // ビクリと = びくりと (2207870, adv, on-mim), not Bikuri surname (5605618)
+        yield return ["最初はビクリと体を引き攣らせた", "ビクリと", 2207870, (byte)3];
+
+        // === なし absorption ===
+        // 異常なし — なし (1529560) must not be absorbed as na-adj copula な + し
+        yield return ["眼球運動異常なし歯肉の出血なし", "なし", 1529560, (byte)1];
+
+        // === Greedy compound vs better split ===
+        // 人見知り (1367260) should win over ただの人 (1891410) + 見知り
+        yield return ["ただの人見知り", "人見知り", 1367260, (byte)0];
+
+        // === Volitional + vowel elongation ===
+        // 遊ぼー → volitional of 遊ぶ (1542160), not 遊 (name) + ボー (bow)
+        yield return ["遊ぼー", "遊ぼう", 1542160, (byte)0];
+
+        // === つく homophone disambiguation ===
+        // 嘘をつく → 吐く (1444150, to tell a lie), not 点く (1441400, to be lit)
+        yield return ["適当な噓をつくな！", "つく", 1444150, (byte)1];
+        yield return ["嘘はつかない", "つかない", 1444150, (byte)1];
+        yield return ["こいつらは嘘はついていないんだろう。", "ついていない", 1444150, (byte)1];
+
+        // 推測がつく → 付く (1495740, to be attached/settled), not 点く (1441400)
+        yield return ["彼女自身も推測がついていた筈だ", "ついていた", 1495740, (byte)2];
+
+        // ともつかない → 付く (1495740, to be attached), not 点く (1441400)
+        yield return ["その行動力に感心とも呆れともつかない", "つかない", 1495740, (byte)2];
+
+        // === Counter without number context ===
+        // 色 should be noun (1357600), not counter (2097830) when not preceded by a number
+        yield return ["世界が敵色だぜ、まったく", "色", 1357600, (byte)0];
+
+        // === Vowel elongation on particles ===
+        // けどー stripped to けど → (1004200), ケドー normalized to けど → (1004200)
+        yield return ["バンフレットの校正なんだけどー", "けど", 1004200, (byte)0];
+        yield return ["知ってると思うケドー", "けど", 1004200, (byte)0];
+
+        // === Onomatopoeia vs rare nouns ===
+        // コホン → cough/ahem (2579880), not 古本/secondhand book (1578510)
+        yield return ["コホン、と咳払いしつつもう一度言う。", "コホン", 2579880, (byte)2];
+
+        // === えと should be filler interjection (1001150), not sexagenary cycle 干支 (1650120) ===
+        // Structural: SurfaceMatchScore gap (干支 exact 300 vs えーと partial 50), PosAffinity doesn't cover interjections
+        yield return ["えと", "えと", 1001150, (byte)1];
+
+        // === 創造主 should be single word (1581250), not 創造+主たる ===
+        yield return ["創造主たる", "創造主", 1581250, (byte)0];
+
+        // === 完全無欠 should be single yojijukugo (1651155) — na-adj merges with な ===
+        yield return ["完全無欠な人", "完全無欠な", 1651155, (byte)0];
+
+        // === 諸君 should be (1344230), not 諸+君たち ===
+        yield return ["諸君たち", "諸君", 1344230, (byte)0];
+
+        // === なれど should be single conjunction (2173630) ===
+        yield return ["身なれどご助力したい", "なれど", 2173630, (byte)0];
+
+        // === 体力 should be (1409760), not 体+力無さ ===
+        yield return ["体力無さすぎです", "体力", 1409760, (byte)0];
+
+        // === 言いすぎた should resolve to verb 言い過ぎる (1848440) ===
+        // Structural: transition rule drops た after noun (Sudachi classifies 言いすぎ as noun)
+        yield return ["少し言いすぎたようだ許せ", "言いすぎた", 1848440, (byte)1];
+
+        // === 強い should be adjective つよい (1236070), not verb 強いる/しいる (1236100) ===
+        // Sudachi misclassifies 強い as 名詞 reading シイ; form scoring correctly picks adj-i
+        // but reading-gating overrides to verb. Adj-i with exact surface match should win.
+        yield return ["強いは弱いの実", "強い", 1236070, (byte)0];
+
+        // === 訳 should be わけ (1538330), not やく (2057030) in these contexts ===
+        yield return ["残念ながらそういう訳にはいかんな", "訳", 1538330, (byte)0];
+        yield return ["自分でも訳が分からずに", "訳", 1538330, (byte)0];
+        yield return ["見間違う訳がねぇ", "訳", 1538330, (byte)0];
+
+        // === たちどころに should be adverb "at once" (1838090), not surname (5700879) ===
+        yield return ["心臓の傷はたちどころに消え失せていた。", "たちどころに", 1838090, (byte)3];
+
+        // === イキ should resolve to 行く (1578850), not 遺棄 (1587090) ===
+        yield return ["俺もイキました思いっきり出しました", "イキました", 1578850, (byte)4];
+        yield return ["そろそろちゃんと僕と話して貰うわけには、いきませんか？", "いきません", 1578850, (byte)2];
+
+        // === 事 after 祝い should be こと (1313580), not ごと suffix (2613010) ===
+        yield return ["お祝い事に招かれたのですから", "事", 1313580, (byte)0];
+
+        // === 住み易そう should resolve to 住み易い (2839799), not 住む (1334040) ===
+        // Verb stem + adj-forming suffix: CombineInflections must set POS to IAdjective
+        yield return ["住み易そう", "住み易そう", 2839799, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

@@ -66,6 +66,15 @@ public static partial class MetadataProviderHelper
                                                         }
                                                       }
                                                     }
+                                                    characters(sort: ROLE) {
+                                                      nodes {
+                                                        name {
+                                                          native
+                                                          first
+                                                          last
+                                                        }
+                                                      }
+                                                    }
                                                   }
                                                 }
                                               }
@@ -108,7 +117,8 @@ public static partial class MetadataProviderHelper
                                                                  }).ToList(),
                                                              IsAdultOnly = media.IsAdult,
                                                              IsNotOriginallyJapanese = media.CountryOfOrigin != "JP",
-                                                             Relations = MapAnilistRelations(media.Relations)
+                                                             Relations = MapAnilistRelations(media.Relations),
+                                                             DictionaryEntries = ExtractAnilistCharacterNames(media.Characters)
                                                          }).ToList() ?? [];
     }
 
@@ -157,6 +167,15 @@ public static partial class MetadataProviderHelper
                                                         }
                                                       }
                                                     }
+                                                    characters(sort: ROLE) {
+                                                      nodes {
+                                                        name {
+                                                          native
+                                                          first
+                                                          last
+                                                        }
+                                                      }
+                                                    }
                                                   }
                                               }
                                       """,
@@ -196,7 +215,8 @@ public static partial class MetadataProviderHelper
                        Percentage = tag.Rank
                    }).ToList(), IsAdultOnly = media.IsAdult,
                    IsNotOriginallyJapanese = media.CountryOfOrigin != "JP",
-                   Relations = MapAnilistRelations(media.Relations)
+                   Relations = MapAnilistRelations(media.Relations),
+                   DictionaryEntries = ExtractAnilistCharacterNames(media.Characters)
                };
     }
 
@@ -245,6 +265,15 @@ public static partial class MetadataProviderHelper
                                                         }
                                                       }
                                                     }
+                                                    characters(sort: ROLE) {
+                                                      nodes {
+                                                        name {
+                                                          native
+                                                          first
+                                                          last
+                                                        }
+                                                      }
+                                                    }
                                                   }
                                               }
                                       """,
@@ -289,8 +318,21 @@ public static partial class MetadataProviderHelper
                        Percentage = tag.Rank
                    }).ToList(), IsAdultOnly = media.IsAdult,
                    IsNotOriginallyJapanese = media.CountryOfOrigin != "JP",
-                   Relations = MapAnilistRelations(media.Relations)
+                   Relations = MapAnilistRelations(media.Relations),
+                   DictionaryEntries = ExtractAnilistCharacterNames(media.Characters)
                };
+    }
+
+    private static List<DeckDictionaryEntry> ExtractAnilistCharacterNames(AnilistCharacterConnection? characters)
+    {
+        if (characters?.Nodes == null || characters.Nodes.Count == 0) return [];
+
+        var names = characters.Nodes
+            .Where(n => !string.IsNullOrWhiteSpace(n.Name.Native))
+            .Select(n => (n.Name.Native, n.Name.First, n.Name.Last))
+            .ToList();
+
+        return BuildDictionaryEntriesFromNames(names);
     }
 
     private static List<MetadataRelation> MapAnilistRelations(AnilistRelations? relations)

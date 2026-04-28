@@ -65,6 +65,15 @@
   const aliases = ref<string[]>([]);
   const showAddAliasDialog = ref(false);
   const newAlias = ref('');
+  const aliasesExpanded = ref(false);
+  const visibleAliases = computed(() => aliasesExpanded.value ? aliases.value : aliases.value.slice(0, 3));
+
+  // Dictionary entries (character names)
+  const dictionaryEntries = ref<string[]>([]);
+  const showAddDictEntryDialog = ref(false);
+  const newDictEntry = ref('');
+  const dictEntriesExpanded = ref(false);
+  const visibleDictEntries = computed(() => dictEntriesExpanded.value ? dictionaryEntries.value : dictionaryEntries.value.slice(0, 3));
 
   // Genres
   const selectedGenres = ref<number[]>([]);
@@ -192,6 +201,7 @@
 
       links.value = mainDeck.links || [];
       aliases.value = mainDeck.aliases || [];
+      dictionaryEntries.value = mainDeck.dictionaryEntries?.map((e: any) => e.surface) || [];
 
       selectedGenres.value = mainDeck.genres || [];
       selectedTags.value = mainDeck.tags?.map(t => ({
@@ -513,6 +523,25 @@
     aliases.value.splice(index, 1);
   }
 
+  // Dictionary entries handlers
+  function openAddDictEntryDialog() {
+    newDictEntry.value = '';
+    showAddDictEntryDialog.value = true;
+  }
+
+  function addDictEntry() {
+    if (!newDictEntry.value.trim()) {
+      showToast('warn', 'Validation Error', 'Name is required');
+      return;
+    }
+    dictionaryEntries.value.push(newDictEntry.value.trim());
+    showAddDictEntryDialog.value = false;
+  }
+
+  function removeDictEntry(index: number) {
+    dictionaryEntries.value.splice(index, 1);
+  }
+
   async function fetchMetadata() {
     try {
       const data = await $api('admin/fetch-metadata/' + mediaId, {
@@ -631,6 +660,12 @@
       if (aliases.value && aliases.value.length > 0) {
         for (let i = 0; i < aliases.value.length; i++) {
           formData.append(`aliases[${i}]`, aliases.value[i]);
+        }
+      }
+
+      if (dictionaryEntries.value && dictionaryEntries.value.length > 0) {
+        for (let i = 0; i < dictionaryEntries.value.length; i++) {
+          formData.append(`dictionaryEntries[${i}]`, dictionaryEntries.value[i]);
         }
       }
 
@@ -892,7 +927,7 @@
 
               <div v-else class="mb-4">
                 <ul class="list-none p-0">
-                  <li v-for="(alias, index) in aliases" :key="index" class="flex justify-between items-center p-2 border-b">
+                  <li v-for="(alias, index) in visibleAliases" :key="index" class="flex justify-between items-center p-2 border-b">
                     <div>{{ alias }}</div>
                     <div class="flex">
                       <Button class="p-button-text p-button-danger" @click="removeAlias(index)">
@@ -901,6 +936,9 @@
                     </div>
                   </li>
                 </ul>
+                <Button v-if="aliases.length > 3" text size="small" class="mt-2" @click="aliasesExpanded = !aliasesExpanded">
+                  {{ aliasesExpanded ? 'Show less' : `Show all (${aliases.length})` }}
+                </Button>
               </div>
 
               <!-- Add Alias Dialog -->
@@ -914,6 +952,48 @@
                 <template #footer>
                   <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showAddAliasDialog = false" />
                   <Button label="Add" icon="pi pi-check" class="p-button-text" @click="addAlias" />
+                </template>
+              </Dialog>
+            </div>
+
+            <!-- Dictionary Entries Section (Character Names) -->
+            <div class="mt-6">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="text-lg font-medium">Character Names</h3>
+                <Button @click="openAddDictEntryDialog">
+                  <Icon name="material-symbols-light:add-circle-outline" size="1.5em" />
+                  Add Name
+                </Button>
+              </div>
+
+              <div v-if="dictionaryEntries.length === 0" class="p-4 border rounded text-center text-gray-500">No character names. Click "Add Name" to add one, or fetch metadata to populate automatically.</div>
+
+              <div v-else class="mb-4">
+                <ul class="list-none p-0">
+                  <li v-for="(entry, index) in visibleDictEntries" :key="index" class="flex justify-between items-center p-2 border-b">
+                    <div>{{ entry }}</div>
+                    <div class="flex">
+                      <Button class="p-button-text p-button-danger" @click="removeDictEntry(index)">
+                        <Icon name="material-symbols-light:delete" size="1.5em" />
+                      </Button>
+                    </div>
+                  </li>
+                </ul>
+                <Button v-if="dictionaryEntries.length > 3" text size="small" class="mt-2" @click="dictEntriesExpanded = !dictEntriesExpanded">
+                  {{ dictEntriesExpanded ? 'Show less' : `Show all (${dictionaryEntries.length})` }}
+                </Button>
+              </div>
+
+              <Dialog v-model:visible="showAddDictEntryDialog" header="Add Character Name" :modal="true" class="w-full md:w-1/2">
+                <div class="p-fluid">
+                  <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">Name</label>
+                    <InputText v-model="newDictEntry" placeholder="Enter character name" class="w-full" />
+                  </div>
+                </div>
+                <template #footer>
+                  <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showAddDictEntryDialog = false" />
+                  <Button label="Add" icon="pi pi-check" class="p-button-text" @click="addDictEntry" />
                 </template>
               </Dialog>
             </div>

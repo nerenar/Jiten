@@ -100,7 +100,7 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <MediaDeckCard :deck="response.data.mainDeck" @update:deck="updateMainDeck" />
+      <MediaDeckCard :deck="response.data.mainDeck" hide-detail-button @update:deck="updateMainDeck" />
 
       <div v-if="response.data.parentDeck != null" class="pt-4">
         This deck belongs to

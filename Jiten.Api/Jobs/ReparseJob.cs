@@ -12,7 +12,11 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
-        var deck = await context.Decks.AsNoTracking().Include(d => d.RawText).Include(d => d.ExampleSentences).Include(d => d.Children).ThenInclude(deck => deck.RawText).Include(deck => deck.ExampleSentences)
+        var deck = await context.Decks.AsNoTracking()
+                                .Include(d => d.RawText).Include(d => d.ExampleSentences)
+                                .Include(d => d.Children).ThenInclude(deck => deck.RawText)
+                                .Include(deck => deck.ExampleSentences)
+                                .Include(d => d.DictionaryEntries)
                                 .FirstOrDefaultAsync(d => d.DeckId == deckId);
         if (deck == null)
             throw new Exception($"Deck with ID {deckId} not found.");
@@ -20,11 +24,19 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
         if (deck.RawText == null && deck.Children.Count == 0)
             throw new Exception($"Deck with ID {deckId} has no raw text to reparse.");
 
+        // Load dictionary entries: own entries, or parent's if this is a child
+        var dictEntries = deck.DictionaryEntries.Count > 0
+            ? deck.DictionaryEntries
+            : deck.ParentDeckId != null
+                ? await context.Set<DeckDictionaryEntry>().Where(e => e.DeckId == deck.ParentDeckId).ToListAsync()
+                : null;
+
         var children = deck.Children.ToList();
 
         if (deck.Children.Count == 0)
         {
-            Deck newDeck = await Parser.Parser.ParseTextToDeck(contextFactory, deck.RawText!.RawText, true, true, deck.MediaType);
+            Deck newDeck = await Parser.Parser.ParseTextToDeck(contextFactory, deck.RawText!.RawText, true, true, deck.MediaType,
+                dictionaryEntries: dictEntries);
             deck.CharacterCount = newDeck.CharacterCount;
             deck.WordCount = newDeck.WordCount;
             deck.UniqueWordCount = newDeck.UniqueWordCount;
@@ -55,7 +67,8 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
                 texts,
                 storeRawText: true,
                 predictDifficulty: true,
-                deck.MediaType);
+                deck.MediaType,
+                dictionaryEntries: dictEntries);
 
             // Copy properties back to original deck objects
             for (int i = 0; i < children.Count; i++)

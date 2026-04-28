@@ -9,6 +9,7 @@
     monochrome?: boolean;
     intervalPreview?: IntervalPreviewDto;
     showKeybinds?: boolean;
+    showSwipeHints?: boolean;
     disabled?: boolean;
     pressedKey?: string | null;
   }>();
@@ -121,7 +122,7 @@
             <span v-if="getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-50">{{ getIntervalForRating(btn.rating) }}</span>
             <span>{{ btn.label }}</span>
             <span v-if="showKeybinds" class="keybind text-xs opacity-60">{{ btn.key }}</span>
-            <span v-if="btn.swipe" class="swipe-hint text-[10px] opacity-50">{{ btn.swipe }}</span>
+            <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-50">{{ btn.swipe }}</span>
           </div>
         </template>
       </Button>

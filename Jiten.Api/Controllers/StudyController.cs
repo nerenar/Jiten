@@ -796,6 +796,7 @@ public class StudyController(
             .AsNoTracking()
             .Where(wf => pageWordIds.Contains(wf.WordId))
             .ToListAsync();
+        RubyTextHelper.EnrichForms(wordForms);
 
         var formsByWord = wordForms.GroupBy(f => f.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -1542,7 +1543,7 @@ public class StudyController(
                         foreach (var gd in globalDynamicDecks)
                         {
                             studyDeckWordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                                gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds));
+                                gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana));
                         }
                     }
                 }
@@ -1784,6 +1785,7 @@ public class StudyController(
             .AsNoTracking()
             .Where(wf => wordIds.Contains(wf.WordId))
             .ToListAsync();
+        RubyTextHelper.EnrichForms(wordForms);
         var wordFormsMap = wordForms.GroupBy(wf => wf.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
         var freqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
@@ -1856,7 +1858,6 @@ public class StudyController(
                 DeckOccurrences = occurrenceMap.TryGetValue(exKey, out var occs)
                     ? occs
                         .OrderByDescending(o => o.Occurrences)
-                        .Take(5)
                         .Where(o => occurrenceDecks.ContainsKey(o.DeckId))
                         .Select(o =>
                         {
@@ -2452,6 +2453,62 @@ public class StudyController(
             dueTomorrow,
             nextReviewAt,
         });
+    }
+
+    [HttpGet("review-forecast-30d")]
+    [SwaggerOperation(Summary = "Get 30-day review forecast bucketed by user-local day")]
+    public async Task<IResult> GetReviewForecast30d()
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var now = DateTime.UtcNow;
+        var settings = await LoadStudySettings(userId);
+        var (_, offsetHours) = ResolveTimezone(now, settings.Timezone);
+
+        var localToday = now.AddHours(offsetHours).Date;
+        var windowStartUtc = localToday.AddHours(-offsetHours);
+        var windowEndUtc = localToday.AddDays(30).AddHours(-offsetHours);
+
+        var baseQuery = userContext.FsrsCards
+            .AsNoTracking()
+            .Where(c => c.UserId == userId
+                        && c.State != FsrsState.New
+                        && c.State != FsrsState.Blacklisted
+                        && c.State != FsrsState.Mastered
+                        && c.State != FsrsState.Suspended
+                        && c.Due <= windowEndUtc);
+
+        var counts = new int[30];
+
+        if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
+        {
+            var cards = await baseQuery
+                .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
+                .ToListAsync();
+            var filter = await BuildDeckReviewFilter(userId, cards.Select(c => (c.WordId, c.ReadingIndex)).ToList());
+            foreach (var c in cards)
+            {
+                if (!filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex))) continue;
+                var dayIndex = c.Due <= windowStartUtc ? 0 : (int)(c.Due.AddHours(offsetHours).Date - localToday).TotalDays;
+                if (dayIndex >= 0 && dayIndex < 30) counts[dayIndex]++;
+            }
+        }
+        else
+        {
+            var dues = await baseQuery.Select(c => c.Due).ToListAsync();
+            foreach (var due in dues)
+            {
+                var dayIndex = due <= windowStartUtc ? 0 : (int)(due.AddHours(offsetHours).Date - localToday).TotalDays;
+                if (dayIndex >= 0 && dayIndex < 30) counts[dayIndex]++;
+            }
+        }
+
+        var days = new object[30];
+        for (var i = 0; i < 30; i++)
+            days[i] = new { date = localToday.AddDays(i).ToString("yyyy-MM-dd"), count = counts[i] };
+
+        return Results.Ok(new { days });
     }
 
     [HttpGet("deck-streak")]
@@ -3241,7 +3298,7 @@ public class StudyController(
                     foreach (var gd in globalDynamicDecks)
                     {
                         wordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds));
+                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana));
                     }
                 }
             }

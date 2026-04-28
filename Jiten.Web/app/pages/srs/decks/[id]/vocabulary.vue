@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useSrsStore } from '~/stores/srsStore';
-  import { type Word, PaginatedResponse, SortOrder, StudyDeckType } from '~/types';
+  import { type Word, SortOrder, StudyDeckType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
@@ -142,7 +142,7 @@
         const filtered = response.value.data.filter(
           (w) => !(w.wordId === word.wordId && w.mainReading.readingIndex === word.mainReading.readingIndex),
         );
-        response.value = new PaginatedResponse(filtered, response.value.totalItems - 1, response.value.pageSize, response.value.currentOffset);
+        response.value = { data: filtered, totalItems: response.value.totalItems - 1, pageSize: response.value.pageSize, currentOffset: response.value.currentOffset };
       }
       toast.add({ severity: 'info', summary: 'Word removed', life: 2000 });
     } catch {

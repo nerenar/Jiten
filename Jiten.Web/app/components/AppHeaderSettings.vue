@@ -86,9 +86,9 @@
 <template>
   <Popover ref="settings" @mouseenter="onSettingsMouseEnter" @mouseleave="onSettingsMouseLeave" :pt="{ root: { class: 'w-[90vw] max-w-sm md:w-auto' }, content: { class: 'p-3 md:p-4 max-h-[80vh] overflow-y-auto' } }">
     <div class="flex flex-col gap-2">
-      <div class="flex justify-between items-center mb-2 md:hidden">
-        <span class="font-semibold text-base">Settings</span>
-        <Button icon="pi pi-times" text rounded size="small" @click="settings.hide()" aria-label="Close settings" />
+      <div class="flex justify-between items-center mb-2">
+        <span class="font-semibold text-base">Local Settings</span>
+        <Button class="md:hidden" icon="pi pi-times" text rounded size="small" @click="settings.hide()" aria-label="Close settings" />
       </div>
       <FloatLabel variant="on" class="">
         <Select

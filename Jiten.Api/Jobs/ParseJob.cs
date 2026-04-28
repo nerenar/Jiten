@@ -76,16 +76,18 @@ public class ParseJob(
                 text = await File.ReadAllTextAsync(filePath);
             }
 
-            deck = await Parser.Parser.ParseTextToDeck(contextFactory, text, storeRawText, true, deckType);
+            deck = await Parser.Parser.ParseTextToDeck(contextFactory, text, storeRawText, true, deckType,
+                dictionaryEntries: metadata.DictionaryEntries);
         }
 
         deck.SpeechDuration = metadata.SpeechDuration ?? 0;
         deck.SpeechMoraCount = metadata.SpeechMoraCount ?? 0;
+        deck.DictionaryEntries = metadata.DictionaryEntries;
 
         // Batch process ALL descendants in one Sudachi call
         if (metadata.Children.Count > 0)
         {
-            await ParseChildrenBatched(metadata.Children, deck, deckType, storeRawText);
+            await ParseChildrenBatched(metadata.Children, deck, deckType, storeRawText, metadata.DictionaryEntries);
         }
 
         await deck.AddChildDeckWords(context);
@@ -149,7 +151,8 @@ public class ParseJob(
     /// Flattens all descendants, batches text extraction, makes ONE Sudachi call,
     /// then reassembles the hierarchy.
     /// </summary>
-    private async Task ParseChildrenBatched(List<Metadata> children, Deck rootDeck, MediaType deckType, bool storeRawText)
+    private async Task ParseChildrenBatched(List<Metadata> children, Deck rootDeck, MediaType deckType, bool storeRawText,
+                                               List<DeckDictionaryEntry>? dictionaryEntries = null)
     {
         // Flatten ALL descendants with their hierarchy info
         // Using Metadata as key to track parent relationships
@@ -169,13 +172,14 @@ public class ParseJob(
         var validItems = flatList.Where(x => !string.IsNullOrEmpty(x.text)).ToList();
         if (validItems.Count == 0) return;
 
-        // Batch parse ALL texts - SINGLE Sudachi call for entire tree
+        // Batch parse ALL texts - SINGLE Sudachi call for entire tree (children inherit parent's dictionary entries)
         var decks = await Parser.Parser.ParseTextsToDeck(
             contextFactory,
             validItems.Select(x => x.text).ToList(),
             storeRawText,
             predictDifficulty: true,
-            deckType);
+            deckType,
+            dictionaryEntries: dictionaryEntries);
 
         // Create mapping from Metadata -> Deck for hierarchy reassembly
         var metaToDeck = new Dictionary<Metadata, Deck>();

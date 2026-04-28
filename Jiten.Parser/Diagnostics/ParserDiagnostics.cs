@@ -178,6 +178,7 @@ public class FormCandidateDiagnostic
     public int SurfaceMatchScore { get; set; }
     public int ScriptScore { get; set; }
     public int ReadingMatchScore { get; set; }
+    public int PosAffinityScore { get; set; }
 }
 
 /// <summary>

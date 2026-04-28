@@ -1,4 +1,5 @@
 using Jiten.Core.Data;
+using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser;
 
@@ -274,6 +275,11 @@ public partial class MorphologicalAnalyser
                 }
             }
 
+            // 訳 (ヤク) → ワケ standalone — ヤク reading is for compounds (翻訳, 英訳) or 訳す;
+            // standalone 訳 is always わけ (reason, meaning)
+            if (word is { Text: "訳", Reading: "ヤク", PartOfSpeech: PartOfSpeech.Noun })
+                word.Reading = "ワケ";
+
             // あの: Sudachi sometimes misclassifies as 感動詞 (filler) when it's prenominal,
             // and as 連体詞 when it's actually a filler interjection.
             // Strategy: override 感動詞→PrenounAdjectival always (Sudachi filler detection unreliable),
@@ -293,6 +299,37 @@ public partial class MorphologicalAnalyser
                     if (!nextIsNoun)
                         word.PartOfSpeech = PartOfSpeech.Interjection;
                 }
+            }
+
+            // Continuative-form detection: noun immediately before a verb (no particle between)
+            // is likely an ichidan verb stem used as a conjunctive (連用中止法).
+            // e.g. 体を支え立ち上がった → 支え = 支える continuative, not the noun 支え.
+            // Reclassify so the scorer applies verb-affinity and ichidan stem penalties correctly.
+            // Guard: only for kanji tokens with え-row endings (valid ichidan stems), skip pre-matched.
+            if (word.PartOfSpeech == PartOfSpeech.Noun
+                && word.DictionaryForm == word.Text
+                && word.PreMatchedWordId == null
+                && word.Text.Length >= 2
+                && KanaScoringHelpers.ContainsKanji(word.Text)
+                && IsIchidanStemEnding(word.Reading)
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Verb)
+            {
+                word.PartOfSpeech = PartOfSpeech.Verb;
+                word.DictionaryForm = word.Text + "る";
+            }
+
+            // 捩* (モジ*) → ネジ* — standalone 捩る is almost always ねじる (to twist);
+            // もじる (to parody) is rare and typically written in kana.
+            if (word.DictionaryForm == "捩る" && word.Reading.StartsWith("モジ"))
+                word.Reading = word.Reading.Replace("モジ", "ネジ");
+
+            // 大仰 (オオノキ, place name) → オオギョウ (exaggerated, adj-na).
+            // The place name reading is rare; the adjective is by far the common reading in prose.
+            if (word is { Text: "大仰", Reading: "オオノキ" })
+            {
+                word.Reading = "オオギョウ";
+                word.PartOfSpeech = PartOfSpeech.NaAdjective;
             }
 
             // 来る: Sudachi sometimes classifies modern くる as archaic きたる (文語四段-ラ行),
@@ -317,6 +354,14 @@ public partial class MorphologicalAnalyser
         }
 
         return wordInfos;
+    }
+
+    private static bool IsIchidanStemEnding(string reading)
+    {
+        if (string.IsNullOrEmpty(reading)) return false;
+        char last = reading[^1];
+        return last is 'エ' or 'ケ' or 'セ' or 'テ' or 'ネ' or 'ベ' or 'メ' or 'レ' or 'ゲ' or 'ペ' or 'ヘ' or 'ゼ'
+            or 'イ' or 'キ' or 'シ' or 'チ' or 'ニ' or 'ビ' or 'ミ' or 'リ' or 'ギ' or 'ピ' or 'ヒ' or 'ジ';
     }
 
     private static bool IsHornBearerWord(string text) => text is

@@ -147,4 +147,21 @@ public class TokenPositionHelperTests
         pos.Should().Be(0);
         len.Should().Be(10);
     }
+
+    [Fact]
+    public void FuzzyMatch_SkipsEllipsis()
+    {
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("襲撃……されて", "襲撃されて", 0);
+        pos.Should().Be(0);
+        len.Should().Be(7, "source span includes the skipped ……");
+    }
+
+    [Fact]
+    public void FuzzyMatch_SkipsEllipsisMultipleGroups()
+    {
+        var source = "脱走……したそう";
+        var (pos, len) = TokenPositionHelper.FindTokenInSource(source, "脱走したそう", 0);
+        pos.Should().Be(0);
+        len.Should().Be(8, "source span includes the skipped ……");
+    }
 }

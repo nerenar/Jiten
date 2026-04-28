@@ -92,7 +92,7 @@
 
   // Helper to build a single card payload from Anki card info
   const buildCardPayload = (card: any, fieldName: string) => {
-    if (card.queue === -1) return null; // Skip suspended
+    if (card.queue === -1 || card.queue === 0) return null; // Skip suspended & new/forgotten
 
     const field = card.fields[fieldName];
     const word = stripRuby(field?.value?.trim() || '');
@@ -102,8 +102,7 @@
 
     // Convert Anki state to FSRS state
     let state: number;
-    if (card.queue === 0) state = 0;
-    else if (card.queue === 1 || card.queue === 3) state = 1; // Learning
+    if (card.queue === 1 || card.queue === 3) state = 1; // Learning
     else state = 2; // Review
 
     const stability = card.interval > 0 ? card.interval : 0;
@@ -112,9 +111,7 @@
     const lastReview = reviews.length > 0 ? reviews[0].ReviewDateTime : null;
 
     let due: Date;
-    if (card.queue === 0) {
-      due = new Date();
-    } else if (card.queue === 1 || card.queue === 3) {
+    if (card.queue === 1 || card.queue === 3) {
       due = new Date(card.due * 1000);
     } else {
       if (lastReview) {
