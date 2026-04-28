@@ -475,6 +475,7 @@
             :monochrome="isMono"
             :interval-preview="srsStore.studySettings.showNextInterval ? srsStore.currentCard?.intervalPreview : undefined"
             :show-keybinds="srsStore.studySettings.showKeybinds"
+            :show-swipe-hints="srsStore.studySettings.enableSwipeGesture"
             :disabled="srsStore.isBusy"
             :pressed-key="pressedKey"
             @grade="handleGrade"
