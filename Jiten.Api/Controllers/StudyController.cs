@@ -796,6 +796,7 @@ public class StudyController(
             .AsNoTracking()
             .Where(wf => pageWordIds.Contains(wf.WordId))
             .ToListAsync();
+        RubyTextHelper.EnrichForms(wordForms);
 
         var formsByWord = wordForms.GroupBy(f => f.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -1784,6 +1785,7 @@ public class StudyController(
             .AsNoTracking()
             .Where(wf => wordIds.Contains(wf.WordId))
             .ToListAsync();
+        RubyTextHelper.EnrichForms(wordForms);
         var wordFormsMap = wordForms.GroupBy(wf => wf.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
         var freqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
