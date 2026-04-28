@@ -894,6 +894,8 @@ export interface StudySettingsDto {
   furiganaOnFrontNewOnly: boolean;
   autoPlayWord: boolean;
   autoPlaySentence: boolean;
+  showReviewActivity: boolean;
+  showReviewForecast: boolean;
   timezone: string | null;
 }
 
@@ -914,6 +916,10 @@ export interface ReviewForecastDto {
   dueToday: number;
   dueTomorrow: number;
   nextReviewAt: string | null;
+}
+
+export interface ReviewForecast30dDto {
+  days: { date: string; count: number }[];
 }
 
 export interface SessionStreakDto {

@@ -393,6 +393,30 @@
         </div>
       </div>
 
+      <Divider />
+
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Study deck page</h3>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.showReviewActivity" input-id="showReviewActivity" />
+          <label for="showReviewActivity" class="text-sm cursor-pointer">
+            Show review activity
+            <Tooltip content="Display the review activity heatmap on the study decks page." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.showReviewForecast" input-id="showReviewForecast" />
+          <label for="showReviewForecast" class="text-sm cursor-pointer">
+            Show review forecast
+            <Tooltip content="Display the 30-day review forecast chart on the study decks page." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+      </div>
+
       <Button label="Save" :loading="saving" class="w-full md:w-auto" @click="save" />
     </div>
   </CardWrapper>

@@ -108,6 +108,12 @@ public class StudySettingsDto
     [JsonPropertyName("autoPlaySentence")]
     public bool AutoPlaySentence { get; set; } = true;
 
+    [JsonPropertyName("showReviewActivity")]
+    public bool ShowReviewActivity { get; set; } = true;
+
+    [JsonPropertyName("showReviewForecast")]
+    public bool ShowReviewForecast { get; set; } = true;
+
     [JsonPropertyName("timezone")]
     public string? Timezone { get; set; }
 }

@@ -3,6 +3,10 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { DeckOrder, MediaType, StudyDeckType, type StudyDeckDto } from '~/types';
+  import { Bar } from 'vue-chartjs';
+  import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip as ChartTooltip } from 'chart.js';
+
+  ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip);
 
   definePageMeta({ middleware: ['auth'] });
   useHead({ title: 'Study Decks' });
@@ -33,6 +37,7 @@
     } else {
       srsStore.refreshOverview();
     }
+    srsStore.fetchReviewForecast30d();
   });
 
   async function refresh() {
@@ -256,6 +261,69 @@
     if (ratio <= 0.75) return 'bg-purple-500 dark:bg-purple-500';
     return 'bg-purple-700 dark:bg-purple-400';
   }
+
+  const forecastNext7d = computed(() => srsStore.reviewForecast30d?.days.slice(0, 7).reduce((s, d) => s + d.count, 0) ?? 0);
+  const forecastNext30d = computed(() => srsStore.reviewForecast30d?.days.reduce((s, d) => s + d.count, 0) ?? 0);
+
+  const forecastChartData = computed(() => {
+    const forecast = srsStore.reviewForecast30d;
+    if (!forecast || forecast.days.length === 0) return null;
+    return {
+      labels: forecast.days.map((d) => {
+        const date = new Date(d.date + 'T00:00:00');
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }),
+      datasets: [{
+        data: forecast.days.map(d => d.count),
+        backgroundColor: forecast.days.map((_, i) =>
+          i === 0 ? 'rgba(59, 130, 246, 0.8)' : 'rgba(168, 85, 247, 0.6)',
+        ),
+        borderRadius: 3,
+      }],
+    };
+  });
+
+  const forecastChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      datalabels: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        borderColor: 'rgba(168, 85, 247, 1)',
+        borderWidth: 1,
+        padding: 10,
+        displayColors: false,
+        callbacks: {
+          title: (context: any) => {
+            const idx = context[0].dataIndex;
+            const day = srsStore.reviewForecast30d?.days[idx];
+            if (!day) return '';
+            const date = new Date(day.date + 'T00:00:00');
+            return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+          },
+          label: (context: any) => {
+            const count = context.raw as number;
+            return `${count} review${count !== 1 ? 's' : ''}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 10 },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(0, 0, 0, 0.06)' },
+        ticks: { precision: 0 },
+      },
+    },
+  };
 </script>
 
 <template>
@@ -364,45 +432,68 @@
 
     <!-- Streak & Mini Heatmap -->
     <div
-      v-if="srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0"
+      v-if="(srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0) || (srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some(d => d.count > 0))"
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4"
     >
-      <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <!-- Streak -->
-        <div class="flex items-center gap-2">
-          <Icon name="material-symbols:local-fire-department" size="1.5rem" class="text-orange-500" />
-          <span class="text-xl font-bold tabular-nums">{{ srsStore.deckStreak.currentStreak }}</span>
-          <span class="text-sm text-gray-500">day streak</span>
+      <div class="flex flex-col md:flex-row gap-4">
+        <!-- Left: streak + heatmap -->
+        <div v-if="srsStore.studySettings.showReviewActivity" class="flex-1 flex flex-col gap-3">
+          <div v-if="srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0" class="flex flex-wrap items-center gap-x-5 gap-y-3">
+            <!-- Streak -->
+            <div class="flex items-center gap-2">
+              <Icon name="material-symbols:local-fire-department" size="1.5rem" class="text-orange-500" />
+              <span class="text-xl font-bold tabular-nums">{{ srsStore.deckStreak.currentStreak }}</span>
+              <span class="text-sm text-gray-500">day streak</span>
+            </div>
+            <div v-if="srsStore.deckStreak.isNewRecord && srsStore.deckStreak.currentStreak > 1" class="text-xs font-semibold text-orange-500">
+              New record!
+            </div>
+            <div class="text-sm text-gray-500">
+              Longest: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.longestStreak }}</span>
+            </div>
+            <div class="text-sm text-gray-500">
+              Days studied: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.totalReviewDays }}</span>
+            </div>
+          </div>
+          <!-- Mini Heatmap -->
+          <div v-if="miniHeatmap.length > 0" class="overflow-x-auto flex flex-col items-start">
+            <div class="text-xs text-gray-500 mb-1">Review activity</div>
+            <div class="relative" :style="{ width: `${WEEKS * (CELL + GAP) - GAP}px`, height: `${7 * (CELL + GAP) - GAP}px` }">
+              <div
+                v-for="(day, i) in miniHeatmap"
+                :key="i"
+                class="absolute rounded-sm"
+                :class="miniIntensity(day.count)"
+                :style="{
+                  left: `${day.weekIdx * (CELL + GAP)}px`,
+                  top: `${day.dow * (CELL + GAP)}px`,
+                  width: `${CELL}px`,
+                  height: `${CELL}px`,
+                }"
+                @mouseenter="showMiniTooltip($event, day)"
+                @mouseleave="hideMiniTooltip"
+              />
+            </div>
+          </div>
         </div>
-        <div v-if="srsStore.deckStreak.isNewRecord && srsStore.deckStreak.currentStreak > 1" class="text-xs font-semibold text-orange-500">
-          New record!
-        </div>
-        <div class="text-sm text-gray-500">
-          Longest: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.longestStreak }}</span>
-        </div>
-        <div class="text-sm text-gray-500">
-          Days studied: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.totalReviewDays }}</span>
-        </div>
-      </div>
 
-      <!-- Mini Heatmap -->
-      <div v-if="miniHeatmap.length > 0" class="mt-3 overflow-x-auto flex flex-col items-start">
-        <div class="text-xs text-gray-500 mb-1">Review activity</div>
-        <div class="relative" :style="{ width: `${WEEKS * (CELL + GAP) - GAP}px`, height: `${7 * (CELL + GAP) - GAP}px` }">
-          <div
-            v-for="(day, i) in miniHeatmap"
-            :key="i"
-            class="absolute rounded-sm"
-            :class="miniIntensity(day.count)"
-            :style="{
-              left: `${day.weekIdx * (CELL + GAP)}px`,
-              top: `${day.dow * (CELL + GAP)}px`,
-              width: `${CELL}px`,
-              height: `${CELL}px`,
-            }"
-            @mouseenter="showMiniTooltip($event, day)"
-            @mouseleave="hideMiniTooltip"
-          />
+        <!-- Right: forecast totals + chart -->
+        <div
+          v-if="srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some(d => d.count > 0)"
+          class="w-full md:w-1/2 flex-shrink-0 min-w-0 flex flex-col gap-3"
+        >
+          <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
+            <div class="text-sm text-gray-500">
+              Next 7d: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext7d }}</span>
+            </div>
+            <div class="text-sm text-gray-500">
+              Next 30d: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext30d }}</span>
+            </div>
+          </div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Upcoming reviews</div>
+          <div :style="{ height: `${7 * (CELL + GAP) - GAP}px` }">
+            <Bar :data="forecastChartData" :options="forecastChartOptions" />
+          </div>
         </div>
       </div>
     </div>
