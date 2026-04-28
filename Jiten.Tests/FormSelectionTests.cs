@@ -961,6 +961,10 @@ public class FormSelectionTests
 
         // === 事 after 祝い should be こと (1313580), not ごと suffix (2613010) ===
         yield return ["お祝い事に招かれたのですから", "事", 1313580, (byte)0];
+
+        // === 住み易そう should resolve to 住み易い (2839799), not 住む (1334040) ===
+        // Verb stem + adj-forming suffix: CombineInflections must set POS to IAdjective
+        yield return ["住み易そう", "住み易そう", 2839799, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

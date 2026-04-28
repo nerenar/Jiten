@@ -44,7 +44,7 @@ public static class TokenPositionHelper
             while (si < source.Length && ti < token.Length)
             {
                 if (source[si] == token[ti]) { si++; ti++; }
-                else if (source[si] == 'ー') { si++; }
+                else if (source[si] is 'ー' or '…') { si++; }
                 else break;
             }
 

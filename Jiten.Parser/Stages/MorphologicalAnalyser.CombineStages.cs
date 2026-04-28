@@ -275,7 +275,9 @@ public partial class MorphologicalAnalyser
                     {
                         merged = true;
                         newDictForm = match.Text;
-                        currentPOS = PartOfSpeech.Verb;
+                        currentPOS = match.Tags.Count > 0 && match.Tags[^1] == "adj-i"
+                            ? PartOfSpeech.IAdjective
+                            : PartOfSpeech.Verb;
                     }
                 }
 

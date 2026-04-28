@@ -73,7 +73,7 @@ public partial class MorphologicalAnalyser
 
     private void PreprocessText(ref string text, bool preserveStopToken)
     {
-        text = text.Replace("<", " ").Replace(">", " ");
+        text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
         text = text.ToFullWidthDigits();
         text = NonJapaneseCharRegex().Replace(text, "");
 

@@ -609,6 +609,14 @@
   {
     "type": "stdrule",
     "dec_end": [""],
+    "con_end": ["そう"],
+    "dec_tag": ["stem-past"],
+    "con_tag": ["adj-na"],
+    "detail": "hearsay"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
     "con_end": ["がる"],
     "dec_tag": ["stem-adj-base"],
     "con_tag": ["v5r"],

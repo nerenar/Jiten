@@ -20,7 +20,7 @@ internal static class MisparseGates
     private static readonly HashSet<PartOfSpeech> ExemptFromKanaGate =
     [
         PartOfSpeech.Particle, PartOfSpeech.Auxiliary, PartOfSpeech.Conjunction,
-        PartOfSpeech.Adnominal
+        PartOfSpeech.Adnominal, PartOfSpeech.Pronoun
     ];
 
     public static MisparseDecision Evaluate(in MisparseGateContext ctx)

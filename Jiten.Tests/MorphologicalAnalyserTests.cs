@@ -1179,6 +1179,9 @@ public class MorphologicalAnalyserTests
         // === Stuttering gate: single mora stutter before word with matching reading ===
         yield return ["じょ、助教授", new[] { "助教授" }];
         yield return ["じょ、冗談", new[] { "冗談" }];
+
+        // === Medical compound: Sudachi greedily matches 右上 instead of 右 + 上腕骨 ===
+        yield return ["右上腕骨不完全骨折", new[] { "右", "上腕骨", "不完全", "骨折" }];
     }
 
     [Theory]
