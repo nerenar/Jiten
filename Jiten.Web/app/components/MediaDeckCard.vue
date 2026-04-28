@@ -13,6 +13,7 @@
     deck: Deck;
     isCompact?: boolean;
     hideControl?: boolean;
+    hideDetailButton?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -485,7 +486,7 @@
                 </template>
                 <div v-if="!hideControl" class="mt-4">
                   <div class="flex gap-2" :class="[isCompact ? 'flex-row' : 'flex-col md:flex-row', { 'justify-center': isCompact }]">
-                    <Tooltip content="Details">
+                    <Tooltip v-if="!hideDetailButton" content="Details">
                       <Button
                         as="router-link"
                         :to="`/decks/media/${deck.deckId}/detail`"

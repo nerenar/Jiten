@@ -83,6 +83,26 @@
   onUnmounted(() => stopPolling());
 
   const settings = ref();
+  const userMenu = ref();
+
+  const userMenuItems = computed(() => [
+    {
+      label: 'Profile',
+      icon: 'pi pi-user',
+      command: () => navigateTo('/profile'),
+    },
+    {
+      label: 'User Settings',
+      icon: 'pi pi-cog',
+      command: () => navigateTo('/settings'),
+    },
+    { separator: true },
+    {
+      label: 'Logout',
+      icon: 'pi pi-sign-out',
+      command: () => auth.logout(),
+    },
+  ]);
 
   const toggleSettings = (event: boolean) => {
     settings.value.toggle(event);
@@ -103,21 +123,20 @@
 
         <!-- Desktop nav -->
         <nav class="hidden md:flex items-center space-x-4">
-          <nuxt-link to="/" :class="route.path === '/' ? 'font-semibold !text-purple-200' : '!text-white'">Home</nuxt-link>
           <nuxt-link to="/decks/media" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'">Study</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated" to="/profile" :class="route.path.startsWith('/profile') ? 'font-semibold !text-purple-200' : '!text-white'">Profile</nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated" to="/ratings" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'">Ratings</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated" to="/settings" :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'">Settings</nuxt-link>
           <nuxt-link to="/other" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
           <nuxt-link to="/faq" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'">FAQ</nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions" to="/Dashboard" :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'">Dashboard</nuxt-link>
-          <a v-if="auth.isAuthenticated" href="#" class="!text-white cursor-pointer" @click.prevent="auth.logout()">Logout</a>
-          <nuxt-link v-else to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'">Login</nuxt-link>
+          <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'">Login</nuxt-link>
+          <Button v-if="auth.isAuthenticated" severity="secondary" @click="userMenu.toggle($event)" aria-label="User menu">
+            <Icon name="material-symbols:person" />
+          </Button>
           <NotificationBell v-if="auth.isAuthenticated" />
           <Button
             type="button"
-            label="Settings"
+            title="Local Settings"
             severity="secondary"
             @mouseover="showSettings($event)"
             @mouseleave="onSettingsMouseLeave"
@@ -129,6 +148,7 @@
           <Button :label="themeLabel" severity="secondary" @click="cycleTheme()">
             <Icon :name="themeIcon" />
           </Button>
+
         </nav>
 
         <!-- Mobile: bell + hamburger -->
@@ -149,7 +169,6 @@
       <div v-if="mobileMenuOpen" class="md:hidden mx-auto max-w-6xl px-4 pb-4">
         <div class="bg-indigo-800 rounded-lg shadow-lg divide-y divide-indigo-700">
           <div class="flex flex-col py-2">
-            <nuxt-link to="/" class="py-2 px-3" :class="route.path === '/' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Home</nuxt-link>
             <nuxt-link to="/decks/media" class="py-2 px-3" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Media</nuxt-link>
             <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" class="py-2 px-3" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'">Study</nuxt-link>
             <nuxt-link v-if="auth.isAuthenticated" to="/profile" class="py-2 px-3" :class="route.path.startsWith('/profile') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Profile</nuxt-link>
@@ -194,6 +213,7 @@
   </header>
 
   <LazyAppHeaderSettings ref="settings" />
+  <TieredMenu v-if="auth.isAuthenticated" ref="userMenu" :model="userMenuItems" popup />
 </template>
 
 <style scoped></style>
