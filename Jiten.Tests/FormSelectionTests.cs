@@ -965,6 +965,21 @@ public class FormSelectionTests
         // === 住み易そう should resolve to 住み易い (2839799), not 住む (1334040) ===
         // Verb stem + adj-forming suffix: CombineInflections must set POS to IAdjective
         yield return ["住み易そう", "住み易そう", 2839799, (byte)1];
+
+        // === 呼ぶ-family: verb conjugation forms must not be split by resegmentation ===
+        // 呼びつけ (continuative of 呼びつける) — resegmentation was splitting to 呼び+つけ
+        yield return ["何だったら俺を呼びつけでもいいし", "呼びつけ", 1266390, (byte)0];
+        yield return ["ランスの呼びつけを無視して", "呼びつけ", 1266390, (byte)0];
+
+        // 呼ばれ (continuative of 呼ばれる) — resegmentation was splitting to 呼+ばれ
+        yield return ["呼ばれもしない", "呼ばれ", 1631030, (byte)0];
+        yield return ["もしもセキュリティを呼ばれでもしたら", "呼ばれ", 1631030, (byte)0];
+
+        // 呼ぼう (volitional of 呼ぶ) with emphatic long vowel mark
+        yield return ["フィルチを呼ーぼう", "呼ぼう", 1266440, (byte)0];
+
+        // 呼ばわる past tense (contracted 呼ばわった → 呼ばった)
+        yield return ["彼女は強く戸を敲きつけて更に大きく呼ばった。", "呼ばった", 2477090, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

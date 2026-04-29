@@ -16,6 +16,9 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"ー{2,}")]
     private static partial Regex MultipleLongVowelRegex();
 
+    [GeneratedRegex(@"(?<=[一-龯])ー(?=[぀-ゟ])")]
+    private static partial Regex EmphLongVowelKanjiHiraganaRegex();
+
     [GeneratedRegex(@"(?<!を)はやめ")]
     private static partial Regex HayameWithoutWoRegex();
 
@@ -98,6 +101,7 @@ public partial class MorphologicalAnalyser
 
         text = TildeAfterKanaRegex().Replace(text, "ー");
         text = MultipleLongVowelRegex().Replace(text, "ー");
+        text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
 
         text = StutteringDigraphRunRegex().Replace(text, _stopToken);
         text = StutteringRunRegex().Replace(text, _stopToken);

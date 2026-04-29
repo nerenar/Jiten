@@ -1182,6 +1182,24 @@ public class MorphologicalAnalyserTests
 
         // === Medical compound: Sudachi greedily matches 右上 instead of 右 + 上腕骨 ===
         yield return ["右上腕骨不完全骨折", new[] { "右", "上腕骨", "不完全", "骨折" }];
+
+        // は particle before katakana/hiragana words must not be dropped as stutter
+        yield return ["挨拶は、ハードルが", new[] { "挨拶", "は", "ハードル", "が" }];
+        yield return ["今は、はっきりと感じる", new[] { "今", "は", "はっきり", "と", "感じる" }];
+        // は as genuine stutter should still be dropped
+        yield return ["は、はい？", new[] { "はい" }];
+
+        // === 呼ぶ-family: verb stems must not be split by resegmentation ===
+        yield return ["呼ばれもしない", new[] { "呼ばれ", "も", "しない" }];
+        yield return ["ランスの呼びつけを無視して", new[] { "ランス", "の", "呼びつけ", "を", "無視して" }];
+        yield return ["もしもセキュリティを呼ばれでもしたら", new[] { "もしも", "セキュリティ", "を", "呼ばれ", "でも", "したら" }];
+        yield return ["何だったら俺を呼びつけでもいいし", new[] { "何", "だったら", "俺", "を", "呼びつけ", "でも", "いい", "し" }];
+
+        // Long vowel mark inside verb: 呼ーぼう → 呼ぼう (volitional of 呼ぶ)
+        yield return ["フィルチを呼ーぼう", new[] { "フィルチ", "を", "呼ぼう" }];
+
+        // 呼ばわる past tense — Sudachi splits 呼+ばった(grasshopper), should be single verb token
+        yield return ["彼女は強く戸を敲きつけて更に大きく呼ばった。", new[] { "彼女", "は", "強く", "戸", "を", "敲きつけて", "更に", "大きく", "呼ばった" }];
     }
 
     [Theory]

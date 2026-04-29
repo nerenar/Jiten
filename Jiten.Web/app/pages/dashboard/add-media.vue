@@ -228,6 +228,20 @@
     }
   }
 
+  function handleLinkMetadata(metadata: Metadata) {
+    if (!selectedMetadata.value) {
+      handleSelectMetadata(metadata);
+      return;
+    }
+
+    if (metadata.links) {
+      for (const link of metadata.links) {
+        if (!selectedMetadata.value.links.some(l => l.linkType === link.linkType))
+          selectedMetadata.value.links.push(link);
+      }
+    }
+  }
+
   const currentProvider = ref('');
 
   async function autoRomanize() {
@@ -547,15 +561,18 @@
               <div class="flex flex-wrap gap-2 mb-6">
                 <template v-if="selectedMediaType === MediaType.Anime">
                   <Button label="AniList" @click="searchAPI('AnilistAnime')" />
+                  <Button label="MyAnimeList" @click="searchAPI('JikanAnime')" />
                 </template>
                 <template v-else-if="selectedMediaType === MediaType.Manga">
                   <Button label="AniList" @click="searchAPI('AnilistManga')" />
+                  <Button label="MyAnimeList" @click="searchAPI('JikanManga')" />
                 </template>
                 <template v-else-if="selectedMediaType === MediaType.Movie || selectedMediaType === MediaType.Drama">
                   <Button label="TMDB" @click="searchAPI('Tmdb')" />
                 </template>
                 <template v-else-if="selectedMediaType === MediaType.Novel || selectedMediaType === MediaType.NonFiction">
                   <Button label="Anilist" @click="searchAPI('AnilistNovel')" />
+                  <Button label="MyAnimeList" @click="searchAPI('JikanNovel')" />
                   <Button label="Google Books" @click="searchAPI('GoogleBooks')" />
                   <Button label="Bookmeter" @click="searchAPI('Bookmeter')" />
                 </template>
@@ -654,6 +671,7 @@
         :author="authorQuery"
         :provider="currentProvider"
         @select-metadata="handleSelectMetadata"
+        @link-metadata="handleLinkMetadata"
       />
     </div>
   </div>
