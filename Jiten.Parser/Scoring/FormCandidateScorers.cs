@@ -28,6 +28,10 @@ internal static class FormCandidateScorer
         int readingMatchScore = ReadingScorer.Score(candidate, context,
             conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied,
             archaicPosTypes);
+
+        if (readingMatchScore < 0 && surfaceMatchScore >= 300)
+            surfaceMatchScore = (int)(surfaceMatchScore * 0.3);
+
         int posAffinityScore = PosAffinityScorer.Score(candidate, context);
 
         return new FormScoreTrace(
@@ -713,6 +717,28 @@ internal static class ReadingScorer
                     readingMatchScore += 70;
             }
 
+            if (readingMatchScore == 0 && sudachiHira.Length >= 2 && kanaForms.Count > 0)
+            {
+                char firstChar = sudachiHira[0];
+                bool anyPrefixMatch = false;
+                foreach (var h in kanaForms)
+                {
+                    if (h.Length > 0 && h[0] == firstChar) { anyPrefixMatch = true; break; }
+                }
+
+                if (anyPrefixMatch)
+                {
+                    readingMatchScore += 25;
+                }
+                else
+                {
+                    bool formMatchesDictForm = !string.IsNullOrEmpty(context.DictionaryForm)
+                        && word.Forms.Any(f => f.Text == context.DictionaryForm);
+                    if (formMatchesDictForm)
+                        readingMatchScore -= 70;
+                }
+            }
+
             if (readingMatchScore > 0 && archaicPosTypes is { Count: > 0 })
             {
                 var readingPos = candidate.CachedReadingPos;
@@ -722,7 +748,7 @@ internal static class ReadingScorer
             }
         }
 
-        if (identityPenaltyApplied)
+        if (identityPenaltyApplied && readingMatchScore > 0)
             readingMatchScore = 0;
 
         return readingMatchScore;

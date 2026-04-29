@@ -223,17 +223,46 @@ public partial class MorphologicalAnalyser
                     (HasCompoundLookup == null || HasCompoundLookup(currentDictForm) ||
                      (currentNormForm != currentDictForm && HasCompoundLookup(currentNormForm))))
                 {
-                    merged = true;
-                    if (currentPOS == PartOfSpeech.Noun)
+                    if (currentPOS == PartOfSpeech.NaAdjective)
                     {
-                        newDictForm = currentDictForm + "する";
-                        currentPOS = PartOfSpeech.Verb;
+                        // Na-adj surface may collide with a godan verb's a-stem (e.g. ささやか = na-adj
+                        // but also mizenkei of ささやく). When the deconjugation chain has verb-stem tags,
+                        // resolve to the underlying verb instead of the na-adjective.
+                        var matchForm = forms.First(f => f.Text == targetHiragana);
+                        if (matchForm.Tags.Any(t => t.StartsWith("stem-")))
+                        {
+                            var verbForm = forms.FirstOrDefault(f =>
+                                f.Text != targetHiragana &&
+                                f.Tags.Count > 0 &&
+                                f.Tags[^1].StartsWith("v") &&
+                                HasCompoundLookup != null && HasCompoundLookup(f.Text));
+
+                            if (verbForm != null)
+                            {
+                                merged = true;
+                                newDictForm = verbForm.Text;
+                                currentPOS = PartOfSpeech.Verb;
+                            }
+                        }
+                        else
+                        {
+                            merged = true;
+                        }
                     }
-                    else if (currentPOS == PartOfSpeech.IAdjective &&
-                             nextWord is { PartOfSpeech: PartOfSpeech.Suffix, DictionaryForm: "さ" })
+                    else
                     {
-                        // Keep original DictionaryForm (e.g. 幼い) and POS (IAdjective) so the parser
-                        // matches the base adjective entry rather than a homophonous noun (e.g. 幼/よう)
+                        merged = true;
+                        if (currentPOS == PartOfSpeech.Noun)
+                        {
+                            newDictForm = currentDictForm + "する";
+                            currentPOS = PartOfSpeech.Verb;
+                        }
+                        else if (currentPOS == PartOfSpeech.IAdjective &&
+                                 nextWord is { PartOfSpeech: PartOfSpeech.Suffix, DictionaryForm: "さ" })
+                        {
+                            // Keep original DictionaryForm (e.g. 幼い) and POS (IAdjective) so the parser
+                            // matches the base adjective entry rather than a homophonous noun (e.g. 幼/よう)
+                        }
                     }
                 }
                 // Scenario B: Suffix transition - creates new compound verb

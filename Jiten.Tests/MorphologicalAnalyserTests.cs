@@ -1200,6 +1200,11 @@ public class MorphologicalAnalyserTests
 
         // 呼ばわる past tense — Sudachi splits 呼+ばった(grasshopper), should be single verb token
         yield return ["彼女は強く戸を敲きつけて更に大きく呼ばった。", new[] { "彼女", "は", "強く", "戸", "を", "敲きつけて", "更に", "大きく", "呼ばった" }];
+
+        // Short katakana words ending in ー must not be absorbed into preceding compound
+        yield return ["もう一度レバーを引いてみる。", new[] { "もう一度", "レバー", "を", "引いてみる" }];
+        yield return ["もう一度ニャーがいなくなる可能性も", new[] { "もう一度", "ニャー", "が", "いなくなる", "可能性", "も" }];
+        yield return ["明後日、もう一度ドリーのところに行って欲しい。", new[] { "明後日", "もう一度", "ドリー", "の", "ところ", "に", "行って", "欲しい" }];
     }
 
     [Theory]
