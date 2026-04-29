@@ -78,6 +78,9 @@ public partial class AdminController(
         {
             "AnilistManga" => await MetadataProviderHelper.AnilistMangaSearchApi(query),
             "AnilistNovel" => await MetadataProviderHelper.AnilistNovelSearchApi(query),
+            "JikanAnime" => await MetadataProviderHelper.JikanAnimeSearchApi(query),
+            "JikanManga" => await MetadataProviderHelper.JikanMangaSearchApi(query),
+            "JikanNovel" => await MetadataProviderHelper.JikanNovelSearchApi(query),
             "GoogleBooks" =>
                 await MetadataProviderHelper.GoogleBooksSearchApi(query + (!string.IsNullOrEmpty(author) ? $"+inauthor:{author}" : "")),
             "Vndb" => await MetadataProviderHelper.VndbSearchApi(query),
@@ -1067,7 +1070,10 @@ public partial class AdminController(
         switch (deck.MediaType)
         {
             case MediaType.Anime or MediaType.Manga:
-                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deckId));
+                if (deck.Links.Any(l => l.LinkType == LinkType.Anilist))
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deckId));
+                else if (deck.Links.Any(l => l.LinkType == LinkType.Mal))
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchJikanMissingMetadata(deckId));
                 break;
             case MediaType.Drama or MediaType.Movie:
                 backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchTmdbMissingMetadata(deckId));
@@ -1081,6 +1087,8 @@ public partial class AdminController(
             case MediaType.Novel or MediaType.NonFiction:
                 if (deck.Links.Any(l => l.LinkType == LinkType.Anilist))
                     backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deckId));
+                else if (deck.Links.Any(l => l.LinkType == LinkType.Mal))
+                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchJikanMissingMetadata(deckId));
                 else
                     backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deckId));
                 break;
@@ -1103,7 +1111,10 @@ public partial class AdminController(
             switch (deck.MediaType)
             {
                 case MediaType.Anime or MediaType.Manga:
-                    backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deck.DeckId));
+                    if (deck.Links.Any(l => l.LinkType == LinkType.Anilist))
+                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deck.DeckId));
+                    else if (deck.Links.Any(l => l.LinkType == LinkType.Mal))
+                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchJikanMissingMetadata(deck.DeckId));
                     break;
                 case MediaType.Drama or MediaType.Movie:
                     backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchTmdbMissingMetadata(deck.DeckId));
@@ -1119,9 +1130,12 @@ public partial class AdminController(
                     {
                         backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchAnilistMissingMetadata(deck.DeckId));
                     }
+                    else if (deck.Links.Any(l => l.LinkType == LinkType.Mal))
+                    {
+                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchJikanMissingMetadata(deck.DeckId));
+                    }
                     else
                     {
-                        // For google books, don't fetch if it's missing aliases or rating
                         if (deck.ReleaseDate == default || string.IsNullOrEmpty(deck.Description))
                             backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deck.DeckId));
                     }
