@@ -1145,7 +1145,9 @@ public class MediaDeckController(
     public async Task<PaginatedResponse<DeckVocabularyListDto?>> GetVocabulary(int id, string? sortBy = "",
                                                                                SortOrder sortOrder = SortOrder.Ascending,
                                                                                int? offset = 0, string displayFilter = "all",
-                                                                               string? search = null)
+                                                                               string? search = null,
+                                                                               string? pos = null, string? excludePos = null,
+                                                                               bool hideKanaOnly = false)
     {
         int pageSize = 100;
 
@@ -1163,6 +1165,29 @@ public class MediaDeckController(
         {
             var matchingWordIds = await SearchHelper.ResolveSearchWordIds(context, search);
             query = query.Where(dw => matchingWordIds.Contains(dw.WordId));
+        }
+
+        var posTags = VocabularyFilterHelper.ParseCommaSeparatedTags(pos);
+        if (posTags.Length > 0)
+        {
+            var wordIdsWithPos = context.JMDictWords.AsNoTracking()
+                .Where(w => w.PartsOfSpeech.Any(p => posTags.Contains(p)));
+            query = query.Where(dw => wordIdsWithPos.Any(w => w.WordId == dw.WordId));
+        }
+
+        var excludePosTags = VocabularyFilterHelper.ParseCommaSeparatedTags(excludePos);
+        if (excludePosTags.Length > 0)
+        {
+            var wordIdsToExclude = context.JMDictWords.AsNoTracking()
+                .Where(w => w.PartsOfSpeech.Any(p => excludePosTags.Contains(p)));
+            query = query.Where(dw => !wordIdsToExclude.Any(w => w.WordId == dw.WordId));
+        }
+
+        if (hideKanaOnly)
+        {
+            query = query.Where(dw => context.WordForms
+                .Any(wf => wf.WordId == dw.WordId && wf.ReadingIndex == (short)dw.ReadingIndex
+                           && wf.FormType != JmDictFormType.KanaForm));
         }
 
         if (currentUserService.IsAuthenticated && !string.IsNullOrEmpty(displayFilter) && displayFilter != "all")

@@ -871,7 +871,10 @@ public class StudyController(
         [FromQuery] string sortBy = "",
         [FromQuery] SortOrder sortOrder = SortOrder.Ascending,
         [FromQuery] string displayFilter = "all",
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] string? pos = null,
+        [FromQuery] string? excludePos = null,
+        [FromQuery] bool hideKanaOnly = false)
     {
         const int pageSize = 100;
         if (offset < 0) return Results.BadRequest("Offset cannot be negative.");
@@ -1091,6 +1094,25 @@ public class StudyController(
 
             default:
                 return Results.BadRequest("Unknown deck type.");
+        }
+
+        var posMatchIds = await VocabularyFilterHelper.GetPosFilteredWordIds(
+            context, pos, allItems.Select(i => i.WordId));
+        if (posMatchIds != null)
+            allItems = allItems.Where(i => posMatchIds.Contains(i.WordId)).ToList();
+
+        var posExcludeIds = await VocabularyFilterHelper.GetPosFilteredWordIds(
+            context, excludePos, allItems.Select(i => i.WordId));
+        if (posExcludeIds != null)
+            allItems = allItems.Where(i => !posExcludeIds.Contains(i.WordId)).ToList();
+
+        if (hideKanaOnly)
+        {
+            var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, allItems.Select(i => i.WordId).Distinct());
+            if (kanaFormKeys.Count > 0)
+                allItems = allItems
+                    .Where(i => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex)))
+                    .ToList();
         }
 
         bool needsKnownFilter = currentUserService.IsAuthenticated

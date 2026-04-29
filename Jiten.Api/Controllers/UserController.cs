@@ -2063,7 +2063,10 @@ public class UserController(
         [FromQuery] string sortBy = "occurrences",
         [FromQuery] bool descending = true,
         [FromQuery] string displayFilter = "all",
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] string? pos = null,
+        [FromQuery] string? excludePos = null,
+        [FromQuery] bool hideKanaOnly = false)
     {
         var user = await userContext.Users
                                     .AsNoTracking()
@@ -2145,6 +2148,26 @@ public class UserController(
         {
             var matchingWordIds = await SearchHelper.ResolveSearchWordIds(jitenContext, search);
             allAggregatedWords = allAggregatedWords.Where(aw => matchingWordIds.Contains(aw.WordId)).ToList();
+        }
+
+        var posMatchIds = await VocabularyFilterHelper.GetPosFilteredWordIds(
+            jitenContext, pos, allAggregatedWords.Select(aw => aw.WordId));
+        if (posMatchIds != null)
+            allAggregatedWords = allAggregatedWords.Where(aw => posMatchIds.Contains(aw.WordId)).ToList();
+
+        var posExcludeIds = await VocabularyFilterHelper.GetPosFilteredWordIds(
+            jitenContext, excludePos, allAggregatedWords.Select(aw => aw.WordId));
+        if (posExcludeIds != null)
+            allAggregatedWords = allAggregatedWords.Where(aw => !posExcludeIds.Contains(aw.WordId)).ToList();
+
+        if (hideKanaOnly)
+        {
+            var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(
+                jitenContext, allAggregatedWords.Select(aw => aw.WordId).Distinct());
+            if (kanaFormKeys.Count > 0)
+                allAggregatedWords = allAggregatedWords
+                    .Where(aw => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(aw.WordId, aw.ReadingIndex)))
+                    .ToList();
         }
 
         // Apply displayFilter if authenticated and filter is not "all"

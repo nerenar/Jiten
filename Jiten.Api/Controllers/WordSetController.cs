@@ -84,7 +84,10 @@ public class WordSetController(
         [FromQuery] string sortBy = "",
         [FromQuery] SortOrder sortOrder = SortOrder.Ascending,
         [FromQuery] string displayFilter = "all",
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] string? pos = null,
+        [FromQuery] string? excludePos = null,
+        [FromQuery] bool hideKanaOnly = false)
     {
         limit = Math.Clamp(limit, 1, 100);
 
@@ -106,6 +109,29 @@ public class WordSetController(
             baseQuery = baseQuery.Where(wsm => searchWordIds.Contains(wsm.WordId));
         }
 
+        var posTags = VocabularyFilterHelper.ParseCommaSeparatedTags(pos);
+        if (posTags.Length > 0)
+        {
+            var wordIdsWithPos = jitenContext.JMDictWords.AsNoTracking()
+                .Where(w => w.PartsOfSpeech.Any(p => posTags.Contains(p)));
+            baseQuery = baseQuery.Where(wsm => wordIdsWithPos.Any(w => w.WordId == wsm.WordId));
+        }
+
+        var excludePosTags = VocabularyFilterHelper.ParseCommaSeparatedTags(excludePos);
+        if (excludePosTags.Length > 0)
+        {
+            var wordIdsToExclude = jitenContext.JMDictWords.AsNoTracking()
+                .Where(w => w.PartsOfSpeech.Any(p => excludePosTags.Contains(p)));
+            baseQuery = baseQuery.Where(wsm => !wordIdsToExclude.Any(w => w.WordId == wsm.WordId));
+        }
+
+        if (hideKanaOnly)
+        {
+            baseQuery = baseQuery.Where(wsm => jitenContext.WordForms
+                .Any(wf => wf.WordId == wsm.WordId && wf.ReadingIndex == wsm.ReadingIndex
+                           && wf.FormType != JmDictFormType.KanaForm));
+        }
+
         bool needsKnownFilter = currentUserService.IsAuthenticated
             && !string.IsNullOrEmpty(displayFilter)
             && displayFilter != "all";
@@ -116,7 +142,8 @@ public class WordSetController(
         if (needsKnownFilter)
         {
             (pagedItems, totalCount) = await ExecuteFilteredVocabularyQuery(
-                set.SetId, currentUserService.UserId!, displayFilter, sortBy, sortOrder, offset, limit, searchWordIds);
+                set.SetId, currentUserService.UserId!, displayFilter, sortBy, sortOrder, offset, limit,
+                searchWordIds, posTags, excludePosTags, hideKanaOnly);
         }
         else if (sortBy == "globalFreq")
         {
@@ -328,7 +355,7 @@ public class WordSetController(
 
     private async Task<(List<WordSetMember> Items, int TotalCount)> ExecuteFilteredVocabularyQuery(
         int setId, string userId, string displayFilter, string sortBy, SortOrder sortOrder, int offset, int limit,
-        HashSet<int>? searchWordIds = null)
+        HashSet<int>? searchWordIds = null, string[]? posTags = null, string[]? excludePosTags = null, bool hideKanaOnly = false)
     {
         var userIdGuid = Guid.Parse(userId);
 
@@ -369,8 +396,35 @@ public class WordSetController(
             _ => @"m.""Position"" DESC"
         };
 
-        string searchClause = searchWordIds != null
-            ? @" AND m.""WordId"" = ANY({4})"
+        var paramList = new List<object> { userIdGuid, setId, offset, limit };
+        int paramIdx = 4;
+
+        string searchClause = "";
+        if (searchWordIds != null)
+        {
+            searchClause = $@" AND m.""WordId"" = ANY({{{paramIdx}}})";
+            paramList.Add(searchWordIds.ToArray());
+            paramIdx++;
+        }
+
+        string posClause = "";
+        if (posTags is { Length: > 0 })
+        {
+            posClause = $@" AND m.""WordId"" IN (SELECT jw.""WordId"" FROM jmdict.""JMDictWords"" jw WHERE jw.""PartsOfSpeech"" && {{{paramIdx}}})";
+            paramList.Add(posTags);
+            paramIdx++;
+        }
+
+        string excludePosClause = "";
+        if (excludePosTags is { Length: > 0 })
+        {
+            excludePosClause = $@" AND m.""WordId"" NOT IN (SELECT jw.""WordId"" FROM jmdict.""JMDictWords"" jw WHERE jw.""PartsOfSpeech"" && {{{paramIdx}}})";
+            paramList.Add(excludePosTags);
+            paramIdx++;
+        }
+
+        string kanaClause = hideKanaOnly
+            ? @" AND EXISTS (SELECT 1 FROM jmdict.""WordForms"" wf WHERE wf.""WordId"" = m.""WordId"" AND wf.""ReadingIndex"" = m.""ReadingIndex"" AND wf.""FormType"" != 1)"
             : "";
 
         string sql =
@@ -395,16 +449,12 @@ public class WordSetController(
             LEFT JOIN user_fsrs f ON m.""WordId"" = f.""WordId"" AND m.""ReadingIndex"" = f.""ReadingIndex""
             LEFT JOIN user_set_effective use_s ON m.""WordId"" = use_s.""WordId"" AND m.""ReadingIndex"" = use_s.""ReadingIndex""
             " + freqJoin + @"
-            WHERE m.""SetId"" = {1} AND (" + filterClause + @")" + searchClause + @"
+            WHERE m.""SetId"" = {1} AND (" + filterClause + @")" + searchClause + posClause + excludePosClause + kanaClause + @"
             ORDER BY " + orderByClause + @"
             OFFSET {2} LIMIT {3}";
 
-        var sqlParams = searchWordIds != null
-            ? new object[] { userIdGuid, setId, offset, limit, searchWordIds.ToArray() }
-            : new object[] { userIdGuid, setId, offset, limit };
-
         var results = await jitenContext.Database
-            .SqlQueryRaw<FilteredMemberResult>(sql, sqlParams)
+            .SqlQueryRaw<FilteredMemberResult>(sql, paramList.ToArray())
             .ToListAsync();
 
         int totalCount = (int)(results.FirstOrDefault()?.TotalCount ?? 0);

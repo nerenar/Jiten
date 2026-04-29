@@ -5,6 +5,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { debounce } from 'perfect-debounce';
+  import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
 
   definePageMeta({ middleware: ['auth'] });
 
@@ -82,6 +83,10 @@
   const search = ref(route.query.search?.toString() || '');
   const debouncedSearch = ref(search.value);
 
+  const includePos = ref<string[]>(parseStringArray(route.query.pos));
+  const excludePos = ref<string[]>(parseStringArray(route.query.excludePos));
+  const hideKanaOnly = ref(toBooleanOrNull(route.query.hideKanaOnly) ?? false);
+
   const sortOrder = computed(() => (sortDescending.value ? SortOrder.Descending : SortOrder.Ascending));
 
   watch(sortDescending, () => {
@@ -102,6 +107,27 @@
   }, 300);
   watch(search, updateSearch);
 
+  const debouncedIncludePos = ref([...includePos.value]);
+  const debouncedExcludePos = ref([...excludePos.value]);
+  const debouncedHideKanaOnly = ref(hideKanaOnly.value);
+
+  const updateAdvancedFilters = debounce(() => {
+    debouncedIncludePos.value = [...includePos.value];
+    debouncedExcludePos.value = [...excludePos.value];
+    debouncedHideKanaOnly.value = hideKanaOnly.value;
+    router.replace({
+      query: {
+        ...route.query,
+        pos: includePos.value.length > 0 ? includePos.value.join(',') : undefined,
+        excludePos: excludePos.value.length > 0 ? excludePos.value.join(',') : undefined,
+        hideKanaOnly: hideKanaOnly.value ? 'true' : undefined,
+        offset: 0,
+      },
+    });
+  }, 500);
+
+  watch([includePos, excludePos, hideKanaOnly], updateAdvancedFilters, { deep: true });
+
   const {
     data: response,
     status,
@@ -114,6 +140,9 @@
       sortOrder: sortOrder,
       displayFilter: display,
       search: debouncedSearch,
+      pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
+      excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
+      hideKanaOnly: debouncedHideKanaOnly,
     },
     watch: [offset, debouncedSearch],
   });
@@ -178,6 +207,9 @@
       v-model:sort-descending="sortDescending"
       v-model:display-filter="display"
       v-model:search="search"
+      v-model:include-pos="includePos"
+      v-model:exclude-pos="excludePos"
+      v-model:hide-kana-only="hideKanaOnly"
       :sort-by-options="sortByOptions"
       :show-display-filter="auth.isAuthenticated"
     />
