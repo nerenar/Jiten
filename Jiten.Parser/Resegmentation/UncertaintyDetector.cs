@@ -67,6 +67,9 @@ internal static class UncertaintyDetector
 
             if (HasGodanDictFormMatch(text, lookups) || (hira != text && HasGodanDictFormMatch(hira, lookups)))
                 return true;
+
+            if (HasIchidanDictFormMatch(text, lookups) || (hira != text && HasIchidanDictFormMatch(hira, lookups)))
+                return true;
         }
         catch { }
         return false;
@@ -76,5 +79,12 @@ internal static class UncertaintyDetector
     {
         var dictForm = MorphologicalAnalyser.TryGodanDictForm(text);
         return dictForm != null && lookups.TryGetValue(dictForm, out var ids) && ids.Count > 0;
+    }
+
+    private static bool HasIchidanDictFormMatch(string text, Dictionary<string, List<int>> lookups)
+    {
+        if (text.Length < 2) return false;
+        var dictForm = text + "る";
+        return lookups.TryGetValue(dictForm, out var ids) && ids.Count > 0;
     }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { ExampleSentence, StudyCardDto, Word } from '~/types';
+  import type { ExampleSentence, ExampleSentencesByDifficultyResponse, StudyCardDto, Word } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
@@ -114,23 +114,59 @@
   const extraSentencesExpanded = ref(false);
   const canLoadMoreSentences = ref(true);
   const isLoadingMoreSentences = ref(false);
+  const bandSize = 0.5;
+  const nextBandMin = ref(0);
+  const nextBandMax = ref(bandSize);
 
   async function loadMoreSentences() {
     isLoadingMoreSentences.value = true;
+    const sorting = srsStore.studySettings.exampleSentenceSorting;
 
     try {
       const alreadyLoaded = extraSentences.value.map(s => s.sourceDeck.deckId);
-      const results = await $api<ExampleSentence[]>(
-        `vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`,
-        { method: 'POST', body: alreadyLoaded },
-      );
 
-      if (results.length === 0) {
-        canLoadMoreSentences.value = false;
-        return;
+      if (sorting === 'Random') {
+        const results = await $api<ExampleSentence[]>(
+          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`,
+          { method: 'POST', body: alreadyLoaded },
+        );
+
+        if (results.length === 0) {
+          canLoadMoreSentences.value = false;
+          return;
+        }
+
+        extraSentences.value.push(...results);
+      } else {
+        const descending = sorting === 'HardestFirst';
+        const results = await $api<ExampleSentencesByDifficultyResponse>(
+          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/example-sentences-by-difficulty?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
+          { method: 'POST', body: alreadyLoaded },
+        );
+
+        if (results.sentences.length > 0) {
+          extraSentences.value.push(...results.sentences);
+        }
+
+        if (descending) {
+          nextBandMax.value = results.searchedBandMin;
+          nextBandMin.value = nextBandMax.value - bandSize;
+          if (nextBandMax.value <= results.minDifficulty) {
+            canLoadMoreSentences.value = false;
+          }
+        } else {
+          nextBandMin.value = results.searchedBandMax;
+          nextBandMax.value = nextBandMin.value + bandSize;
+          if (nextBandMin.value > results.maxDifficulty) {
+            canLoadMoreSentences.value = false;
+          }
+        }
+
+        if (results.sentences.length === 0 && canLoadMoreSentences.value) {
+          return;
+        }
       }
 
-      extraSentences.value.push(...results);
       extraSentencesExpanded.value = true;
     } catch {
       canLoadMoreSentences.value = false;
@@ -151,6 +187,14 @@
     extraSentences.value = [];
     extraSentencesExpanded.value = false;
     canLoadMoreSentences.value = true;
+    const sorting = srsStore.studySettings.exampleSentenceSorting;
+    if (sorting === 'HardestFirst') {
+      nextBandMin.value = 999;
+      nextBandMax.value = 999 + bandSize;
+    } else {
+      nextBandMin.value = 0;
+      nextBandMax.value = bandSize;
+    }
   });
 
   const headWordTtsText = computed(() => {
@@ -264,7 +308,7 @@
           <div
             v-if="!isFlipped && srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || card.isNewCard)"
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
-            v-html="convertToRuby(card.wordText || card.wordTextPlain)"
+            v-html="convertToRuby(card.wordText || card.wordTextPlain, true)"
           />
           <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans">
             {{ card.wordTextPlain }}
@@ -272,7 +316,7 @@
           <div
             v-else
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
-            v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain)"
+            v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain, true)"
           />
           <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
         </div>

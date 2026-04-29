@@ -12,8 +12,9 @@ public class ExampleSentence
     /// Position i.e. id of the sentence it appears in
     /// </summary>
     public int Position { get; set; }
+    public float Difficulty { get; set; }
     public List<ExampleSentenceWord> Words { get; set; } = new();
-    
+
     public Deck? Deck { get; set; }
 }
 

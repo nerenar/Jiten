@@ -22,6 +22,7 @@ const { $api } = useNuxtApp();
 const emit = defineEmits<{
   'update:visible': [value: boolean];
   'select-metadata': [metadata: Metadata];
+  'link-metadata': [metadata: Metadata];
 }>();
 
 const searchAPI = async () => {
@@ -64,6 +65,11 @@ function showToast(severity: 'success' | 'info' | 'warn' | 'error', summary: str
 
 function selectMetadata(metadata: Metadata) {
   emit('select-metadata', metadata);
+  emit('update:visible', false);
+}
+
+function linkMetadata(metadata: Metadata) {
+  emit('link-metadata', metadata);
   emit('update:visible', false);
 }
 
@@ -124,7 +130,10 @@ function closeDialog() {
             <div v-if="metadata.isAdultOnly" class="text-xs mb-2">
               <span class="inline-block bg-red-100 text-red-800 px-2 py-1 rounded">18+</span>
             </div>
-            <Button label="Select" class="w-full p-button-sm" @click="selectMetadata(metadata)" />
+            <div class="flex flex-col gap-1">
+              <Button label="Select" class="w-full p-button-sm" @click="selectMetadata(metadata)" />
+              <Button label="Link Only" severity="secondary" class="w-full p-button-sm" @click="linkMetadata(metadata)" />
+            </div>
           </div>
         </div>
       </div>

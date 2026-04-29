@@ -6,7 +6,7 @@ namespace Jiten.Parser;
 public static class ExampleSentenceExtractor
 {
     private const int FIRST_PASS_MIN_LENGTH = 15;
-    private const int FIRST_PASS_MAX_LENGTH = 40;
+    private const int FIRST_PASS_MAX_LENGTH = 35;
     private const float FIRST_PASS_PERCENTAGE = 0.25f;
 
     private const int SECOND_PASS_MIN_LENGTH = 10;
@@ -17,7 +17,11 @@ public static class ExampleSentenceExtractor
     private const int THIRD_PASS_MAX_LENGTH = 55;
     private const float THIRD_PASS_PERCENTAGE = 1f;
 
-    public static List<ExampleSentence> ExtractSentences(List<SentenceInfo> sentences, DeckWord[] words)
+    public static List<ExampleSentence> ExtractSentences(
+        List<SentenceInfo> sentences,
+        DeckWord[] words,
+        Dictionary<(int WordId, byte ReadingIndex), int> formFreqRanks,
+        Dictionary<int, int> wordFreqRanks)
     {
         static bool IsPosMatch(DeckWord deckWord, WordInfo token)
         {
@@ -142,9 +146,22 @@ public static class ExampleSentenceExtractor
             for (int i = 0; i < candidateSentences.Count; i++)
             {
                 var sentence = candidateSentences[i];
+                var trimmedText = NormalizeTrailingPunctuation(sentence.Text).Trim();
+                int leadingTrim = sentence.Text.Length - sentence.Text.AsSpan().TrimStart().Length;
+
+                int closingTrim = 0;
+                while (closingTrim < trimmedText.Length && ClosingSigns.Contains(trimmedText[closingTrim]))
+                    closingTrim++;
+                if (closingTrim > 0)
+                {
+                    trimmedText = trimmedText[closingTrim..];
+                    leadingTrim += closingTrim;
+                }
+
                 var exampleSentence = new ExampleSentence
                                       {
-                                          Text = sentence.Text, Position = sentencePositions[sentence],
+                                          Text = BalanceBrackets(trimmedText),
+                                          Position = sentencePositions[sentence],
                                           Words = new List<ExampleSentenceWord>()
                                       };
 
@@ -223,7 +240,7 @@ public static class ExampleSentenceExtractor
                         exampleSentence.Words.Add(new ExampleSentenceWord
                                                   {
                                                       WordId = foundWord.WordId, ReadingIndex = foundWord.ReadingIndex,
-                                                      Position = (byte)Math.Min(position, 255),
+                                                      Position = (byte)Math.Clamp(position - leadingTrim, 0, 255),
                                                       Length = (byte)Math.Min(length, 255)
                                                   });
 
@@ -242,6 +259,8 @@ public static class ExampleSentenceExtractor
 
                 if (foundAnyWord)
                 {
+                    exampleSentence.Difficulty = SentenceDifficultyScorer.Score(
+                        sentence, exampleSentence.Words, formFreqRanks, wordFreqRanks);
                     exampleSentences.Add(exampleSentence);
                 }
 
@@ -262,5 +281,43 @@ public static class ExampleSentenceExtractor
         }
 
         return exampleSentences;
+    }
+
+    private static readonly HashSet<char> ClosingSigns =
+        ['〉', '》', '】', '〕', '）', ')', '」', '』', '｝', '}'];
+
+    private static readonly (char open, char close)[] BracketPairs =
+        [('「', '」'), ('『', '』'), ('（', '）'), ('(', ')')];
+
+    private static string BalanceBrackets(string text)
+    {
+        foreach (var (open, close) in BracketPairs)
+        {
+            int balance = 0;
+            foreach (char c in text)
+            {
+                if (c == open) balance++;
+                else if (c == close) balance--;
+            }
+
+            if (balance > 0)
+                text += new string(close, balance);
+            else if (balance < 0)
+                text = new string(open, -balance) + text;
+        }
+
+        return text;
+    }
+
+    private static string NormalizeTrailingPunctuation(string text)
+    {
+        if (text.Length < 2) return text;
+
+        int end = text.Length;
+        while (end >= 2 && text[end - 1] == text[end - 2] &&
+               text[end - 1] is '。' or '！' or '？' or '!' or '?' or '.' or '…' or '‥')
+            end--;
+
+        return end == text.Length ? text : text[..end];
     }
 }

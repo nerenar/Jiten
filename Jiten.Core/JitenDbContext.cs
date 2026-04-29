@@ -473,6 +473,7 @@ public class JitenDbContext : DbContext
             entity.Property(e => e.Text).IsRequired();
             
             entity.HasIndex(e => e.DeckId).HasDatabaseName("IX_ExampleSentence_DeckId");
+            entity.HasIndex(e => new { e.DeckId, e.Difficulty }).HasDatabaseName("IX_ExampleSentence_DeckId_Difficulty");
             
             entity.HasOne(e => e.Deck)
                   .WithMany(d => d.ExampleSentences)

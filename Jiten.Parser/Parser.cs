@@ -74,7 +74,8 @@ namespace Jiten.Parser
             (2026870, 1), (1585310, 4), (1585310, 5), (2252690, 1), (2835861, 0), (1223130, 1),
             (1246880, 1), (1246880, 2), (1461140, 8), (1461140, 6), (2029700, 0), (2594040, 2),
             (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1),
-            (1533340,3), (5050910,0), (2406530,0), (1243650,2), (1158500,1), (2759530,0)
+            (1533340,3), (5050910,0), (2406530,0), (1243650,2), (1158500,1), (2759530,0),
+            (1689970,3), (5257597,0)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -772,7 +773,19 @@ namespace Jiten.Parser
             List<ExampleSentence>? exampleSentences = null;
 
             if (mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
-                exampleSentences = ExampleSentenceExtractor.ExtractSentences(sentences, processedWords);
+            {
+                var wordIds = processedWords.Select(w => w.WordId).Distinct().ToList();
+                await using var freqCtx = await _contextFactory.CreateDbContextAsync();
+                var formFreqRanks = await freqCtx.WordFormFrequencies
+                    .AsNoTracking()
+                    .Where(wff => wordIds.Contains(wff.WordId))
+                    .ToDictionaryAsync(
+                        wff => (wff.WordId, (byte)wff.ReadingIndex),
+                        wff => wff.FrequencyRank);
+
+                exampleSentences = ExampleSentenceExtractor.ExtractSentences(
+                    sentences, processedWords, formFreqRanks, _wordFrequencyRanks);
+            }
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
             var characterCount = wordInfos.Sum(x => x.Text.Length);
@@ -2248,17 +2261,6 @@ namespace Jiten.Parser
                                 break;
                             }
 
-                            if (candidateKey.Length > 0 && TryDeconjugatedLongVowelLookup(candidateKey))
-                            {
-                                var first = words[i - k];
-                                first.word.Text = candidateKey;
-                                int cLen = 0;
-                                for (int j = i - k; j <= i; j++) cLen += words[j].length;
-                                result.Add((first.word, first.position, cLen));
-                                i -= k + 1;
-                                merged = true;
-                                break;
-                            }
                         }
 
                         if (!merged && i > 0 && word.Text is "るー" or "すー")
@@ -3507,18 +3509,21 @@ namespace Jiten.Parser
                     var (currentInfo, currentResult, currentMargin) = sentenceWords[i];
                     if (currentResult == null) continue;
 
+                    WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
+                    bool nextIsCopula = nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text);
+
                     // High confidence → skip rederivation, unless archaic sentence (Phase 1 scored without archaic context)
-                    if (!isArchaicPass1 && currentMargin >= ScoringPolicy.HighConfidenceThreshold) continue;
+                    // Exception: copula can only follow nominals, so always re-evaluate before だ/です/である
+                    if (!isArchaicPass1 && !nextIsCopula && currentMargin >= ScoringPolicy.HighConfidenceThreshold) continue;
 
                     WordInfo? prevInfo = i > 0 ? sentenceWords[i - 1].word : null;
-                    WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
                     var prevResult = i > 0 ? sentenceWords[i - 1].result : null;
                     var nextResult = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].result : null;
 
                     // Low confidence → always rederive (bypass HasApplicableRules check)
                     bool forceRederive = currentMargin.HasValue && currentMargin.Value < ScoringPolicy.LowConfidenceThreshold;
 
-                    if (!forceRederive && !isArchaicPass1 && !TransitionRuleEngine.CouldAnySoftRuleApply(
+                    if (!forceRederive && !nextIsCopula && !isArchaicPass1 && !TransitionRuleEngine.CouldAnySoftRuleApply(
                          currentResult.PartsOfSpeech, currentInfo.Text,
                          prevResult?.PartsOfSpeech, prevInfo?.Text,
                          nextResult?.PartsOfSpeech, nextInfo?.Text))
@@ -3645,6 +3650,12 @@ namespace Jiten.Parser
                             collocMap[cv.TargetWordId] = collocMap.GetValueOrDefault(cv.TargetWordId) + cv.Bonus;
                         }
                     }
+
+                    // Copula can only follow nominals — clear the POS-incompatibility flag so
+                    // noun candidates can receive their grammatical bonus from noun-copula-synergy.
+                    if (nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text))
+                        foreach (var c in candidates)
+                            c.IsPosIncompatibleDirectSurface = false;
 
                     foreach (var candidate in candidates)
                     {

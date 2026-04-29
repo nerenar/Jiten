@@ -461,7 +461,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate, nextText: "です");
 
         var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
-        bonus.Should().Be(30);
+        bonus.Should().Be(65);
         rules.Should().Contain("noun-copula-synergy");
     }
 

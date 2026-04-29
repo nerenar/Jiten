@@ -626,6 +626,9 @@ namespace Jiten.Core.Migrations
                     b.Property<int>("DeckId")
                         .HasColumnType("integer");
 
+                    b.Property<float>("Difficulty")
+                        .HasColumnType("real");
+
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
@@ -637,6 +640,9 @@ namespace Jiten.Core.Migrations
 
                     b.HasIndex("DeckId")
                         .HasDatabaseName("IX_ExampleSentence_DeckId");
+
+                    b.HasIndex("DeckId", "Difficulty")
+                        .HasDatabaseName("IX_ExampleSentence_DeckId_Difficulty");
 
                     b.ToTable("ExampleSentences", "jiten");
                 });

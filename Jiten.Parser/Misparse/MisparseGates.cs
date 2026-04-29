@@ -79,13 +79,21 @@ internal static class MisparseGates
 
         if (ctx.ReadingIsIchi || ctx.IsUsuallyKana) return false;
 
-        if (ctx.Next?.Reading is not { Length: > 0 } nextReading) return false;
+        if (ctx.Next is not { Reading.Length: > 0, Text.Length: > 0 } next) return false;
+
+        // Hiragana before a katakana word is not a stutter (e.g. は + ハードル)
+        if (next.Text[0] >= 'ァ' && next.Text[0] <= 'ヴ') return false;
+
+        // は after a content word is the topic particle, not a stutter (e.g. 今は、はっきり)
+        if (surface == "は" && ctx.Prev is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.Verb
+            or PartOfSpeech.IAdjective or PartOfSpeech.NaAdjective or PartOfSpeech.Adverb or PartOfSpeech.Pronoun })
+            return false;
 
         string katakana = surface.Length == 1
             ? new string(surface[0] >= 'ぁ' && surface[0] <= 'ん' ? (char)(surface[0] + 0x60) : surface[0], 1)
             : WanaKana.ToKatakana(surface);
 
-        return nextReading.StartsWith(katakana, StringComparison.Ordinal);
+        return next.Reading.StartsWith(katakana, StringComparison.Ordinal);
     }
 
     private static bool IsShortKanaNameWithoutContext(in MisparseGateContext ctx)

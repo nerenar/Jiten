@@ -552,6 +552,13 @@ builder.Services.AddHangfireServer((options) =>
 
 builder.Services.AddHangfireServer((options) =>
 {
+    options.ServerName = "JikanServer";
+    options.Queues = ["jikan"];
+    options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
     options.ServerName = "CoverageServer";
     options.Queues = ["coverage"];
     options.WorkerCount = 4;

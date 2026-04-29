@@ -352,18 +352,106 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                      && (!j.Deck.ParentDeckId.HasValue || !alreadyLoaded.Contains(j.Deck.ParentDeckId.Value)))
             .OrderBy(_ => EF.Functions.Random())
             .Take(3)
-            .Select(j => new
-            {
-                SentenceId = j.Sentence.SentenceId,
-                j.Sentence.Text,
-                DeckId = j.Deck.DeckId,
-                ParentDeckId = j.Deck.ParentDeckId
-            })
+            .Select(j => new PickedSentence(
+                j.Sentence.SentenceId, j.Sentence.Text, j.Sentence.Difficulty,
+                j.Deck.DeckId, j.Deck.ParentDeckId))
             .ToListAsync();
 
         if (picked.Count == 0) return [];
 
-        // Fetch word position/length for the selected sentences (at most a handful of rows)
+        return await BuildExampleSentenceDtos(picked, wordId, readingIndex);
+    }
+
+    [HttpPost("{wordId}/{readingIndex}/example-sentences-by-difficulty/{mediaType?}")]
+    [SwaggerOperation(Summary = "Get example sentences ordered by difficulty",
+                      Description =
+                          "Returns example sentences for the given word and reading index, ordered by difficulty score. " +
+                          "Automatically expands the band (ascending or descending) until `take` sentences are found or the range is exhausted.")]
+    [ProducesResponseType(typeof(ExampleSentencesByDifficultyResponse), StatusCodes.Status200OK)]
+    public async Task<ExampleSentencesByDifficultyResponse> GetExampleSentencesByDifficulty(
+        [FromRoute] int wordId, [FromRoute] int readingIndex,
+        [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null,
+        [FromQuery] float minDifficulty = 0f, [FromQuery] float maxDifficulty = 0.5f,
+        [FromQuery] bool descending = false, [FromQuery] int take = 3)
+    {
+        take = Math.Clamp(take, 1, 20);
+        const float bandSize = 0.5f;
+        const int maxIterations = 40;
+
+        var sentenceIdSubquery = context.ExampleSentenceWords
+            .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
+            .Select(w => w.ExampleSentenceId)
+            .Distinct();
+
+        var baseSentences = context.ExampleSentences
+            .AsNoTracking()
+            .Where(s => sentenceIdSubquery.Contains(s.SentenceId));
+
+        var globalMin = await baseSentences.Select(s => (float?)s.Difficulty).MinAsync() ?? 0f;
+        var globalMax = await baseSentences.Select(s => (float?)s.Difficulty).MaxAsync() ?? 0f;
+
+        var collected = new List<PickedSentence>();
+        var bandMin = minDifficulty;
+        var bandMax = maxDifficulty;
+
+        if (descending && bandMin > globalMax)
+        {
+            bandMax = (float)(Math.Ceiling(globalMax / bandSize) * bandSize + bandSize);
+            bandMin = bandMax - bandSize;
+        }
+
+        for (var i = 0; i < maxIterations && collected.Count < take; i++)
+        {
+            if (descending ? bandMax < globalMin : bandMin > globalMax + bandSize)
+                break;
+
+            var remaining = take - collected.Count;
+            var excludeIds = alreadyLoaded.Concat(collected.Select(c => c.DeckId)).Distinct().ToList();
+
+            var batch = await baseSentences
+                .Where(s => s.Difficulty >= bandMin && s.Difficulty < bandMax)
+                .Join(context.Decks.AsNoTracking(),
+                      s => s.DeckId, d => d.DeckId,
+                      (s, d) => new { Sentence = s, Deck = d })
+                .Where(j => !mediaType.HasValue || j.Deck.MediaType == mediaType.Value)
+                .Where(j => !excludeIds.Contains(j.Deck.DeckId)
+                         && (!j.Deck.ParentDeckId.HasValue || !excludeIds.Contains(j.Deck.ParentDeckId.Value)))
+                .OrderBy(_ => EF.Functions.Random())
+                .Take(remaining)
+                .Select(j => new PickedSentence(
+                    j.Sentence.SentenceId, j.Sentence.Text, j.Sentence.Difficulty,
+                    j.Deck.DeckId, j.Deck.ParentDeckId))
+                .ToListAsync();
+
+            collected.AddRange(batch);
+
+            if (descending)
+            {
+                bandMax = bandMin;
+                bandMin -= bandSize;
+            }
+            else
+            {
+                bandMin = bandMax;
+                bandMax += bandSize;
+            }
+        }
+
+        return new ExampleSentencesByDifficultyResponse
+        {
+            MinDifficulty = globalMin,
+            MaxDifficulty = globalMax,
+            SearchedBandMin = minDifficulty,
+            SearchedBandMax = descending ? bandMax + bandSize : bandMin,
+            Sentences = collected.Count == 0 ? [] : await BuildExampleSentenceDtos(collected, wordId, readingIndex)
+        };
+    }
+
+    private record PickedSentence(int SentenceId, string Text, float Difficulty, int DeckId, int? ParentDeckId);
+
+    private async Task<List<ExampleSentenceDto>> BuildExampleSentenceDtos(
+        List<PickedSentence> picked, int wordId, int readingIndex)
+    {
         var selectedIds = picked.Select(p => p.SentenceId).ToList();
         var positionMap = (await context.ExampleSentenceWords
             .AsNoTracking()
@@ -374,7 +462,6 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             .DistinctBy(w => w.ExampleSentenceId)
             .ToDictionary(w => w.ExampleSentenceId);
 
-        // Build DTOs
         var childDeckIds = picked.Select(p => p.DeckId).Distinct().ToList();
         var childDecks = await context.Decks.AsNoTracking()
             .Where(d => childDeckIds.Contains(d.DeckId))
@@ -399,6 +486,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             {
                 SentenceId = p.SentenceId,
                 Text = p.Text,
+                Difficulty = p.Difficulty,
                 WordPosition = pos?.Position ?? 0,
                 WordLength = pos?.Length ?? 0,
                 SourceDeck = sourceDeck!,

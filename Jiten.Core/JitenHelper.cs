@@ -310,7 +310,7 @@ public static class JitenHelper
 
                 // Step 2: COPY sentences
                 await using (var writer = await conn.BeginBinaryImportAsync(
-                    @"COPY jiten.""ExampleSentences"" (""SentenceId"", ""Text"", ""Position"", ""DeckId"") FROM STDIN (FORMAT BINARY)"))
+                    @"COPY jiten.""ExampleSentences"" (""SentenceId"", ""Text"", ""Position"", ""DeckId"", ""Difficulty"") FROM STDIN (FORMAT BINARY)"))
                 {
                     var idx = 0;
                     foreach (var sentence in exampleSentences)
@@ -321,6 +321,7 @@ public static class JitenHelper
                         await writer.WriteAsync(sentence.Text);
                         await writer.WriteAsync(sentence.Position);
                         await writer.WriteAsync(deckId);
+                        await writer.WriteAsync(sentence.Difficulty);
 
                         sentence.SentenceId = id;
                         sentence.DeckId = deckId;

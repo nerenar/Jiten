@@ -29,6 +29,9 @@ public static class MetadataDownloader
             "books" => MetadataProviderHelper.GoogleBooksSearchApi,
             "anilist" => MetadataProviderHelper.AnilistNovelSearchApi,
             "anilist-manga" => MetadataProviderHelper.AnilistMangaSearchApi,
+            "jikan-anime" => MetadataProviderHelper.JikanAnimeSearchApi,
+            "jikan-manga" => MetadataProviderHelper.JikanMangaSearchApi,
+            "jikan-novel" => MetadataProviderHelper.JikanNovelSearchApi,
             _ => throw new ArgumentException("Invalid API")
         };
 
