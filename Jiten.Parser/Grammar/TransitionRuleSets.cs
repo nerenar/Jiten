@@ -74,7 +74,7 @@ internal static class TransitionRuleSets
         new("noun-copula-synergy",
             [ScoringCondition.CandidateIsNounLike],
             [ScoringCondition.NextIsCopula],
-            30),
+            65),
 
         new("na-adj-connector-synergy",
             [ScoringCondition.CandidateIsNaAdj],

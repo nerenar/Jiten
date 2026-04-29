@@ -3509,18 +3509,21 @@ namespace Jiten.Parser
                     var (currentInfo, currentResult, currentMargin) = sentenceWords[i];
                     if (currentResult == null) continue;
 
+                    WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
+                    bool nextIsCopula = nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text);
+
                     // High confidence → skip rederivation, unless archaic sentence (Phase 1 scored without archaic context)
-                    if (!isArchaicPass1 && currentMargin >= ScoringPolicy.HighConfidenceThreshold) continue;
+                    // Exception: copula can only follow nominals, so always re-evaluate before だ/です/である
+                    if (!isArchaicPass1 && !nextIsCopula && currentMargin >= ScoringPolicy.HighConfidenceThreshold) continue;
 
                     WordInfo? prevInfo = i > 0 ? sentenceWords[i - 1].word : null;
-                    WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
                     var prevResult = i > 0 ? sentenceWords[i - 1].result : null;
                     var nextResult = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].result : null;
 
                     // Low confidence → always rederive (bypass HasApplicableRules check)
                     bool forceRederive = currentMargin.HasValue && currentMargin.Value < ScoringPolicy.LowConfidenceThreshold;
 
-                    if (!forceRederive && !isArchaicPass1 && !TransitionRuleEngine.CouldAnySoftRuleApply(
+                    if (!forceRederive && !nextIsCopula && !isArchaicPass1 && !TransitionRuleEngine.CouldAnySoftRuleApply(
                          currentResult.PartsOfSpeech, currentInfo.Text,
                          prevResult?.PartsOfSpeech, prevInfo?.Text,
                          nextResult?.PartsOfSpeech, nextInfo?.Text))
@@ -3647,6 +3650,12 @@ namespace Jiten.Parser
                             collocMap[cv.TargetWordId] = collocMap.GetValueOrDefault(cv.TargetWordId) + cv.Bonus;
                         }
                     }
+
+                    // Copula can only follow nominals — clear the POS-incompatibility flag so
+                    // noun candidates can receive their grammatical bonus from noun-copula-synergy.
+                    if (nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text))
+                        foreach (var c in candidates)
+                            c.IsPosIncompatibleDirectSurface = false;
 
                     foreach (var candidate in candidates)
                     {
