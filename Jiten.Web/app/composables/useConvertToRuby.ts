@@ -5,8 +5,8 @@ import { sanitiseHtml } from '~/utils/sanitiseHtml';
 export function useConvertToRuby() {
   const store = useJitenStore();
 
-  return (text: string): string => {
-    const html = convertToRubyWithFurigana(text, store.displayFurigana);
+  return (text: string, forceDisplayFurigana?: boolean): string => {
+    const html = convertToRubyWithFurigana(text, forceDisplayFurigana ?? store.displayFurigana);
     return sanitiseHtml(html);
   };
 }
