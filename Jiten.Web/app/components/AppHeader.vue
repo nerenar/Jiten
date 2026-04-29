@@ -96,6 +96,11 @@
       icon: 'pi pi-cog',
       command: () => navigateTo('/settings'),
     },
+    {
+      label: 'Media Requests',
+      icon: 'pi pi-list',
+      command: () => navigateTo('/requests'),
+    },
     { separator: true },
     {
       label: 'Logout',
