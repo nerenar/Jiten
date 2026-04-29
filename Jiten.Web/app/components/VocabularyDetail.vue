@@ -1,10 +1,11 @@
 <script setup lang="ts">
-  import { KnownState, type ExampleSentence, type MediaType, type Word } from '~/types';
+  import { KnownState, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
   import Button from 'primevue/button';
+  import Select from 'primevue/select';
   import { useJitenStore } from '~/stores/jitenStore';
 
   const props = defineProps({
@@ -72,7 +73,9 @@
     mediaAccordionValue.value = '1';
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
-    getRandomExampleSentences();
+    nextBandMin.value = 0;
+    nextBandMax.value = bandSize;
+    loadExampleSentences();
   };
 
   const isTransitioning = ref(false);
@@ -89,7 +92,9 @@
 
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
-    getRandomExampleSentences();
+    nextBandMin.value = 0;
+    nextBandMax.value = bandSize;
+    loadExampleSentences();
   };
 
   const selectReading = async (index: number) => {
@@ -127,12 +132,46 @@
     return conjugations.join(' ; ');
   });
 
+  type SortMode = 'random' | 'easiest' | 'hardest';
+  const sortModeOptions = [
+    { label: 'Random', value: 'random' as SortMode, icon: 'pi pi-sync' },
+    { label: 'Easiest first', value: 'easiest' as SortMode, icon: 'pi pi-arrow-up' },
+    { label: 'Hardest first', value: 'hardest' as SortMode, icon: 'pi pi-arrow-down' },
+  ];
+  const selectedSortMode = ref<SortMode>('random');
+  const bandSize = 0.5;
+
   const exampleSentences = ref<ExampleSentence[]>([]);
   const canLoadExampleSentences = ref(true);
   const isLoadingExampleSentences = ref(true);
+
+  const nextBandMin = ref(0);
+  const nextBandMax = ref(bandSize);
+
+  const switchSortMode = () => {
+    exampleSentences.value = [];
+    canLoadExampleSentences.value = true;
+    if (selectedSortMode.value === 'hardest') {
+      nextBandMin.value = 999;
+      nextBandMax.value = 999 + bandSize;
+    } else {
+      nextBandMin.value = 0;
+      nextBandMax.value = bandSize;
+    }
+    loadExampleSentences();
+  };
+
   onMounted(() => {
-    getRandomExampleSentences();
+    loadExampleSentences();
   });
+
+  async function loadExampleSentences() {
+    if (selectedSortMode.value === 'random') {
+      await getRandomExampleSentences();
+    } else {
+      await getExampleSentencesByDifficulty();
+    }
+  }
 
   async function getRandomExampleSentences() {
     isLoadingExampleSentences.value = true;
@@ -156,6 +195,42 @@
     }
 
     exampleSentences.value.push(...results);
+  }
+
+  async function getExampleSentencesByDifficulty() {
+    isLoadingExampleSentences.value = true;
+    const descending = selectedSortMode.value === 'hardest';
+    let url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/example-sentences-by-difficulty`;
+
+    if (selectedMediaType.value != null) {
+      url += '/' + selectedMediaType.value;
+    }
+
+    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
+    const results = await $api<ExampleSentencesByDifficultyResponse>(
+      `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
+      { method: 'POST', body: alreadyLoaded },
+    );
+
+    isLoadingExampleSentences.value = false;
+
+    if (results.sentences.length > 0) {
+      exampleSentences.value.push(...results.sentences);
+    }
+
+    if (descending) {
+      nextBandMax.value = results.searchedBandMin;
+      nextBandMin.value = nextBandMax.value - bandSize;
+      if (nextBandMax.value <= results.minDifficulty) {
+        canLoadExampleSentences.value = false;
+      }
+    } else {
+      nextBandMin.value = results.searchedBandMax;
+      nextBandMax.value = nextBandMin.value + bandSize;
+      if (nextBandMin.value > results.maxDifficulty) {
+        canLoadExampleSentences.value = false;
+      }
+    }
   }
 </script>
 
@@ -276,7 +351,32 @@
           <Accordion value="1" lazy>
             <AccordionPanel value="1">
               <AccordionHeader>
-                <div class="cursor-pointer">Example sentences</div>
+                <div class="flex items-center gap-1 cursor-pointer w-full">
+                  <span>Example sentences</span>
+                  <Select
+                    v-model="selectedSortMode"
+                    :options="sortModeOptions"
+                    option-label="label"
+                    option-value="value"
+                    variant="filled"
+                    class="sort-mode-select"
+                    @click.stop
+                    @change="switchSortMode()"
+                  >
+                    <template #value="{ value }">
+                      <div class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                        <i :class="sortModeOptions.find(o => o.value === value)?.icon" class="text-xs" />
+                        <span>{{ sortModeOptions.find(o => o.value === value)?.label }}</span>
+                      </div>
+                    </template>
+                    <template #option="{ option }">
+                      <div class="flex items-center gap-2">
+                        <i :class="option.icon" />
+                        <span>{{ option.label }}</span>
+                      </div>
+                    </template>
+                  </Select>
+                </div>
               </AccordionHeader>
               <AccordionContent>
                 <div class="text-xs pb-2">
@@ -296,7 +396,7 @@
                     </div>
                   </div>
                 </template>
-                <Button @click="getRandomExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>
+                <Button @click="loadExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>
               </AccordionContent>
             </AccordionPanel>
           </Accordion>
@@ -322,5 +422,32 @@
 <style scoped>
   th {
     font-weight: normal;
+  }
+
+  :deep(.sort-mode-select) {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    min-width: auto !important;
+    font-size: 0.875rem;
+  }
+
+  :deep(.sort-mode-select .p-select-label) {
+    padding: 0.125rem 0.25rem !important;
+  }
+
+  :deep(.sort-mode-select .p-select-dropdown) {
+    width: 1.25rem;
+    color: var(--p-text-muted-color);
+  }
+
+  :deep(.sort-mode-select:hover) {
+    background: var(--p-surface-100) !important;
+    border-radius: 0.375rem;
+  }
+
+  :deep(.dark .sort-mode-select:hover) {
+    background: var(--p-surface-800) !important;
   }
 </style>

@@ -8,6 +8,16 @@ public class ExampleSentenceDto
     public required string Text { get; set; }
     public int WordPosition { get; set; }
     public int WordLength { get; set; }
+    public float Difficulty { get; set; }
     public Deck? SourceDeckParent { get; set; }
     public Deck? SourceDeck { get; set; }
+}
+
+public class ExampleSentencesByDifficultyResponse
+{
+    public float MinDifficulty { get; set; }
+    public float MaxDifficulty { get; set; }
+    public float SearchedBandMin { get; set; }
+    public float SearchedBandMax { get; set; }
+    public List<ExampleSentenceDto> Sentences { get; set; } = [];
 } 

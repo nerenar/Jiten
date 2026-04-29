@@ -773,7 +773,19 @@ namespace Jiten.Parser
             List<ExampleSentence>? exampleSentences = null;
 
             if (mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
-                exampleSentences = ExampleSentenceExtractor.ExtractSentences(sentences, processedWords);
+            {
+                var wordIds = processedWords.Select(w => w.WordId).Distinct().ToList();
+                await using var freqCtx = await _contextFactory.CreateDbContextAsync();
+                var formFreqRanks = await freqCtx.WordFormFrequencies
+                    .AsNoTracking()
+                    .Where(wff => wordIds.Contains(wff.WordId))
+                    .ToDictionaryAsync(
+                        wff => (wff.WordId, (byte)wff.ReadingIndex),
+                        wff => wff.FrequencyRank);
+
+                exampleSentences = ExampleSentenceExtractor.ExtractSentences(
+                    sentences, processedWords, formFreqRanks, _wordFrequencyRanks);
+            }
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
             var characterCount = wordInfos.Sum(x => x.Text.Length);
@@ -2249,17 +2261,6 @@ namespace Jiten.Parser
                                 break;
                             }
 
-                            if (candidateKey.Length > 0 && TryDeconjugatedLongVowelLookup(candidateKey))
-                            {
-                                var first = words[i - k];
-                                first.word.Text = candidateKey;
-                                int cLen = 0;
-                                for (int j = i - k; j <= i; j++) cLen += words[j].length;
-                                result.Add((first.word, first.position, cLen));
-                                i -= k + 1;
-                                merged = true;
-                                break;
-                            }
                         }
 
                         if (!merged && i > 0 && word.Text is "るー" or "すー")

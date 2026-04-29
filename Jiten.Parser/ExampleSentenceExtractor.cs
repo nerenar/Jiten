@@ -148,6 +148,16 @@ public static class ExampleSentenceExtractor
                 var sentence = candidateSentences[i];
                 var trimmedText = NormalizeTrailingPunctuation(sentence.Text).Trim();
                 int leadingTrim = sentence.Text.Length - sentence.Text.AsSpan().TrimStart().Length;
+
+                int closingTrim = 0;
+                while (closingTrim < trimmedText.Length && ClosingSigns.Contains(trimmedText[closingTrim]))
+                    closingTrim++;
+                if (closingTrim > 0)
+                {
+                    trimmedText = trimmedText[closingTrim..];
+                    leadingTrim += closingTrim;
+                }
+
                 var exampleSentence = new ExampleSentence
                                       {
                                           Text = BalanceBrackets(trimmedText),
@@ -272,6 +282,9 @@ public static class ExampleSentenceExtractor
 
         return exampleSentences;
     }
+
+    private static readonly HashSet<char> ClosingSigns =
+        ['〉', '》', '】', '〕', '）', ')', '」', '』', '｝', '}'];
 
     private static readonly (char open, char close)[] BracketPairs =
         [('「', '」'), ('『', '』'), ('（', '）'), ('(', ')')];

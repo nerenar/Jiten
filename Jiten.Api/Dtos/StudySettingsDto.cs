@@ -33,6 +33,14 @@ public enum ExampleSentencePosition
     Front
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<ExampleSentenceSorting>))]
+public enum ExampleSentenceSorting
+{
+    Random,
+    EasiestFirst,
+    HardestFirst
+}
+
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
 public class StudySettingsDto
 {
@@ -65,6 +73,9 @@ public class StudySettingsDto
 
     [JsonPropertyName("blurExampleSentence")]
     public bool BlurExampleSentence { get; set; }
+
+    [JsonPropertyName("exampleSentenceSorting")]
+    public ExampleSentenceSorting ExampleSentenceSorting { get; set; } = ExampleSentenceSorting.Random;
 
     [JsonPropertyName("showFrequencyRank")]
     public bool ShowFrequencyRank { get; set; } = true;

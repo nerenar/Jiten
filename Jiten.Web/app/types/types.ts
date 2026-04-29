@@ -259,8 +259,17 @@ export interface ExampleSentence {
   text: string;
   wordPosition: number;
   wordLength: number;
+  difficulty: number;
   sourceDeck: Deck;
   sourceDeckParent: Deck;
+}
+
+export interface ExampleSentencesByDifficultyResponse {
+  minDifficulty: number;
+  maxDifficulty: number;
+  searchedBandMin: number;
+  searchedBandMax: number;
+  sentences: ExampleSentence[];
 }
 
 export interface GoogleSignInResponse {
@@ -842,6 +851,7 @@ export type StudyInterleaving = 'Mixed' | 'NewFirst' | 'ReviewsFirst';
 export type StudyNewCardGathering = 'TopDeck' | 'RoundRobin' | 'CrossDeckFrequency';
 export type StudyReviewFrom = 'AllTracked' | 'StudyDecksOnly';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
+export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
 
 export interface StudySettingsDto {
   newCardsPerDay: number;
@@ -853,6 +863,7 @@ export interface StudySettingsDto {
   reviewFrom: StudyReviewFrom;
   showPitchAccent: boolean;
   exampleSentencePosition: ExampleSentencePosition;
+  exampleSentenceSorting: ExampleSentenceSorting;
   blurExampleSentence: boolean;
   showFrequencyRank: boolean;
   showKanjiBreakdown: boolean;

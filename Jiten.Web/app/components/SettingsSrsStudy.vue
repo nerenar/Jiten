@@ -47,6 +47,12 @@
     { label: 'Back', value: 'Back' },
   ];
 
+  const exampleSentenceSortingOptions = [
+    { label: 'Random', value: 'Random' },
+    { label: 'Easiest', value: 'EasiestFirst' },
+    { label: 'Hardest', value: 'HardestFirst' },
+  ];
+
   function getUtcOffsetMinutes(zone: string, date?: Date): number {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false, timeZoneName: 'shortOffset' })
       .formatToParts(date ?? new Date());
@@ -282,6 +288,15 @@
                   <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
                 </Tooltip>
               </label>
+            </div>
+            <div v-if="form.exampleSentencePosition !== 'Hidden'" class="mt-2">
+              <label class="text-sm mb-1 block">
+                Sorting
+                <Tooltip content="**Random** — a random example sentence each time.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences." placement="right">
+                  <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                </Tooltip>
+              </label>
+              <SelectButton v-model="form.exampleSentenceSorting" :options="exampleSentenceSortingOptions" option-label="label" option-value="value" :allow-empty="false" />
             </div>
           </div>
           <div class="flex items-center gap-2">
