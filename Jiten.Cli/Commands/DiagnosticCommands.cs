@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
+using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Parser;
 using Jiten.Parser.Diagnostics;
@@ -43,7 +44,17 @@ public class DiagnosticCommands(CliContext context)
         var diagnostics = new ParserDiagnostics { InputText = text };
         var sw = Stopwatch.StartNew();
 
-        var deckWords = await Jiten.Parser.Parser.ParseText(context.ContextFactory, text, diagnostics: diagnostics);
+        List<DeckDictionaryEntry>? dictEntries = null;
+        var names = options.ParseTestNames?.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+        if (names is { Count: > 0 })
+        {
+            dictEntries = names.Select(n => new DeckDictionaryEntry { Surface = n, EntryType = DeckDictionaryEntryType.Name }).ToList();
+            Console.WriteLine($"Injecting {dictEntries.Count} user-dict name(s): {string.Join(", ", names)}");
+        }
+
+        var deckWords = dictEntries != null
+            ? (await Jiten.Parser.Parser.ParseTextToDeck(context.ContextFactory, text, diagnostics: diagnostics, dictionaryEntries: dictEntries)).DeckWords?.Select(dw => dw).Cast<DeckWord>().ToList() ?? []
+            : await Jiten.Parser.Parser.ParseText(context.ContextFactory, text, diagnostics: diagnostics);
 
         sw.Stop();
         diagnostics.TotalElapsedMs = sw.ElapsedMilliseconds;

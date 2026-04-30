@@ -43,13 +43,15 @@ public static class JitenHelper
 
         try
         {
-            var existingDeck =
-                await context.Decks
+            var existingDeckQuery = context.Decks
                              .Include(d => d.DeckWords)
                              .Include(d => d.Children).ThenInclude(d => d.DeckWords)
                              .Include(d => d.RawText)
-                             .Include(d => d.ExampleSentences)
-                             .OrderBy(d => d.DeckOrder)
+                             .Include(d => d.ExampleSentences);
+
+            var existingDeck = deck.DeckId > 0
+                ? await existingDeckQuery.FirstOrDefaultAsync(d => d.DeckId == deck.DeckId)
+                : await existingDeckQuery.OrderBy(d => d.DeckOrder)
                              .FirstOrDefaultAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType);
 
             if (existingDeck != null)

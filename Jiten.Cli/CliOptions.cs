@@ -136,6 +136,9 @@ public class CliOptions
     [Option(longName: "watch-word", Required = false, HelpText = "Surface text to focus on during --parse-deck-test (e.g. さっき). Shows deck result + standalone sentence diagnostics.")]
     public string? WatchWord { get; set; }
 
+    [Option(longName: "parse-test-names", Required = false, Separator = ',', HelpText = "Comma-separated person names to inject as user dictionary entries during parse-test (e.g. アーリャ,菰田重徳).")]
+    public IEnumerable<string>? ParseTestNames { get; set; }
+
     [Option(longName: "parse-test-output", Required = false, HelpText = "Output file path for parse-test diagnostics. Defaults to stdout.")]
     public string? ParseTestOutput { get; set; }
 

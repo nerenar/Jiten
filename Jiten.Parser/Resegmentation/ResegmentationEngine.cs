@@ -14,13 +14,14 @@ internal static class ResegmentationEngine
         List<SentenceInfo> sentences,
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int> frequencyRanks,
-        Dictionary<int, JmDictWordMeta> wordMeta)
+        Dictionary<int, JmDictWordMeta> wordMeta,
+        HashSet<string>? protectedSurfaces = null)
     {
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
 
         foreach (var sentence in sentences)
         {
-            var spans = UncertaintyDetector.FindSpans(sentence, lookups);
+            var spans = UncertaintyDetector.FindSpans(sentence, lookups, protectedSurfaces);
             if (spans.Count == 0) continue;
 
             foreach (var span in spans.OrderByDescending(s => s.WordIndex))

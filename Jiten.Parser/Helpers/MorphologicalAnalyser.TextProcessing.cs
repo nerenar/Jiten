@@ -103,8 +103,8 @@ public partial class MorphologicalAnalyser
         text = MultipleLongVowelRegex().Replace(text, "ー");
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
 
-        text = StutteringDigraphRunRegex().Replace(text, _stopToken);
-        text = StutteringRunRegex().Replace(text, _stopToken);
+        text = StutteringDigraphRunRegex().Replace(text, "");
+        text = StutteringRunRegex().Replace(text, "");
 
         text = text
             .Replace("垣間見", $"垣間{_stopToken}見")

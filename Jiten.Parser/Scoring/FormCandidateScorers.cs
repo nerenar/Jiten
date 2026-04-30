@@ -419,6 +419,11 @@ internal static class PenaltyScorer
                 bool isExpression = posToCheck.Any(p => p is "exp" or "on-mim");
                 if (isExpression) return false;
 
+                // Numerals (一つ, 二つ, 三つ …) have DictionaryForm=つ (the counter suffix)
+                // from Sudachi, not a conjugation base. Skip the penalty.
+                bool isNumeral = posToCheck.Any(p => p is "num");
+                if (isNumeral) return false;
+
                 // Standalone adverbs with frequency evidence (e.g. 悪しからず ichi1) are not
                 // conjugated forms — they're fixed expressions found via direct lookup.
                 // The DictionaryForm comes from a Sudachi sub-token and is irrelevant.

@@ -110,7 +110,7 @@ namespace Jiten.Parser
             FilterOrphanedMisparses(sentences);
             ValidateGrammaticalSequences(sentences, diagnostics);
             StripTrailingParticles(sentences);
-            ResegmentationEngine.TryImproveUncertainSpans(sentences, _lookups, _wordFrequencyRanks, WordMeta);
+            ResegmentationEngine.TryImproveUncertainSpans(sentences, _lookups, _wordFrequencyRanks, WordMeta, protectedSurfaces);
             MarkPersonNameHonorificContexts(sentences);
         }
 
@@ -3847,7 +3847,7 @@ namespace Jiten.Parser
                     DeckDictionaryEntryType.Name => "名詞,固有名詞,人名,一般,*,*",
                     _ => "名詞,普通名詞,一般,*,*,*"
                 };
-                sb.Append(surface).Append(",5146,5146,3000,")
+                sb.Append(surface).Append(",5146,5146,-9000,")
                   .Append(surface).Append(',')
                   .Append(pos).Append(',')
                   .Append(surface).Append(',')

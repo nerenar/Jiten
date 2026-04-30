@@ -107,6 +107,7 @@ internal enum ScoringCondition
     CandidateIsNotAdverb,
     NextIsNotNounLike,
     CandidateIsHonorific,
+    CandidateIsNotHonorific,
     PrevIsName,
     PrevIsAuxiliary,
 }

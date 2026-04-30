@@ -187,9 +187,14 @@ public class FormSelectionTests
         yield return ["いかんいかん、心の声が漏れそうになった。", "いかん", 2829697, (byte)1];
         yield return ["戦線を伸ばしきるわけにもいかんしこのあたりが限界か", "いかん", 2829697, (byte)1];
 
-        // 二つ → ふたつ/two (1461160), not つ/harbour (2609820)
-        // CombineAmounts merges 二+つ with POS Noun; Noun↔Numeral compatibility ensures JMDict num match
+        // Numeral+counter words: Sudachi DictionaryForm=つ must not match colloquial つ (2798260)
+        // Numeral POS exemption in ConjugatedIdentityPenalty preserves the SurfaceMatchScore
         yield return ["二つ", "二つ", 1461160, (byte)0];
+        yield return ["６鼠の小説には優れた点が二つある。", "二つ", 1461160, (byte)0];
+        yield return ["３つ", "３つ", 1299740, (byte)1];
+        yield return ["２つ", "２つ", 1461160, (byte)1];
+        yield return ["小太郎は七つであった。", "七つ", 1319220, (byte)0];
+        yield return ["規定は主に四つあります", "四つ", 1307040, (byte)0];
 
         // 罪 after expression token → noun つみ (1296680), not suffix ザイ (2836325)
         // Sudachi merges それが into a single expression token, causing 罪 to be misclassified as suffix;
@@ -460,6 +465,11 @@ public class FormSelectionTests
         // 食べなさそう should be 食べる (taberu, 1358280)
         yield return ["あいつ野菜食べなさそうだよな", "食べなさそう", 1358280, (byte)0];
 
+        // こうやって → conjunction "thus/in this way" (2123630), not 公約/public commitment (1274880)
+        // SpecialCases2 merges Sudachi's こう+やって so the direct dictionary entry wins
+        yield return ["こうやって、お互いに端っこと端っこを咥えて", "こうやって", 2123630, (byte)0];
+        yield return ["こうやって、直接相談に乗るためか！", "こうやって", 2123630, (byte)0];
+
         // こと + って must not merge — こと stays as 事 (1313580), not verb stem of ことる (Kotor, place name)
         yield return ["自分のことって自分では分からない", "こと", 1313580, (byte)2];
 
@@ -521,6 +531,10 @@ public class FormSelectionTests
         // Sudachi tags 事 as 接尾辞/ジ; ReclassifyOrphanedSuffixes reclassifies it, then
         // FixReadingAmbiguity overrides ジ→コト so ReadingMatchScore goes to the correct entry
         yield return ["どうやらこの男は俺と違って、自分のなすべき事を理解しているようだった。", "事", 1313580, (byte)0];
+
+        // べき should be "should/must" aux (1011430), not "exponent/power" noun (1564290)
+        yield return ["もう少し様子を見るべきですが、場合によっては病院に搬送するかどうかも考えましょう。", "べき", 1011430, (byte)1];
+        yield return ["けど、なるべきだと思ったのよね。", "べき", 1011430, (byte)1];
 
         yield return ["一人でシコってくれた。", "シコってくれた", 2595020, (byte)0];
         yield return [" 「……あんたはさ、考え方が古くせーんだよ」", "古くせー", 1265530, (byte)1];
