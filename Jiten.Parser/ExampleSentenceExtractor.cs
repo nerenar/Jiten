@@ -158,9 +158,11 @@ public static class ExampleSentenceExtractor
                     leadingTrim += closingTrim;
                 }
 
+                var balancedText = BalanceBrackets(trimmedText, out int bracketPrepend);
+
                 var exampleSentence = new ExampleSentence
                                       {
-                                          Text = BalanceBrackets(trimmedText),
+                                          Text = balancedText,
                                           Position = sentencePositions[sentence],
                                           Words = new List<ExampleSentenceWord>()
                                       };
@@ -240,7 +242,7 @@ public static class ExampleSentenceExtractor
                         exampleSentence.Words.Add(new ExampleSentenceWord
                                                   {
                                                       WordId = foundWord.WordId, ReadingIndex = foundWord.ReadingIndex,
-                                                      Position = (byte)Math.Clamp(position - leadingTrim, 0, 255),
+                                                      Position = (byte)Math.Clamp(position - leadingTrim + bracketPrepend, 0, 255),
                                                       Length = (byte)Math.Min(length, 255)
                                                   });
 
@@ -289,8 +291,9 @@ public static class ExampleSentenceExtractor
     private static readonly (char open, char close)[] BracketPairs =
         [('「', '」'), ('『', '』'), ('（', '）'), ('(', ')')];
 
-    private static string BalanceBrackets(string text)
+    private static string BalanceBrackets(string text, out int prepended)
     {
+        prepended = 0;
         foreach (var (open, close) in BracketPairs)
         {
             int balance = 0;
@@ -303,7 +306,10 @@ public static class ExampleSentenceExtractor
             if (balance > 0)
                 text += new string(close, balance);
             else if (balance < 0)
+            {
+                prepended += -balance;
                 text = new string(open, -balance) + text;
+            }
         }
 
         return text;
