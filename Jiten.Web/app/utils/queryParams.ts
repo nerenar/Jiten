@@ -20,3 +20,13 @@ export const parseNumberArray = (v: unknown): number[] => {
     .map((s) => Number(s.trim()))
     .filter((n) => Number.isFinite(n) && n > 0);
 };
+
+export const parseStringArray = (v: unknown): string[] => {
+  if (!v) return [];
+  const str = Array.isArray(v) ? v[0] : v;
+  if (typeof str !== 'string') return [];
+  return str
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+};

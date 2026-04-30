@@ -1,4 +1,6 @@
 <script setup lang="ts">
+  import VocabularyAdvancedFilters from '~/components/VocabularyAdvancedFilters.vue';
+
   const props = defineProps<{
     sortByOptions: { label: string; value: string }[];
     sortBy: string;
@@ -15,6 +17,10 @@
     'update:displayFilter': [value: string];
     'update:search': [value: string];
   }>();
+
+  const includePos = defineModel<string[]>('includePos', { default: () => [] });
+  const excludePos = defineModel<string[]>('excludePos', { default: () => [] });
+  const hideKanaOnly = defineModel<boolean>('hideKanaOnly', { default: false });
 
   const displayOptions = [
     { label: 'All', value: 'all' },
@@ -37,6 +43,12 @@
   });
 
   const sortByWidthClass = computed(() => props.sortByWidth ?? 'md:w-56');
+
+  const resetAdvancedFilters = () => {
+    includePos.value = [];
+    excludePos.value = [];
+    hideKanaOnly.value = false;
+  };
 </script>
 
 <template>
@@ -84,5 +96,11 @@
         <label for="display">Display</label>
       </FloatLabel>
     </div>
+    <VocabularyAdvancedFilters
+      v-model:include-pos="includePos"
+      v-model:exclude-pos="excludePos"
+      v-model:hide-kana-only="hideKanaOnly"
+      @reset="resetAdvancedFilters"
+    />
   </div>
 </template>

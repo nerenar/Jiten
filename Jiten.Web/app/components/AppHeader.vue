@@ -89,12 +89,20 @@
     {
       label: 'Profile',
       icon: 'pi pi-user',
+      route: '/profile',
       command: () => navigateTo('/profile'),
     },
     {
       label: 'User Settings',
       icon: 'pi pi-cog',
+      route: '/settings',
       command: () => navigateTo('/settings'),
+    },
+    {
+      label: 'Media Requests',
+      icon: 'pi pi-list',
+      route: '/requests',
+      command: () => navigateTo('/requests'),
     },
     { separator: true },
     {
@@ -213,7 +221,20 @@
   </header>
 
   <LazyAppHeaderSettings ref="settings" />
-  <TieredMenu v-if="auth.isAuthenticated" ref="userMenu" :model="userMenuItems" popup />
+  <TieredMenu v-if="auth.isAuthenticated" ref="userMenu" :model="userMenuItems" popup>
+    <template #item="{ item, props }">
+      <NuxtLink v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>
+        <a :href="href" v-bind="props.action" @click="navigate">
+          <span :class="item.icon" />
+          <span class="ml-2">{{ item.label }}</span>
+        </a>
+      </NuxtLink>
+      <a v-else v-bind="props.action">
+        <span :class="item.icon" />
+        <span class="ml-2">{{ item.label }}</span>
+      </a>
+    </template>
+  </TieredMenu>
 </template>
 
 <style scoped></style>

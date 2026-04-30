@@ -110,14 +110,14 @@
     if (!ds || ds.newCardsAvailable <= 0) return ids;
 
     const active = srsStore.activeDecks;
-    if (srsStore.studySettings.newCardGathering === 'RoundRobin') {
+    if (srsStore.studySettings.newCardGathering === 'TopDeck') {
       for (const d of active) {
-        if (d.unseenCount > 0) ids.add(d.userStudyDeckId);
+        if (d.unseenCount > 0) { ids.add(d.userStudyDeckId); break; }
       }
     }
     else {
       for (const d of active) {
-        if (d.unseenCount > 0) { ids.add(d.userStudyDeckId); break; }
+        if (d.unseenCount > 0) ids.add(d.userStudyDeckId);
       }
     }
     return ids;

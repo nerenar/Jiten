@@ -3,6 +3,7 @@ import type { WordSetDto, Word } from '~/types/types';
 import { WordSetStateType } from '~/types';
 import { autoLinkUrls } from '~/utils/autoLinkUrls';
 import { debounce } from 'perfect-debounce';
+import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
 
 definePageMeta({
   middleware: ['auth'],
@@ -36,6 +37,10 @@ const display = ref(route.query.display?.toString() || 'all');
 const search = ref(route.query.search?.toString() || '');
 const debouncedSearch = ref(search.value);
 
+const includePos = ref<string[]>(parseStringArray(route.query.pos));
+const excludePos = ref<string[]>(parseStringArray(route.query.excludePos));
+const hideKanaOnly = ref(toBooleanOrNull(route.query.hideKanaOnly) ?? false);
+
 watch(sortDescending, (newValue) => {
   router.replace({
     query: { ...route.query, sortOrder: newValue ? '1' : '0', offset: 0 },
@@ -60,6 +65,27 @@ const updateSearch = debounce((val: string) => {
 }, 300);
 watch(search, updateSearch);
 
+const debouncedIncludePos = ref([...includePos.value]);
+const debouncedExcludePos = ref([...excludePos.value]);
+const debouncedHideKanaOnly = ref(hideKanaOnly.value);
+
+const updateAdvancedFilters = debounce(() => {
+  debouncedIncludePos.value = [...includePos.value];
+  debouncedExcludePos.value = [...excludePos.value];
+  debouncedHideKanaOnly.value = hideKanaOnly.value;
+  router.replace({
+    query: {
+      ...route.query,
+      pos: includePos.value.length > 0 ? includePos.value.join(',') : undefined,
+      excludePos: excludePos.value.length > 0 ? excludePos.value.join(',') : undefined,
+      hideKanaOnly: hideKanaOnly.value ? 'true' : undefined,
+      offset: 0,
+    },
+  });
+}, 500);
+
+watch([includePos, excludePos, hideKanaOnly], updateAdvancedFilters, { deep: true });
+
 const { data: wordSet, status: wordSetStatus, error: wordSetError } = await useApiFetch<WordSetDto>(`word-sets/${slug}`);
 
 const {
@@ -73,8 +99,11 @@ const {
     sortOrder: computed(() => sortDescending.value ? 1 : 0),
     displayFilter: display,
     search: debouncedSearch,
+    pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
+    excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
+    hideKanaOnly: debouncedHideKanaOnly,
   },
-  watch: [offset, sortBy, sortDescending, display, debouncedSearch],
+  watch: [offset, sortBy, sortDescending, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly],
 });
 
 const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
@@ -238,6 +267,9 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           v-model:sort-descending="sortDescending"
           v-model:display-filter="display"
           v-model:search="search"
+          v-model:include-pos="includePos"
+          v-model:exclude-pos="excludePos"
+          v-model:hide-kana-only="hideKanaOnly"
           :sort-by-options="sortByOptions"
           :show-display-filter="authStore.isAuthenticated"
         />

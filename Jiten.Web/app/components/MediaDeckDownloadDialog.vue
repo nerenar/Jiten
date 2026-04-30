@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type Deck, type StudyDeckDto, StudyDeckType, DeckDownloadType, DeckFormat, DeckOrder } from '~/types';
+  import { type Deck, type StudyDeckDto, StudyDeckType, DeckDownloadType, DeckFormat, DeckOrder, MediaType } from '~/types';
   import { SelectButton, Select, Slider, InputNumber, Checkbox, Dialog, Button, ProgressSpinner } from 'primevue';
   import { debounce } from 'perfect-debounce';
   import { useAuthStore } from '~/stores/authStore';
@@ -123,6 +123,10 @@
   const isLearn = computed(() => format.value === DeckFormat.Learn);
   const isOccurrences = computed(() => format.value === DeckFormat.Yomitan);
   const showStrategyAndOptions = computed(() => !isOccurrences.value && !isNonMediaStudyDeck.value);
+  const hasExampleSentences = computed(() => {
+    const mt = props.deck?.mediaType ?? props.studyDeck?.mediaType;
+    return mt === MediaType.Novel || mt === MediaType.NonFiction || mt === MediaType.VideoGame || mt === MediaType.VisualNovel || mt === MediaType.WebNovel;
+  });
 
   const modeOptions = computed(() => [
     { label: 'Manual', value: 'manual', icon: 'pi pi-sliders-h' },
@@ -807,13 +811,19 @@
 
               <div
                 v-if="!isLearn"
-                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
-                @click="excludeExampleSentences = !excludeExampleSentences"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
+                :class="hasExampleSentences
+                  ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
+                  : 'opacity-50 cursor-not-allowed'"
+                @click="hasExampleSentences && (excludeExampleSentences = !excludeExampleSentences)"
               >
-                <Checkbox v-model="excludeExampleSentences" binary class="mt-1" @click.stop />
+                <Checkbox v-model="excludeExampleSentences" binary class="mt-1" :disabled="!hasExampleSentences" @click.stop />
                 <div>
                   <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Exclude Example Sentences</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Remove example sentences.</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">
+                    <template v-if="hasExampleSentences">Remove example sentences.</template>
+                    <template v-else>Example sentences are not available for this media type.</template>
+                  </div>
                 </div>
               </div>
 
@@ -893,13 +903,19 @@
               </div>
               <div
                 v-if="!isLearn"
-                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
-                @click="excludeExampleSentences = !excludeExampleSentences"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
+                :class="hasExampleSentences
+                  ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
+                  : 'opacity-50 cursor-not-allowed'"
+                @click="hasExampleSentences && (excludeExampleSentences = !excludeExampleSentences)"
               >
-                <Checkbox v-model="excludeExampleSentences" binary class="mt-1" @click.stop />
+                <Checkbox v-model="excludeExampleSentences" binary class="mt-1" :disabled="!hasExampleSentences" @click.stop />
                 <div>
                   <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Exclude Example Sentences</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Remove example sentences.</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">
+                    <template v-if="hasExampleSentences">Remove example sentences.</template>
+                    <template v-else>Example sentences are not available for this media type.</template>
+                  </div>
                 </div>
               </div>
               <div

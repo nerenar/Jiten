@@ -233,6 +233,37 @@
     emit('reset');
   };
 
+  const activeFilterCount = computed(() => {
+    let count = 0;
+    if (charCountMin.value != null) count++;
+    if (charCountMax.value != null) count++;
+    if (difficultyMin.value != null) count++;
+    if (difficultyMax.value != null) count++;
+    if (releaseYearMin.value != null) count++;
+    if (releaseYearMax.value != null) count++;
+    if (uniqueKanjiMin.value != null) count++;
+    if (uniqueKanjiMax.value != null) count++;
+    if (subdeckCountMin.value != null) count++;
+    if (subdeckCountMax.value != null) count++;
+    if (extRatingMin.value != null) count++;
+    if (extRatingMax.value != null) count++;
+    if (speechSpeedMin.value != null) count++;
+    if (speechSpeedMax.value != null) count++;
+    if (speechDurationMin.value != null) count++;
+    if (speechDurationMax.value != null) count++;
+    if (coverageMin.value != null) count++;
+    if (coverageMax.value != null) count++;
+    if (uniqueCoverageMin.value != null) count++;
+    if (uniqueCoverageMax.value != null) count++;
+    if (statusFilter.value !== 'none') count++;
+    if (excludeSequels.value) count++;
+    count += includeGenres.value.length;
+    count += excludeGenres.value.length;
+    count += includeTags.value.length;
+    count += excludeTags.value.length;
+    return count;
+  });
+
   const toggle = (event: Event) => {
     popover.value.toggle(event);
   };
@@ -241,7 +272,13 @@
 </script>
 
 <template>
-  <Button class="w-32" @click="toggle($event)">Filters</Button>
+  <div class="relative">
+    <Button @click="toggle($event)">
+      <Icon name="material-symbols:filter-list" size="1.25em" />
+      Filters
+    </Button>
+    <Badge v-if="activeFilterCount > 0" :value="activeFilterCount" severity="warn" class="absolute -top-2 -right-2 pointer-events-none" />
+  </div>
 
   <Popover ref="popover" class="w-full max-w-3xl">
     <div class="flex flex-col gap-4 p-3 min-w-[280px]">
