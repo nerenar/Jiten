@@ -14,7 +14,8 @@ internal static class UncertaintyDetector
         PartOfSpeech.Expression
     ];
 
-    public static List<UncertainSpan> FindSpans(SentenceInfo sentence, Dictionary<string, List<int>> lookups)
+    public static List<UncertainSpan> FindSpans(SentenceInfo sentence, Dictionary<string, List<int>> lookups,
+        HashSet<string>? protectedSurfaces = null)
     {
         var result = new List<UncertainSpan>();
 
@@ -27,6 +28,8 @@ internal static class UncertaintyDetector
             if (word.PreMatchedWordId != null)
                 continue;
             if (Array.IndexOf(SkipPos, word.PartOfSpeech) >= 0)
+                continue;
+            if (protectedSurfaces != null && protectedSurfaces.Contains(word.Text))
                 continue;
 
             if (HasMatch(word.Text, lookups))
