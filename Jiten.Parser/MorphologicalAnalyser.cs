@@ -82,17 +82,10 @@ public partial class MorphologicalAnalyser
 
         List<WordInfo> allWordInfos;
 
-        // Use streaming when available and not in diagnostics mode
-        if (diagnostics == null && SudachiInterop.StreamingAvailable)
+        bool useStreaming = SudachiInterop.StreamingAvailable && (diagnostics == null || userDictCsv != null);
+        if (useStreaming)
         {
             allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode, userDictCsv: userDictCsv);
-
-            if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
-        }
-        else
-        {
-            // Fall back to string-based ProcessText (needed for diagnostics raw output)
-            var rawOutput = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: mode);
             sudachiStopwatch?.Stop();
 
             if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
@@ -101,10 +94,30 @@ public partial class MorphologicalAnalyser
             {
                 diagnostics.Sudachi = new SudachiDiagnostics
                                       {
-                                          ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds, RawOutput = rawOutput,
-                                          Tokens = ParseSudachiOutputToDiagnosticTokens(rawOutput)
+                                          ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds,
+                                          Tokens = allWordInfos.Select(w => new SudachiToken
+                                          {
+                                              Surface = w.Text,
+                                              PartOfSpeech = w.PartOfSpeech.ToString(),
+                                              DictionaryForm = w.DictionaryForm,
+                                              Reading = w.Reading,
+                                              NormalizedForm = w.NormalizedForm
+                                          }).ToList()
                                       };
             }
+        }
+        else if (diagnostics != null)
+        {
+            var rawOutput = SudachiInterop.ProcessText(configPath, combinedText, dic, mode: mode);
+            sudachiStopwatch?.Stop();
+
+            if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
+            diagnostics.Sudachi = new SudachiDiagnostics
+                                  {
+                                      ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds, RawOutput = rawOutput,
+                                      Tokens = ParseSudachiOutputToDiagnosticTokens(rawOutput)
+                                  };
 
             var output = rawOutput.Split("\n");
             allWordInfos = new List<WordInfo>();
@@ -114,6 +127,11 @@ public partial class MorphologicalAnalyser
                 var wi = new WordInfo(line);
                 if (!wi.IsInvalid) allWordInfos.Add(wi);
             }
+        }
+        else
+        {
+            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode, userDictCsv: userDictCsv);
+            if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
         }
 
         // Split by delimiter tokens (if batch)

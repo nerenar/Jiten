@@ -485,6 +485,9 @@ internal static class TransitionRuleEngine
                     TransitionRuleSets.HonorificSuffixes.Contains(ctx.CandidateText) &&
                     PosMask.Has(ctx.CandidateMask, PosMask.SuffixGroup),
 
+                ScoringCondition.CandidateIsNotHonorific =>
+                    !TransitionRuleSets.HonorificSuffixes.Contains(ctx.CandidateText),
+
                 ScoringCondition.PrevIsName =>
                     ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.NameBit),
 

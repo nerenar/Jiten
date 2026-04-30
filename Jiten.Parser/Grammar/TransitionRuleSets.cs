@@ -72,7 +72,7 @@ internal static class TransitionRuleSets
             40),
 
         new("noun-copula-synergy",
-            [ScoringCondition.CandidateIsNounLike],
+            [ScoringCondition.CandidateIsNounLike, ScoringCondition.CandidateIsNotHonorific],
             [ScoringCondition.NextIsCopula],
             65),
 
@@ -90,6 +90,11 @@ internal static class TransitionRuleSets
             [ScoringCondition.CandidateIsAuxiliary],
             [ScoringCondition.PrevIsVerbOrIAdj],
             20),
+
+        new("aux-copula-synergy",
+            [ScoringCondition.CandidateIsAuxiliary],
+            [ScoringCondition.NextIsCopula],
+            65),
 
         new("single-kana-penalty-left",
             [ScoringCondition.CandidateIsSingleKanaNonParticle],
