@@ -20,6 +20,7 @@
 
   const forecast = ref<ReviewForecastDto | null>(null);
   const streak = ref<SessionStreakDto | null>(null);
+  const streakLoaded = ref(false);
 
   onMounted(async () => {
     const [forecastResult, streakResult] = await Promise.allSettled([
@@ -28,6 +29,7 @@
     ]);
     if (forecastResult.status === 'fulfilled') forecast.value = forecastResult.value;
     if (streakResult.status === 'fulfilled') streak.value = streakResult.value;
+    streakLoaded.value = true;
   });
 
   const duration = computed(() => {
@@ -121,8 +123,12 @@
     <div v-else class="mb-6" />
 
     <!-- Streak -->
+    <div v-if="!streak && !streakLoaded" class="w-full mb-6 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700/30 animate-pulse">
+      <div class="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-600 shrink-0" />
+      <div class="h-4 bg-gray-200 dark:bg-gray-600 rounded w-48" />
+    </div>
     <div
-      v-if="streakMessage"
+      v-else-if="streakMessage"
       class="w-full mb-6 flex items-center gap-2.5 px-4 py-3 rounded-xl"
       :class="streak?.isNewRecord && streak.currentStreak > 1
         ? 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 ring-1 ring-orange-200 dark:ring-orange-800/50'

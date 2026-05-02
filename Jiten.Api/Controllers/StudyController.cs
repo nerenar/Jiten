@@ -2123,16 +2123,24 @@ public class StudyController(
             reviewsDue = await dueBaseQuery.Where(c => c.Due <= dueCutoff).CountAsync();
         }
 
+        var userCardIds = userContext.FsrsCards
+            .Where(c => c.UserId == userId)
+            .Select(c => c.CardId);
+
         var todayLogs = userContext.FsrsReviewLogs
             .AsNoTracking()
-            .Where(rl => rl.Card.UserId == userId && rl.ReviewDateTime >= todayStart);
+            .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart);
 
         var reviewsToday = settings.CountFailedReviews
             ? await todayLogs.CountAsync()
             : await todayLogs.Select(rl => rl.CardId).Distinct().CountAsync();
 
-        var newCardsToday = await todayLogs
-            .Where(rl => rl.Card.CreatedAt >= todayStart)
+        var newCardIds = userContext.FsrsCards
+            .Where(c => c.UserId == userId && c.CreatedAt >= todayStart)
+            .Select(c => c.CardId);
+        var newCardsToday = await userContext.FsrsReviewLogs
+            .AsNoTracking()
+            .Where(rl => newCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart)
             .Select(rl => rl.CardId)
             .Distinct()
             .CountAsync();
@@ -2203,14 +2211,21 @@ public class StudyController(
         {
             if (deckFilter != null)
             {
-                var upcomingCards = await dueBaseQuery
+                var ordered = dueBaseQuery
                     .Where(c => c.Due > dueCutoff)
                     .OrderBy(c => c.Due)
-                    .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
-                    .ToListAsync();
-                nextReviewAt = upcomingCards
-                    .FirstOrDefault(c => deckFilter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)))
-                    ?.Due;
+                    .Select(c => new { c.WordId, c.ReadingIndex, c.Due });
+                var skip = 0;
+                const int pageSize = 200;
+                while (true)
+                {
+                    var page = await ordered.Skip(skip).Take(pageSize).ToListAsync();
+                    if (page.Count == 0) break;
+                    var match = page.FirstOrDefault(c =>
+                        deckFilter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)));
+                    if (match != null) { nextReviewAt = match.Due; break; }
+                    skip += pageSize;
+                }
             }
             else
             {
@@ -2253,9 +2268,12 @@ public class StudyController(
         {
             case "extraNew":
             {
+                var newCardIds = userContext.FsrsCards
+                    .Where(c => c.UserId == userId && c.CreatedAt >= todayStart)
+                    .Select(c => c.CardId);
                 var newCardsToday = await userContext.FsrsReviewLogs
                     .AsNoTracking()
-                    .Where(rl => rl.Card.UserId == userId && rl.ReviewDateTime >= todayStart && rl.Card.CreatedAt >= todayStart)
+                    .Where(rl => newCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart)
                     .Select(rl => rl.CardId)
                     .Distinct()
                     .CountAsync();
@@ -2375,9 +2393,12 @@ public class StudyController(
                 var days = Math.Clamp(mistakeDays ?? 3, 1, 7);
                 var mistakeCutoff = now.AddDays(-days);
 
+                var userCardIds = userContext.FsrsCards
+                    .Where(c => c.UserId == userId)
+                    .Select(c => c.CardId);
                 var mistakeCardIds = await userContext.FsrsReviewLogs
                     .AsNoTracking()
-                    .Where(l => l.Card.UserId == userId
+                    .Where(l => userCardIds.Contains(l.CardId)
                                 && l.Rating == FsrsRating.Again
                                 && l.ReviewDateTime >= mistakeCutoff)
                     .Select(l => l.CardId)
@@ -2438,13 +2459,19 @@ public class StudyController(
 
             if (dueWithinHour == 0 && dueToday == 0)
             {
-                var allUpcoming = await baseQuery
-                    .OrderBy(c => c.Due)
-                    .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
-                    .ToListAsync();
-                nextReviewAt = allUpcoming
-                    .FirstOrDefault(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)))
-                    ?.Due;
+                var ordered = baseQuery.OrderBy(c => c.Due)
+                    .Select(c => new { c.WordId, c.ReadingIndex, c.Due });
+                var skip = 0;
+                const int pageSize = 200;
+                while (true)
+                {
+                    var page = await ordered.Skip(skip).Take(pageSize).ToListAsync();
+                    if (page.Count == 0) break;
+                    var match = page.FirstOrDefault(c =>
+                        filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)));
+                    if (match != null) { nextReviewAt = match.Due; break; }
+                    skip += pageSize;
+                }
             }
         }
         else
@@ -2545,22 +2572,29 @@ public class StudyController(
         var (todayStart, offsetHours) = ResolveTimezone(now, settings.Timezone);
         var today = now.AddHours(offsetHours).Date;
         var windowStart = today.AddDays(-83);
+        var windowStartUtc = windowStart.AddHours(-offsetHours);
 
-        var userLogsBase = userContext.FsrsReviewLogs
+        var userCardIds = userContext.FsrsCards
+            .Where(c => c.UserId == userId)
+            .Select(c => c.CardId);
+
+        var allTimestamps = await userContext.FsrsReviewLogs
             .AsNoTracking()
-            .Where(rl => rl.Card.UserId == userId);
+            .Where(rl => userCardIds.Contains(rl.CardId))
+            .Select(rl => rl.ReviewDateTime)
+            .ToListAsync();
 
-        var totalReviewDays = await userLogsBase
-            .Select(rl => rl.ReviewDateTime.AddHours(offsetHours).Date)
+        var totalReviewDays = allTimestamps
+            .Select(dt => dt.AddHours(offsetHours).Date)
             .Distinct()
-            .CountAsync();
+            .Count();
 
-        var dailyStats = await userLogsBase
-            .Where(rl => rl.ReviewDateTime.AddHours(offsetHours) >= windowStart)
-            .GroupBy(rl => rl.ReviewDateTime.AddHours(offsetHours).Date)
+        var dailyStats = allTimestamps
+            .Where(dt => dt >= windowStartUtc)
+            .GroupBy(dt => dt.AddHours(offsetHours).Date)
             .Select(g => new { Date = g.Key, Count = g.Count() })
             .OrderBy(g => g.Date)
-            .ToListAsync();
+            .ToList();
 
         var windowDates = dailyStats.Select(d => d.Date).OrderByDescending(d => d).ToList();
         var (currentStreak, longestStreak) = ComputeStreaks(windowDates, today);
@@ -2587,14 +2621,23 @@ public class StudyController(
         var (_, offsetHours) = ResolveTimezone(now, settings.Timezone);
         var today = now.AddHours(offsetHours).Date;
         var windowStart = today.AddDays(-83);
+        var windowStartUtc = windowStart.AddHours(-offsetHours);
 
-        var recentDates = await userContext.FsrsReviewLogs
+        var userCardIds = userContext.FsrsCards
+            .Where(c => c.UserId == userId)
+            .Select(c => c.CardId);
+
+        var rawTimestamps = await userContext.FsrsReviewLogs
             .AsNoTracking()
-            .Where(rl => rl.Card.UserId == userId && rl.ReviewDateTime.AddHours(offsetHours) >= windowStart)
-            .Select(rl => rl.ReviewDateTime.AddHours(offsetHours).Date)
+            .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= windowStartUtc)
+            .Select(rl => rl.ReviewDateTime)
+            .ToListAsync();
+
+        var recentDates = rawTimestamps
+            .Select(dt => dt.AddHours(offsetHours).Date)
             .Distinct()
             .OrderByDescending(d => d)
-            .ToListAsync();
+            .ToList();
 
         var (currentStreak, longestStreak) = ComputeStreaks(recentDates, today);
 

@@ -336,7 +336,7 @@
         <Button
           v-if="srsStore.studyDecks.length > 0 || totalDue > 0"
           icon="pi pi-play"
-          :label="totalDue > 0 ? `Study (${totalDue})` : 'Study'"
+          :label="!srsStore.dueSummary ? 'Study ...' : totalDue > 0 ? `Study (${totalDue})` : 'Study'"
           :severity="totalDue > 0 ? 'success' : 'secondary'"
           class="!hidden sm:!inline-flex"
           @click="startStudy"
@@ -344,7 +344,7 @@
         <Button
           v-if="srsStore.studyDecks.length > 0 || totalDue > 0"
           icon="pi pi-play"
-          :label="totalDue > 0 ? String(totalDue) : undefined"
+          :label="!srsStore.dueSummary ? '...' : totalDue > 0 ? String(totalDue) : undefined"
           :severity="totalDue > 0 ? 'success' : 'secondary'"
           class="sm:!hidden"
           @click="startStudy"
@@ -365,7 +365,7 @@
 
     <!-- Due Summary Skeleton -->
     <div
-      v-if="decksLoading && !srsStore.dueSummary"
+      v-if="!srsStore.dueSummary"
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden"
     >
       <div class="grid grid-cols-2 md:grid-cols-4 divide-x divide-surface-200 dark:divide-surface-700">
@@ -378,7 +378,7 @@
 
     <!-- Due Summary Banner -->
     <div
-      v-else-if="srsStore.dueSummary"
+      v-else
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden"
     >
       <div class="grid grid-cols-2 md:grid-cols-4 divide-x divide-surface-200 dark:divide-surface-700">

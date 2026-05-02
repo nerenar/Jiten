@@ -211,20 +211,36 @@ export const useSrsStore = defineStore('srs', () => {
     return fetchStudyDecksPromise;
   }
 
+  let fetchDueSummaryPromise: Promise<void> | null = null;
+
   async function fetchDueSummary() {
-    try {
-      dueSummary.value = await $api<DueSummaryDto>('srs/due-summary');
-    } catch {
-      dueSummary.value = null;
-    }
+    if (fetchDueSummaryPromise) return fetchDueSummaryPromise;
+    fetchDueSummaryPromise = (async () => {
+      try {
+        dueSummary.value = await $api<DueSummaryDto>('srs/due-summary');
+      } catch {
+        dueSummary.value = null;
+      } finally {
+        fetchDueSummaryPromise = null;
+      }
+    })();
+    return fetchDueSummaryPromise;
   }
 
+  let fetchDeckStreakPromise: Promise<void> | null = null;
+
   async function fetchDeckStreak() {
-    try {
-      deckStreak.value = await $api<DeckStreakDto>('srs/deck-streak');
-    } catch {
-      deckStreak.value = null;
-    }
+    if (fetchDeckStreakPromise) return fetchDeckStreakPromise;
+    fetchDeckStreakPromise = (async () => {
+      try {
+        deckStreak.value = await $api<DeckStreakDto>('srs/deck-streak');
+      } catch {
+        deckStreak.value = null;
+      } finally {
+        fetchDeckStreakPromise = null;
+      }
+    })();
+    return fetchDeckStreakPromise;
   }
 
   async function fetchReviewForecast30d() {
