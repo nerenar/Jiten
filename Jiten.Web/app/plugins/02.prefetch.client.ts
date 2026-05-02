@@ -4,5 +4,7 @@ export default defineNuxtPlugin(() => {
     const srs = useSrsStore();
     srs.fetchEnrollment();
     srs.fetchStudyDecks();
+    srs.fetchDueSummary();
+    srs.fetchDeckStreak();
   }
 });
