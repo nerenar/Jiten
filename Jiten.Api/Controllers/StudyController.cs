@@ -187,7 +187,7 @@ public class StudyController(
                 {
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
-                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter))));
+                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown))));
                 }
                 else
                 {
@@ -198,7 +198,7 @@ public class StudyController(
                         false, false,
                         sd.TargetPercentage,
                         sd.MinOccurrences, sd.MaxOccurrences,
-                        sd.PosFilter);
+                        sd.PosFilter, sd.StartFromKnown);
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
                             .CountDeckWords(request, sd.ExcludeKana))));
@@ -276,6 +276,7 @@ public class StudyController(
                 MinFrequency = sd.MinFrequency,
                 MaxFrequency = sd.MaxFrequency,
                 TargetPercentage = sd.TargetPercentage,
+                StartFromKnown = sd.StartFromKnown,
                 MinOccurrences = sd.MinOccurrences,
                 MaxOccurrences = sd.MaxOccurrences,
                 ExcludeKana = sd.ExcludeKana,
@@ -379,6 +380,7 @@ public class StudyController(
             MinFrequency = request.MinFrequency,
             MaxFrequency = request.MaxFrequency,
             TargetPercentage = request.TargetPercentage,
+            StartFromKnown = request.StartFromKnown,
             MinOccurrences = request.MinOccurrences,
             MaxOccurrences = request.MaxOccurrences,
             ExcludeKana = request.ExcludeKana,
@@ -425,6 +427,7 @@ public class StudyController(
             studyDeck.MinFrequency = request.MinFrequency;
             studyDeck.MaxFrequency = request.MaxFrequency;
             studyDeck.TargetPercentage = request.TargetPercentage;
+            studyDeck.StartFromKnown = request.StartFromKnown;
             studyDeck.MinOccurrences = request.MinOccurrences;
             studyDeck.MaxOccurrences = request.MaxOccurrences;
             studyDeck.PosFilter = request.PosFilter;
@@ -986,7 +989,7 @@ public class StudyController(
                     if (deck != null)
                     {
                         var (_, targetKeys) = await deckWordResolver.CountTargetCoverageWords(
-                            studyDeck.DeckId!.Value, deck, studyDeck.TargetPercentage.Value, false, studyDeck.PosFilter);
+                            studyDeck.DeckId!.Value, deck, studyDeck.TargetPercentage.Value, false, studyDeck.PosFilter, studyDeck.StartFromKnown);
                         allItems = allItems.Where(i => targetKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
                     }
                 }
@@ -1289,7 +1292,7 @@ public class StudyController(
             if ((DeckDownloadType)request.DownloadType == DeckDownloadType.TargetCoverage && request.TargetPercentage.HasValue)
             {
                 var (_, targetKeys) = await deckWordResolver.CountTargetCoverageWords(
-                    request.DeckId.Value, deck, request.TargetPercentage.Value, false, request.PosFilter);
+                    request.DeckId.Value, deck, request.TargetPercentage.Value, false, request.PosFilter, request.StartFromKnown);
                 if (targetKeys.Count == 0) return Results.Ok(new { total = 0, unlearned = 0 });
 
                 var allDeckWords = await context.DeckWords.AsNoTracking()
@@ -1311,7 +1314,7 @@ public class StudyController(
                     false, false,
                     request.TargetPercentage,
                     request.MinOccurrences, request.MaxOccurrences,
-                    request.PosFilter));
+                    request.PosFilter, request.StartFromKnown));
 
                 if (error != null) return error;
                 if (words == null || words.Count == 0) return Results.Ok(0);
@@ -1647,7 +1650,7 @@ public class StudyController(
                         false, false,
                         studyDeck.TargetPercentage,
                         studyDeck.MinOccurrences, studyDeck.MaxOccurrences,
-                        studyDeck.PosFilter));
+                        studyDeck.PosFilter, studyDeck.StartFromKnown));
 
                     if (error != null || words == null) continue;
                     wordPairs = words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
@@ -3146,7 +3149,7 @@ public class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter));
+                    studyDeck.PosFilter, studyDeck.StartFromKnown));
                 if (error != null) return error;
 
                 deckWords = words!.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
@@ -3228,7 +3231,7 @@ public class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter));
+                    studyDeck.PosFilter, studyDeck.StartFromKnown));
                 if (error != null) return error;
                 if (words == null || words.Count == 0) return Results.Ok(0);
 
@@ -3389,7 +3392,7 @@ public class StudyController(
             if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
             {
                 var (_, keys) = await deckWordResolver.CountTargetCoverageWords(
-                    sd.DeckId!.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter);
+                    sd.DeckId!.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown);
                 wordKeys.UnionWith(keys);
             }
             else
@@ -3401,7 +3404,7 @@ public class StudyController(
                     false, false,
                     sd.TargetPercentage,
                     sd.MinOccurrences, sd.MaxOccurrences,
-                    sd.PosFilter);
+                    sd.PosFilter, sd.StartFromKnown);
                 var (_, keys) = await deckWordResolver.CountDeckWords(request, sd.ExcludeKana);
                 wordKeys.UnionWith(keys);
             }

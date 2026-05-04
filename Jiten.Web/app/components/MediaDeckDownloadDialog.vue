@@ -53,7 +53,9 @@
   type Mode = 'manual' | 'target' | 'occurrence';
   const downloadMode = ref<Mode>('manual');
   const targetPercentage = ref(80);
+  const startFromKnown = ref(true);
   const minTargetPercentage = computed(() => {
+    if (!startFromKnown.value) return 0;
     const coverage = props.deck?.coverage ?? 0;
     return Math.ceil(coverage * 10) / 10;
   });
@@ -268,6 +270,13 @@
     }
   );
 
+  watch(startFromKnown, (val) => {
+    if (!val && downloadMode.value === 'target' && authStore.isAuthenticated) {
+      excludeMatureMasteredBlacklisted.value = true;
+      excludeAllTrackedWords.value = true;
+    }
+  });
+
   watch(
     minTargetPercentage,
     (minVal) => {
@@ -369,6 +378,7 @@
       occurrenceFilterType,
       occurrenceThreshold,
       targetPercentage,
+      startFromKnown,
       excludeKana,
       excludeMatureMasteredBlacklisted,
       excludeAllTrackedWords,
@@ -403,6 +413,7 @@
         ...payload,
         downloadType: DeckDownloadType.TargetCoverage,
         targetPercentage: targetPercentage.value,
+        startFromKnown: startFromKnown.value,
         order: deckOrder.value,
       };
     } else if (downloadMode.value === 'occurrence') {
@@ -439,6 +450,7 @@
       excludeAllTrackedWords: payload.excludeAllTrackedWords,
       excludeExampleSentences: excludeExampleSentences.value,
       targetPercentage: payload.targetPercentage,
+      startFromKnown: payload.startFromKnown,
       minOccurrences: payload.minOccurrences,
       maxOccurrences: payload.maxOccurrences,
     };
@@ -709,6 +721,17 @@
                 <div class="text-2xl font-black text-primary">{{ targetPercentage }}%</div>
               </div>
               <Slider v-model="targetPercentage" :step="0.1" :min="minTargetPercentage" :max="100" class="w-full" />
+              <div class="flex items-start gap-3 mt-4">
+                <Checkbox v-model="startFromKnown" input-id="startFromKnown" :binary="true" class="mt-1" />
+                <div>
+                  <label for="startFromKnown" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">Start from my current coverage</label>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ startFromKnown
+                      ? 'Only the words you still need to learn to reach this coverage.'
+                      : 'All words required for this coverage, as if starting from zero.' }}
+                  </div>
+                </div>
+              </div>
               <div class="flex flex-col gap-1 mt-4">
                 <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Then Sort By</label>
                 <Select v-model="deckOrder" :options="deckOrders" option-value="value" option-label="label" class="w-full text-sm" size="small" />
@@ -798,7 +821,7 @@
             <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Options</div>
             <div class="flex flex-col gap-0">
               <div
-                v-if="downloadMode !== 'target'"
+                v-if="downloadMode !== 'target' || !startFromKnown"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
                 @click="excludeKana = !excludeKana"
               >
@@ -828,7 +851,7 @@
               </div>
 
               <div
-                v-if="downloadMode !== 'target' && authStore.isAuthenticated"
+                v-if="(downloadMode !== 'target' || !startFromKnown) && authStore.isAuthenticated"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
                 @click="excludeMatureMasteredBlacklisted = !excludeMatureMasteredBlacklisted"
               >
@@ -843,7 +866,7 @@
               </div>
 
               <div
-                v-if="downloadMode !== 'target' && authStore.isAuthenticated"
+                v-if="(downloadMode !== 'target' || !startFromKnown) && authStore.isAuthenticated"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer"
                 @click="excludeAllTrackedWords = !excludeAllTrackedWords"
               >

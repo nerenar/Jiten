@@ -117,6 +117,7 @@ public class StudyDeckDto
     public int MinFrequency { get; set; }
     public int MaxFrequency { get; set; }
     public float? TargetPercentage { get; set; }
+    public bool StartFromKnown { get; set; }
     public int? MinOccurrences { get; set; }
     public int? MaxOccurrences { get; set; }
     public bool ExcludeKana { get; set; }

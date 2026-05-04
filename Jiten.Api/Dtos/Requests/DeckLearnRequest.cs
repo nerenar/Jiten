@@ -10,6 +10,7 @@ public class DeckLearnRequest
     public bool ExcludeMatureMasteredBlacklisted { get; set; }
     public bool ExcludeAllTrackedWords { get; set; }
     public float? TargetPercentage { get; set; }
+    public bool StartFromKnown { get; set; }
     public int? MinOccurrences { get; set; }
     public int? MaxOccurrences { get; set; }
     public string VocabularyState { get; set; } = "mastered";
