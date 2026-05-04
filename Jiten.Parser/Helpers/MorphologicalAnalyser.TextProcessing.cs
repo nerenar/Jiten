@@ -28,14 +28,11 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(外|家)出(ない|なかった|なく)")]
     private static partial Regex DeNaiCompoundRegex();
 
-    [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?![かきくけこさしすせそたちつてとぱぴぷぺぽばびぶべぼカキクケコサシスセソタチツテトパピプペポバビブベボ\p{IsCJKUnifiedIdeographs}])")]
+    [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?![かきくけこがぎぐげござじずぜぞさしすせそたちつてとだぢづでどぱぴぷぺぽばびぶべぼカキクケコガギグゲゴザジズゼゾサシスセソタチツテトダヂヅデドパピプペポバビブベボ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex EmphaticTsuRegex();
 
     [GeneratedRegex(@"ホント(バカ|ダメ|マジ|クソ|アホ)")]
     private static partial Regex HontoKatakanaRegex();
-
-    [GeneratedRegex(@"(?<=[\u3041-\u3096])[\u30A1-\u30F6](?=[\u3041-\u3096])")]
-    private static partial Regex KatakanaInHiraganaRegex();
 
     [GeneratedRegex(@"(?<!い)っしょ[ーう]?(?=[\s\n]|$)")]
     private static partial Regex ColloquialSshoRegex();
@@ -45,13 +42,6 @@ public partial class MorphologicalAnalyser
 
     [GeneratedRegex(@"(?<=(?:どー|どう|そー|そう|こー|こう|ああ|あー))ゆう")]
     private static partial Regex ColloquialYuuRegex();
-
-    // Colloquial emphatic gemination: っ inserted before a consonant for emphasis.
-    // E.g., ふざけんな→ふざっけんな, すごい→すっごい, くそ→くっそ.
-    // Removes っ before specific suffixes that are clearly colloquial emphasis,
-    // not part of a legitimate word like きっと or さっき.
-    [GeneratedRegex(@"(?<=[\u3041-\u3096])っ(?=ご[くい]|けん[なの]|くそ|じ[でか]|ぜ[えぇー])")]
-    private static partial Regex ColloquialGeminationRegex();
 
     [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]{2})…+(?=[^\r\n…])")]
     private static partial Regex MidSentenceEllipsisRegex();
@@ -127,8 +117,6 @@ public partial class MorphologicalAnalyser
             .Replace("悶え苦しん", $"悶え{_stopToken}苦しん")
             ;
 
-        text = ColloquialGeminationRegex().Replace(text, "");
-
         text = text.Replace('頚', '頸');
 
         text = text.Replace("前出すぎ", $"前{_stopToken}出すぎ");
@@ -154,16 +142,10 @@ public partial class MorphologicalAnalyser
             .Replace("年未公開", $"年{_stopToken}未公開")
             .Replace("足元気", $"足元{_stopToken}気");
 
-        text = KatakanaInHiraganaRegex().Replace(text,
-            m => ((char)(m.Value[0] - 0x60)).ToString());
-
         text = text
             .Replace("来イ", "来い")
-            .Replace("とんでもねえ", "とんでもない")
-            .Replace("しょうがねえ", "しょうがない")
             .Replace("にちがいねえ", "にちがいない")
             .Replace("せぇ", "さい")
-            .Replace("ですー", "です")
             .Replace("ですぅ", "です");
 
         text = text.Replace("できんよう", $"できん{_stopToken}よう");
@@ -171,10 +153,6 @@ public partial class MorphologicalAnalyser
 
         text = ColloquialDoshiRegex().Replace(text, "どうし");
         text = ColloquialYuuRegex().Replace(text, "いう");
-        text = text
-            .Replace("殺ス", "殺す")
-            .Replace("殺サ", "殺さ")
-            .Replace("殺セ", "殺せ");
 
         text = MidSentenceEllipsisRegex().Replace(text, "");
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");

@@ -144,7 +144,8 @@ internal static class MisparseGates
                              || word.Forms.Any(f => f.FormType == JmDictFormType.KanaForm
                                                     && f.ReadingIndex == readingIndex
                                                     && f.Priorities != null
-                                                    && (f.Priorities.Contains("ichi1") || f.Priorities.Contains("ichi2")));
+                                                    && (f.Priorities.Contains("ichi1") || f.Priorities.Contains("ichi2")
+                                                        || f.Priorities.Contains("jiten")));
 
         return (isUk, hasKanji, readingIsIchi);
     }

@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using WanaKanaShaapu;
@@ -756,6 +757,18 @@ internal static class ReadingScorer
         if (identityPenaltyApplied && readingMatchScore > 0)
             readingMatchScore = 0;
 
+        // Kanji with multiple valid readings (e.g. 得る える/うる, 色 いろ/しょく)
+        // shouldn't be crushed when Sudachi picks a different reading — the kanji
+        // surface is inherently ambiguous. This also prevents the SurfaceMatch 0.3
+        // slash in FormCandidateScorer.Score from triggering.
+        if (readingMatchScore < 0
+            && candidate.Form.FormType == JmDictFormType.KanjiForm
+            && context.Surface == candidate.Form.Text
+            && KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities))
+        {
+            readingMatchScore = 0;
+        }
+
         return readingMatchScore;
     }
 }
@@ -830,7 +843,7 @@ internal static class KanaScoringHelpers
     {
         foreach (char c in text)
         {
-            if (c >= '\u4E00' && c <= '\u9FFF')
+            if (JapaneseTextHelper.IsKanji(c))
                 return true;
         }
 
@@ -881,10 +894,26 @@ internal static class PosAffinityScorer
             var expectedTag = InferGodanTag(context.DictionaryForm);
             if (expectedTag != null)
             {
-                bool hasMatchingTag = candidate.Word.PartsOfSpeech.Contains(expectedTag);
+                bool hasMatchingTag = candidate.Word.PartsOfSpeech.Contains(expectedTag)
+                    || candidate.Word.PartsOfSpeech.Contains(expectedTag + "-s");
                 if (!hasMatchingTag)
                     score -= 45;
             }
+        }
+
+        // Plain suru-verb nouns (vs without a direct verb class) conjugate via する,
+        // not directly. Penalize kana-form matches against verb conjugations — e.g.
+        // 遺棄 "いき" [n, vs] should not match いきました; that's 行く.
+        if (context.SudachiPOS == PartOfSpeech.Verb
+            && candidate.Form.FormType == JmDictFormType.KanaForm
+            && candidate.Word.PartsOfSpeech.Contains("vs")
+            && !candidate.Word.PartsOfSpeech.Any(static p =>
+                p is "v1" or "v1-s" or "vs-c" or "vs-i" or "vs-s"
+                or "v5a" or "v5b" or "v5g" or "v5k" or "v5k-s"
+                or "v5m" or "v5n" or "v5r" or "v5r-i" or "v5s" or "v5t"
+                or "v5u" or "v5u-s" or "v5uru" or "vk" or "vz" or "aux-v"))
+        {
+            score -= 60;
         }
 
         return score;

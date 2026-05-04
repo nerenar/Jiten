@@ -176,7 +176,7 @@ public class MorphologicalAnalyserTests
         yield return ["荒いとこもある", new[] { "荒い", "とこ", "も", "ある" }];
         yield return ["あったかいとこ行こう", new[] { "あったかい", "とこ", "行こう" }];
         yield return ["ぶっちゃけ話", new[] { "ぶっちゃけ", "話" }];
-        yield return ["いけないわー", new[] { "いけない", "わー" }];
+        yield return ["いけないわー", new[] { "いけない", "わ" }];
         yield return ["社長としてやっていけないわ", new[] { "社長", "として", "やっていけない", "わ" }];
         yield return ["よくわかんないけど", new[] { "よく", "わかんない", "けど" }];
         yield return ["ほうがいいんじゃないの", new[] { "ほうがいい", "ん", "じゃない", "の" }];
@@ -626,8 +626,8 @@ public class MorphologicalAnalyserTests
         yield return ["いきたああ", new[] { "いきた" }];  // ああ is gated (archaic kanji 嗚呼, meaningless elongation)
         // Vowel elongation tests - verb + ー (long vowel mark)
         // Pattern 5: Verb + separate ー token (handled by RepairLongVowelTokens in Parser)
-        yield return ["ぶつかるー", new[] { "ぶつかる" }];  // ぶつ + か + る + ー → ぶつかる (ー stripped, word doesn't contain it)
-        yield return ["わかるー", new[] { "わかる" }];  // わか + る + ー → わかる (ー stripped, word doesn't contain it)
+        yield return ["ぶつかるー", new[] { "ぶつかるー" }];
+        yield return ["わかるー", new[] { "わかるー" }];
         // Emphatic っ tests - sokuon at clause boundaries causing misparses
         // っ is filtered as SupplementarySymbol, so it won't appear in output
         yield return ["止まらないっ", new[] { "止まらない" }];  // Sudachi misparsed as 止まら + な + いっ (行く)
@@ -660,27 +660,28 @@ public class MorphologicalAnalyserTests
         // てやれ (imperative of auxiliary やる) - Sudachi tags やれ as interjection, should combine with て-form
         yield return ["なら逃がしてやれ監禁する理由などないのだから", new[] { "なら", "逃がしてやれ", "監禁する", "理由", "など", "ない", "の", "だから" }];
         yield return ["続きがある", new[] { "続き", "が", "ある" }];
-        // Long vowel mark (ー) repair tests
-        // Broken cases: hiragana + ー that Sudachi over-segments must be repaired; ー stripped when word doesn't contain it
-        yield return ["あなたー", new[] { "あなた" }];
-        yield return ["おまえー", new[] { "おまえ" }];
-        yield return ["わたしー", new[] { "わたし" }];
-        yield return ["ばかー", new[] { "ばか" }];
-        yield return ["うそー", new[] { "うそ" }];
-        yield return ["すごいー", new[] { "すごい" }];
+        // Long vowel mark (ー) tests
+        // Trailing ー after hiragana/kanji: lattice-level lookup finds the word without ー,
+        // original surface preserved (ー included in output)
+        yield return ["あなたー", new[] { "あなたー" }];
+        yield return ["おまえー", new[] { "おまえー" }];
+        yield return ["わたしー", new[] { "わたしー" }];
+        yield return ["ばかー", new[] { "ばかー" }];
+        yield return ["うそー", new[] { "うそー" }];
+        yield return ["すごいー", new[] { "すごいー" }];
         // Multi-word sentence: あなたー must not merge with following words (no たーそこ tokens)
-        yield return ["あなたーそこにいるの", new[] { "あなた", "そこ", "に", "いる", "の" }];
+        yield return ["あなたーそこにいるの", new[] { "あなたー", "そこ", "に", "いる", "の" }];
         // Must not regress: these are valid JMDict entries with ー — ー is part of the word
         yield return ["すげー", new[] { "すげー" }];
         yield return ["やべー", new[] { "やべー" }];
         yield return ["うるせー", new[] { "うるせー" }];
         yield return ["かわいー", new[] { "かわいー" }];
         yield return ["コーヒー", new[] { "コーヒー" }];
-        // Bar run normalisation: multiple ー collapse to single ー, then word matched without ー
-        yield return ["あなたーー", new[] { "あなた" }];
-        // Kanji + ー: ー stripped since 休憩 doesn't contain it
-        yield return ["休憩ー", new[] { "休憩" }];
-        yield return ["この辺りで物々交換しておかないとな", new[] { "この","辺り","で","物々交換","しておかない","と","な" }];
+        // Bar run normalisation: multiple ー collapse to single ー, surface preserved
+        yield return ["あなたーー", new[] { "あなたー" }];
+        // Kanji + ー: lattice finds 休憩 without ー, surface preserved
+        yield return ["休憩ー", new[] { "休憩ー" }];
+        yield return ["この辺りで物々交換しておかないとな", new[] { "この辺り","で","物々交換","しておかない","と","な" }];
         yield return ["その案件について", new[] { "その","案件","について" }];
         // 板につく (idiomatic compound) — に+つい+て should NOT merge into particle について
         yield return ["板について", new[] { "板について" }];
@@ -726,9 +727,9 @@ public class MorphologicalAnalyserTests
 
         // Vowel elongation ー after る-verbs — Sudachi splits as prefix + る(OOV) + ー
         // RepairVowelElongation merges back into verb and drops ー
-        yield return ["手伝って来るー", new[] { "手伝って", "来る" }];
-        yield return ["ダンジョンに潜るー", new[] { "ダンジョン", "に", "潜る" }];
-        yield return ["ここにおるー", new[] { "ここ", "に", "おる" }];
+        yield return ["手伝って来るー", new[] { "手伝って", "来るー" }];
+        yield return ["ダンジョンに潜るー", new[] { "ダンジョン", "に", "潜るー" }];
+        yield return ["ここにおるー", new[] { "ここ", "に", "おるー" }];
         yield return ["きっと写るーっ", new[] { "きっと", "写る" }];
         // 何本 split into 何 + 本 (counter) — Sudachi treats as surname ナニモト or single noun ナンボン
         yield return ["なら光これは何本", new[] { "なら", "光", "これ", "は", "何", "本" }];
@@ -875,7 +876,7 @@ public class MorphologicalAnalyserTests
         // Colloquial てらん (contraction of ていられ) — repair stage merges らん+ない, deconjugator handles n-slang
         yield return ["やってらんないだろ", new[] { "やってらんない", "だろ" }];
         yield return ["やってらんねえ", new[] { "やってらんねえ" }];
-        yield return ["負けてらんねぇぞー", new[] { "負けてらんねぇ", "ぞー" }];
+        yield return ["負けてらんねぇぞー", new[] { "負けてらんねぇ", "ぞ" }];
         yield return ["飲んでらんねえ", new[] { "飲んでらんねえ" }];
 
         // Unknown compound split via resegmentation — single kanji + suffix
@@ -891,7 +892,7 @@ public class MorphologicalAnalyserTests
         // 第一次/一次/第二次/二次 — ordinal counters should not be split
         yield return ["第一次魔王討伐", new[] { "第一次", "魔王", "討伐" }];
         yield return ["立つ鳥の声一次の日の朝まだき", new[] { "立つ鳥", "の", "声", "一次", "の", "日", "の", "朝まだき" }];
-        yield return ["余のせいで第二次神魔大戦まであるんだけどーっ", new[] { "余", "の", "せい", "で", "第二次", "神", "魔", "大戦", "まで", "ある", "んだ", "けどー" }];
+        yield return ["余のせいで第二次神魔大戦まであるんだけどーっ", new[] { "余", "の", "せい", "で", "第二次", "神", "魔", "大戦", "まで", "ある", "んだ", "けど" }];
         yield return ["しかも何で二次性徴の部分", new[] { "しかも", "何で", "二次", "性徴", "の", "部分"}];
         yield return ["足元気をつけろ！", new[] { "足元", "気をつけろ" }];
 
@@ -919,13 +920,13 @@ public class MorphologicalAnalyserTests
         yield return ["でぶっ倒れてる", new[] { "で", "ぶっ倒れてる" }];
         yield return ["でぶっ飛ばす", new[] { "で", "ぶっ飛ばす" }];
 
-        // === Long vowel ー at end of sentence should not detach る ===
-        yield return ["よそってあげるー", new[] { "よそってあげる" }];
-        yield return ["出てくれるー", new[] { "出てくれる" }];
-        yield return ["思われてるー", new[] { "思われてる" }];
+        // === Long vowel ー at end of sentence — original surface preserved ===
+        yield return ["よそってあげるー", new[] { "よそってあげるー" }];
+        yield return ["出てくれるー", new[] { "出てくれるー" }];
+        yield return ["思われてるー", new[] { "思われてるー" }];
 
         // === Sudachi mis-segmentation ===
-        yield return ["恋ってすごいですねー", new[] { "恋", "って", "すごい", "です", "ねー" }];
+        yield return ["恋ってすごいですねー", new[] { "恋", "って", "すごい", "です", "ね" }];
         yield return ["恋って何色ですか？", new[] { "恋", "って", "何色", "ですか" }];
 
         // === Colloquial ゆう for いう (normalized, then combined by pipeline) ===
@@ -936,11 +937,11 @@ public class MorphologicalAnalyserTests
         // === Colloquial conjugations ===
         yield return ["出てこん", new[] { "出てこん" }];
         yield return ["入っとらん", new[] { "入っとらん" }];
-        yield return ["殺ス", new[] { "殺す" }];
+        yield return ["殺ス", new[] { "殺ス" }];
 
-        // === すっごく/すっごい normalized to すごく/すごい ===
-        yield return ["舐められてるのもすっごく", new[] { "舐められてる", "の", "も", "すごく" }];
-        yield return ["足、すっごい熱いから", new[] { "足", "すごい", "熱い", "から" }];
+        // === すっごく/すっごい — original surface preserved via sokuon-skip ===
+        yield return ["舐められてるのもすっごく", new[] { "舐められてる", "の", "も", "すっごく" }];
+        yield return ["足、すっごい熱いから", new[] { "足", "すっごい", "熱い", "から" }];
 
         // === Expressions that should be single words ===
         yield return ["ビクともしません", new[] { "ビクともしません" }];
@@ -949,8 +950,8 @@ public class MorphologicalAnalyserTests
         yield return ["ビクともせん", new[] { "ビクともせん" }];
         yield return ["ゲームってのはいつもそういう性質のもの。", new[] { "ゲーム", "ってのは", "いつも", "そういう", "性質", "の", "もの" }];
 
-        // === 母性的な should be split: 母性 + 的な ===
-        yield return ["母性的な", new[] { "母性", "的な" }];
+        // === 母性的 is JMDict 2870498 (adj-na, "motherly") — keep as single token ===
+        yield return ["母性的な", new[] { "母性的な" }];
 
         // === 要するに should be combined as a single expression ===
         yield return ["要するに負ける要素なんざない訳で", new[] { "要するに", "負ける", "要素", "なんざ", "ない", "訳", "で" }];
@@ -967,11 +968,11 @@ public class MorphologicalAnalyserTests
         // === 前出すぎ should split as 前 + 出すぎ, not 前出 + すぎ ===
         yield return ["おまえだけ明らかに前出すぎだ", new[] { "おまえ", "だけ", "明らか", "に", "前", "出すぎ", "だ" }];
 
-        // === ふざっけんな should normalize to ふざけんな ===
-        yield return ["ふざっけんな！", new[] { "ふざけんな" }];
+        // === ふざっけんな — original surface preserved via sokuon-skip ===
+        yield return ["ふざっけんな！", new[] { "ふざっけんな" }];
 
-        // === 早くー should parse as 早く (adjective adverbial form), not prefix+interjection ===
-        yield return ["ルーデウス早くー！", new[] { "ルー", "デウス", "早く" }];
+        // === 早くー — original surface preserved ===
+        yield return ["ルーデウス早くー！", new[] { "ルー", "デウス", "早くー" }];
 
         // === Pending: need user_dic.xml entries (Sudachi splits these incorrectly) ===
         // からかう: Sudachi splits as から(particle) + かう(verb)
@@ -979,9 +980,9 @@ public class MorphologicalAnalyserTests
         yield return ["満足すべき", new[] { "満足す", "べき" }];
         // 涎たらす: Sudachi splits たらしたら as たら(conditional) + したら
         yield return ["でも、涎たらしたら怒ります", new[] { "でも", "涎", "たらしたら", "怒ります" }];
-        // ですー: Sudachi splits です into で(particle) + す(noun) before ー
-        yield return ["困るですー", new[] { "困る", "です" }];
-        yield return ["一緒に回りたいですー！", new[] { "一緒に", "回りたい", "です" }];
+        // ですー: Sudachi handles via prolonged sound lookup, original surface preserved
+        yield return ["困るですー", new[] { "困る", "ですー" }];
+        yield return ["一緒に回りたいですー！", new[] { "一緒に", "回りたい", "ですー" }];
 
         // Shouldn't be split as 死ん-だの
         yield return ["自分が死んだのを誰か", new[] { "自分","が","死んだ","の","を","誰か" }];
@@ -1104,8 +1105,8 @@ public class MorphologicalAnalyserTests
         yield return ["心あるものが", new[] {"心ある","もの","が" }];
         yield return ["信仰心ある人間", new[] {"信仰心","ある","人間" }];
 
-        // === Volitional + vowel elongation ===
-        yield return ["遊ぼー", new[] { "遊ぼう" }];
+        // === Volitional + vowel elongation — original surface preserved ===
+        yield return ["遊ぼー", new[] { "遊ぼー" }];
 
         // === Compound verb not in Sudachi ===
         yield return ["節くれだっていた", new[] { "節くれだっていた" }];
@@ -1181,7 +1182,7 @@ public class MorphologicalAnalyserTests
         yield return ["じょ、冗談", new[] { "冗談" }];
 
         // === Medical compound: Sudachi greedily matches 右上 instead of 右 + 上腕骨 ===
-        yield return ["右上腕骨不完全骨折", new[] { "右", "上腕骨", "不完全", "骨折" }];
+        yield return ["右上腕骨不完全骨折", new[] { "右", "上腕骨", "不完全骨折" }];
 
         // は particle before katakana/hiragana words must not be dropped as stutter
         yield return ["挨拶は、ハードルが", new[] { "挨拶", "は", "ハードル", "が" }];

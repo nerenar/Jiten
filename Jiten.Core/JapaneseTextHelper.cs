@@ -14,6 +14,9 @@ public static class JapaneseTextHelper
     public static bool IsHiragana(char c) =>
         c is >= '\u3040' and <= '\u309F';
 
+    public static bool IsKanji(char c) =>
+        c is (>= '一' and <= '鿿') or (>= '㐀' and <= '䶿') or (>= '豈' and <= '﫿');
+
     public static bool IsKanji(Rune r)
     {
         int value = r.Value;

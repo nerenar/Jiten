@@ -121,6 +121,12 @@ public class BenchmarkCommands(CliContext context)
         Console.WriteLine($"    Pipeline:      {t.PipelineMs:N1} ms ({Pct(t.PipelineMs, t.TotalMs)})");
         Console.WriteLine($"    Sent. Split:   {t.SentenceSplitMs:N1} ms ({Pct(t.SentenceSplitMs, t.TotalMs)})");
         Console.WriteLine($"  Preprocessing:   {t.PreprocessingMs:N1} ms ({Pct(t.PreprocessingMs, t.TotalMs)})");
+        Console.WriteLine($"    NounCompounds: {t.PrepNounCompoundsMs:N1} ms ({Pct(t.PrepNounCompoundsMs, t.TotalMs)})");
+        Console.WriteLine($"    Compounds:     {t.PrepCompoundsMs:N1} ms ({Pct(t.PrepCompoundsMs, t.TotalMs)})");
+        Console.WriteLine($"    Expressions:   {t.PrepExpressionsMs:N1} ms ({Pct(t.PrepExpressionsMs, t.TotalMs)})");
+        Console.WriteLine($"    Grammar:       {t.PrepGrammarMs:N1} ms ({Pct(t.PrepGrammarMs, t.TotalMs)})");
+        Console.WriteLine($"    Reseg:         {t.PrepResegmentationMs:N1} ms ({Pct(t.PrepResegmentationMs, t.TotalMs)})");
+        Console.WriteLine($"    Other:         {t.PrepOtherMs:N1} ms ({Pct(t.PrepOtherMs, t.TotalMs)})");
         Console.WriteLine($"  Deconj/Lookup:   {t.DeconjugationLookupMs:N1} ms ({Pct(t.DeconjugationLookupMs, t.TotalMs)})");
         Console.WriteLine($"  Resegmentation:  {t.ResegmentationMs:N1} ms ({Pct(t.ResegmentationMs, t.TotalMs)})");
         Console.WriteLine($"  Adj. Scoring:    {t.AdjacentScoringMs:N1} ms ({Pct(t.AdjacentScoringMs, t.TotalMs)})");

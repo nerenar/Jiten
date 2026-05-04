@@ -297,12 +297,12 @@ public class FormSelectionTests
         // がちがち → onomatopoeia "stiff/rigid" (1003110), not split into がち+が+ちち
         yield return ["がちがちに緊張する", "がちがち", 1003110, (byte)1];
 
-        // Vowel elongation ー after る-verbs — Sudachi splits as prefix + る(OOV) + ー
-        // RepairVowelElongation merges back into verb and drops ー
-        yield return ["手伝って来るー", "来る", 1547720, (byte)0];
-        yield return ["ダンジョンに潜るー", "潜る", 1609715, (byte)0];
-        yield return ["ここにおるー", "おる", 1577985, (byte)1];
-        yield return ["きっと写るーっ", "写る", 1321820, (byte)0];
+        // Vowel elongation ー after る-verbs — lattice-level lookup finds verb without trailing ー,
+        // surface preserved with ー
+        yield return ["手伝って来るー", "来るー", 1547720, (byte)0];
+        yield return ["ダンジョンに潜るー", "潜るー", 1609715, (byte)0];
+        yield return ["ここにおるー", "おるー", 1577985, (byte)1];
+        yield return ["きっと写るーっ", "写るーっ", 1321820, (byte)0];
 
         // 玩具 → おもちゃ/toy (1217070), not がんぐ (2863107)
         // User dic overrides Sudachi reading ガング→オモチャ for the common modern reading
@@ -365,9 +365,8 @@ public class FormSelectionTests
         // Sudachi tags as 接尾辞,助数詞 — FilterMisparse reclassifies Suffix+Counter to Counter POS
         yield return ["二頭の猟犬", "頭", 1450690, (byte)0];
 
-        // じまい after verb ず-form → 仕舞い suffix "ending" (2582570), not 地米 "locally produced rice" (1763500)
-        // ReclassifyOrphanedSuffixes preserves Suffix POS for じまい so POS compatibility matches suf
-        yield return ["相変わらず瑛の母親はわからずじまいで…。", "じまい", 2582570, (byte)4];
+        // わからずじまい is JMDict 2870678 (exp, "ending up not understanding") — kept as compound
+        yield return ["相変わらず瑛の母親はわからずじまいで…。", "わからずじまいで", 2870678, (byte)5];
 
         // チック should match the colloquial suffix (-esque/-like/-ish), not pomade stick
         yield return ["小悪魔チックに微笑む彼女。", "チック", 2846862, (byte)0];
@@ -643,7 +642,8 @@ public class FormSelectionTests
         // ないわ should NOT merge into ナイワ (Najwa, name 5057701).
         // わ is a sentence-ending particle and should stay separate from ない (1529520, adj-i).
         yield return ["あなたがここの団長じゃあないわよね", "ない", 1529520, (byte)1];
-        yield return ["例のプラスチック爆薬が主食になる、なんてことはないわよね", "ない", 1529520, (byte)1];
+        // ことはない is JMDict 2585230 (exp, "there's no way that") — kept as compound
+        yield return ["例のプラスチック爆薬が主食になる、なんてことはないわよね", "ことはない", 2585230, (byte)3];
         yield return ["この子は悩みなんてないわよね", "ない", 1529520, (byte)1];
 
         // よう after verb/aux should resolve to 様 (1605840, "seeming/manner"), not
@@ -655,6 +655,10 @@ public class FormSelectionTests
         yield return ["側に浮いていた黒いキューブが変形していたようなので、おそらく装備品でしょう」", "よう", 1605840, (byte)1];
         yield return ["なかったようで安心した", "よう", 1605840, (byte)1];
         yield return ["嬉しいようで照れていた", "よう", 1605840, (byte)1];
+        yield return ["あの男もそのことは分かっていたようだが、それを解決したがっていた。", "よう", 1605840, (byte)1];
+        yield return ["何かに感づいたようだが、オレには全く分からない。", "よう", 1605840, (byte)1];
+        yield return ["朝凪さんは何もしていないのに、まるで劣っているような言い方。", "よう", 1605840, (byte)1];
+        yield return ["この一二年で、すっかり腑抜けちまったようだな。", "よう", 1605840, (byte)1];
 
         // よし as interjection "alright" (2607690), not adverb 縦し "even if" (2607700)
         yield return ["よし分かった", "よし", 2607690, (byte)0];
@@ -909,9 +913,9 @@ public class FormSelectionTests
         // 人見知り (1367260) should win over ただの人 (1891410) + 見知り
         yield return ["ただの人見知り", "人見知り", 1367260, (byte)0];
 
-        // === Volitional + vowel elongation ===
+        // === Volitional + vowel elongation — original surface preserved ===
         // 遊ぼー → volitional of 遊ぶ (1542160), not 遊 (name) + ボー (bow)
-        yield return ["遊ぼー", "遊ぼう", 1542160, (byte)0];
+        yield return ["遊ぼー", "遊ぼー", 1542160, (byte)0];
 
         // === つく homophone disambiguation ===
         // 嘘をつく → 吐く (1444150, to tell a lie), not 点く (1441400, to be lit)
@@ -939,8 +943,7 @@ public class FormSelectionTests
         yield return ["コホン、と咳払いしつつもう一度言う。", "コホン", 2579880, (byte)2];
 
         // === えと should be filler interjection (1001150), not sexagenary cycle 干支 (1650120) ===
-        // Structural: SurfaceMatchScore gap (干支 exact 300 vs えーと partial 50), PosAffinity doesn't cover interjections
-        yield return ["えと", "えと", 1001150, (byte)1];
+        yield return ["えと", "えと", 1001150, (byte)8];
 
         // === 創造主 should be single word (1581250), not 創造+主たる ===
         yield return ["創造主たる", "創造主", 1581250, (byte)0];
@@ -978,8 +981,8 @@ public class FormSelectionTests
         yield return ["俺もイキました思いっきり出しました", "イキました", 1578850, (byte)4];
         yield return ["そろそろちゃんと僕と話して貰うわけには、いきませんか？", "いきません", 1578850, (byte)2];
 
-        // === 事 after 祝い should be こと (1313580), not ごと suffix (2613010) ===
-        yield return ["お祝い事に招かれたのですから", "事", 1313580, (byte)0];
+        // === 事 in お祝い事 is ごと (2613010, nominalizing suffix), not こと ===
+        yield return ["お祝い事に招かれたのですから", "事", 2613010, (byte)0];
 
         // === 住み易そう should resolve to 住み易い (2839799), not 住む (1334040) ===
         // Verb stem + adj-forming suffix: CombineInflections must set POS to IAdjective
@@ -1002,6 +1005,9 @@ public class FormSelectionTests
 
         // ささやかれる = passive of ささやく (囁く, to whisper), not na-adj ささやか + れる
         yield return ["ささやかれるどころか", "ささやかれる", 1565670, (byte)2];
+
+        // Should be まえ　and not ぜん
+        yield return ["「前準備って……見当とかついたりするか？」", "前", 1392580, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

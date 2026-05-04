@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Utils;
 using WanaKanaShaapu;
@@ -229,7 +230,7 @@ public partial class MorphologicalAnalyser
                         // but also mizenkei of ささやく). When the deconjugation chain has verb-stem tags,
                         // resolve to the underlying verb instead of the na-adjective.
                         var matchForm = forms.First(f => f.Text == targetHiragana);
-                        if (matchForm.Tags.Any(t => t.StartsWith("stem-")))
+                        if (matchForm.Tags.Any(t => t.StartsWith("stem-") && t != "stem-adj-base"))
                         {
                             var verbForm = forms.FirstOrDefault(f =>
                                 f.Text != targetHiragana &&
@@ -263,6 +264,21 @@ public partial class MorphologicalAnalyser
                             // Keep original DictionaryForm (e.g. 幼い) and POS (IAdjective) so the parser
                             // matches the base adjective entry rather than a homophonous noun (e.g. 幼/よう)
                         }
+                    }
+                }
+                // Scenario A2: Noun with na-adj capability + adj-base suffix (e.g., 贅沢すぎる)
+                // The suru-verb target (贅沢する) doesn't match because すぎる/そう/がる attach to the na-adj stem
+                // Only match when the deconjugation goes through stem-adj-base (not copula stem-te/stem-past)
+                else if (currentPOS == PartOfSpeech.Noun &&
+                         currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun))
+                {
+                    string bareTarget = KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
+                    if (forms.Any(f => f.Text == bareTarget && f.Tags.Contains("stem-adj-base")) &&
+                        (HasCompoundLookup == null || HasCompoundLookup(currentDictForm) ||
+                         (currentNormForm != currentDictForm && HasCompoundLookup(currentNormForm))))
+                    {
+                        merged = true;
+                        currentPOS = PartOfSpeech.NaAdjective;
                     }
                 }
                 // Scenario B: Suffix transition - creates new compound verb
@@ -335,10 +351,8 @@ public partial class MorphologicalAnalyser
 
     private static readonly HashSet<string> PrefixCombineExclusions = ["おつもり", "おいま", "おにく"];
 
-    private static bool IsKanjiPrefix(string text)
-    {
-        return text.Length > 0 && text[0] >= '\u4E00' && text[0] <= '\u9FFF';
-    }
+    private static bool IsKanjiPrefix(string text) =>
+        text.Length > 0 && JapaneseTextHelper.IsKanji(text[0]);
 
     private List<WordInfo> CombinePrefixes(List<WordInfo> wordInfos)
     {

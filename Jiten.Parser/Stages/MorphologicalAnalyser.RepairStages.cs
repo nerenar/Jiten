@@ -815,8 +815,6 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count == 0)
             return wordInfos;
 
-        wordInfos = RepairChimauFragments(wordInfos);
-
         List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
 
 
@@ -890,10 +888,11 @@ public partial class MorphologicalAnalyser
             // Split them back so the parser can match the underlying noun/verb + particle separately.
             if (w1.PartOfSpeech == PartOfSpeech.Expression)
             {
-                (string head, string tail, PartOfSpeech tailPos, string tailReading)? split = w1.Text switch
+                (string head, string tail, PartOfSpeech headPos, PartOfSpeech tailPos, string tailReading)? split = w1.Text switch
                 {
-                    "人前で" => ("人前", "で", PartOfSpeech.Particle, "デ"),
-                    "様に" => ("様", "に", PartOfSpeech.Particle, "ニ"),
+                    "人前で" => ("人前", "で", PartOfSpeech.Noun, PartOfSpeech.Particle, "デ"),
+                    "様に" => ("様", "に", PartOfSpeech.Noun, PartOfSpeech.Particle, "ニ"),
+                    "誰だって" => ("誰", "だって", PartOfSpeech.Pronoun, PartOfSpeech.Particle, "ダッテ"),
                     _ => null,
                 };
                 if (split is { } s)
@@ -904,7 +903,7 @@ public partial class MorphologicalAnalyser
                         Text = s.head,
                         DictionaryForm = s.head,
                         NormalizedForm = s.head,
-                        PartOfSpeech = PartOfSpeech.Noun,
+                        PartOfSpeech = s.headPos,
                         Reading = "",
                         StartOffset = w1.StartOffset,
                         EndOffset = mid,
@@ -1802,97 +1801,120 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
-    /// <summary>
-    /// Sudachi doesn't know ちまう (colloquial てしまう) and fragments it.
-    /// e.g., やっちまえー → や(particle) + っち(suffix) + ま(filler) + えー(filler).
-    /// Reassemble the fragments into a single verb token so CombineInflections can handle it.
-    /// </summary>
-    private static List<WordInfo> RepairChimauFragments(List<WordInfo> wordInfos)
+    private static readonly HashSet<string> CaseParticles =
+        ["に", "を", "が", "へ", "で", "と", "は", "も", "か", "から", "より", "まで", "の"];
+
+    private static readonly HashSet<string> CommonTeFormVerbs =
+        ["なる", "する", "やる", "いる", "ある", "くる", "できる", "おる", "みる", "しまう"];
+
+    private List<WordInfo> RepairQuotativeTte(List<WordInfo> wordInfos)
     {
-        if (wordInfos.Count < 3)
-            return wordInfos;
+        if (wordInfos.Count < 2) return wordInfos;
 
-        bool hasChimau = false;
-        foreach (var w in wordInfos)
-            if (w is { Text: "っち", PartOfSpeech: PartOfSpeech.Suffix }) { hasChimau = true; break; }
-        if (!hasChimau) return wordInfos;
+        var deconj = Deconjugator.Instance;
+        var result = new List<WordInfo>(wordInfos.Count + 2);
+        bool changed = false;
 
-        var result = new List<WordInfo>(wordInfos.Count);
-        int i = 0;
-
-        while (i < wordInfos.Count)
+        for (int i = 0; i < wordInfos.Count; i++)
         {
-            if (i + 2 < wordInfos.Count
-                && wordInfos[i] is { Text: "っち", PartOfSpeech: PartOfSpeech.Suffix }
-                && wordInfos[i + 1] is { Text: "ま", PartOfSpeech: PartOfSpeech.Filler or PartOfSpeech.Interjection })
+            if (i + 1 >= wordInfos.Count
+                || wordInfos[i].Text.Length < 2
+                || wordInfos[i].Text[^1] != 'っ'
+                || wordInfos[i + 1].Text != "て"
+                || wordInfos[i].PartOfSpeech is not (PartOfSpeech.Verb or PartOfSpeech.Noun or PartOfSpeech.CommonNoun))
             {
-                string tail = wordInfos[i + 2].Text;
-                string chimauSurface;
-                string chimauReading;
-                int tokensConsumed;
+                result.Add(wordInfos[i]);
+                continue;
+            }
 
-                if (tail is "え" or "えー" or "えぇ")
-                {
-                    chimauSurface = "っちまえ";
-                    chimauReading = "ッチマエ";
-                    tokensConsumed = 3;
-                }
-                else if (tail is "う" or "うー")
-                {
-                    chimauSurface = "っちまう";
-                    chimauReading = "ッチマウ";
-                    tokensConsumed = 3;
-                }
-                else if (tail is "っ" && i + 3 < wordInfos.Count)
-                {
-                    chimauSurface = "っちまっ" + wordInfos[i + 3].Text;
-                    chimauReading = "ッチマッ" + WanaKana.ToKatakana(wordInfos[i + 3].Text);
-                    tokensConsumed = 4;
-                }
-                else
-                {
-                    result.Add(wordInfos[i]);
-                    i++;
-                    continue;
-                }
+            var thief = wordInfos[i];
 
-                if (result.Count > 0 && result[^1].Text.Length == 1
-                    && (WanaKana.IsHiragana(result[^1].Text) || WanaKana.IsKatakana(result[^1].Text)))
+            if (thief.PartOfSpeech is PartOfSpeech.Verb && CommonTeFormVerbs.Contains(thief.DictionaryForm))
+            {
+                result.Add(wordInfos[i]);
+                continue;
+            }
+
+            var stripped = thief.Text[..^1];
+            bool shouldRepair = false;
+            bool mergeIntoPrev = false;
+
+            if (stripped.Length == 1 && stripped[0] is >= 'ぁ' and <= 'ゖ')
+            {
+                if (result.Count > 0)
                 {
-                    var stem = result[^1];
-                    result[^1] = new WordInfo
+                    var prev = result[^1];
+                    if (prev.PartOfSpeech == PartOfSpeech.Particle && CaseParticles.Contains(prev.Text))
                     {
-                        Text = stem.Text + chimauSurface,
-                        DictionaryForm = stem.Text + "っちまう",
-                        NormalizedForm = stem.Text + "っちまう",
-                        PartOfSpeech = PartOfSpeech.Verb,
-                        Reading = stem.Reading + chimauReading,
-                        StartOffset = stem.StartOffset,
-                        EndOffset = wordInfos[i + tokensConsumed - 1].EndOffset
+                        result.Add(wordInfos[i]);
+                        continue;
+                    }
+
+                    var merged = prev.Text + stripped;
+                    var forms = deconj.Deconjugate(merged);
+                    bool hasShortChain = false;
+                    foreach (var f in forms)
+                    {
+                        if (f.Process.Count <= 1) { hasShortChain = true; break; }
+                    }
+                    if (hasShortChain)
+                    {
+                        shouldRepair = true;
+                        mergeIntoPrev = true;
+                    }
+                    else if (forms.Count == 0)
+                    {
+                        shouldRepair = true;
+                    }
+                }
+            }
+            else if (stripped.Length >= 2)
+            {
+                bool allKana = true;
+                foreach (var c in stripped)
+                    if (c is not ((>= 'ぁ' and <= 'ゖ') or (>= '゠' and <= 'ヿ'))) { allKana = false; break; }
+
+                if (allKana && !CommonTeFormVerbs.Contains(thief.DictionaryForm))
+                {
+                    var forms = deconj.Deconjugate(stripped);
+                    shouldRepair = forms.Count > 0;
+                }
+            }
+
+            if (shouldRepair)
+            {
+                if (mergeIntoPrev && result.Count > 0)
+                {
+                    var prev = result[^1];
+                    result[^1] = new WordInfo(prev)
+                    {
+                        Text = prev.Text + stripped,
+                        EndOffset = thief.EndOffset >= 0 ? thief.EndOffset - 3 : -1
                     };
                 }
                 else
                 {
-                    result.Add(new WordInfo
-                    {
-                        Text = chimauSurface,
-                        DictionaryForm = "っちまう",
-                        NormalizedForm = "っちまう",
-                        PartOfSpeech = PartOfSpeech.Auxiliary,
-                        Reading = chimauReading,
-                        StartOffset = wordInfos[i].StartOffset,
-                        EndOffset = wordInfos[i + tokensConsumed - 1].EndOffset
-                    });
+                    result.Add(new WordInfo(thief) { Text = stripped, PartOfSpeech = PartOfSpeech.Verb });
                 }
 
-                i += tokensConsumed;
+                result.Add(new WordInfo(wordInfos[i + 1])
+                {
+                    Text = "って",
+                    DictionaryForm = "って",
+                    NormalizedForm = "って",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    StartOffset = thief.EndOffset >= 0 ? thief.EndOffset - 3 : -1,
+                    EndOffset = wordInfos[i + 1].EndOffset
+                });
+                i++;
+                changed = true;
                 continue;
             }
 
             result.Add(wordInfos[i]);
-            i++;
         }
 
-        return result;
+        return changed ? result : wordInfos;
     }
+
 }

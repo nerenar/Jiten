@@ -15,7 +15,8 @@ public record DeckWordResolveRequest(
     float? TargetPercentage,
     int? MinOccurrences = null,
     int? MaxOccurrences = null,
-    string? PosFilter = null);
+    string? PosFilter = null,
+    bool StartFromKnown = false);
 
 public class ResolvedWord
 {
@@ -41,7 +42,7 @@ public interface IDeckWordResolver
     Task<(int Count, bool WasTruncated)> CountGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
     Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana);
-    Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null);
+    Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null, bool startFromKnown = false);
     Task<(int Count, HashSet<long> WordKeys)> CountStaticDeckWords(int studyDeckId, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
 }
