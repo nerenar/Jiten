@@ -12,6 +12,7 @@ public class DeckDownloadRequest
     public bool ExcludeAllTrackedWords { get; set; }
     public bool ExcludeExampleSentences { get; set; }
     public float? TargetPercentage { get; set; }
+    public bool StartFromKnown { get; set; }
     public int? MinOccurrences { get; set; }
     public int? MaxOccurrences { get; set; }
 }

@@ -69,6 +69,7 @@
       minFrequency.value = deck.minFrequency;
       maxFrequency.value = deck.maxFrequency;
       targetPercentage.value = deck.targetPercentage ?? 80;
+      startFromKnown.value = deck.startFromKnown ?? false;
       if (deck.minOccurrences) {
         occurrenceFilterType.value = 'gte';
         occurrenceThreshold.value = deck.minOccurrences;
@@ -131,6 +132,7 @@
   const minFrequency = ref(0);
   const maxFrequency = ref(30000);
   const targetPercentage = ref(80);
+  const startFromKnown = ref(false);
   const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
   const occurrenceThreshold = ref(10);
   const mediaPosFilter = ref<string[]>([]);
@@ -165,6 +167,7 @@
           minFrequency: minFrequency.value,
           maxFrequency: maxFrequency.value,
           targetPercentage: downloadMode.value === 'target' ? targetPercentage.value : undefined,
+          startFromKnown: downloadMode.value === 'target' ? startFromKnown.value : undefined,
           minOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'gte' ? occurrenceThreshold.value : undefined,
           maxOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'lte' ? occurrenceThreshold.value : undefined,
           posFilter: mediaPosFilter.value.length > 0 ? JSON.stringify(mediaPosFilter.value) : undefined,
@@ -186,7 +189,7 @@
     [
       step, () => selectedDeck.value?.deckId,
       computedDownloadType, downloadType, deckOrder,
-      minFrequency, maxFrequency, targetPercentage,
+      minFrequency, maxFrequency, targetPercentage, startFromKnown,
       occurrenceFilterType, occurrenceThreshold, mediaPosFilter, excludeKana,
     ],
     () => {
@@ -332,6 +335,7 @@
           minFrequency: minFrequency.value,
           maxFrequency: maxFrequency.value,
           targetPercentage: downloadMode.value === 'target' ? targetPercentage.value : undefined,
+          startFromKnown: downloadMode.value === 'target' ? startFromKnown.value : undefined,
           minOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'gte' ? occurrenceThreshold.value : undefined,
           maxOccurrences: downloadMode.value === 'occurrence' && occurrenceFilterType.value === 'lte' ? occurrenceThreshold.value : undefined,
           posFilter: mediaPosFilter.value.length > 0 ? JSON.stringify(mediaPosFilter.value) : undefined,
@@ -413,6 +417,7 @@
     minFrequency.value = 0;
     maxFrequency.value = 30000;
     targetPercentage.value = 80;
+    startFromKnown.value = false;
     occurrenceFilterType.value = 'gte';
     occurrenceThreshold.value = 10;
     mediaPosFilter.value = [];
@@ -596,6 +601,10 @@
         <div class="mb-3">
           <label class="block text-sm font-medium mb-1">Target Coverage: {{ targetPercentage }}%</label>
           <Slider v-model="targetPercentage" :min="1" :max="100" class="w-full" />
+        </div>
+        <div class="flex items-center gap-2 mb-3">
+          <Checkbox v-model="startFromKnown" input-id="srsStartFromKnown" :binary="true" />
+          <label for="srsStartFromKnown" class="text-sm cursor-pointer">Start from my current coverage</label>
         </div>
       </template>
 

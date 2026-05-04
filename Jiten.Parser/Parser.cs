@@ -35,12 +35,11 @@ namespace Jiten.Parser
         private static HashSet<int> _expressionWordIds = null!;
         internal static Dictionary<int, Data.JmDictWordMeta> WordMeta = null!;
 
-        // Cache for compound expression lookups with bounded eviction
-        private static readonly Dictionary<string, (bool validExpression, int? wordId)> CompoundExpressionCache = new();
-        private static readonly LinkedList<string> CompoundCacheOrder = new(); // Tracks insertion order for LRU eviction
+        private static readonly Dictionary<string, (int? exprWordId, int? compWordId)> CompoundExpressionCache = new();
+        private static readonly LinkedList<string> CompoundCacheOrder = new();
         private static readonly Lock CompoundCacheLock = new();
         private const int MAX_COMPOUND_CACHE_SIZE = 200_000;
-        private const int EVICTION_BATCH_SIZE = 50_000; // Remove oldest 25% when limit hit
+        private const int EVICTION_BATCH_SIZE = 50_000;
 
         // Compiled regexes for token cleaning (avoid recompilation on every token)
         private static readonly Regex TokenCleanRegex = new(
@@ -96,22 +95,48 @@ namespace Jiten.Parser
             WordMeta = runtime.WordMeta;
         }
 
-        private static async Task PreprocessSentences(List<SentenceInfo> sentences,
-                                                      ParserDiagnostics? diagnostics = null,
-                                                      HashSet<string>? protectedSurfaces = null)
+        private static void PreprocessSentences(List<SentenceInfo> sentences,
+                                                ParserDiagnostics? diagnostics = null,
+                                                HashSet<string>? protectedSurfaces = null,
+                                                BenchmarkTimings? timings = null)
         {
+            Stopwatch? sw = timings != null ? Stopwatch.StartNew() : null;
+
             CleanSentenceTokens(sentences);
             SplitSuruInflectionsForNounCompounding(sentences);
             SplitUnknownNounTokens(sentences, protectedSurfaces);
+
+            if (sw != null) { timings!.PrepOtherMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             CombineNounCompounds(sentences);
-            await CombineCompounds(sentences);
+
+            if (sw != null) { timings!.PrepNounCompoundsMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
+            CombineCompounds(sentences);
+
+            if (sw != null) { timings!.PrepCompoundsMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             CombineExpressions(sentences);
+
+            if (sw != null) { timings!.PrepExpressionsMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             RepairLongVowels(sentences);
+
+            if (sw != null) { timings!.PrepOtherMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             FilterOrphanedMisparses(sentences);
             ValidateGrammaticalSequences(sentences, diagnostics);
             StripTrailingParticles(sentences);
+
+            if (sw != null) { timings!.PrepGrammarMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             ResegmentationEngine.TryImproveUncertainSpans(sentences, _lookups, _wordFrequencyRanks, WordMeta, protectedSurfaces);
+
+            if (sw != null) { timings!.PrepResegmentationMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+
             MarkPersonNameHonorificContexts(sentences);
+
+            if (sw != null) { timings!.PrepOtherMs += sw.Elapsed.TotalMilliseconds; }
         }
 
         private static readonly HashSet<string> ArchaicPosTypes =
@@ -543,7 +568,7 @@ namespace Jiten.Parser
             var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
             var sentences = await parser.Parse(text, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
-            await PreprocessSentences(sentences, diagnostics);
+            PreprocessSentences(sentences, diagnostics);
             PropagatePersonNameContexts(sentences);
             var wordInfos = ExtractWordInfos(sentences);
             var wordsWithOccurrences = wordInfos.Select(w => (w, 0)).ToList();
@@ -662,9 +687,8 @@ namespace Jiten.Parser
 
             timer.Restart();
 
-            // Pass 1: Preprocess all texts, then propagate person names across all texts
             for (int textIndex = 0; textIndex < batchedSentences.Count; textIndex++)
-                await PreprocessSentences(batchedSentences[textIndex], diagnostics, protectedSurfaces);
+                PreprocessSentences(batchedSentences[textIndex], diagnostics, protectedSurfaces, timings);
 
             PropagatePersonNameContexts(batchedSentences);
 
@@ -803,9 +827,9 @@ namespace Jiten.Parser
                        {
                            CharacterCount = characterCount, WordCount = totalWordCount, UniqueWordCount = processedWords.Length,
                            UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
-                           UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(c => WanaKana.IsKanji(c.ToString())),
+                           UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(JapaneseTextHelper.IsKanji),
                            UniqueKanjiUsedOnceCount = wordInfos.SelectMany(w => w.Text).GroupBy(c => c)
-                                                               .Count(g => g.Count() == 1 && WanaKana.IsKanji(g.Key.ToString())),
+                                                               .Count(g => g.Count() == 1 && JapaneseTextHelper.IsKanji(g.Key)),
                            SentenceCount = sentences.Count, DialoguePercentage = dialoguePercentage, DeckWords = processedWords,
                            RawText = storeRawText ? new DeckRawText(text) : null, ExampleSentences = exampleSentences
                        };
@@ -2035,7 +2059,7 @@ namespace Jiten.Parser
             return best?.ReadingIndex ?? 255;
         }
 
-        private static async Task CombineCompounds(List<SentenceInfo> sentences)
+        private static void CombineCompounds(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
             {
@@ -2290,7 +2314,10 @@ namespace Jiten.Parser
                             {
                                 var singleKey = word.Text.TrimEnd('ー');
 
-                                if (!(singleKey.Length == 2 && TryResolveAdjStem(word, singleKey)) &&
+                                if (!(singleKey.Length == 2
+                                      && word.PartOfSpeech is not PartOfSpeech.Auxiliary and not PartOfSpeech.Particle and not PartOfSpeech.Verb
+                                      && !(word.PartOfSpeech == PartOfSpeech.Noun && !word.DictionaryForm.Contains('ー'))
+                                      && TryResolveAdjStem(word, singleKey)) &&
                                     !TryLongVowelLookup(word.Text))
                                 {
                                     if (singleKey.Length > 0 &&
@@ -2521,7 +2548,7 @@ namespace Jiten.Parser
 
                     if (word.Text.Length >= 2 &&
                         PosMapper.IsNounForCompounding(word.PartOfSpeech) &&
-                        word.Text.All(c => WanaKana.IsKanji(c.ToString())) &&
+                        word.Text.All(JapaneseTextHelper.IsKanji) &&
                         !(_lookups.TryGetValue(word.Text, out var ids) && ids.Count > 0))
                     {
                         for (int j = 0; j < word.Text.Length; j++)
@@ -3095,7 +3122,7 @@ namespace Jiten.Parser
             }
         }
 
-        private static void AddToCompoundCache(string key, (bool validExpression, int? wordId) value)
+        private static void AddToCompoundCache(string key, (int? exprWordId, int? compWordId) value)
         {
             CleanCompoundCache();
             if (CompoundExpressionCache.TryAdd(key, value))
@@ -3109,6 +3136,7 @@ namespace Jiten.Parser
 
             var wordIds = corrected.Select(w => w.WordId).Distinct();
             var wordData = await JmDictCache.GetWordsAsync(wordIds);
+            PriorityOverrides.ApplyAll(wordData.Values);
 
             var flatTokens = sentences
                 .SelectMany(s => s.Words)
@@ -3281,7 +3309,7 @@ namespace Jiten.Parser
                 }
 
                 var verbKana = KanaConverter.ToHiragana(verb.Text, convertLongVowelMark: false);
-                if (verb.Text.Any(c => WanaKana.IsKanji(c.ToString()))
+                if (verb.Text.Any(JapaneseTextHelper.IsKanji)
                     && !MorphologicalAnalyser.DictionaryVerbEndings.Contains(verbKana[^1]))
                 {
                     var deconj = Deconjugator.Instance.Deconjugate(KanaConverter.ToHiragana(verb.Text));
@@ -3345,56 +3373,50 @@ namespace Jiten.Parser
 
                 var candidate = prefix + dictForm;
 
-                if (!expressionOnly)
+                lock (CompoundCacheLock)
                 {
-                    lock (CompoundCacheLock)
+                    if (CompoundExpressionCache.TryGetValue(candidate, out var cached))
                     {
-                        if (CompoundExpressionCache.TryGetValue(candidate, out var cached))
-                        {
-                            if (cached.validExpression)
-                                return (startIndex, candidate, cached.wordId!.Value);
-
-                            continue;
-                        }
+                        var cachedId = expressionOnly ? cached.exprWordId : (cached.exprWordId ?? cached.compWordId);
+                        if (cachedId.HasValue)
+                            return (startIndex, candidate, cachedId.Value);
+                        continue;
                     }
                 }
+
+                int? exprWordId = null, compWordId = null;
 
                 if (_lookups.TryGetValue(candidate, out var wordIds) && wordIds.Count > 0)
                 {
-                    var validWordId =
-                        CompoundWordSelector.FindValidCompoundWordId(wordIds, WordMeta, expressionOnly,
-                                                                     WanaKana.IsKana(candidate));
-                    if (validWordId.HasValue)
-                    {
-                        lock (CompoundCacheLock)
-                        {
-                            AddToCompoundCache(candidate, (true, validWordId.Value));
-                        }
-
-                        return (startIndex, candidate, validWordId.Value);
-                    }
+                    (exprWordId, compWordId) = CompoundWordSelector.FindCompoundWordIds(wordIds, WordMeta, WanaKana.IsKana(candidate));
                 }
 
-                var hiraganaCandidate = KanaConverter.ToHiragana(candidate, convertLongVowelMark: false);
-                if (hiraganaCandidate != candidate && _lookups.TryGetValue(hiraganaCandidate, out wordIds) && wordIds.Count > 0)
+                if (exprWordId == null && compWordId == null)
                 {
-                    var validWordId =
-                        CompoundWordSelector.FindValidCompoundWordId(wordIds, WordMeta, expressionOnly, isKana: true);
-                    if (validWordId.HasValue)
+                    bool hasKatakana = false;
+                    for (int k = 0; k < candidate.Length; k++)
                     {
-                        lock (CompoundCacheLock)
-                        {
-                            AddToCompoundCache(candidate, (true, validWordId.Value));
-                        }
+                        if (candidate[k] is >= '゠' and <= 'ヿ') { hasKatakana = true; break; }
+                    }
 
-                        return (startIndex, candidate, validWordId.Value);
+                    if (hasKatakana)
+                    {
+                        var hiraganaCandidate = KanaConverter.ToHiragana(candidate, convertLongVowelMark: false);
+                        if (hiraganaCandidate != candidate && _lookups.TryGetValue(hiraganaCandidate, out var hiraWordIds) && hiraWordIds.Count > 0)
+                        {
+                            (exprWordId, compWordId) = CompoundWordSelector.FindCompoundWordIds(hiraWordIds, WordMeta, isKana: true);
+                        }
                     }
                 }
 
                 lock (CompoundCacheLock)
                 {
-                    AddToCompoundCache(candidate, (false, null));
+                    AddToCompoundCache(candidate, (exprWordId, compWordId));
                 }
+
+                var matchId = expressionOnly ? exprWordId : (exprWordId ?? compWordId);
+                if (matchId.HasValue)
+                    return (startIndex, candidate, matchId.Value);
             }
 
             return null;
@@ -3514,6 +3536,9 @@ namespace Jiten.Parser
 
                     // High confidence → skip rederivation, unless archaic sentence (Phase 1 scored without archaic context)
                     // Exception: copula can only follow nominals, so always re-evaluate before だ/です/である
+                    // But never rederive tokens with PreMatchedWordId — disambiguation is authoritative
+                    bool isPreMatched = currentInfo.PreMatchedWordId.HasValue && currentInfo.PreMatchedCandidateWordIds == null;
+                    if (isPreMatched) continue;
                     if (!isArchaicPass1 && !nextIsCopula && currentMargin >= ScoringPolicy.HighConfidenceThreshold) continue;
 
                     WordInfo? prevInfo = i > 0 ? sentenceWords[i - 1].word : null;

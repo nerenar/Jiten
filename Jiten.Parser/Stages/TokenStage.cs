@@ -39,6 +39,9 @@ internal enum TokenFeatures : uint
     TextTawake      = 1 << 15,
     TextTatte       = 1 << 16,
     TextRan         = 1 << 17,
+
+    // Composite
+    InflectableBase = 1 << 18,
 }
 
 internal sealed class TokenStage(
@@ -67,6 +70,9 @@ internal static class TokenFeatureScanner
                 case PartOfSpeech.Suffix:        f |= TokenFeatures.Suffix; break;
                 case PartOfSpeech.Auxiliary:      f |= TokenFeatures.Auxiliary; break;
                 case PartOfSpeech.Interjection:  f |= TokenFeatures.Interjection; break;
+                case PartOfSpeech.Verb:
+                case PartOfSpeech.IAdjective:
+                case PartOfSpeech.NaAdjective:   f |= TokenFeatures.InflectableBase; break;
             }
 
             f |= SectionFeature(w.PartOfSpeechSection1);
@@ -118,8 +124,10 @@ internal static class TokenFeatureScanner
         PartOfSpeechSection.AdverbialParticle   => TokenFeatures.AdvParticle,
         PartOfSpeechSection.Dependant           => TokenFeatures.Dependant,
         PartOfSpeechSection.PossibleDependant   => TokenFeatures.Dependant,
-        PartOfSpeechSection.VerbLike            => TokenFeatures.VerbLike,
+        PartOfSpeechSection.VerbLike            => TokenFeatures.VerbLike | TokenFeatures.InflectableBase,
         PartOfSpeechSection.Suffix              => TokenFeatures.Suffix,
+        PartOfSpeechSection.PossibleSuru        => TokenFeatures.InflectableBase,
+        PartOfSpeechSection.PossibleVerbSuruNoun => TokenFeatures.InflectableBase,
         _                                       => TokenFeatures.None,
     };
 }

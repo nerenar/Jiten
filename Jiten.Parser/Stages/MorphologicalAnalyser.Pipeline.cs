@@ -27,9 +27,10 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, ProcessSpecialCases),
         Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee, TokenFeatures.Interjection),
         Stage(TokenStageGroup.Repair, RepairColloquialRanNai, TokenFeatures.TextRan),
+        Stage(TokenStageGroup.Repair, RepairQuotativeTte, TokenFeatures.EndsWithTsu),
 
         Stage(TokenStageGroup.Combine, CombinePrefixes, TokenFeatures.Prefix),
-        Stage(TokenStageGroup.Combine, CombineInflections),
+        Stage(TokenStageGroup.Combine, CombineInflections, TokenFeatures.InflectableBase),
         Stage(TokenStageGroup.Combine, CombineAmounts, TokenFeatures.NumericAmount),
         Stage(TokenStageGroup.Combine, CombineTte, TokenFeatures.EndsWithTsu),
         Stage(TokenStageGroup.Combine, CombineAuxiliaryVerbStem, TokenFeatures.AuxVerbStem),

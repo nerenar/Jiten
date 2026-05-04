@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser;
 using Jiten.Parser.Diagnostics;
@@ -215,7 +216,7 @@ internal static class TransitionRuleEngine
     }
 
     private static bool IsSingleKanji(string? text) =>
-        text is { Length: 1 } && text[0] >= '\u4E00' && text[0] <= '\u9FFF';
+        text is { Length: 1 } && JapaneseTextHelper.IsKanji(text[0]);
 
     private static TokenWindow BuildWindow(List<(WordInfo word, int pos, int len)> words, int i)
     {

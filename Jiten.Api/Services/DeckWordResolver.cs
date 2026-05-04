@@ -16,7 +16,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences, posFilter) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown) = request;
 
         IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
 
@@ -86,21 +86,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 int totalOccurrences = deck.WordCount;
                 double targetCoverage = targetPercentage.Value;
 
-                var resultWords = new List<DeckWord>();
-                int cumulativeOccurrences = 0;
-
-                foreach (var dw in allDeckWordsForCoverage)
-                {
-                    cumulativeOccurrences += dw.Occurrences;
-
-                    var key = WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex);
-                    if (!knownKeysSet.Contains(key))
-                        resultWords.Add(dw);
-
-                    double newCoverage = (double)cumulativeOccurrences / totalOccurrences * 100;
-                    if (newCoverage >= targetCoverage)
-                        break;
-                }
+                var resultWords = CollectCoverageWords(
+                    allDeckWordsForCoverage, knownKeysSet, totalOccurrences, targetCoverage, startFromKnown);
 
                 if (order == DeckOrder.Chronological)
                 {
@@ -411,7 +398,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences, posFilter) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown) = request;
 
         IQueryable<DeckWord> query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
 
@@ -496,7 +483,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return false;
     }
 
-    public async Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null)
+    public async Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null, bool startFromKnown = false)
     {
         if (!currentUserService.IsAuthenticated)
             return (0, []);
@@ -521,26 +508,27 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             .ToListAsync();
 
         int totalOccurrences = deck.WordCount;
-        int cumulativeOccurrences = 0;
-        var resultKeys = new HashSet<long>();
 
-        foreach (var dw in allDeckWords)
+        var keysWithOccurrences = allDeckWords
+            .Select(dw => (Key: WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex), dw.Occurrences))
+            .ToList();
+
+        HashSet<long>? knownKeysSet = null;
+        if (startFromKnown)
         {
-            var key = WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex);
-            resultKeys.Add(key);
-            cumulativeOccurrences += dw.Occurrences;
-
-            double coverage = (double)cumulativeOccurrences / totalOccurrences * 100;
-            if (coverage >= targetPercentage)
-                break;
+            var coverageWordKeys = allDeckWords.Select(dw => (dw.WordId, dw.ReadingIndex)).ToList();
+            var coverageStates = await currentUserService.GetKnownWordsState(coverageWordKeys);
+            knownKeysSet = coverageStates
+                .Where(kvp => kvp.Value.Any(s => s is KnownState.Mastered or KnownState.Blacklisted or KnownState.Mature))
+                .Select(kvp => WordFormHelper.EncodeWordKey(kvp.Key.WordId, kvp.Key.ReadingIndex))
+                .ToHashSet();
         }
+
+        var resultKeys = CollectCoverageKeys(keysWithOccurrences, knownKeysSet, totalOccurrences, targetPercentage, startFromKnown);
 
         if (excludeKana)
         {
-            var wordIds = allDeckWords
-                .Where(dw => resultKeys.Contains(WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex)))
-                .Select(dw => dw.WordId)
-                .Distinct();
+            var wordIds = resultKeys.Select(k => (int)(k >> 8)).Distinct();
             var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, wordIds);
             if (kanaFormKeys.Count > 0)
                 resultKeys.RemoveWhere(k => kanaFormKeys.Contains(k));
@@ -635,5 +623,68 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             excluded);
 
         return excluded;
+    }
+
+    private static List<DeckWord> CollectCoverageWords(
+        List<DeckWord> allWords, HashSet<long> knownKeysSet,
+        int totalOccurrences, double targetPercentage, bool startFromKnown)
+    {
+        var keysWithOccurrences = allWords
+            .Select(dw => (Key: WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex), dw.Occurrences))
+            .ToList();
+
+        var selectedKeys = CollectCoverageKeys(keysWithOccurrences, knownKeysSet, totalOccurrences, (float)targetPercentage, startFromKnown);
+
+        var result = new List<DeckWord>(selectedKeys.Count);
+        for (int i = 0; i < allWords.Count && result.Count < selectedKeys.Count; i++)
+        {
+            var key = keysWithOccurrences[i].Key;
+            if (selectedKeys.Contains(key))
+                result.Add(allWords[i]);
+        }
+        return result;
+    }
+
+    private static HashSet<long> CollectCoverageKeys(
+        List<(long Key, int Occurrences)> items, HashSet<long>? knownKeysSet,
+        int totalOccurrences, float targetPercentage, bool startFromKnown)
+    {
+        var result = new HashSet<long>();
+
+        if (startFromKnown && knownKeysSet != null)
+        {
+            int knownOccurrences = 0;
+            foreach (var (key, occ) in items)
+            {
+                if (knownKeysSet.Contains(key))
+                    knownOccurrences += occ;
+            }
+
+            int cumulative = knownOccurrences;
+            foreach (var (key, occ) in items)
+            {
+                if (knownKeysSet.Contains(key))
+                    continue;
+
+                result.Add(key);
+                cumulative += occ;
+                if ((double)cumulative / totalOccurrences * 100 >= targetPercentage)
+                    break;
+            }
+        }
+        else
+        {
+            int cumulative = 0;
+            foreach (var (key, occ) in items)
+            {
+                cumulative += occ;
+                if (knownKeysSet == null || !knownKeysSet.Contains(key))
+                    result.Add(key);
+                if ((double)cumulative / totalOccurrences * 100 >= targetPercentage)
+                    break;
+            }
+        }
+
+        return result;
     }
 }

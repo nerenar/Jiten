@@ -5,14 +5,16 @@ namespace Jiten.Parser.Resolution;
 
 internal static class CompoundWordSelector
 {
-    public static int? FindValidCompoundWordId(
+    public static (int? expressionWordId, int? compoundWordId) FindCompoundWordIds(
         List<int> wordIds,
         Dictionary<int, JmDictWordMeta> wordMeta,
-        bool expressionOnly = false,
         bool isKana = true)
     {
         int? bestExprWordId = null;
         int bestExprScore = int.MinValue;
+        int? bestCompWordId = null;
+        int bestCompScore = int.MinValue;
+
         foreach (var wordId in wordIds)
         {
             if (!wordMeta.TryGetValue(wordId, out var meta)) continue;
@@ -26,18 +28,6 @@ internal static class CompoundWordSelector
                     bestExprWordId = wordId;
                 }
             }
-        }
-
-        if (bestExprWordId.HasValue)
-            return bestExprWordId;
-
-        if (expressionOnly) return null;
-
-        int? bestWordId = null;
-        int bestScore = int.MinValue;
-        foreach (var wordId in wordIds)
-        {
-            if (!wordMeta.TryGetValue(wordId, out var meta)) continue;
 
             bool hasValidPos = false;
             foreach (var p in meta.Pos)
@@ -52,14 +42,14 @@ internal static class CompoundWordSelector
             if (hasValidPos)
             {
                 int score = meta.GetPriorityScore(isKana);
-                if (score > bestScore || (score == bestScore && (bestWordId == null || wordId < bestWordId.Value)))
+                if (score > bestCompScore || (score == bestCompScore && (bestCompWordId == null || wordId < bestCompWordId.Value)))
                 {
-                    bestScore = score;
-                    bestWordId = wordId;
+                    bestCompScore = score;
+                    bestCompWordId = wordId;
                 }
             }
         }
 
-        return bestWordId;
+        return (bestExprWordId, bestCompWordId);
     }
 }

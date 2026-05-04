@@ -348,6 +348,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("StartFromKnown")
+                        .HasColumnType("boolean");
+
                     b.Property<float?>("TargetPercentage")
                         .HasColumnType("real");
 

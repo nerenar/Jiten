@@ -10,6 +10,12 @@ public class BenchmarkTimings
     public double SentenceSplitMs { get; set; }
 
     public double PreprocessingMs { get; set; }
+    public double PrepNounCompoundsMs { get; set; }
+    public double PrepCompoundsMs { get; set; }
+    public double PrepExpressionsMs { get; set; }
+    public double PrepGrammarMs { get; set; }
+    public double PrepResegmentationMs { get; set; }
+    public double PrepOtherMs { get; set; }
     public double DeconjugationLookupMs { get; set; }
     public double ResegmentationMs { get; set; }
     public double AdjacentScoringMs { get; set; }
@@ -29,6 +35,12 @@ public class BenchmarkTimings
         PipelineMs += other.PipelineMs;
         SentenceSplitMs += other.SentenceSplitMs;
         PreprocessingMs += other.PreprocessingMs;
+        PrepNounCompoundsMs += other.PrepNounCompoundsMs;
+        PrepCompoundsMs += other.PrepCompoundsMs;
+        PrepExpressionsMs += other.PrepExpressionsMs;
+        PrepGrammarMs += other.PrepGrammarMs;
+        PrepResegmentationMs += other.PrepResegmentationMs;
+        PrepOtherMs += other.PrepOtherMs;
         DeconjugationLookupMs += other.DeconjugationLookupMs;
         ResegmentationMs += other.ResegmentationMs;
         AdjacentScoringMs += other.AdjacentScoringMs;

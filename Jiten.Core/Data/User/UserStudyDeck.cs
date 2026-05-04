@@ -18,6 +18,7 @@ public class UserStudyDeck
     public int? MaxOccurrences { get; set; }
     public bool IsActive { get; set; } = true;
     public bool ExcludeKana { get; set; }
+    public bool StartFromKnown { get; set; }
 
     public int? MinGlobalFrequency { get; set; }
     public int? MaxGlobalFrequency { get; set; }

@@ -739,6 +739,7 @@ export interface StudyDeckDto {
   minFrequency: number;
   maxFrequency: number;
   targetPercentage?: number;
+  startFromKnown: boolean;
   minOccurrences?: number;
   maxOccurrences?: number;
   excludeKana: boolean;
@@ -972,6 +973,7 @@ export interface AddStudyDeckRequest {
   minFrequency: number;
   maxFrequency: number;
   targetPercentage?: number;
+  startFromKnown?: boolean;
   minOccurrences?: number;
   maxOccurrences?: number;
   excludeKana: boolean;
@@ -988,6 +990,7 @@ export interface UpdateStudyDeckRequest {
   minFrequency: number;
   maxFrequency: number;
   targetPercentage?: number;
+  startFromKnown?: boolean;
   minOccurrences?: number;
   maxOccurrences?: number;
   excludeKana: boolean;

@@ -141,8 +141,5 @@ public static partial class MetadataProviderHelper
         return null;
     }
 
-    private static bool IsKanjiChar(char c) =>
-        c is >= '一' and <= '鿿'
-            or >= '㐀' and <= '䶿'
-            or >= '豈' and <= '﫿';
+    private static bool IsKanjiChar(char c) => JapaneseTextHelper.IsKanji(c);
 }

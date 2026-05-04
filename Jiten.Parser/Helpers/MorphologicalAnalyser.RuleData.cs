@@ -19,6 +19,7 @@ public partial class MorphologicalAnalyser
         ("に", "劣ら", "ず", PartOfSpeech.Expression),
         ("しょう", "が", "ねぇ", PartOfSpeech.IAdjective),
         ("しょう", "が", "ねー", PartOfSpeech.IAdjective),
+        ("たら", "し", "たら", PartOfSpeech.Verb),
     ];
 
     private static readonly HashSet<string> AuxiliaryVerbs =

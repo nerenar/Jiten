@@ -1462,7 +1462,8 @@ public class MediaDeckController(
                                                            request.MinFrequency, request.MaxFrequency,
                                                            request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                                                            request.TargetPercentage,
-                                                           request.MinOccurrences, request.MaxOccurrences);
+                                                           request.MinOccurrences, request.MaxOccurrences,
+                                                           request.StartFromKnown);
 
         if (error != null)
             return error;
@@ -1529,7 +1530,8 @@ public class MediaDeckController(
                                                            request.MinFrequency, request.MaxFrequency,
                                                            request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                                                            request.TargetPercentage,
-                                                           request.MinOccurrences, request.MaxOccurrences);
+                                                           request.MinOccurrences, request.MaxOccurrences,
+                                                           request.StartFromKnown);
 
         if (error != null)
             return error;
@@ -1689,7 +1691,8 @@ public class MediaDeckController(
                                                            request.MinFrequency, request.MaxFrequency,
                                                            request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                                                            request.TargetPercentage,
-                                                           request.MinOccurrences, request.MaxOccurrences);
+                                                           request.MinOccurrences, request.MaxOccurrences,
+                                                           request.StartFromKnown);
 
         if (error != null)
             return error;
@@ -2012,13 +2015,15 @@ public class MediaDeckController(
         int minFrequency, int maxFrequency,
         bool excludeMatureMasteredBlacklisted, bool excludeAllTrackedWords,
         float? targetPercentage,
-        int? minOccurrences = null, int? maxOccurrences = null)
+        int? minOccurrences = null, int? maxOccurrences = null,
+        bool startFromKnown = false)
     {
         return await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
             deckId, deck, downloadType, order,
             minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences));
+            targetPercentage, minOccurrences, maxOccurrences,
+            StartFromKnown: startFromKnown));
     }
 
     private static int GetLevenshteinMaxDistance(string query)
