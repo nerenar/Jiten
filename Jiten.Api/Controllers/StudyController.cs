@@ -24,8 +24,10 @@ namespace Jiten.Api.Controllers;
 public class StudyController(
     JitenDbContext context,
     IDbContextFactory<JitenDbContext> contextFactory,
+    IDbContextFactory<UserDbContext> userContextFactory,
     UserDbContext userContext,
     ICurrentUserService currentUserService,
+    IHttpContextAccessor httpContextAccessor,
     IDeckWordResolver deckWordResolver,
     IDeckDownloadService downloadService,
     IDeckImportService importService,
@@ -186,7 +188,7 @@ public class StudyController(
                 if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
                 {
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
-                        CountWithFactoryContext(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
+                        CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
                             .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown))));
                 }
                 else
@@ -200,7 +202,7 @@ public class StudyController(
                         sd.MinOccurrences, sd.MaxOccurrences,
                         sd.PosFilter, sd.StartFromKnown);
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
-                        CountWithFactoryContext(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
+                        CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
                             .CountDeckWords(request, sd.ExcludeKana))));
                 }
             }
@@ -208,7 +210,7 @@ public class StudyController(
             {
                 resolvedDecks.Add((sd, null));
                 globalDynamicCountTasks.Add((sd.UserStudyDeckId, sd,
-                    CountWithFactoryContext<(int, bool)>(ctx => new DeckWordResolver(ctx, userContext, currentUserService, wordFormCache)
+                    CountWithFactoryContext<(int, bool)>((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
                         .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana))));
             }
             else if (sd.DeckType == StudyDeckType.StaticWordList)
@@ -2883,10 +2885,12 @@ public class StudyController(
         return dto;
     }
 
-    private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, Task<T>> query)
+    private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, UserDbContext, ICurrentUserService, Task<T>> query)
     {
         await using var ctx = await contextFactory.CreateDbContextAsync();
-        return await query(ctx);
+        await using var uCtx = await userContextFactory.CreateDbContextAsync();
+        var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache);
+        return await query(ctx, uCtx, userService);
     }
 
     private static bool IsValidPosFilter(string? posFilter)
