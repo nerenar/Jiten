@@ -1,15 +1,27 @@
 <script setup lang="ts">
   import type { ExampleSentence } from '~/types';
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
 
   const props = defineProps<{
     exampleSentence: ExampleSentence;
     showSource?: boolean;
+    wordId?: number;
+    readingIndex?: number;
   }>();
 
+  const emit = defineEmits<{
+    favourited: [];
+  }>();
+
+  import { useToast } from 'primevue/usetoast';
+
+  const { $api } = useNuxtApp();
+  const authStore = useAuthStore();
+  const toast = useToast();
   const localiseTitle = useLocaliseTitle();
   const store = useJitenStore();
   const isNsfw = isTextNsfw(props.exampleSentence.text);
+  const favourited = ref(false);
   const isRevealed = computed({
     get: () => store.displayAllNsfw,
     set: (value) => {
@@ -36,6 +48,31 @@
       isRevealed.value = true;
     }
   };
+
+  async function favouriteSentence() {
+    if (props.wordId == null || props.readingIndex == null) return;
+
+    const { text, wordPosition, wordLength, sourceDeckParent, sourceDeck } = props.exampleSentence;
+    const before = text.substring(0, wordPosition);
+    const word = text.substring(wordPosition, wordPosition + wordLength);
+    const after = text.substring(wordPosition + wordLength);
+    const markedText = `${before}**${word}**${after}`;
+
+    let source = '';
+    if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
+    if (sourceDeck) source += localiseTitle(sourceDeck);
+
+    try {
+      await $api(`user/example-sentences/${props.wordId}/${props.readingIndex}/favourite`, {
+        method: 'POST',
+        body: { text: markedText, source: source || undefined },
+      });
+      favourited.value = true;
+      emit('favourited');
+    } catch {
+      toast.add({ severity: 'error', summary: 'Maximum of 3 custom sentences reached', life: 3000 });
+    }
+  }
 </script>
 
 <template>
@@ -44,6 +81,16 @@
       <div class="flex items-start gap-2">
         <div v-html="formattedText" class="md:text-lg text-sm transition-filter duration-200 flex-1" :class="{ 'blur-sm': isNsfw && !isRevealed }" @click="handleReveal"></div>
         <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
+        <button
+          v-if="authStore.isAuthenticated && wordId != null && readingIndex != null"
+          class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
+          :class="favourited ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
+          :disabled="favourited"
+          title="Save as custom sentence"
+          @click="favouriteSentence"
+        >
+          <i class="pi text-sm" :class="favourited ? 'pi-star-fill' : 'pi-star'" />
+        </button>
       </div>
       <div v-if="isNsfw && !isRevealed" class="absolute top-0 left-0 w-full h-full flex items-center justify-center cursor-pointer z-10" @click="handleReveal">
         <div class="text-center px-3 py-2 bg-white/80 backdrop-blur-md border border-red-300 text-red-600 text-sm font-semibold rounded shadow">

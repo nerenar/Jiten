@@ -2728,15 +2728,46 @@ public class StudyController(
         if (userId == null) return Results.Unauthorized();
         if (request.Pairs is not { Count: > 0 and <= 20 }) return Results.BadRequest();
 
+        var pairWordIds = request.Pairs.Select(p => p.WordId).Distinct().ToList();
+
+        var customSentences = await userContext.UserExampleSentences
+            .AsNoTracking()
+            .Where(e => e.UserId == userId && pairWordIds.Contains(e.WordId))
+            .ToListAsync();
+
+        var customByKey = customSentences
+            .GroupBy(e => $"{e.WordId}-{e.ReadingIndex}")
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var result = new Dictionary<string, StudyExampleSentenceDto>();
+        var remainingPairs = new List<CardExamplesRequest.WordPair>();
+
+        foreach (var pair in request.Pairs)
+        {
+            var key = $"{pair.WordId}-{pair.ReadingIndex}";
+            if (customByKey.TryGetValue(key, out var customs) && customs.Count > 0)
+            {
+                var picked = customs[Random.Shared.Next(customs.Count)];
+                result[key] = BuildCustomStudyExample(picked);
+            }
+            else
+            {
+                remainingPairs.Add(pair);
+            }
+        }
+
+        if (remainingPairs.Count == 0)
+            return Results.Ok(new CardExamplesResponse { Examples = result });
+
         var studyDecks = await userContext.UserStudyDecks
             .AsNoTracking()
             .Where(sd => sd.UserId == userId)
             .ToListAsync();
         var studyDeckIdArray = studyDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToArray();
 
-        var pairWordIds = request.Pairs.Select(p => p.WordId).ToArray();
-        var pairReadingIndexes = request.Pairs.Select(p => (short)p.ReadingIndex).ToArray();
-        var wordIds = pairWordIds.Distinct().ToList();
+        var remainingWordIds = remainingPairs.Select(p => p.WordId).ToArray();
+        var remainingReadingIndexes = remainingPairs.Select(p => (short)p.ReadingIndex).ToArray();
+        var wordIds = remainingWordIds.Distinct().ToList();
 
         var isNpgsql = context.Database.ProviderName?.Contains("Npgsql") == true;
 
@@ -2757,11 +2788,11 @@ public class StudyController(
                               AND es.""DeckId"" = ANY({2})
                             LIMIT 1
                         ) esw
-                    ", pairWordIds, pairReadingIndexes, studyDeckIdArray)
+                    ", remainingWordIds, remainingReadingIndexes, studyDeckIdArray)
                     .ToListAsync()
                 : [];
 
-            if (studyExampleIds.Count >= request.Pairs.Count)
+            if (studyExampleIds.Count >= remainingPairs.Count)
             {
                 fallbackExampleIds = [];
             }
@@ -2778,7 +2809,7 @@ public class StudyController(
                             ORDER BY esw2.""ExampleSentenceId""
                             LIMIT 1
                         ) esw
-                    ", pairWordIds, pairReadingIndexes)
+                    ", remainingWordIds, remainingReadingIndexes)
                     .ToListAsync();
 
             }
@@ -2797,7 +2828,7 @@ public class StudyController(
         var exampleIds = studyExampleIds.Union(fallbackExampleIds).Distinct().ToList();
 
         if (exampleIds.Count == 0)
-            return Results.Ok(new CardExamplesResponse());
+            return Results.Ok(new CardExamplesResponse { Examples = result });
 
         var sentences = await context.ExampleSentences
             .AsNoTracking()
@@ -2831,7 +2862,6 @@ public class StudyController(
 
 
         var studyIdSet = studyExampleIds.ToHashSet();
-        var result = new Dictionary<string, StudyExampleSentenceDto>();
         foreach (var esw in exampleWords.OrderByDescending(e => studyIdSet.Contains(e.ExampleSentenceId)))
         {
             if (!sentences.TryGetValue(esw.ExampleSentenceId, out var sentence)) continue;
@@ -2883,6 +2913,22 @@ public class StudyController(
         }
 
         return dto;
+    }
+
+    private static StudyExampleSentenceDto BuildCustomStudyExample(UserExampleSentence custom)
+    {
+        var plainText = custom.Text.Replace("**", "");
+
+        return new StudyExampleSentenceDto
+        {
+            SentenceId = -custom.UserExampleSentenceId,
+            Text = plainText,
+            WordPosition = -1,
+            WordLength = 0,
+            IsCustom = true,
+            CustomSource = custom.Source,
+            CustomText = custom.Text
+        };
     }
 
     private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, UserDbContext, ICurrentUserService, Task<T>> query)

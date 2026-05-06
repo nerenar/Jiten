@@ -1257,4 +1257,21 @@ public class SrsController(
     {
         return string.Join(", ", parameters.Select(value => value.ToString("0.####", CultureInfo.InvariantCulture)));
     }
+
+    [HttpPost("reader-study-decks")]
+    [SwaggerOperation(Summary = "Get user's static word list decks for the reader extension")]
+    public async Task<IResult> GetReaderStudyDecks()
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var decks = await userContext.UserStudyDecks
+            .AsNoTracking()
+            .Where(sd => sd.UserId == userId && sd.DeckType == StudyDeckType.StaticWordList)
+            .OrderBy(sd => sd.SortOrder)
+            .Select(sd => new { sd.UserStudyDeckId, sd.Name })
+            .ToListAsync();
+
+        return Results.Ok(decks);
+    }
 }

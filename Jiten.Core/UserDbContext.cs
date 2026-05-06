@@ -38,6 +38,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserWordSetState> UserWordSetStates { get; set; }
     public DbSet<UserStudyDeck> UserStudyDecks { get; set; }
     public DbSet<UserStudyDeckWord> UserStudyDeckWords { get; set; }
+    public DbSet<UserExampleSentence> UserExampleSentences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -340,6 +341,28 @@ public class UserDbContext : IdentityDbContext<User>
                   .WithMany(sd => sd.Words)
                   .HasForeignKey(w => w.UserStudyDeckId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserExampleSentence>(entity =>
+        {
+            entity.HasKey(e => e.UserExampleSentenceId);
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.Text).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.Source).HasMaxLength(150);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(isNpgsql ? "now() at time zone 'utc'" : "datetime('now')");
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.WordId, e.ReadingIndex, e.SortOrder })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserExampleSentence_UserId_WordId_ReadingIndex_SortOrder");
+
+            entity.HasIndex(e => new { e.UserId, e.WordId, e.ReadingIndex })
+                  .HasDatabaseName("IX_UserExampleSentence_UserId_WordId_ReadingIndex");
         });
 
         modelBuilder.Entity<UserWordSetState>(entity =>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-  import { KnownState, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type Word } from '~/types';
+  import { KnownState, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type UserExampleSentenceDto, type Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
+  import CustomExampleSentenceEntry from '~/components/CustomExampleSentenceEntry.vue';
   import Button from 'primevue/button';
   import Select from 'primevue/select';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -32,6 +33,7 @@
   const { $api } = useNuxtApp();
 
   const store = useJitenStore();
+  const authStore = useAuthStore();
   const convertToRuby = useConvertToRuby();
 
   const currentWordId = ref(props.wordId);
@@ -89,6 +91,7 @@
     mediaAccordionValue.value = '0';
 
     refreshMediaFrequency();
+    loadCustomSentences();
 
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
@@ -141,6 +144,19 @@
   const selectedSortMode = ref<SortMode>('random');
   const bandSize = 0.5;
 
+  const customSentences = ref<UserExampleSentenceDto[]>([]);
+
+  async function loadCustomSentences() {
+    if (!authStore.isAuthenticated) return;
+    try {
+      customSentences.value = await $api<UserExampleSentenceDto[]>(
+        `user/example-sentences/${props.wordId}/${currentReadingIndex.value}`,
+      );
+    } catch {
+      customSentences.value = [];
+    }
+  }
+
   const exampleSentences = ref<ExampleSentence[]>([]);
   const canLoadExampleSentences = ref(true);
   const isLoadingExampleSentences = ref(true);
@@ -162,6 +178,7 @@
   };
 
   onMounted(() => {
+    loadCustomSentences();
     loadExampleSentences();
   });
 
@@ -347,13 +364,23 @@
       />
 
       <ClientOnly>
-        <div v-if="exampleSentences.length > 0 || isLoadingExampleSentences">
+        <div v-if="exampleSentences.length > 0 || customSentences.length > 0 || isLoadingExampleSentences || authStore.isAuthenticated">
           <Accordion value="1" lazy>
             <AccordionPanel value="1">
               <AccordionHeader>
                 <div class="flex items-center gap-1 cursor-pointer w-full">
                   <span>Example sentences</span>
+                  <NuxtLink
+                    v-if="authStore.isAuthenticated"
+                    :to="`/vocabulary/${props.wordId}/${currentReadingIndex}/custom-sentences`"
+                    class="text-surface-400 hover:text-primary-500 transition-colors ml-1"
+                    title="Edit custom sentences"
+                    @click.stop
+                  >
+                    <i class="pi pi-pencil text-sm" />
+                  </NuxtLink>
                   <Select
+                    v-if="exampleSentences.length > 0 || isLoadingExampleSentences"
                     v-model="selectedSortMode"
                     :options="sortModeOptions"
                     option-label="label"
@@ -379,14 +406,18 @@
                 </div>
               </AccordionHeader>
               <AccordionContent>
-                <div class="text-xs pb-2">
+                <div v-if="exampleSentences.length > 0" class="text-xs pb-2">
                   Quotations belong to their original creators and are presented here for educational purposes only, as per the
                   <NuxtLink :to="`/terms`" target="_blank" class="hover:underline text-primary-600"> terms of service.</NuxtLink>
                 </div>
-                <template v-if="exampleSentences.length > 0">
-                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" />
+                <template v-if="customSentences.length > 0">
+                  <CustomExampleSentenceEntry v-for="sentence in customSentences" :key="`custom-${sentence.userExampleSentenceId}`" :sentence="sentence" />
+                  <div v-if="exampleSentences.length > 0" class="border-b border-surface-200 dark:border-surface-700 my-2" />
                 </template>
-                <template v-else>
+                <template v-if="exampleSentences.length > 0">
+                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" :word-id="props.wordId" :reading-index="currentReadingIndex" @favourited="loadCustomSentences()" />
+                </template>
+                <template v-else-if="isLoadingExampleSentences">
                   <div v-for="i in 3" :key="i" class="flex flex-col mb-2">
                     <div class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
                       <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
@@ -396,7 +427,13 @@
                     </div>
                   </div>
                 </template>
-                <Button @click="loadExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>
+                <template v-else-if="customSentences.length === 0">
+                  <div class="text-sm text-surface-400 py-2">
+                    No example sentences for this word.
+                    <NuxtLink v-if="authStore.isAuthenticated" :to="`/vocabulary/${props.wordId}/${currentReadingIndex}/custom-sentences`" class="text-primary-500 hover:underline">Add a custom one</NuxtLink>
+                  </div>
+                </template>
+                <Button v-if="exampleSentences.length > 0" @click="loadExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>
               </AccordionContent>
             </AccordionPanel>
           </Accordion>
