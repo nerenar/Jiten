@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Enums;
@@ -35,6 +36,9 @@ public class StudyController(
     IStudySessionService sessionService,
     ILogger<StudyController> logger) : ControllerBase
 {
+    private static readonly Regex SentenceMarkerRegex =
+        new(@"\*\*[^*]+\*\*", RegexOptions.Compiled);
+
     [HttpGet("overview-version")]
     [SwaggerOperation(Summary = "Get current overview version for cache validation")]
     public async Task<IResult> GetOverviewVersion()
@@ -538,25 +542,43 @@ public class StudyController(
         if (existing != null)
         {
             existing.Occurrences += Math.Max(1, request.Occurrences);
-            await userContext.SaveChangesAsync();
-            await transaction.CommitAsync();
-            await sessionService.BumpStudyOverviewVersion(userId);
+        }
+        else
+        {
+            var maxSort = await userContext.UserStudyDeckWords
+                .Where(w => w.UserStudyDeckId == id)
+                .MaxAsync(w => (int?)w.SortOrder) ?? -1;
 
-            return Results.Ok(new { success = true });
+            userContext.UserStudyDeckWords.Add(new UserStudyDeckWord
+            {
+                UserStudyDeckId = id,
+                WordId = request.WordId,
+                ReadingIndex = request.ReadingIndex,
+                Occurrences = Math.Max(1, request.Occurrences),
+                SortOrder = maxSort + 1
+            });
         }
 
-        var maxSort = await userContext.UserStudyDeckWords
-            .Where(w => w.UserStudyDeckId == id)
-            .MaxAsync(w => (int?)w.SortOrder) ?? -1;
-
-        userContext.UserStudyDeckWords.Add(new UserStudyDeckWord
+        if (request.Sentence is { Length: > 0 and <= 150 }
+            && SentenceMarkerRegex.IsMatch(request.Sentence))
         {
-            UserStudyDeckId = id,
-            WordId = request.WordId,
-            ReadingIndex = request.ReadingIndex,
-            Occurrences = Math.Max(1, request.Occurrences),
-            SortOrder = maxSort + 1
-        });
+            var sentenceCount = await userContext.UserExampleSentences
+                .CountAsync(e => e.UserId == userId && e.WordId == request.WordId && e.ReadingIndex == request.ReadingIndex);
+
+            if (sentenceCount < 3)
+            {
+                userContext.UserExampleSentences.Add(new UserExampleSentence
+                {
+                    UserId = userId,
+                    WordId = request.WordId,
+                    ReadingIndex = (byte)request.ReadingIndex,
+                    Text = request.Sentence,
+                    Source = request.Source?.Length > 150 ? request.Source[..150] : request.Source,
+                    SortOrder = (byte)sentenceCount
+                });
+            }
+        }
+
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
