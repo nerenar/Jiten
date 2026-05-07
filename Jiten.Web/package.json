@@ -1,5 +1,6 @@
 {
   "name": "nuxt-app",
+  "packageManager": "pnpm@10.11.0",
   "private": true,
   "type": "module",
   "scripts": {
