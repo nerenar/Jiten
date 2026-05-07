@@ -47,6 +47,14 @@
     "vue-router": "latest",
     "yanki-connect": "^3.2.4"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "esbuild",
+      "unrs-resolver",
+      "vue-demi"
+    ]
+  },
   "devDependencies": {
     "@css-inline/css-inline-wasm": "^0.14.3",
     "@iconify-json/ic": "^1.2.4",
