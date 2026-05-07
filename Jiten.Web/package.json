@@ -53,9 +53,6 @@
       "esbuild",
       "unrs-resolver",
       "vue-demi"
-    ],
-    "ignoredBuiltDependencies": [
-      "vue-demi"
     ]
   },
   "devDependencies": {
