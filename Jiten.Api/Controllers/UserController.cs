@@ -8,6 +8,7 @@ using Jiten.Core;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data;
+using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -2545,6 +2546,196 @@ public class UserController(
 
         var interval = (due - lastReview.Value).TotalDays;
         return interval < 21 ? KnownState.Young : KnownState.Mature;
+    }
+
+    #endregion
+
+    #region Custom Example Sentences
+
+    private static readonly System.Text.RegularExpressions.Regex MarkerRegex =
+        new(@"\*\*[^*]+\*\*", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    [HttpGet("example-sentences/{wordId}/{readingIndex}")]
+    public async Task<IResult> GetCustomExampleSentences(int wordId, byte readingIndex)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var sentences = await userContext.UserExampleSentences
+            .AsNoTracking()
+            .Where(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex)
+            .OrderBy(e => e.SortOrder)
+            .Select(e => new UserExampleSentenceDto
+            {
+                UserExampleSentenceId = e.UserExampleSentenceId,
+                Text = e.Text,
+                Source = e.Source,
+                SortOrder = e.SortOrder
+            })
+            .ToListAsync();
+
+        return Results.Ok(sentences);
+    }
+
+    [HttpPost("example-sentences/{wordId}/{readingIndex}")]
+    public async Task<IResult> AddCustomExampleSentence(int wordId, byte readingIndex, [FromBody] UpsertUserExampleSentenceRequest request)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (!MarkerRegex.IsMatch(request.Text)) return Results.BadRequest("Text must contain at least one **word** marker.");
+        if (request.Text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
+        if (request.Source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
+
+        var count = await userContext.UserExampleSentences
+            .CountAsync(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex);
+        if (count >= 3) return Results.BadRequest("Maximum of 3 custom sentences per word.");
+
+        var sentence = new UserExampleSentence
+        {
+            UserId = userId,
+            WordId = wordId,
+            ReadingIndex = readingIndex,
+            Text = request.Text,
+            Source = request.Source,
+            SortOrder = (byte)count
+        };
+
+        userContext.UserExampleSentences.Add(sentence);
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new UserExampleSentenceDto
+        {
+            UserExampleSentenceId = sentence.UserExampleSentenceId,
+            Text = sentence.Text,
+            Source = sentence.Source,
+            SortOrder = sentence.SortOrder
+        });
+    }
+
+    [HttpPost("example-sentences/{wordId}/{readingIndex}/favourite")]
+    public async Task<IResult> FavouriteExampleSentence(int wordId, byte readingIndex, [FromBody] FavouriteExampleSentenceRequest request)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (!MarkerRegex.IsMatch(request.Text)) return Results.BadRequest("Text must contain at least one **word** marker.");
+        if (request.Text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
+        if (request.Source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
+
+        var count = await userContext.UserExampleSentences
+            .CountAsync(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex);
+        if (count >= 3) return Results.BadRequest("Maximum of 3 custom sentences per word.");
+
+        var sentence = new UserExampleSentence
+        {
+            UserId = userId,
+            WordId = wordId,
+            ReadingIndex = readingIndex,
+            Text = request.Text,
+            Source = request.Source,
+            SortOrder = (byte)count
+        };
+
+        userContext.UserExampleSentences.Add(sentence);
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new UserExampleSentenceDto
+        {
+            UserExampleSentenceId = sentence.UserExampleSentenceId,
+            Text = sentence.Text,
+            Source = sentence.Source,
+            SortOrder = sentence.SortOrder
+        });
+    }
+
+    [HttpPut("example-sentences/{id}")]
+    public async Task<IResult> UpdateCustomExampleSentence(int id, [FromBody] UpsertUserExampleSentenceRequest request)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (!MarkerRegex.IsMatch(request.Text)) return Results.BadRequest("Text must contain at least one **word** marker.");
+        if (request.Text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
+        if (request.Source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
+
+        var sentence = await userContext.UserExampleSentences
+            .FirstOrDefaultAsync(e => e.UserExampleSentenceId == id && e.UserId == userId);
+        if (sentence == null) return Results.NotFound();
+
+        sentence.Text = request.Text;
+        sentence.Source = request.Source;
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new UserExampleSentenceDto
+        {
+            UserExampleSentenceId = sentence.UserExampleSentenceId,
+            Text = sentence.Text,
+            Source = sentence.Source,
+            SortOrder = sentence.SortOrder
+        });
+    }
+
+    [HttpDelete("example-sentences/{id}")]
+    public async Task<IResult> DeleteCustomExampleSentence(int id)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var sentence = await userContext.UserExampleSentences
+            .FirstOrDefaultAsync(e => e.UserExampleSentenceId == id && e.UserId == userId);
+        if (sentence == null) return Results.NotFound();
+
+        var wordId = sentence.WordId;
+        var readingIndex = sentence.ReadingIndex;
+
+        userContext.UserExampleSentences.Remove(sentence);
+        await userContext.SaveChangesAsync();
+
+        var remaining = await userContext.UserExampleSentences
+            .Where(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex)
+            .OrderBy(e => e.SortOrder)
+            .ToListAsync();
+
+        for (byte i = 0; i < remaining.Count; i++)
+            remaining[i].SortOrder = i;
+
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new { deleted = true });
+    }
+
+    [HttpPost("example-sentences/batch")]
+    public async Task<IResult> GetCustomExampleSentencesBatch([FromBody] List<CardExamplesRequest.WordPair> pairs)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (pairs is not { Count: > 0 and <= 20 }) return Results.BadRequest();
+
+        var wordIds = pairs.Select(p => p.WordId).Distinct().ToList();
+
+        var sentences = await userContext.UserExampleSentences
+            .AsNoTracking()
+            .Where(e => e.UserId == userId && wordIds.Contains(e.WordId))
+            .OrderBy(e => e.SortOrder)
+            .ToListAsync();
+
+        var result = new Dictionary<string, List<UserExampleSentenceDto>>();
+        foreach (var pair in pairs)
+        {
+            var key = $"{pair.WordId}-{pair.ReadingIndex}";
+            var matching = sentences
+                .Where(s => s.WordId == pair.WordId && s.ReadingIndex == pair.ReadingIndex)
+                .Select(s => new UserExampleSentenceDto
+                {
+                    UserExampleSentenceId = s.UserExampleSentenceId,
+                    Text = s.Text,
+                    Source = s.Source,
+                    SortOrder = s.SortOrder
+                })
+                .ToList();
+            if (matching.Count > 0)
+                result[key] = matching;
+        }
+
+        return Results.Ok(result);
     }
 
     #endregion

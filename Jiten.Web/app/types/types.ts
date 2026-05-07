@@ -264,6 +264,13 @@ export interface ExampleSentence {
   sourceDeckParent: Deck;
 }
 
+export interface UserExampleSentenceDto {
+  userExampleSentenceId: number;
+  text: string;
+  source?: string;
+  sortOrder: number;
+}
+
 export interface ExampleSentencesByDifficultyResponse {
   minDifficulty: number;
   maxDifficulty: number;
@@ -838,6 +845,9 @@ export interface StudyExampleSentenceDto {
   wordLength: number;
   sourceDeck?: StudyExampleSourceDto;
   sourceParent?: StudyExampleSourceDto;
+  isCustom?: boolean;
+  customSource?: string;
+  customText?: string;
 }
 
 export interface StudyExampleSourceDto {

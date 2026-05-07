@@ -8,6 +8,10 @@ public class AddDeckWordRequest
     public short ReadingIndex { get; set; }
     [Range(1, int.MaxValue)]
     public int Occurrences { get; set; } = 1;
+    [MaxLength(150)]
+    public string? Sentence { get; set; }
+    [MaxLength(150)]
+    public string? Source { get; set; }
 }
 
 public class BatchAddDeckWordsRequest

@@ -73,6 +73,9 @@ public class StudyExampleSentenceDto
     public int WordLength { get; set; }
     public StudyExampleSourceDto? SourceDeck { get; set; }
     public StudyExampleSourceDto? SourceParent { get; set; }
+    public bool IsCustom { get; set; }
+    public string? CustomSource { get; set; }
+    public string? CustomText { get; set; }
 }
 
 public class StudyExampleSourceDto

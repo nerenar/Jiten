@@ -91,6 +91,9 @@
   const exampleSentenceHtml = computed(() => {
     const ex = cardExample.value;
     if (!ex) return null;
+    if (ex.isCustom && ex.customText) {
+      return parseCustomSentenceHtml(ex.customText);
+    }
     const { text, wordPosition, wordLength } = ex;
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
       return text;
@@ -323,8 +326,8 @@
         <!-- Example sentence on front -->
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full" @click.stop>
           <blockquote
-            class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-            :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
+            class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
+            :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }]"
             @click.stop="revealExample()"
           >
             <div class="flex items-start gap-2">
@@ -332,7 +335,11 @@
               <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
             </div>
           </blockquote>
-          <div v-if="cardExample?.sourceDeck" class="flex items-center mt-1">
+          <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
+            <span class="text-xs italic mr-2 ml-4">Source:</span>
+            <span class="text-xs">{{ cardExample.customSource }}</span>
+          </div>
+          <div v-else-if="cardExample?.sourceDeck" class="flex items-center mt-1">
             <span class="text-xs italic mr-2 ml-4">Source:</span>
             <div class="inline-flex items-center text-xs flex-wrap">
               <NuxtLink
@@ -441,8 +448,8 @@
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Back'" class="mb-4">
           <template v-if="exampleSentenceHtml">
             <blockquote
-              class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-              :class="{ 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }"
+              class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
+              :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }]"
               @click.stop="revealExample()"
             >
               <div class="flex items-start gap-2">
@@ -450,7 +457,11 @@
                 <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
               </div>
             </blockquote>
-            <div v-if="cardExample?.sourceDeck" class="flex items-center mt-1">
+            <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
+              <span class="text-xs italic mr-2 ml-4">Source:</span>
+              <span class="text-xs">{{ cardExample.customSource }}</span>
+            </div>
+            <div v-else-if="cardExample?.sourceDeck" class="flex items-center mt-1">
               <span class="text-xs italic mr-2 ml-4">Source:</span>
               <div class="inline-flex items-center text-xs flex-wrap">
                 <NuxtLink
