@@ -15,6 +15,9 @@ internal static class KanaConverter
     private static int _gen0Count;
     private static int _rotating;
 
+    public static string ToNormalizedHiragana(string text) =>
+        KanaNormalizer.Normalize(ToHiragana(text, convertLongVowelMark: false));
+
     public static string ToHiragana(string text) => ToHiragana(text, convertLongVowelMark: true);
 
     public static string ToHiragana(string text, bool convertLongVowelMark)

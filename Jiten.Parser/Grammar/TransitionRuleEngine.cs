@@ -225,7 +225,7 @@ internal static class TransitionRuleEngine
         return new TokenWindow(prev, words[i].word, next, i, words.Count);
     }
 
-    internal static int EvaluateSoftRulesBonus(ScoringWindow window)
+    internal static int EvaluateSoftRules(ScoringWindow window, List<string>? rulesMatched = null)
     {
         int bonus = 0;
         var ctx = ConditionContext.FromScoringWindow(window);
@@ -238,29 +238,10 @@ internal static class TransitionRuleEngine
             if (!MatchesAll(ctx, rule.ContextMatch)) continue;
 
             bonus += rule.Delta;
+            rulesMatched?.Add(rule.Id);
         }
 
         return bonus;
-    }
-
-    internal static (int bonus, List<string> rulesMatched) EvaluateSoftRules(ScoringWindow window)
-    {
-        int bonus = 0;
-        var rulesMatched = new List<string>();
-        var ctx = ConditionContext.FromScoringWindow(window);
-
-        foreach (var rule in TransitionRuleSets.SoftRules)
-        {
-            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
-                continue;
-            if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
-            if (!MatchesAll(ctx, rule.ContextMatch)) continue;
-
-            bonus += rule.Delta;
-            rulesMatched.Add(rule.Id);
-        }
-
-        return (bonus, rulesMatched);
     }
 
     internal static bool HasApplicableSoftRules(ScoringWindow window)
@@ -308,14 +289,18 @@ internal static class TransitionRuleEngine
         uint NextMask,
         bool HasNext,
         string? NextText,
-        bool CandidateIsSuruNounVal = false)
+        bool CandidateIsSuruNounVal = false,
+        bool CandidateHasHonorificRegister = false)
     {
         public static ConditionContext FromScoringWindow(ScoringWindow w) => new(
             w.Candidate.Word.CachedPOSMask,
             w.Candidate.Form.Text,
             w.PrevMask, w.HasPrev, w.PrevText,
             w.NextMask, w.HasNext, w.NextText,
-            w.Candidate.Word.IsSuruVerb);
+            w.Candidate.Word.IsSuruVerb,
+            TransitionRuleSets.HonorificSuffixes.Contains(w.Candidate.Form.Text) &&
+            PosMask.Has(w.Candidate.Word.CachedPOSMask, PosMask.SuffixGroup) &&
+            w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains));
     }
 
     private static bool MatchesAll(ConditionContext ctx, ScoringCondition[] conditions)
@@ -484,7 +469,8 @@ internal static class TransitionRuleEngine
 
                 ScoringCondition.CandidateIsHonorific =>
                     TransitionRuleSets.HonorificSuffixes.Contains(ctx.CandidateText) &&
-                    PosMask.Has(ctx.CandidateMask, PosMask.SuffixGroup),
+                    PosMask.Has(ctx.CandidateMask, PosMask.SuffixGroup) &&
+                    ctx.CandidateHasHonorificRegister,
 
                 ScoringCondition.CandidateIsNotHonorific =>
                     !TransitionRuleSets.HonorificSuffixes.Contains(ctx.CandidateText),
@@ -494,6 +480,13 @@ internal static class TransitionRuleEngine
 
                 ScoringCondition.PrevIsAuxiliary =>
                     ctx.HasPrev && PosMask.Has(ctx.PrevMask, PosMask.Auxiliary),
+
+                ScoringCondition.NextIsNaAdj =>
+                    ctx.HasNext && PosMask.Has(ctx.NextMask, PosMask.NaAdjective),
+
+                ScoringCondition.PrevIsToParticle =>
+                    ctx.HasPrev && ctx.PrevText == "と"
+                    && PosMask.Has(ctx.PrevMask, PosMask.Particle),
 
                 _ => false
             };

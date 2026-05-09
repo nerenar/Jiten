@@ -275,10 +275,26 @@ public partial class MorphologicalAnalyser
                 }
             }
 
+            // 糞 (フン, animal feces) → クソ (damn/shit) unless context suggests literal droppings.
+            // ふん is natural after の (鼠の糞, 犬の糞) or before と (糞と尿);
+            // standalone 糞 is overwhelmingly くそ in modern Japanese.
+            if (word is { Text: "糞", Reading: "フン" })
+            {
+                var prev = i > 0 ? wordInfos[i - 1] : null;
+                var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
+                bool keepFun = prev is { Text: "の" } || next is { Text: "と" };
+                if (!keepFun)
+                    word.Reading = "クソ";
+            }
+
             // 訳 (ヤク) → ワケ standalone — ヤク reading is for compounds (翻訳, 英訳) or 訳す;
             // standalone 訳 is always わけ (reason, meaning)
             if (word is { Text: "訳", Reading: "ヤク", PartOfSpeech: PartOfSpeech.Noun })
                 word.Reading = "ワケ";
+
+            // 町 (チョウ) → マチ — チョウ reading primarily in compounds (町長, 市町村) parsed as single tokens.
+            if (word is { Text: "町", Reading: "チョウ" })
+                word.Reading = "マチ";
 
             // あの: Sudachi sometimes misclassifies as 感動詞 (filler) when it's prenominal,
             // and as 連体詞 when it's actually a filler interjection.
@@ -324,12 +340,40 @@ public partial class MorphologicalAnalyser
             if (word.DictionaryForm == "捩る" && word.Reading.StartsWith("モジ"))
                 word.Reading = word.Reading.Replace("モジ", "ネジ");
 
+            // 大勢 (タイセイ, general trend) → オオゼイ (many people) — the common reading.
+            // タイセイ reading only in set phrases like 大勢に影響がない.
+            if (word is { Text: "大勢", Reading: "タイセイ" })
+            {
+                var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
+                var next2 = i + 2 < wordInfos.Count ? wordInfos[i + 2] : null;
+                bool isTaiseiContext = next is { Text: "に" } && next2 is { DictionaryForm: "影響" };
+                if (!isTaiseiContext)
+                    word.Reading = "オオゼイ";
+            }
+
             // 大仰 (オオノキ, place name) → オオギョウ (exaggerated, adj-na).
             // The place name reading is rare; the adjective is by far the common reading in prose.
             if (word is { Text: "大仰", Reading: "オオノキ" })
             {
                 word.Reading = "オオギョウ";
                 word.PartOfSpeech = PartOfSpeech.NaAdjective;
+            }
+
+            // イキ (katakana) → 行く, not 生きる. Sudachi maps katakana イキ to dict=イキる/norm=生きる,
+            // but standalone katakana イキ is slang for 行く (イク). 生きる is never written as イキ.
+            // After CombineAuxiliary, the token may be イキました/イキます etc.
+            if (word.DictionaryForm == "イキる" && word.Text.StartsWith("イキ"))
+            {
+                word.DictionaryForm = "行く";
+                word.NormalizedForm = "行く";
+            }
+
+            // 弾ける: Sudachi gives dict=弾ける for both はじける (to burst) and the potential of
+            // 弾く/ひく (to play). The reading disambiguates: ヒケ* = 弾く potential, ハジケ* = 弾ける.
+            if (word.DictionaryForm == "弾ける" && word.Reading.StartsWith("ヒケ"))
+            {
+                word.DictionaryForm = "弾く";
+                word.NormalizedForm = "弾く";
             }
 
             // 来る: Sudachi sometimes classifies modern くる as archaic きたる (文語四段-ラ行),

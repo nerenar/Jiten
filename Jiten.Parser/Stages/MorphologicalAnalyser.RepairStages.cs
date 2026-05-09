@@ -336,7 +336,7 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            if (!w.Text.Contains('ー') || w.Text[^1] == 'ー') continue;
+            if (!w.Text.Contains('ー') || w.Text[^1] == 'ー' || w.PartOfSpeech == PartOfSpeech.Interjection) continue;
 
             bool allHiraganaOrBar = true;
             foreach (var c in w.Text)
@@ -861,6 +861,13 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            if (w1 is { Text: "っけ", PartOfSpeech: PartOfSpeech.Suffix })
+            {
+                newList.Add(new WordInfo(w1) { PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle });
+                i++;
+                continue;
+            }
+
             if (w1.PartOfSpeech == PartOfSpeech.IAdjective
                 && w1.Text.Length > 1 && w1.Text[0] == 'て'
                 && newList.Count > 0
@@ -1002,6 +1009,18 @@ public partial class MorphologicalAnalyser
             {
                 w1.PartOfSpeech = PartOfSpeech.Auxiliary;
                 w1.NormalizedForm = "ず";
+            }
+
+            // Sudachi misclassifies 着 as noun suffix (ギ = clothing suffix) after nouns like 服,
+            // but when followed by a particle/auxiliary it's the verb 着る (きる, to wear).
+            if (w1 is { Text: "着", PartOfSpeech: PartOfSpeech.Suffix, Reading: "ギ" }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary)
+            {
+                w1.PartOfSpeech = PartOfSpeech.Verb;
+                w1.DictionaryForm = "着る";
+                w1.NormalizedForm = "着る";
+                w1.Reading = "キ";
             }
 
             // Sudachi always tags なれ as 代名詞 with dictForm=汝 (archaic pronoun "thou"),
@@ -1289,6 +1308,32 @@ public partial class MorphologicalAnalyser
                     {
                         Text = "と", DictionaryForm = "と", NormalizedForm = "と",
                         PartOfSpeech = PartOfSpeech.Particle, Reading = "ト",
+                        StartOffset = w2.StartOffset >= 0 ? w2.StartOffset + 2 : -1,
+                        EndOffset = w2.EndOffset
+                    });
+                    i += 2;
+                    continue;
+                }
+
+                // Sudachi misparsing verb stem + とくよう as verb/noun + 徳用 (na-adj)
+                // Should be verb/noun + とく (ておく contraction, auxiliary) + よう (formal noun)
+                // e.g., 片づけとくように → 片づけ + とく + よう + に
+                // w1 accepts Noun because Sudachi often classifies verb continuative forms as nouns
+                if (w1.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Noun &&
+                    w2 is { Text: "とくよう", NormalizedForm: "徳用" })
+                {
+                    newList.Add(w1);
+                    newList.Add(new WordInfo
+                    {
+                        Text = "とく", DictionaryForm = "とく", NormalizedForm = "とく",
+                        PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "トク",
+                        StartOffset = w2.StartOffset,
+                        EndOffset = w2.StartOffset >= 0 ? w2.StartOffset + 2 : -1
+                    });
+                    newList.Add(new WordInfo
+                    {
+                        Text = "よう", DictionaryForm = "よう", NormalizedForm = "よう",
+                        PartOfSpeech = PartOfSpeech.Noun, Reading = "ヨウ",
                         StartOffset = w2.StartOffset >= 0 ? w2.StartOffset + 2 : -1,
                         EndOffset = w2.EndOffset
                     });
@@ -1915,6 +1960,124 @@ public partial class MorphologicalAnalyser
         }
 
         return changed ? result : wordInfos;
+    }
+
+    private List<WordInfo> RecombineHiraganaTokens(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2 || HasCompoundLookup == null)
+            return wordInfos;
+
+        var deconjugator = Deconjugator.Instance;
+        var result = new List<WordInfo>(wordInfos.Count);
+        bool changed = false;
+
+        int i = 0;
+        while (i < wordInfos.Count)
+        {
+            bool combined = false;
+            int maxSpan = Math.Min(4, wordInfos.Count - i);
+
+            for (int spanLen = maxSpan; spanLen >= 2 && !combined; spanLen--)
+            {
+                bool allValid = true;
+                int totalLen = 0;
+
+                for (int j = i; j < i + spanLen; j++)
+                {
+                    var w = wordInfos[j];
+                    if (!IsAllHiraganaSpan(w.Text) ||
+                        PosMapper.IsInflectableBase(w.PartOfSpeech) ||
+                        w.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
+                            or PartOfSpeech.Prefix or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix
+                            or PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
+                            or PartOfSpeech.BlankSpace or PartOfSpeech.Conjunction)
+                    {
+                        allValid = false;
+                        break;
+                    }
+
+                    totalLen += w.Text.Length;
+                }
+
+                if (!allValid || totalLen < 3 || totalLen > 12)
+                    continue;
+
+                string combinedText = spanLen switch
+                {
+                    2 => wordInfos[i].Text + wordInfos[i + 1].Text,
+                    3 => wordInfos[i].Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text,
+                    _ => wordInfos[i].Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text + wordInfos[i + 3].Text,
+                };
+
+                if (HasCompoundLookup(combinedText))
+                {
+                    result.Add(BuildMergedHiraganaToken(wordInfos, i, spanLen, combinedText, combinedText, PartOfSpeech.CommonNoun));
+                    i += spanLen;
+                    combined = true;
+                    break;
+                }
+
+                var hiragana = KanaConverter.ToNormalizedHiragana(combinedText);
+                var forms = deconjugator.Deconjugate(hiragana);
+
+                foreach (var form in forms)
+                {
+                    if (form.Tags.Count == 0 || form.Tags.Count > 5) continue;
+                    var lastTag = form.Tags[^1];
+                    if (!lastTag.StartsWith("v") && lastTag is not "adj-i" and not "adj-na")
+                        continue;
+                    if (!HasCompoundLookup(form.Text)) continue;
+
+                    var pos = lastTag switch
+                    {
+                        "adj-i" => PartOfSpeech.IAdjective,
+                        "adj-na" => PartOfSpeech.NaAdjective,
+                        _ => PartOfSpeech.Verb
+                    };
+
+                    result.Add(BuildMergedHiraganaToken(wordInfos, i, spanLen, combinedText, form.Text, pos));
+                    i += spanLen;
+                    combined = true;
+                    break;
+                }
+            }
+
+            if (combined)
+                changed = true;
+            else
+            {
+                result.Add(wordInfos[i]);
+                i++;
+            }
+        }
+
+        return changed ? result : wordInfos;
+    }
+
+    private static WordInfo BuildMergedHiraganaToken(
+        List<WordInfo> tokens, int start, int count,
+        string surface, string dictForm, PartOfSpeech pos)
+    {
+        var first = tokens[start];
+        var last = tokens[start + count - 1];
+
+        string reading = count switch
+        {
+            2 => tokens[start].Reading + tokens[start + 1].Reading,
+            3 => tokens[start].Reading + tokens[start + 1].Reading + tokens[start + 2].Reading,
+            _ => tokens[start].Reading + tokens[start + 1].Reading + tokens[start + 2].Reading + tokens[start + 3].Reading,
+        };
+
+        return new WordInfo
+        {
+            Text = surface,
+            DictionaryForm = dictForm,
+            NormalizedForm = dictForm,
+            PartOfSpeech = pos,
+            StartOffset = first.StartOffset,
+            EndOffset = last.EndOffset,
+            Reading = reading,
+        };
     }
 
 }

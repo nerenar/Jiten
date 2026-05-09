@@ -53,6 +53,13 @@ public class TransitionRuleEngineTests
             prevPOS != null ? PosMask.FromList(prevPOS) : 0, prevPOS != null, prevText,
             nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText);
 
+    private static (int bonus, List<string> rules) EvaluateSoftRules(ScoringWindow window)
+    {
+        var rules = new List<string>();
+        var bonus = TransitionRuleEngine.EvaluateSoftRules(window, rules);
+        return (bonus, rules);
+    }
+
     // -----------------------------------------------------------------------
     // Phase 1: leading-aux-strip
     // -----------------------------------------------------------------------
@@ -449,7 +456,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "が");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(40);
         rules.Should().Contain("noun-particle-synergy");
     }
@@ -460,7 +467,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("学生", "n");
         var window = MakeWindow(candidate, nextText: "です");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(65);
         rules.Should().Contain("noun-copula-synergy");
     }
@@ -471,7 +478,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("静か", "adj-na");
         var window = MakeWindow(candidate, nextText: "な");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(30);
         rules.Should().Contain("na-adj-connector-synergy");
     }
@@ -483,7 +490,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Verb], nextText: "食べる");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(20);
         rules.Should().Contain("adverb-verb-synergy");
     }
@@ -495,7 +502,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             prevPOS: [PartOfSpeech.Verb], prevText: "食べ");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(30);
         rules.Should().Contain("verb-aux-synergy");
         rules.Should().Contain("verb-sentence-final-synergy");
@@ -513,7 +520,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Noun], prevText: "い",
             nextPOS: [PartOfSpeech.Noun], nextText: "う");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(-80);
         rules.Should().Contain("single-kana-penalty-left");
         rules.Should().Contain("single-kana-penalty-right");
@@ -527,7 +534,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Noun], prevText: "あ",
             nextPOS: [PartOfSpeech.Noun], nextText: "い");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("single-kana-penalty-left");
         rules.Should().NotContain("single-kana-penalty-right");
     }
@@ -540,7 +547,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Particle], prevText: "が",
             nextPOS: [PartOfSpeech.Particle], nextText: "も");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(-40);
         rules.Should().Contain("particle-particle-penalty-left");
         rules.Should().Contain("particle-particle-penalty-right");
@@ -554,7 +561,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Particle], prevText: "が",
             nextPOS: [PartOfSpeech.Verb], nextText: "食べる");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(-20);
         rules.Should().Contain("particle-particle-penalty-left");
         rules.Should().NotContain("particle-particle-penalty-right");
@@ -572,7 +579,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "な");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         // CandidateIsNounLike matches adj-na, NextIsCommonParticle does NOT match (な not in CommonParticles)
         // But NextIsNaConnector matches
         rules.Should().Contain("na-adj-connector-synergy");
@@ -587,7 +594,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Verb], prevText: "行く",
             nextText: "だ");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(25);
         rules.Should().Contain("no-da-synergy");
     }
@@ -601,7 +608,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Auxiliary], prevText: "いる",
             nextText: "です");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(25);
         rules.Should().Contain("no-da-synergy");
     }
@@ -615,7 +622,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.IAdjective], prevText: "寒い",
             nextText: "だ");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(25);
         rules.Should().Contain("no-da-synergy");
     }
@@ -629,7 +636,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Noun], prevText: "私",
             nextText: "だ");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("no-da-synergy");
     }
 
@@ -642,7 +649,7 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Verb], prevText: "行く",
             nextText: "に");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("no-da-synergy");
     }
 
@@ -656,7 +663,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("できる", "v1");
         var window = MakeWindow(candidate, nextText: "んだ");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(25);
         rules.Should().Contain("predicate-explanatory-n-synergy");
     }
@@ -667,7 +674,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("高い", "adj-i");
         var window = MakeWindow(candidate, nextText: "ん");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(25);
         rules.Should().Contain("predicate-explanatory-n-synergy");
     }
@@ -678,7 +685,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("ない", "aux");
         var window = MakeWindow(candidate, nextText: "んです");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(25);
         rules.Should().Contain("predicate-explanatory-n-synergy");
     }
@@ -689,7 +696,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("本", "n");
         var window = MakeWindow(candidate, nextText: "んだ");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("predicate-explanatory-n-synergy");
     }
 
@@ -699,7 +706,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("できる", "v1");
         var window = MakeWindow(candidate, nextText: "だ");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("predicate-explanatory-n-synergy");
     }
 
@@ -709,7 +716,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("行く", "v5k");
         var window = MakeWindow(candidate, nextText: "んじゃ");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(25);
         rules.Should().Contain("predicate-explanatory-n-synergy");
     }
@@ -725,7 +732,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "と");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(20);
         rules.Should().Contain("conjunctive-particle-verb-link");
     }
@@ -737,7 +744,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "なら");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(20);
         rules.Should().Contain("conjunctive-particle-verb-link");
     }
@@ -749,7 +756,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "と");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(20);
         rules.Should().Contain("conjunctive-particle-verb-link");
     }
@@ -761,7 +768,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "と");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("conjunctive-particle-verb-link");
     }
 
@@ -772,7 +779,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "が");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("conjunctive-particle-verb-link");
     }
 
@@ -787,7 +794,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Verb], nextText: "する");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(-20);
         rules.Should().Contain("na-adj-no-connector-penalty");
     }
@@ -798,7 +805,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("静か", "adj-na");
         var window = MakeWindow(candidate, nextText: "な");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("na-adj-no-connector-penalty");
     }
 
@@ -809,7 +816,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "に");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("na-adj-no-connector-penalty");
     }
 
@@ -819,7 +826,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("元気", "adj-na");
         var window = MakeWindow(candidate, nextText: "だ");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("na-adj-no-connector-penalty");
     }
 
@@ -830,7 +837,7 @@ public class TransitionRuleEngineTests
         var window = MakeWindow(candidate,
             nextPOS: [PartOfSpeech.Particle], nextText: "が");
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("na-adj-no-connector-penalty");
     }
 
@@ -840,7 +847,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("元気", "adj-na");
         var window = MakeWindow(candidate);
 
-        var (_, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (_, rules) = EvaluateSoftRules(window);
         rules.Should().NotContain("na-adj-no-connector-penalty");
     }
 
@@ -851,7 +858,7 @@ public class TransitionRuleEngineTests
         var candidate = MakeCandidate("好き", "adj-na");
         var window = MakeWindow(candidate, nextText: "な");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(30);
         rules.Should().Contain("na-adj-connector-synergy");
         rules.Should().NotContain("na-adj-no-connector-penalty");
@@ -865,9 +872,87 @@ public class TransitionRuleEngineTests
             prevPOS: [PartOfSpeech.Noun], prevText: "本",
             nextPOS: [PartOfSpeech.Noun], nextText: "物");
 
-        var (bonus, rules) = TransitionRuleEngine.EvaluateSoftRules(window);
+        var (bonus, rules) = EvaluateSoftRules(window);
         bonus.Should().Be(0);
         rules.Should().BeEmpty();
+    }
+
+    // -----------------------------------------------------------------------
+    // HasApplicableSoftRules
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    // Soft rules: adverb-na-adj-synergy
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void AdverbNaAdjSynergy_FiresWhenAdverbFollowedByNaAdj()
+    {
+        var candidate = MakeCandidate("とても", "adv");
+        var window = MakeWindow(candidate,
+            nextPOS: [PartOfSpeech.NaAdjective], nextText: "静か");
+
+        var (bonus, rules) = EvaluateSoftRules(window);
+        rules.Should().Contain("adverb-na-adj-synergy");
+    }
+
+    [Fact]
+    public void AdverbNaAdjSynergy_DoesNotFireForAdverbBeforeVerb()
+    {
+        var candidate = MakeCandidate("すぐ", "adv");
+        var window = MakeWindow(candidate,
+            nextPOS: [PartOfSpeech.Verb], nextText: "食べる");
+
+        var (_, rules) = EvaluateSoftRules(window);
+        rules.Should().NotContain("adverb-na-adj-synergy");
+    }
+
+    [Fact]
+    public void AdverbNaAdjSynergy_DoesNotFireForNounBeforeNaAdj()
+    {
+        var candidate = MakeCandidate("本", "n");
+        var window = MakeWindow(candidate,
+            nextPOS: [PartOfSpeech.NaAdjective], nextText: "静か");
+
+        var (_, rules) = EvaluateSoftRules(window);
+        rules.Should().NotContain("adverb-na-adj-synergy");
+    }
+
+    // -----------------------------------------------------------------------
+    // Soft rules: verb-after-quotation-to-synergy
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void VerbAfterQuotationTo_FiresWhenVerbFollowsToParticle()
+    {
+        var candidate = MakeCandidate("思う", "v5u");
+        var window = MakeWindow(candidate,
+            prevPOS: [PartOfSpeech.Particle], prevText: "と");
+
+        var (bonus, rules) = EvaluateSoftRules(window);
+        rules.Should().Contain("verb-after-quotation-to-synergy");
+    }
+
+    [Fact]
+    public void VerbAfterQuotationTo_DoesNotFireForVerbAfterGaParticle()
+    {
+        var candidate = MakeCandidate("食べる", "v1");
+        var window = MakeWindow(candidate,
+            prevPOS: [PartOfSpeech.Particle], prevText: "が");
+
+        var (_, rules) = EvaluateSoftRules(window);
+        rules.Should().NotContain("verb-after-quotation-to-synergy");
+    }
+
+    [Fact]
+    public void VerbAfterQuotationTo_DoesNotFireForNounAfterTo()
+    {
+        var candidate = MakeCandidate("本", "n");
+        var window = MakeWindow(candidate,
+            prevPOS: [PartOfSpeech.Particle], prevText: "と");
+
+        var (_, rules) = EvaluateSoftRules(window);
+        rules.Should().NotContain("verb-after-quotation-to-synergy");
     }
 
     // -----------------------------------------------------------------------

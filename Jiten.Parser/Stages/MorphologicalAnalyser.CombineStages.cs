@@ -56,60 +56,7 @@ public partial class MorphologicalAnalyser
             {
                 var nextWord = wordInfos[i + 1];
 
-                // Safety filter: stop at particles and auxiliary expressions
-                // Exception: allow negative stem な when followed by dependent verbs like すぎる
-                // e.g., わからなすぎる = わかる + negative stem + すぎる
-                bool isNegativeStemBeforeDependant = false;
-                if (nextWord is { Text: "な", PartOfSpeech: PartOfSpeech.Auxiliary, DictionaryForm: "ない" } &&
-                    i + 2 < wordInfos.Count)
-                {
-                    var afterNa = wordInfos[i + 2];
-                    isNegativeStemBeforeDependant =
-                        (afterNa.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) ||
-                         afterNa.HasPartOfSpeechSection(PartOfSpeechSection.Dependant)) &&
-                        afterNa.DictionaryForm is "すぎる" or "過ぎる";
-                }
-
-                if (nextWord.Text is "は" or "よ" or "し" or "を" or "が" or "か" or "ください" or "かな")
-                    break;
-                if (nextWord.Text == "な" && !isNegativeStemBeforeDependant)
-                    break;
-
-                // Don't merge よう (様, "seeming/manner") with preceding verb/adjective.
-                // Sudachi tags it as 形状詞/助動詞語幹, but as a standalone token it's always the
-                // noun 様, not a volitional suffix (volitional forms are produced as single tokens).
-                if (nextWord is { Text: "よう", DictionaryForm: "よう" })
-                    break;
-
-                // Don't merge いけ/いけない after ちゃ/じゃ/きゃ/にゃ (obligation/prohibition patterns)
-                // e.g., しちゃいけない = "must not do", なきゃいけない = "must do"
-                // But allow merging after て (continuation: やっていける = "can get by")
-                if (nextWord.DictionaryForm == "いける" &&
-                    (currentWord.Text.EndsWith("ちゃ") || currentWord.Text.EndsWith("じゃ") ||
-                     currentWord.Text.EndsWith("きゃ") || currentWord.Text.EndsWith("にゃ")))
-                    break;
-
-                // Don't merge explanatory ん (DictionaryForm = "の" or "ん") with preceding tokens
-                if (nextWord is { Text: "ん", DictionaryForm: "の" or "ん" })
-                    break;
-
-                // Don't merge with quotative って when followed by explanatory ん/んだ/んです
-                // e.g., 悪いってんだ = 悪い + って + んだ (quotative), not 悪いって (te-form) + んだ
-                if (nextWord.Text == "って" && i + 2 < wordInfos.Count &&
-                    wordInfos[i + 2].Text is "ん" or "んだ" or "んです")
-                    break;
-
-                if (currentWord.Text.EndsWith("ん") && nextWord.Text is "だ" or "です")
-                    break;
-
-                // Don't merge contracted copula じゃ - it starts a new clause (じゃない, じゃねえか, etc.)
-                if (nextWord is { Text: "じゃ", DictionaryForm: "だ" })
-                    break;
-
-                // Don't merge na-adjective + copula で (e.g., たくさん + で should stay separate)
-                // The で here is the te-form of copula だ, not a verb conjugation
-                if (currentPOS == PartOfSpeech.NaAdjective &&
-                    nextWord is { Text: "で", DictionaryForm: "だ" })
+                if (ShouldStopMerging(currentWord, nextWord, wordInfos, i, currentPOS))
                     break;
 
                 // Check if valid inflection part
@@ -332,6 +279,7 @@ public partial class MorphologicalAnalyser
                     currentWord.EndOffset = nextWord.EndOffset;
                     currentWord.Reading += nextWord.Reading;
                     currentWord.PartOfSpeech = currentPOS;
+                    currentWord.IsMergedInflection = true;
                     if (newDictForm != null)
                         currentWord.DictionaryForm = newDictForm;
                     currentDictForm = currentWord.DictionaryForm;
@@ -347,6 +295,55 @@ public partial class MorphologicalAnalyser
         }
 
         return result;
+    }
+
+    private static bool ShouldStopMerging(WordInfo currentWord, WordInfo nextWord,
+        List<WordInfo> wordInfos, int i, PartOfSpeech currentPOS)
+    {
+        // Allow negative stem な when followed by すぎる (e.g., わからなすぎる)
+        bool isNegativeStemBeforeDependant = false;
+        if (nextWord is { Text: "な", PartOfSpeech: PartOfSpeech.Auxiliary, DictionaryForm: "ない" } &&
+            i + 2 < wordInfos.Count)
+        {
+            var afterNa = wordInfos[i + 2];
+            isNegativeStemBeforeDependant =
+                (afterNa.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) ||
+                 afterNa.HasPartOfSpeechSection(PartOfSpeechSection.Dependant)) &&
+                afterNa.DictionaryForm is "すぎる" or "過ぎる";
+        }
+
+        if (nextWord.Text is "は" or "よ" or "し" or "を" or "が" or "か" or "ください" or "かな")
+            return true;
+        if (nextWord.Text == "な" && !isNegativeStemBeforeDependant)
+            return true;
+
+        // Standalone よう is always noun 様, not a volitional suffix (those are single tokens)
+        if (nextWord is { Text: "よう", DictionaryForm: "よう" })
+            return true;
+
+        // いけ after ちゃ/じゃ/きゃ/にゃ is obligation/prohibition, not compound
+        if (nextWord.DictionaryForm == "いける" &&
+            (currentWord.Text.EndsWith("ちゃ") || currentWord.Text.EndsWith("じゃ") ||
+             currentWord.Text.EndsWith("きゃ") || currentWord.Text.EndsWith("にゃ")))
+            return true;
+
+        if (nextWord is { Text: "ん", DictionaryForm: "の" or "ん" })
+            return true;
+
+        // って before ん/んだ/んです is quotative, not te-form
+        if (nextWord.Text == "って" && i + 2 < wordInfos.Count &&
+            wordInfos[i + 2].Text is "ん" or "んだ" or "んです")
+            return true;
+
+        if (currentWord.Text.EndsWith("ん") && nextWord.Text is "だ" or "です")
+            return true;
+        if (nextWord is { Text: "じゃ", DictionaryForm: "だ" })
+            return true;
+        if (currentPOS == PartOfSpeech.NaAdjective &&
+            nextWord is { Text: "で", DictionaryForm: "だ" })
+            return true;
+
+        return false;
     }
 
     private static readonly HashSet<string> PrefixCombineExclusions = ["おつもり", "おいま", "おにく"];
@@ -484,6 +481,7 @@ public partial class MorphologicalAnalyser
                 var startOff = currentWord.StartOffset;
                 currentWord = new WordInfo(nextWord);
                 currentWord.Text = text;
+                currentWord.DictionaryForm = text;
                 currentWord.StartOffset = startOff;
                 currentWord.PartOfSpeech = PartOfSpeech.Noun;
             }
@@ -684,9 +682,17 @@ public partial class MorphologicalAnalyser
                 && !(currentWord is { Text: "じゃ", DictionaryForm: "だ" })
                )
             {
+                var stemText = previousWord.Text;
                 previousWord.Text += currentWord.Text;
                 previousWord.EndOffset = currentWord.EndOffset;
                 previousWord.Reading += currentWord.Reading;
+                if (currentWord.DictionaryForm is "ちまう" or "じまう" or "しまう"
+                    && HasCompoundLookup != null)
+                {
+                    var mergedDictForm = stemText + currentWord.DictionaryForm;
+                    if (HasCompoundLookup(mergedDictForm))
+                        previousWord.DictionaryForm = mergedDictForm;
+                }
                 combined = true;
             }
 
@@ -966,6 +972,30 @@ public partial class MorphologicalAnalyser
                         i++;
                         changed = true;
                         goto next;
+                    }
+                }
+
+                if (i + 2 < wordInfos.Count)
+                {
+                    var thirdWord = wordInfos[i + 2];
+                    foreach (var sc in SpecialCases3)
+                    {
+                        if (currentWord.Text == sc.Item1 && nextWord.Text == sc.Item2 && thirdWord.Text == sc.Item3)
+                        {
+                            var merged = new WordInfo(currentWord)
+                            {
+                                Text = currentWord.Text + nextWord.Text + thirdWord.Text,
+                                EndOffset = thirdWord.EndOffset,
+                                Reading = currentWord.Reading + nextWord.Reading + thirdWord.Reading,
+                                DictionaryForm = currentWord.Text + nextWord.Text + thirdWord.Text
+                            };
+                            if (sc.Item4 != null)
+                                merged.PartOfSpeech = sc.Item4.Value;
+                            newList.Add(merged);
+                            i += 2;
+                            changed = true;
+                            goto next;
+                        }
                     }
                 }
             }

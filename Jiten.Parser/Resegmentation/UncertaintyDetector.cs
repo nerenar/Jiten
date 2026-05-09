@@ -1,4 +1,5 @@
 using Jiten.Core.Data;
+using Jiten.Parser.Resolution;
 
 namespace Jiten.Parser.Resegmentation;
 
@@ -32,11 +33,18 @@ internal static class UncertaintyDetector
             if (protectedSurfaces != null && protectedSurfaces.Contains(word.Text))
                 continue;
 
-            if (HasMatch(word.Text, lookups))
-                continue;
-            if (word.DictionaryForm != word.Text && !string.IsNullOrEmpty(word.DictionaryForm) &&
-                HasMatch(word.DictionaryForm, lookups))
-                continue;
+            // Multi-character kanji numerals (五十七, 六十一) are OOV in Sudachi and often
+            // only match name entries in JMDict. Flag them for resegmentation so the scorer
+            // can evaluate splits like 五十+七 which resolve to real numeral entries.
+            bool isCompoundNumeral = word.PartOfSpeechSection1 == PartOfSpeechSection.Numeral && word.Text.Length > 1;
+            if (!isCompoundNumeral)
+            {
+                if (HasMatch(word.Text, lookups))
+                    continue;
+                if (word.DictionaryForm != word.Text && !string.IsNullOrEmpty(word.DictionaryForm) &&
+                    HasMatch(word.DictionaryForm, lookups))
+                    continue;
+            }
 
             result.Add(new UncertainSpan
             {
@@ -52,26 +60,20 @@ internal static class UncertaintyDetector
 
     internal static bool HasMatch(string text, Dictionary<string, List<int>> lookups)
     {
-        if (lookups.TryGetValue(text, out var ids) && ids.Count > 0) return true;
+        if (LookupCandidateCollector.HasAnyMatch(lookups, text, includeLongVowelStripped: true))
+            return true;
+
         try
         {
-            var hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(text, convertLongVowelMark: false));
-            if (hira != text && lookups.TryGetValue(hira, out ids) && ids.Count > 0) return true;
-
-            if (text.Contains('ー'))
-            {
-                var stripped = text.Replace("ー", "");
-                if (stripped.Length > 0)
-                {
-                    var strippedHira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(stripped, convertLongVowelMark: false));
-                    if (lookups.TryGetValue(strippedHira, out ids) && ids.Count > 0) return true;
-                }
-            }
+            var hira = KanaConverter.ToNormalizedHiragana(text);
 
             if (HasGodanDictFormMatch(text, lookups) || (hira != text && HasGodanDictFormMatch(hira, lookups)))
                 return true;
 
             if (HasIchidanDictFormMatch(text, lookups) || (hira != text && HasIchidanDictFormMatch(hira, lookups)))
+                return true;
+
+            if (HasAdjSaNominalizationMatch(text, lookups) || (hira != text && HasAdjSaNominalizationMatch(hira, lookups)))
                 return true;
         }
         catch { }
@@ -89,5 +91,12 @@ internal static class UncertaintyDetector
         if (text.Length < 2) return false;
         var dictForm = text + "る";
         return lookups.TryGetValue(dictForm, out var ids) && ids.Count > 0;
+    }
+
+    private static bool HasAdjSaNominalizationMatch(string text, Dictionary<string, List<int>> lookups)
+    {
+        if (text.Length < 3 || text[^1] != 'さ') return false;
+        var adjForm = text[..^1] + "い";
+        return lookups.TryGetValue(adjForm, out var ids) && ids.Count > 0;
     }
 }

@@ -393,6 +393,9 @@ public class FormSelectionTests
         // colloquial せぇ → さい: 面倒くせぇ = 面倒くさい (1533560, adj-i)
         yield return ["面倒くせぇ", "面倒くさい", 1533560, (byte)0];
 
+        // さ-nominalization of adj-i: 嬉しさ → 嬉しい (1219510, adj-i)
+        yield return ["嬉しさで胸が熱くなる", "嬉しさ", 1219510, (byte)0];
+
         // 隙 in context → すき/opening (1253780), not ひま/obsolete (2861550)
         // FixReadingAmbiguity overrides Sudachi ヒマ→スキ for standalone 隙
         yield return ["いなくなった隙に奪い取る", "隙", 1253780, (byte)0];
@@ -601,8 +604,8 @@ public class FormSelectionTests
         // いかんせん = 如何せん (1919420), not いかん + せん
         yield return ["いかんせん、距離が離れすぎている", "いかんせん", 1919420, (byte)1];
         yield return ["いかんせん頑張ってるだけで勝てるほど甘くはない", "いかんせん", 1919420, (byte)1];
-        // セン in katakana → 線 (1391780, line), not 千 (1388740, thousand)
-        yield return ["いいセンいってるとかいったじゃないか", "セン", 1391780, (byte)1];
+        // いいセンいってる → compound expression "to be on the right track" (2394060)
+        yield return ["いいセンいってるとかいったじゃないか", "いいセンいってる", 2394060, (byte)4];
         // ノリ in katakana → 乗り (1354720, riding/enthusiasm), not 海苔 (1201620, seaweed)
         yield return ["ノリを合わせて一度話し始めると", "ノリ", 1354720, (byte)2];
         yield return ["ノリだけで応募するわけじゃありません", "ノリ", 1354720, (byte)2];
@@ -688,6 +691,10 @@ public class FormSelectionTests
         // いちゃ (contracted いては) should resolve to いる (1577980), not 射手 (1579670)
         yield return ["いちゃ駄目", "いちゃ", 1577980, (byte)1];
         yield return ["ここにいちゃまずいんじゃないか", "いちゃ", 1577980, (byte)1];
+
+        // いない (negative of いる) should resolve to 居る (1577980), not 以内 (1155180)
+        yield return ["誰もいない場所でひたすら撃ちまくって", "いない", 1577980, (byte)1];
+        yield return ["どうして……貴方が……いないの？", "いない", 1577980, (byte)1];
 
         // 気がついて expression should resolve to 気がつく (1591050), not be split into 気+がつ+いて
         yield return ["気がついてしまう", "気がついて", 1591050, (byte)0];
@@ -794,6 +801,8 @@ public class FormSelectionTests
         yield return ["来るわけねえだろ", "来る", 1547720, (byte)0];
         yield return ["ヘンな眼鏡がこっち来たー！", "来たー", 1547720, (byte)0];
         yield return ["別の場所で泣いてから来るべきだ。", "来る", 1547720, (byte)0];
+        // 来てない = te-form negative of 来る, not the expression 来てる (2830009)
+        yield return ["まだ来てないか", "来てない", 1547720, (byte)0];
 
         // === 来る in archaic context should stay きたる (1591270) ===
         yield return ["冬来りなば春遠からじ。", "来りなば", 1591270, (byte)0];
@@ -878,6 +887,9 @@ public class FormSelectionTests
         yield return ["いいよ", "よ", 2029090, (byte)0];
         yield return ["うるさいわ", "わ", 2029100, (byte)0];
 
+        // わい sentence-final particle (dialectal/emphatic) — Sudachi splits わ+い
+        yield return ["慣れておるわい", "わい", 2201380, (byte)0];
+
         // 営 as standalone noun — Sudachi suffix reclassified to noun via user_dic
         yield return ["官の営による一大事業", "営", 1173410, (byte)0];
 
@@ -899,7 +911,7 @@ public class FormSelectionTests
 
         // === Colloquial contractions ===
         // やっちまえ = やっちまう (1012780) imperative — Sudachi splits や/っち/ま/えー
-        yield return ["やっちまえー！", "やっちまえ", 1012780, (byte)0];
+        yield return ["やっちまえー！", "やっちまえー", 1012780, (byte)0];
 
         // === Onomatopoeia with と ===
         // ビクリと = びくりと (2207870, adv, on-mim), not Bikuri surname (5605618)
@@ -922,6 +934,9 @@ public class FormSelectionTests
         yield return ["適当な噓をつくな！", "つく", 1444150, (byte)1];
         yield return ["嘘はつかない", "つかない", 1444150, (byte)1];
         yield return ["こいつらは嘘はついていないんだろう。", "ついていない", 1444150, (byte)1];
+
+        // ため息をつく → 吐く (1444150, to sigh), not 付く (1495740)
+        yield return ["ため息もつかずに走り続けた", "つかずに", 1444150, (byte)1];
 
         // 推測がつく → 付く (1495740, to be attached/settled), not 点く (1441400)
         yield return ["彼女自身も推測がついていた筈だ", "ついていた", 1495740, (byte)2];
@@ -977,8 +992,9 @@ public class FormSelectionTests
         // === たちどころに should be adverb "at once" (1838090), not surname (5700879) ===
         yield return ["心臓の傷はたちどころに消え失せていた。", "たちどころに", 1838090, (byte)3];
 
-        // === イキ should resolve to 行く (1578850), not 遺棄 (1587090) ===
-        yield return ["俺もイキました思いっきり出しました", "イキました", 1578850, (byte)4];
+        // === イキ should resolve to 行く (1578850), not 生きる (1378520) or 遺棄 (1587090) ===
+        // Sudachi maps katakana イキ to 生きる; disambiguation overrides DictionaryForm to 行く
+        yield return ["俺もイキました思いっきり出しました", "イキました", 1578850, (byte)2];
         yield return ["そろそろちゃんと僕と話して貰うわけには、いきませんか？", "いきません", 1578850, (byte)2];
 
         // === 事 in お祝い事 is ごと (2613010, nominalizing suffix), not こと ===
@@ -1008,6 +1024,52 @@ public class FormSelectionTests
 
         // Should be まえ　and not ぜん
         yield return ["「前準備って……見当とかついたりするか？」", "前", 1392580, (byte)0];
+
+        // ぶっ壊れる is not in JMDict — should split into ぶっ (prefix) + 壊れる
+        yield return ["ぶっ壊れた", "壊れた", 1199900, (byte)0];
+
+        // そうやって should be the conjunction (2772380), not 装薬 souyaku (1799180)
+        yield return ["そうやって", "そうやって", 2772380, (byte)0];
+
+        // 内儀 (wife) — WordId 1458040
+        yield return ["その方はお館様のお内儀で", "内儀", 1458040, (byte)0];
+
+        // 殿 after a name should be どの (honorific, 1442500) not でん (hall, 2859792)
+        yield return ["ランド殿は反対した。", "殿", 1442500, (byte)0];
+
+        // 町 standalone → まち/town (1603990), not ちょう/counter (2853569)
+        // User dic overrides Sudachi reading チョウ→マチ for the common standalone reading
+        yield return ["まずは町に戻ろう", "町", 1603990, (byte)0];
+
+        // 大勢 → おおぜい/many people (1414220), not たいせい/general trend (1414230)
+        yield return ["これほど大勢の方に参列していただき", "大勢", 1414220, (byte)0];
+
+        // 意気軒昂 — yojijukugo compound (1156440), not split into 意気+軒昂
+        yield return ["彼は意気軒昂な様子だった", "意気軒昂な", 1156440, (byte)0];
+
+        // あーあ should preserve ー (not strip to ああ) and match 2205270 (aah!/oh no!)
+        yield return ["……あーあ、馬鹿らしいことで悩んでたわ、私ってば。", "あーあ", 2205270, (byte)1];
+
+        // ってば should combine って+ば into particle 2130420 (speaking of / I told you already)
+        yield return ["……あーあ、馬鹿らしいことで悩んでたわ、私ってば。", "ってば", 2130420, (byte)1];
+
+        // やや after case particle を should be adverb "somewhat" (1570120), not interjection "oh my!" (2771700)
+        yield return ["ホープがグレイの提案をやや方向修正した。", "やや", 1570120, (byte)2];
+
+        // 挙手せん: classical negative of 挙手する (not potential+slurred)
+        yield return ["お二人は挙手せんでもよろしい", "挙手せん", 1232570, (byte)0];
+
+        // どうあっても — expression "whatever happens; no matter what" (2250230)
+        yield return ["どうあっても覆すことはできないのだから", "どうあっても", 2250230, (byte)1];
+
+        // 節くれだった → 節くれだつ (1846970) "to be gnarled" — past tense of compound verb
+        yield return ["節くれだった", "節くれだった", 1846970, (byte)0];
+
+        // 糞 standalone → くそ/damn (1504900), not ふん/animal feces (2834408)
+        yield return ["糞！", "糞", 1504900, (byte)0];
+
+        // 鼠の糞 → ふん/droppings (2834408) — の preserves the フン reading
+        yield return ["さらに黴や鼠の糞の臭いが淀んだ空気に漂っている。", "糞", 2834408, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

@@ -24,27 +24,16 @@ internal static class AdjacentWordScorer
             nextText);
     }
 
-    internal static int CalculateContextBonusOnly(
+    internal static int CalculateContextBonus(
         FormCandidate candidate,
-        AdjacentContext context)
+        AdjacentContext context,
+        List<string>? rulesMatched = null)
     {
         var window = new ScoringWindow(
             candidate,
             context.PrevMask, context.HasPrev, context.PrevText,
             context.NextMask, context.HasNext, context.NextText);
 
-        return TransitionRuleEngine.EvaluateSoftRulesBonus(window);
-    }
-
-    internal static (int bonus, List<string> rulesMatched) CalculateContextBonus(
-        FormCandidate candidate,
-        AdjacentContext context)
-    {
-        var window = new ScoringWindow(
-            candidate,
-            context.PrevMask, context.HasPrev, context.PrevText,
-            context.NextMask, context.HasNext, context.NextText);
-
-        return TransitionRuleEngine.EvaluateSoftRules(window);
+        return TransitionRuleEngine.EvaluateSoftRules(window, rulesMatched);
     }
 }

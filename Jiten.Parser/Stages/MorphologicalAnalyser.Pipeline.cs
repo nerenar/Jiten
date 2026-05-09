@@ -16,6 +16,7 @@ public partial class MorphologicalAnalyser
 
     private IReadOnlyList<TokenStage> BuildTokenStages() =>
     [
+        Stage(TokenStageGroup.Split, SplitOovGarbageTokens, TokenFeatures.OovGarbage),
         Stage(TokenStageGroup.Split, SplitCompoundAuxiliaryVerbs),
         Stage(TokenStageGroup.Split, SplitTatteParticle, TokenFeatures.TextTatte),
         Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
@@ -28,6 +29,8 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee, TokenFeatures.Interjection),
         Stage(TokenStageGroup.Repair, RepairColloquialRanNai, TokenFeatures.TextRan),
         Stage(TokenStageGroup.Repair, RepairQuotativeTte, TokenFeatures.EndsWithTsu),
+
+        Stage(TokenStageGroup.Repair, RecombineHiraganaTokens),
 
         Stage(TokenStageGroup.Combine, CombinePrefixes, TokenFeatures.Prefix),
         Stage(TokenStageGroup.Combine, CombineInflections, TokenFeatures.InflectableBase),

@@ -13,13 +13,14 @@ public partial class MorphologicalAnalyser
         ("ほう", "が", "いい", PartOfSpeech.Expression),
         ("に", "とっ", "て", PartOfSpeech.Expression),
         ("に", "つい", "て", PartOfSpeech.Expression),
-        ("いそう", "に", "ない", PartOfSpeech.Expression),
+        // ("いそう", "に", "ない") removed: いそうにない has no JMDict entry, tokens should stay split
         ("か", "の", "ように", PartOfSpeech.Expression),
         ("それ", "よ", "か", PartOfSpeech.Expression),
         ("に", "劣ら", "ず", PartOfSpeech.Expression),
         ("しょう", "が", "ねぇ", PartOfSpeech.IAdjective),
         ("しょう", "が", "ねー", PartOfSpeech.IAdjective),
         ("たら", "し", "たら", PartOfSpeech.Verb),
+        ("どう", "あって", "も", PartOfSpeech.Expression),
     ];
 
     private static readonly HashSet<string> AuxiliaryVerbs =
@@ -34,6 +35,7 @@ public partial class MorphologicalAnalyser
         "いただく",
         "頂く",
         "する",
+        "回る",
     ];
 
     private static readonly HashSet<string> TeFormSubsidiaryVerbs =
@@ -66,6 +68,7 @@ public partial class MorphologicalAnalyser
     {
         { "続ける", "続け" }, { "始める", "始め" }, { "終わる", "終わ" },
         { "終える", "終え" }, { "出す", "出" }, { "かける", "かけ" },
+        { "回る", "回" },
     };
 
     private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
@@ -109,6 +112,7 @@ public partial class MorphologicalAnalyser
         ("ニッ", "と", PartOfSpeech.Adverb),
         ("にっ", "と", PartOfSpeech.Adverb),
         ("か", "な", PartOfSpeech.Particle),
+        ("わ", "い", PartOfSpeech.Particle),
         ("よう", "です", PartOfSpeech.Expression),
         ("何も", "かも", PartOfSpeech.Expression),
         ("何と", "も", PartOfSpeech.Adverb),
@@ -147,6 +151,7 @@ public partial class MorphologicalAnalyser
         ("当", "たった", PartOfSpeech.Verb),
         ("こそ", "あれ", PartOfSpeech.Conjunction),
         ("こう", "やって", PartOfSpeech.Conjunction),
+        ("って", "ば", PartOfSpeech.Particle),
         ("かく", "も", PartOfSpeech.NominalAdjective),
         ("よう", "さん", PartOfSpeech.NominalAdjective),
         ("と", "する", PartOfSpeech.Expression),
@@ -177,6 +182,8 @@ public partial class MorphologicalAnalyser
         ("か", "い", PartOfSpeech.Particle),
         ("露", "にして", PartOfSpeech.Expression),
         ("なれ", "ど", PartOfSpeech.Conjunction),
+        ("ここ", "ぞ", PartOfSpeech.Expression),
+        ("並び", "に", PartOfSpeech.Conjunction),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

@@ -8,7 +8,7 @@ namespace Jiten.Parser;
 public partial class MorphologicalAnalyser
 {
     private static string NormalizeToHiragana(string text) =>
-        KanaNormalizer.Normalize(KanaConverter.ToHiragana(text, convertLongVowelMark: false));
+        KanaConverter.ToNormalizedHiragana(text);
 
     private static bool IsNdaVerbForm(IReadOnlyList<DeconjugationForm> forms) =>
         forms.Any(f => f.Tags.Count > 0 &&

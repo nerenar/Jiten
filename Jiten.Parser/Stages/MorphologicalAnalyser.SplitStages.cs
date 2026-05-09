@@ -288,4 +288,185 @@ public partial class MorphologicalAnalyser
 
         return result;
     }
+
+    private static readonly string[] OovGrammarMarkers = ["って", "った", "のは", "のが", "のに", "ので", "んだ", "んで", "わけ", "ない"];
+
+    private static readonly (string text, string reading, PartOfSpeech pos, PartOfSpeechSection sec)[] GrammarTokenTable =
+    [
+        ("って", "ッテ", PartOfSpeech.Particle, PartOfSpeechSection.AdverbialParticle),
+        ("った", "ッタ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
+        ("わけ", "ワケ", PartOfSpeech.Noun, PartOfSpeechSection.CommonNoun),
+        ("ない", "ナイ", PartOfSpeech.IAdjective, PartOfSpeechSection.PossibleDependant),
+        ("から", "カラ", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),
+        ("けど", "ケド", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),
+        ("の", "ノ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
+        ("は", "ハ", PartOfSpeech.Particle, PartOfSpeechSection.BindingParticle),
+        ("が", "ガ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
+        ("も", "モ", PartOfSpeech.Particle, PartOfSpeechSection.BindingParticle),
+        ("で", "デ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
+        ("に", "ニ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
+        ("を", "ヲ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
+        ("と", "ト", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
+        ("か", "カ", PartOfSpeech.Particle, PartOfSpeechSection.AdverbialParticle),
+        ("だ", "ダ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
+        ("な", "ナ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
+        ("ん", "ン", PartOfSpeech.Particle, PartOfSpeechSection.Juntaijoushi),
+        ("た", "タ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
+    ];
+
+    private static bool IsAllHiraganaSpan(ReadOnlySpan<char> text)
+    {
+        foreach (var c in text)
+            if (c is < '぀' or > 'ゟ') return false;
+        return text.Length > 0;
+    }
+
+    private static bool IsLikelyOovGarbage(WordInfo w)
+    {
+        if (w.Text.Length < 4) return false;
+        if (w.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection or PartOfSpeech.Filler))
+            return false;
+        if (!IsAllHiraganaSpan(w.Text.AsSpan())) return false;
+        if (w.NormalizedForm != w.Text) return false;
+
+        foreach (var marker in OovGrammarMarkers)
+            if (w.Text.Contains(marker, StringComparison.Ordinal))
+                return true;
+
+        return false;
+    }
+
+    private static List<WordInfo> TokenizeGrammarRemainder(string text, int startOffset)
+    {
+        var tokens = new List<WordInfo>();
+        int i = 0;
+        while (i < text.Length)
+        {
+            bool matched = false;
+            foreach (var (gram, reading, pos, sec) in GrammarTokenTable)
+            {
+                if (text.AsSpan(i).StartsWith(gram))
+                {
+                    tokens.Add(new WordInfo
+                    {
+                        Text = gram, DictionaryForm = gram, NormalizedForm = gram, Reading = reading,
+                        PartOfSpeech = pos, PartOfSpeechSection1 = sec,
+                        StartOffset = startOffset >= 0 ? startOffset + i : -1,
+                        EndOffset = startOffset >= 0 ? startOffset + i + gram.Length : -1
+                    });
+                    i += gram.Length;
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched) break;
+        }
+
+        if (i < text.Length)
+        {
+            var leftover = text[i..];
+            tokens.Add(new WordInfo
+            {
+                Text = leftover, DictionaryForm = leftover, NormalizedForm = leftover, Reading = leftover,
+                PartOfSpeech = PartOfSpeech.Noun, PartOfSpeechSection1 = PartOfSpeechSection.CommonNoun,
+                StartOffset = startOffset >= 0 ? startOffset + i : -1,
+                EndOffset = startOffset >= 0 ? startOffset + text.Length : -1
+            });
+        }
+
+        return tokens;
+    }
+
+    private List<WordInfo> SplitOovGarbageTokens(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2) return wordInfos;
+
+        var deconj = Deconjugator.Instance;
+        var result = new List<WordInfo>(wordInfos.Count + 8);
+        bool changed = false;
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (!IsLikelyOovGarbage(word) || result.Count == 0)
+            {
+                result.Add(word);
+                continue;
+            }
+
+            var prev = result[^1];
+            bool repaired = false;
+
+            int maxPrefix = Math.Min(3, word.Text.Length - 2);
+            for (int prefixLen = 1; prefixLen <= maxPrefix; prefixLen++)
+            {
+                var prefix = word.Text[..prefixLen];
+                var candidate = prev.Text + prefix;
+                var hiragana = NormalizeToHiragana(candidate);
+                var forms = deconj.Deconjugate(hiragana);
+
+                string? dictForm = null;
+                PartOfSpeech repairedPos = PartOfSpeech.Verb;
+                bool isValid = false;
+                bool foundVerb = false;
+
+                foreach (var f in forms)
+                {
+                    foreach (var t in f.Tags)
+                    {
+                        if (t.StartsWith("v", StringComparison.Ordinal))
+                        {
+                            isValid = true;
+                            foundVerb = true;
+                            dictForm ??= f.Text;
+                            break;
+                        }
+                        if (t.StartsWith("adj", StringComparison.Ordinal))
+                        {
+                            isValid = true;
+                            dictForm ??= f.Text;
+                        }
+                    }
+                    if (foundVerb) break;
+                }
+
+                if (isValid && !foundVerb) repairedPos = PartOfSpeech.IAdjective;
+
+                if (!isValid) continue;
+
+                var remainder = word.Text[prefixLen..];
+                var grammarTokens = TokenizeGrammarRemainder(remainder, word.StartOffset >= 0 ? word.StartOffset + prefixLen : -1);
+
+                if (grammarTokens.Count == 0) continue;
+                bool hasLeftoverNoun = grammarTokens.Any(t =>
+                    t.PartOfSpeech == PartOfSpeech.Noun && t.PartOfSpeechSection1 == PartOfSpeechSection.CommonNoun &&
+                    t.Text != "わけ");
+                if (hasLeftoverNoun) continue;
+
+                result[^1] = new WordInfo
+                {
+                    Text = candidate,
+                    DictionaryForm = dictForm ?? hiragana,
+                    NormalizedForm = dictForm ?? hiragana,
+                    Reading = WanaKanaShaapu.WanaKana.ToKatakana(hiragana),
+                    PartOfSpeech = repairedPos,
+                    PartOfSpeechSection1 = PartOfSpeechSection.Common,
+                    StartOffset = prev.StartOffset,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + prefixLen : -1
+                };
+
+                result.AddRange(grammarTokens);
+                repaired = true;
+                changed = true;
+                break;
+            }
+
+            if (!repaired)
+                result.Add(word);
+        }
+
+        return changed ? result : wordInfos;
+    }
 }

@@ -52,6 +52,12 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"どし(?=[たてよ])")]
     private static partial Regex ColloquialDoshiRegex();
 
+    // ー followed by っ/ッ after hiragana is always emphatic/expressive, never semantically meaningful.
+    // e.g., けどーっ → けど, 写るーっ → 写る
+    [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+")]
+    private static partial Regex EmphLongVowelSokuonRegex();
+
+
     // 3+ identical kana with optional break chars (っ/ッ/、/comma/space) between reps.
     // No Japanese word has 3+ identical kana — this is always stuttering or sound effects.
     // Range ぁ-んァ-ヶ excludes ー (U+30FC) which is handled by MultipleLongVowelRegex.
@@ -92,6 +98,7 @@ public partial class MorphologicalAnalyser
         text = TildeAfterKanaRegex().Replace(text, "ー");
         text = MultipleLongVowelRegex().Replace(text, "ー");
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
+        text = EmphLongVowelSokuonRegex().Replace(text, "");
 
         text = StutteringDigraphRunRegex().Replace(text, "");
         text = StutteringRunRegex().Replace(text, "");
@@ -122,14 +129,18 @@ public partial class MorphologicalAnalyser
         text = text.Replace("前出すぎ", $"前{_stopToken}出すぎ");
 
         text = DeNaiCompoundRegex().Replace(text, $"$1{_stopToken}出$2");
+        text = text.Replace("届出さ", $"届{_stopToken}出さ");
         text = text.Replace("ぶっち切", "ぶち切");
+        text = text.Replace("ぶっ壊れ", $"ぶっ{_stopToken}壊れ");
         text = EmphaticTsuRegex().Replace(text, $"{_stopToken}$1");
         text = BanCompoundTsuRegex().Replace(text, $"番{_stopToken}っ");
 
         text = text
             .Replace("水魔法", $"水{_stopToken}魔法")
             .Replace("不適応", $"不{_stopToken}適応")
-            .Replace("首落と", $"首{_stopToken}落と");
+            .Replace("首落と", $"首{_stopToken}落と")
+            .Replace("面の皮", $"面{_stopToken}の皮")
+            .Replace("たっけ", $"た{_stopToken}っけ");
 
         text = HontoKatakanaRegex().Replace(text, $"ホント{_stopToken}$1");
         text = KatakanaInterjectionTsuRegex().Replace(text, $"$1{_stopToken}");
@@ -146,8 +157,11 @@ public partial class MorphologicalAnalyser
             .Replace("来イ", "来い")
             .Replace("にちがいねえ", "にちがいない")
             .Replace("せぇ", "さい")
-            .Replace("ですぅ", "です");
+            .Replace("くせー", "くさい")
+            .Replace("ですぅ", "です")
+            .Replace("ごめんなさいっ", "ごめんなさい");
 
+        text = text.Replace("でもちょっと", $"でも{_stopToken}ちょっと");
         text = text.Replace("できんよう", $"できん{_stopToken}よう");
         text = ColloquialSshoRegex().Replace(text, $"{_stopToken}っしょ");
 

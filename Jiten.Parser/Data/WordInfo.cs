@@ -22,6 +22,7 @@ public class WordInfo
     public List<int>? PreMatchedCandidateWordIds { get; set; }
     public bool IsImperative { get; set; }
     public bool WasReclassifiedFromSuffix { get; set; }
+    public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
     public WordInfo(){}
@@ -45,6 +46,7 @@ public class WordInfo
         PreMatchedCandidateWordIds = other.PreMatchedCandidateWordIds?.ToList();
         IsImperative = other.IsImperative;
         WasReclassifiedFromSuffix = other.WasReclassifiedFromSuffix;
+        IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;
     }
 

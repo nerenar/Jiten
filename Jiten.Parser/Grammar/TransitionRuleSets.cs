@@ -51,6 +51,8 @@ internal static class TransitionRuleSets
         "さん", "くん", "ちゃん", "様", "殿", "氏"
     ];
 
+    internal static readonly HashSet<string> HonorificRegisterTags = ["pol", "hon", "fam"];
+
     internal static readonly HashSet<string> NounSuffixes =
     [
         "的", "性", "化", "中", "用", "式", "風"
@@ -62,6 +64,7 @@ internal static class TransitionRuleSets
     internal static readonly Dictionary<int, (int TargetWordId, int Bonus)> NounVerbCollocations = new()
     {
         { 1172400, (1444150, 30) }, // 嘘 → 吐く (to tell a lie), not 点く/付く
+        { 1597190, (1444150, 30) }, // ため息 → 吐く (to sigh), not 付く
     };
 
     internal static readonly ScoringRule[] SoftRules =
@@ -212,7 +215,7 @@ internal static class TransitionRuleSets
             35),
 
         new("noun-after-case-particle-demotion",
-            [ScoringCondition.CandidateIsNounLike],
+            [ScoringCondition.CandidateIsNounLike, ScoringCondition.CandidateIsNotAdverb],
             [ScoringCondition.PrevIsCaseParticle],
             -25),
 
@@ -254,6 +257,16 @@ internal static class TransitionRuleSets
         new("particle-after-noun-synergy",
             [ScoringCondition.CandidateIsParticle, ScoringCondition.CandidateIsNotNounLike],
             [ScoringCondition.PrevIsNounLike],
+            20),
+
+        new("adverb-na-adj-synergy",
+            [ScoringCondition.CandidateIsAdverb],
+            [ScoringCondition.NextIsNaAdj],
+            20),
+
+        new("verb-after-quotation-to-synergy",
+            [ScoringCondition.CandidateIsVerb],
+            [ScoringCondition.PrevIsToParticle],
             20),
     ];
 
