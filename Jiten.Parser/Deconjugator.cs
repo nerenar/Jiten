@@ -12,6 +12,13 @@ public class Deconjugator
     public static Deconjugator Instance => _instance.Value;
 
     private const int DefaultMaxCacheEntries = 10_000;
+    private const int MaxCacheableInputLength = 20;
+    private const int MaxCachedFormsBase = 16;
+    private const int MaxCachedFormsPerChar = 6;
+    // Deconjugation shortens text; growth beyond this is spurious rule chaining
+    private const int MaxTextGrowthFromOriginal = 10;
+    // Deepest real conjugation chain is ~6 steps (e.g. 食べさせられたくなかったらしい)
+    private const int MaxChainDepthAboveInputLength = 6;
     private readonly int _maxCacheEntries;
     private volatile ConcurrentDictionary<string, DeconjugationForm[]> _gen0 =
         new(Environment.ProcessorCount, 4096, StringComparer.Ordinal);
@@ -106,7 +113,7 @@ public class Deconjugator
 
     private void StoreCached(string text, List<DeconjugationForm> forms)
     {
-        if (text.Length > 20 || forms.Count >= 55)
+        if (text.Length > MaxCacheableInputLength || forms.Count >= MaxCachedFormsBase + MaxCachedFormsPerChar * text.Length)
             return;
 
         var snapshot = forms.ToArray();
@@ -244,8 +251,8 @@ public class Deconjugator
     private static bool ShouldSkipForm(DeconjugationForm form)
     {
         return string.IsNullOrEmpty(form.Text) ||
-               form.Text.Length > form.OriginalText.Length + 10 ||
-               form.Tags.Count > form.OriginalText.Length + 6;
+               form.Text.Length > form.OriginalText.Length + MaxTextGrowthFromOriginal ||
+               form.Tags.Count > form.OriginalText.Length + MaxChainDepthAboveInputLength;
     }
 
     private HashSet<DeconjugationForm>? StdRuleDeconjugate(DeconjugationForm form, DeconjugationRule rule)

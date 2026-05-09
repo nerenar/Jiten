@@ -799,6 +799,14 @@
     "detail": "archaic negative"
   },
   {
+    "type": "onlyfinalrule",
+    "dec_end": ["する", "する"],
+    "con_end": ["せん", "せん"],
+    "dec_tag": ["vs-i", "vs-s"],
+    "con_tag": ["uninflectable"],
+    "detail": "negative (classical)"
+  },
+  {
     "type": "stdrule",
     "dec_end": [""],
     "con_end": ["ない"],
@@ -1098,6 +1106,14 @@
     "type": "stdrule",
     "dec_end": [""],
     "con_end": ["ください"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["adj-i"],
+    "detail": "polite request"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["くださいませ"],
     "dec_tag": ["stem-te"],
     "con_tag": ["adj-i"],
     "detail": "polite request"

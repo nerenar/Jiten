@@ -40,7 +40,8 @@ public static class PosMapper
         PartOfSpeech.Verb,
         PartOfSpeech.IAdjective,
         PartOfSpeech.NaAdjective,
-        PartOfSpeech.Auxiliary
+        PartOfSpeech.Auxiliary,
+        PartOfSpeech.Conjunction
     };
 
     /// <summary>

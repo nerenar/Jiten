@@ -39,6 +39,7 @@ internal enum TokenFeatures : uint
     TextTawake      = 1 << 15,
     TextTatte       = 1 << 16,
     TextRan         = 1 << 17,
+    OovGarbage      = 1 << 19,
 
     // Composite
     InflectableBase = 1 << 18,
@@ -109,6 +110,17 @@ internal static class TokenFeatureScanner
                 case "らん":
                     f |= TokenFeatures.TextRan;
                     break;
+            }
+
+            if (w.Text.Length >= 4
+                && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection or PartOfSpeech.Filler
+                && (f & TokenFeatures.OovGarbage) == 0)
+            {
+                bool allHira = true;
+                foreach (var c in w.Text)
+                    if (c is < '぀' or > 'ゟ') { allHira = false; break; }
+                if (allHira)
+                    f |= TokenFeatures.OovGarbage;
             }
         }
 

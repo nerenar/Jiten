@@ -325,9 +325,16 @@ internal static class LemmaScorer
         {
             if (dictionaryForm == formText)
             {
-                // Exact Sudachi DictionaryForm match keeps a floor for deep chains.
-                double effectiveScale = Math.Max(0.3, lemmaScale);
-                score += (int)(100 * effectiveScale);
+                // When deconjugation traces back to the DictionaryForm, Sudachi and the
+                // deconjugator independently agree on the base form — use a higher floor
+                // so deep chains (e.g. 来てない→来る via teru contraction) aren't crushed.
+                bool deconjConfirmsDictForm = candidate.DeconjForm is { Process.Count: > 0 }
+                    && candidate.DeconjForm.Text == context.DictionaryFormHiragana;
+                double floor = deconjConfirmsDictForm ? 0.8 : 0.3;
+                double effectiveScale = Math.Max(floor, lemmaScale);
+                int bonus = (int)(100 * effectiveScale);
+
+                score += bonus;
             }
             else
             {
@@ -740,7 +747,9 @@ internal static class ReadingScorer
                 {
                     bool formMatchesDictForm = !string.IsNullOrEmpty(context.DictionaryForm)
                         && word.Forms.Any(f => f.Text == context.DictionaryForm);
-                    if (formMatchesDictForm)
+                    // Skip penalty when deconjugation validates the match — conjugation can
+                    // change the reading stem for irregular verbs (e.g. 来る くる → 来てない きてない).
+                    if (formMatchesDictForm && candidate.DeconjForm?.Process is not { Count: > 0 })
                         readingMatchScore -= 70;
                 }
             }

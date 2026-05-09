@@ -31,7 +31,7 @@ internal static class ResegmentationScorer
             {
                 try
                 {
-                    var hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(slice, convertLongVowelMark: false));
+                    var hira = KanaConverter.ToNormalizedHiragana(slice);
                     if (hira != slice && lookups.TryGetValue(hira, out var hiraIds) && hiraIds.Count > 0)
                         wordIds = hiraIds;
 
@@ -149,7 +149,7 @@ internal static class ResegmentationScorer
 
         if (frequencyRanks != null)
         {
-            // Use full ScorePath for final selection — adds structural bonuses not tracked in partial score
+            // Use full ScorePath for final selection — adds structural bonuses not tracked in partial score.
             return validStates
                 .Select(s => new SpanPath(s.segs))
                 .MaxBy(p => ScorePath(p, frequencyRanks, spanText));
@@ -178,7 +178,10 @@ internal static class ResegmentationScorer
             if (seg.Length < 2)
             {
                 if (spanText == null || JapaneseTextHelper.IsKana(spanText[seg.StartChar]))
-                    noWeakSingleCharSegments = false;
+                {
+                    if (!(seg.StartChar == 0 && spanText != null && spanText[seg.StartChar] is 'お' or 'ご'))
+                        noWeakSingleCharSegments = false;
+                }
             }
 
             int bestRank = int.MaxValue;
@@ -204,6 +207,11 @@ internal static class ResegmentationScorer
 
         if (path.Segments.Count > 0 && totalLength / path.Segments.Count >= 3)
             score += 20;
+
+        if (spanText != null && path.Segments.Count >= 2
+            && path.Segments[0] is { StartChar: 0, Length: 1 }
+            && spanText[0] is 'お' or 'ご')
+            score += 35;
 
         return score;
     }
@@ -294,6 +302,7 @@ internal static class ResegmentationScorer
             var seg = segs[i];
             if (seg.Length != 1) continue;
             char c = spanText[seg.StartChar];
+            if (seg.StartChar == 0 && c is '\u304A' or '\u3054') continue;
             if (c is >= '\u3041' and <= '\u3096' || c is >= '\u30A1' and <= '\u30F6')
                 return true;
         }

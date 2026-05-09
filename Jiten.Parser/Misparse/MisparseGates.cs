@@ -84,8 +84,7 @@ internal static class MisparseGates
         // Hiragana before a katakana word is not a stutter (e.g. は + ハードル)
         if (next.Text[0] >= 'ァ' && next.Text[0] <= 'ヴ') return false;
 
-        // は after a content word is the topic particle, not a stutter (e.g. 今は、はっきり)
-        if (surface == "は" && ctx.Prev is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.Verb
+        if (ctx.Token.PartOfSpeech == PartOfSpeech.Particle && ctx.Prev is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.Verb
             or PartOfSpeech.IAdjective or PartOfSpeech.NaAdjective or PartOfSpeech.Adverb or PartOfSpeech.Pronoun })
             return false;
 
@@ -96,12 +95,20 @@ internal static class MisparseGates
         return next.Reading.StartsWith(katakana, StringComparison.Ordinal);
     }
 
+    private static bool IsAllKatakana(string text)
+    {
+        foreach (var c in text)
+            if (c is < '゠' or > 'ヿ') return false;
+        return text.Length > 0;
+    }
+
     private static bool IsShortKanaNameWithoutContext(in MisparseGateContext ctx)
     {
         if (!WanaKana.IsKana(ctx.Token.Text)) return false;
         if (ctx.Token.Text.Length > 2) return false;
         if (!ctx.SelectedWord.PartsOfSpeech.Contains(PartOfSpeech.Name)) return false;
         if (ctx.Token.IsPersonNameContext) return false;
+        if (IsAllKatakana(ctx.Token.Text)) return false;
 
         return true;
     }
@@ -119,8 +126,9 @@ internal static class MisparseGates
 
         if (!ctx.HasKanjiSpelling) return false;
 
-        // Kana reading is in basic vocabulary (ichi1) — too common to reject
         if (ctx.ReadingIsIchi) return false;
+
+        if (IsAllKatakana(surface)) return false;
 
         if (ctx.Next != null && IsGrammaticalFollower(ctx.Next.Text))
             return false;

@@ -26,15 +26,28 @@ internal static class ResegmentationEngine
 
             foreach (var span in spans.OrderByDescending(s => s.WordIndex))
             {
-                var path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks);
-                if (path == null || !path.IsComplete(span.Text.Length) || path.Segments.Count <= 1)
-                    continue;
-                if (path.Segments.Count > (span.Text.Length + 1) / 2)
-                    continue;
-                if (path.Segments.Any(s => s.Length == 1 && IsHiragana(span.Text[s.StartChar])))
-                    continue;
-                if (ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0)
-                    continue;
+                var word = sentence.Words[span.WordIndex].word;
+                bool isCompoundNumeral = word.PartOfSpeechSection1 == PartOfSpeechSection.Numeral && word.Text.Length > 1;
+
+                SpanPath? path;
+                if (isCompoundNumeral)
+                {
+                    path = TrySplitCompoundNumeral(span.Text, lookups);
+                    if (path == null)
+                        continue;
+                }
+                else
+                {
+                    path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks);
+                    if (path == null || !path.IsComplete(span.Text.Length) || path.Segments.Count <= 1)
+                        continue;
+                    if (path.Segments.Count > (span.Text.Length + 1) / 2)
+                        continue;
+                    if (HasBadSingleHiragana(path, span.Text))
+                        continue;
+                    if (ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0)
+                        continue;
+                }
 
                 var prevPos = span.WordIndex > 0 ? sentence.Words[span.WordIndex - 1].word.PartOfSpeech : (PartOfSpeech?)null;
                 var nextPos = span.WordIndex < sentence.Words.Count - 1 ? sentence.Words[span.WordIndex + 1].word.PartOfSpeech : (PartOfSpeech?)null;
@@ -88,7 +101,7 @@ internal static class ResegmentationEngine
                 if (PosMapper.IsNameLikeSudachiNoun(word.PartOfSpeech, word.PartOfSpeechSection1,
                         word.PartOfSpeechSection2, word.PartOfSpeechSection3))
                     continue;
-                if (!marginMap.TryGetValue((si, wi), out var margin) || margin == null || margin >= ScoringPolicy.LowConfidenceThreshold)
+                if (!marginMap.TryGetValue((si, wi), out var margin) || !ScoringPolicy.IsLowConfidence(margin))
                     continue;
 
                 var path = ResegmentationScorer.FindBestPath(word.Text, lookups, frequencyRanks);
@@ -96,7 +109,7 @@ internal static class ResegmentationEngine
                     continue;
                 if (path.Segments.Count > (word.Text.Length + 1) / 2)
                     continue;
-                if (path.Segments.Any(s => s.Length == 1 && IsHiragana(word.Text[s.StartChar])))
+                if (HasBadSingleHiragana(path, word.Text))
                     continue;
                 if (ResegmentationScorer.ScorePath(path, frequencyRanks, word.Text) < MinAcceptScoreConfidence)
                     continue;
@@ -136,6 +149,45 @@ internal static class ResegmentationEngine
         }
 
         return anyApplied;
+    }
+
+    // Splits compound kanji numerals at the last place marker (十/百/千/万/億/兆).
+    // E.g. 五十七 → 五十+七, 三十八 → 三十+八, 六十一 → 六十+一.
+    private static SpanPath? TrySplitCompoundNumeral(string text, Dictionary<string, List<int>> lookups)
+    {
+        for (int i = text.Length - 1; i >= 1; i--)
+        {
+            if (text[i - 1] is not ('十' or '百' or '千' or '万' or '億' or '兆'))
+                continue;
+
+            var left = text[..i];
+            var right = text[i..];
+
+            if (!lookups.TryGetValue(left, out var leftIds) || leftIds.Count == 0)
+                continue;
+            if (!lookups.TryGetValue(right, out var rightIds) || rightIds.Count == 0)
+                continue;
+
+            return new SpanPath([
+                new SpanTokenCandidate(0, left.Length, leftIds),
+                new SpanTokenCandidate(i, right.Length, rightIds)
+            ]);
+        }
+
+        return null;
+    }
+
+    private static bool HasBadSingleHiragana(SpanPath path, string text)
+    {
+        foreach (var s in path.Segments)
+        {
+            if (s.Length != 1 || !IsHiragana(text[s.StartChar]))
+                continue;
+            if (s.StartChar == 0 && text[s.StartChar] is 'お' or 'ご')
+                continue;
+            return true;
+        }
+        return false;
     }
 
     private static bool IsKana(char c) => JapaneseTextHelper.IsKana(c);
