@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using Jiten.Core.Data;
 using Jiten.Parser.Grammar;
+using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Diagnostics;
 
@@ -157,10 +158,10 @@ public class WordResult
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ConfidenceLevel => MarginToSecond switch
     {
-        null    => "single",
-        >= 40   => "high",
-        >= 15   => "medium",
-        _       => "low"
+        null => "single",
+        _ when ScoringPolicy.IsHighConfidence(MarginToSecond) => "high",
+        _ when ScoringPolicy.IsLowConfidence(MarginToSecond)  => "low",
+        _ => "medium"
     };
 }
 

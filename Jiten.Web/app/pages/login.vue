@@ -19,7 +19,7 @@
 
   onMounted(() => {
     if (authStore.isAuthenticated) {
-      router.push('/');
+      router.push(getSafeRedirect() ?? '/');
     }
   });
 

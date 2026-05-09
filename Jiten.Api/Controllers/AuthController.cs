@@ -206,38 +206,55 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest model)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        var principal = _tokenService.GetPrincipalFromExpiredToken(model.AccessToken);
-        if (principal == null) return BadRequest(new { message = "Invalid access token or refresh token." });
 
-        var userId = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userId)) return BadRequest(new { message = "Invalid token claims." });
+        var principal = _tokenService.GetPrincipalFromExpiredToken(model.AccessToken);
+
+        string? userId;
+        string? jti;
+        RefreshToken? oldRefreshToken;
+
+        if (principal != null)
+        {
+            userId = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId)) return BadRequest(new { message = "Invalid token claims." });
+
+            jti = principal.Claims.FirstOrDefault(c => c.Type == System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+            if (string.IsNullOrEmpty(jti)) return BadRequest(new { message = "Invalid token claims." });
+
+            oldRefreshToken = await _context.RefreshTokens
+                .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken && rt.UserId == userId);
+
+            if (oldRefreshToken == null || oldRefreshToken.JwtId != jti || oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
+            {
+                if (oldRefreshToken != null && (oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked))
+                {
+                    _context.RefreshTokens.Remove(oldRefreshToken);
+                    await _context.SaveChangesAsync();
+                }
+                return BadRequest(new { message = "Invalid or expired refresh token." });
+            }
+        }
+        else
+        {
+            // Access token unparseable (corrupted/rotated key) — look up refresh token directly
+            oldRefreshToken = await _context.RefreshTokens
+                .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken && !rt.IsUsed && !rt.IsRevoked && rt.ExpiryDate >= DateTime.UtcNow);
+
+            if (oldRefreshToken == null)
+                return BadRequest(new { message = "Invalid or expired refresh token." });
+
+            userId = oldRefreshToken.UserId;
+        }
 
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return BadRequest(new { message = "User not found." });
-
-        var jti = principal.Claims.FirstOrDefault(c => c.Type == System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
-        if (string.IsNullOrEmpty(jti)) return BadRequest(new { message = "Invalid token claims." });
-
-        var oldRefreshToken = await _context.RefreshTokens
-                                            .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken && rt.UserId == userId);
-
-        if (oldRefreshToken == null || oldRefreshToken.JwtId != jti || oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
-        {
-            if (oldRefreshToken != null && (oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked))
-            {
-                _context.RefreshTokens.Remove(oldRefreshToken); // Clean up if already invalid
-                await _context.SaveChangesAsync();
-            }
-
-            return BadRequest(new { message = "Invalid or expired refresh token." });
-        }
 
         oldRefreshToken.IsUsed = true;
         _context.RefreshTokens.Update(oldRefreshToken);
 
         var newTokens = await _tokenService.GenerateTokens(user);
 
-        await _context.SaveChangesAsync(); // Saves both the used old token and the new token
+        await _context.SaveChangesAsync();
         await _activityTracker.BumpAsync(user.Id);
 
         return Ok(newTokens);

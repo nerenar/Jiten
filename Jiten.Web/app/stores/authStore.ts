@@ -212,17 +212,16 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (err: any) {
       console.error('Token refresh failed:', err);
 
-      // Notify other tabs that refresh failed
       tabSyncManager?.broadcast('TOKEN_REFRESH_FAILED', {
         timestamp: Date.now()
       });
 
-      clearAuthData();
-
-      if (import.meta.client) {
-        navigateTo('/login');
+      // On SSR, only preserve tokens if the API was unreachable (network error).
+      // If the server responded (4xx/5xx), the tokens are genuinely invalid.
+      const isNetworkError = import.meta.server && !err.status && !err.statusCode;
+      if (!isNetworkError) {
+        clearAuthData();
       }
-
       return false;
     } finally {
       isRefreshing.value = false;
@@ -350,21 +349,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchCurrentUser() {
-    // Caller is responsible for ensuring valid token via ensureValidToken()
-
     try {
       const data = await $api('/auth/me');
       user.value = data;
     } catch (err: any) {
       console.error('Failed to fetch current user:', err);
-
-      // If 401, clear auth data and let error handler/middleware handle redirect
-      // Don't attempt nested refresh or logout (prevents cascading errors during SSR)
-      if (err.status === 401) {
-        clearAuthData();
-      }
-
       user.value = null;
+      throw err;
     }
   }
 
@@ -415,13 +406,13 @@ export const useAuthStore = defineStore('auth', () => {
         console.log('Token expired on init, refreshing...');
         refreshAccessToken().then((success) => {
           if (success) {
-            fetchCurrentUser();
+            fetchCurrentUser().catch(() => {});
             onLoginSuccess();
           }
         });
       } else {
         console.log('Token valid on init, fetching user...');
-        fetchCurrentUser();
+        fetchCurrentUser().catch(() => {});
         onLoginSuccess();
       }
     } else {

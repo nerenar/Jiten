@@ -2616,15 +2616,20 @@ public class StudyController(
             .Distinct()
             .Count();
 
+        var allDates = allTimestamps
+            .Select(dt => dt.AddHours(offsetHours).Date)
+            .Distinct()
+            .OrderByDescending(d => d)
+            .ToList();
+
+        var (currentStreak, longestStreak) = ComputeStreaks(allDates, today);
+
         var dailyStats = allTimestamps
             .Where(dt => dt >= windowStartUtc)
             .GroupBy(dt => dt.AddHours(offsetHours).Date)
             .Select(g => new { Date = g.Key, Count = g.Count() })
             .OrderBy(g => g.Date)
             .ToList();
-
-        var windowDates = dailyStats.Select(d => d.Date).OrderByDescending(d => d).ToList();
-        var (currentStreak, longestStreak) = ComputeStreaks(windowDates, today);
 
         return Results.Ok(new
         {
@@ -2647,8 +2652,6 @@ public class StudyController(
         var now = DateTime.UtcNow;
         var (_, offsetHours) = ResolveTimezone(now, settings.Timezone);
         var today = now.AddHours(offsetHours).Date;
-        var windowStart = today.AddDays(-83);
-        var windowStartUtc = windowStart.AddHours(-offsetHours);
 
         var userCardIds = userContext.FsrsCards
             .Where(c => c.UserId == userId)
@@ -2656,7 +2659,7 @@ public class StudyController(
 
         var rawTimestamps = await userContext.FsrsReviewLogs
             .AsNoTracking()
-            .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= windowStartUtc)
+            .Where(rl => userCardIds.Contains(rl.CardId))
             .Select(rl => rl.ReviewDateTime)
             .ToListAsync();
 
