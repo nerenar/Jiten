@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { RequestStatus, MediaType } from '~/types';
-import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadAdminDto } from '~/types/types';
+import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
+import type { AutoCompleteCompleteEvent } from 'primevue/autocomplete';
+import { debounce } from 'perfect-debounce';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
 import { getLinkTypeText } from '~/utils/linkTypeMapper';
@@ -17,6 +19,8 @@ const router = useRouter();
 const toast = useToast();
 const authStore = useAuthStore();
 const jitenStore = useJitenStore();
+const { $api } = useNuxtApp();
+const localiseTitle = useLocaliseTitle();
 
 const requestId = computed(() => Number(route.params.id));
 const {
@@ -45,8 +49,42 @@ const displayAdminFunctions = computed(() => jitenStore.displayAdminFunctions);
 const showAdminPanel = ref(false);
 const adminNote = ref('');
 const fulfilledDeckId = ref<number | null>(null);
+const selectedDeck = ref<MediaSuggestion | string | null>(null);
+const deckSuggestions = ref<MediaSuggestion[]>([]);
 const isUpdatingStatus = ref(false);
 const reviewingUploadId = ref<number | null>(null);
+
+watch(selectedDeck, (val) => {
+  if (val && typeof val === 'object') fulfilledDeckId.value = val.deckId;
+  else if (typeof val === 'string' && /^\d+$/.test(val.trim())) fulfilledDeckId.value = Number(val.trim());
+  else fulfilledDeckId.value = null;
+});
+
+async function fetchRecentDecks(): Promise<MediaSuggestion[]> {
+  try {
+    return await $api<MediaSuggestion[]>('admin/recent-decks', { query: { limit: 12 } });
+  } catch { return []; }
+}
+
+const searchDecks = debounce(async (query: string) => {
+  try {
+    const res = await $api<{ suggestions: MediaSuggestion[] }>('media-deck/search-suggestions', { query: { query, limit: 10 } });
+    deckSuggestions.value = res.suggestions ?? [];
+  } catch { deckSuggestions.value = []; }
+}, 300);
+
+async function onDeckComplete(event: AutoCompleteCompleteEvent) {
+  if (!event.query || event.query.length < 2) {
+    deckSuggestions.value = await fetchRecentDecks();
+  } else {
+    await searchDecks(event.query);
+  }
+}
+
+function getDeckLabel(item: MediaSuggestion | string): string {
+  if (typeof item === 'string') return item;
+  return `${localiseTitle(item)} (ID: ${item.deckId})`;
+}
 
 // Admin edit fields
 const editTitle = ref('');
@@ -567,8 +605,29 @@ onMounted(() => loadData());
               <Textarea v-model="adminNote" rows="2" class="w-full" placeholder="Reason for rejection or other note" />
             </div>
             <div class="flex flex-col gap-2">
-              <label class="font-semibold text-sm">Fulfilled Deck ID (for completion)</label>
-              <InputNumber v-model="fulfilledDeckId" class="w-full" placeholder="Deck ID" />
+              <label class="font-semibold text-sm">Fulfilled Deck (for completion)</label>
+              <AutoComplete
+                v-model="selectedDeck"
+                :suggestions="deckSuggestions"
+                :option-label="getDeckLabel"
+                placeholder="Search or select recent deck..."
+                class="w-full"
+                dropdown
+                @complete="onDeckComplete"
+              >
+                <template #option="{ option }">
+                  <div class="flex items-center gap-2">
+                    <img
+                      :src="option.coverName && option.coverName !== 'nocover.jpg' ? option.coverName : '/img/nocover.jpg'"
+                      :alt="getDeckLabel(option)"
+                      class="h-10 w-7 object-cover rounded shrink-0"
+                    />
+                    <span class="truncate text-sm">{{ getDeckLabel(option) }}</span>
+                    <Tag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="shrink-0 text-xs" />
+                  </div>
+                </template>
+              </AutoComplete>
+              <small v-if="fulfilledDeckId" class="text-surface-500">Deck ID: {{ fulfilledDeckId }}</small>
             </div>
             <div v-if="!isTerminal" class="flex gap-2 flex-wrap">
               <Button

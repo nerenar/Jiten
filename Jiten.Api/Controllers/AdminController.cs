@@ -1,6 +1,4 @@
 using System.Net;
-using System.Text;
-using System.Text.RegularExpressions;
 using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
@@ -9,7 +7,6 @@ using Jiten.Api.Services;
 using Jiten.Cli;
 using Jiten.Core;
 using Jiten.Core.Data;
-using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.Providers;
 using Jiten.Parser;
@@ -68,6 +65,23 @@ public partial class AdminController(
             .ToList();
 
         return Results.Ok(decks);
+    }
+
+    [HttpGet("recent-decks")]
+    public async Task<List<MediaSuggestionDto>> GetRecentDecks([FromQuery] int limit = 12)
+    {
+        limit = Math.Clamp(limit, 1, 30);
+        return await dbContext.Decks
+            .AsNoTracking()
+            .Where(d => d.ParentDeckId == null)
+            .OrderByDescending(d => d.CreationDate)
+            .Take(limit)
+            .Select(d => new MediaSuggestionDto
+            {
+                DeckId = d.DeckId, OriginalTitle = d.OriginalTitle, RomajiTitle = d.RomajiTitle,
+                EnglishTitle = d.EnglishTitle, MediaType = d.MediaType, CoverName = d.CoverName
+            })
+            .ToListAsync();
     }
 
     [HttpGet("search-media")]
