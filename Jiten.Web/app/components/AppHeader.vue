@@ -90,19 +90,16 @@
       label: 'Profile',
       icon: 'pi pi-user',
       route: '/profile',
-      command: () => navigateTo('/profile'),
     },
     {
       label: 'User Settings',
       icon: 'pi pi-cog',
       route: '/settings',
-      command: () => navigateTo('/settings'),
     },
     {
       label: 'Media Requests',
       icon: 'pi pi-list',
       route: '/requests',
-      command: () => navigateTo('/requests'),
     },
     { separator: true },
     {
