@@ -1265,6 +1265,9 @@ public class MorphologicalAnalyserTests
 
         // ってば should combine from って+ば into a single particle (WordId 2130420)
         yield return ["……あーあ、馬鹿らしいことで悩んでたわ、私ってば。", new[] { "あーあ", "馬鹿らしい", "こと", "で", "悩んでた", "わ", "私", "ってば" }];
+
+        // こう+ついてってる — adverb こう must not merge with verb ついてってる to form 交通
+        yield return ["ミミにいろんな勲章がこうついてってる感覚は…", new[] { "ミミ", "に", "いろんな", "勲章", "が", "こう", "ついてってる", "感覚", "は" }];
     }
 
     [Theory]

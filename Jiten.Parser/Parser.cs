@@ -3353,7 +3353,7 @@ namespace Jiten.Parser
                 if (firstWord.WasReclassifiedFromSuffix)
                     continue;
 
-                bool expressionOnly = forceExpressionOnly || firstWord.PartOfSpeech is PartOfSpeech.Suffix or PartOfSpeech.Auxiliary;
+                bool expressionOnly = forceExpressionOnly || firstWord.PartOfSpeech is PartOfSpeech.Suffix or PartOfSpeech.Auxiliary or PartOfSpeech.Adverb;
 
                 bool hasPunctuation = false;
                 for (int j = startIndex; j < wordIndex; j++)
