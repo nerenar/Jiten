@@ -3,7 +3,6 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   const tokenCookie = useCookie('token');
   const refreshTokenCookie = useCookie('refreshToken');
 
-  // If no tokens at all, redirect to login
   if (!tokenCookie.value && !refreshTokenCookie.value) {
     return navigateTo({
       path: '/login',
@@ -11,37 +10,29 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     });
   }
 
-  // If we have tokens, try to ensure they're valid
-  if (tokenCookie.value || refreshTokenCookie.value) {
-    try {
-      // This will check if the token is expired and refresh if needed
-      const hasValidToken = await authStore.ensureValidToken();
+  try {
+    const hasValidToken = await authStore.ensureValidToken();
 
-      if (!hasValidToken) {
-        // Token refresh failed, clear everything and redirect
-        authStore.clearAuthData();
-        return navigateTo({
-          path: '/login',
-          query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
-        });
+    if (!hasValidToken) {
+      // If tokens still exist after ensureValidToken failed, it was an SSR network error —
+      // the API was unreachable from the server but the client can retry directly
+      if (import.meta.server && authStore.refreshToken) {
+        return;
       }
-
-      // We have a valid token, allow the navigation
-      return;
-    } catch (error) {
-      console.error('Auth middleware error:', error);
-      // On error, clear auth data and redirect
       authStore.clearAuthData();
       return navigateTo({
         path: '/login',
         query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
       });
     }
+  } catch (error) {
+    if (import.meta.server && authStore.refreshToken) {
+      return;
+    }
+    authStore.clearAuthData();
+    return navigateTo({
+      path: '/login',
+      query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
+    });
   }
-
-  // Fallback - if we somehow get here without valid authentication
-  return navigateTo({
-    path: '/login',
-    query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
-  });
 });

@@ -34,41 +34,40 @@ export default defineNuxtPlugin((nuxtApp) => {
 
         const url = request.toString();
         const isAuthEndpoint = url.includes('/auth/');
+        const needsAuthHeader = url.includes('/auth/me') || url.includes('/auth/revoke-token');
+        const shouldAttemptRefresh = !isAuthEndpoint || needsAuthHeader;
 
-        if (!isAuthEndpoint && !authStore.isRefreshing) {
-          console.log('Received 401, attempting token refresh...');
-
+        if (shouldAttemptRefresh && !authStore.isRefreshing) {
           const refreshSuccess = await authStore.refreshAccessToken();
 
           if (refreshSuccess) {
-            console.log('Token refreshed, retrying original request...');
-
             if (authStore.accessToken) {
               options.headers = options.headers || {};
               options.headers.set('Authorization', `Bearer ${authStore.accessToken}`);
             }
 
             try {
-              // Strip interceptor hooks to prevent infinite retry loops
               const { onRequest: _, onResponse: _r, onResponseError: _e, ...retryOptions } = options;
               return await $fetch(request, retryOptions);
             } catch (retryError) {
               console.error('Retry after token refresh failed:', retryError);
             }
           }
-        }
 
-        await nuxtApp.runWithContext(() => {
-          const router = useRouter();
-          const currentRoute = router.currentRoute.value.path;
+          if (!isAuthEndpoint) {
+            await nuxtApp.runWithContext(() => {
+              const router = useRouter();
+              const currentRoute = router.currentRoute.value.path;
 
-          if (currentRoute !== '/login') {
-            return navigateTo({
-              path: '/login',
-              query: { redirect: currentRoute },
+              if (currentRoute !== '/login') {
+                return navigateTo({
+                  path: '/login',
+                  query: { redirect: currentRoute },
+                }, { external: true });
+              }
             });
           }
-        });
+        }
       }
     },
   });

@@ -8,7 +8,7 @@
   });
 
   if (!auth.user) {
-    await auth.fetchCurrentUser();
+    try { await auth.fetchCurrentUser(); } catch {}
   }
 
   if (auth.user?.userName) {
