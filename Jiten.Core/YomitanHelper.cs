@@ -61,8 +61,6 @@ public static class YomitanHelper
             var kanaReadings = GetKanaReadingsWithFrequenciesFromForms(wordForms, allFormFreqs, freq.WordId);
             if (kanaReadings.Count == 0) continue;
 
-            string mainKanaReading = kanaReadings[0].kanaText;
-
             // CASE 1: Create standalone kana entries
             foreach (var (kanaText, kanaRank, kanaIndex) in kanaReadings)
             {
@@ -122,9 +120,6 @@ public static class YomitanHelper
                             addedEntries.Add(entryKey1);
                         }
                     }
-
-                    if (kanaText != mainKanaReading)
-                        continue;
 
                     string entryKey2 = $"{kanjiTerm}:{kanaText}:kanji";
                     if (addedEntries.Contains(entryKey2))
@@ -274,8 +269,6 @@ public static class YomitanHelper
             var kanaReadings = GetKanaReadingsWithOccurrencesFromForms(wordForms, deckWordsByWordIdAndReading, wordId);
             if (kanaReadings.Count == 0) continue;
 
-            string mainKanaReading = kanaReadings[0].kanaText;
-
             // CASE 1: Create standalone kana entries
             foreach (var (kanaText, kanaOccurrences, kanaIndex) in kanaReadings)
             {
@@ -326,8 +319,6 @@ public static class YomitanHelper
                             addedEntries.Add(entryKey1);
                         }
                     }
-
-                    if (kanaText != mainKanaReading) continue;
 
                     string entryKey2 = $"{kanjiTerm}:{kanaText}:kanji";
                     if (addedEntries.Contains(entryKey2)) continue;
