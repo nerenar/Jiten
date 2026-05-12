@@ -1,2 +1,8 @@
 patchedDependencies:
   vue-recaptcha: patches/vue-recaptcha.patch
+
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  unrs-resolver: true
+  vue-demi: true
