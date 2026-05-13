@@ -35,6 +35,8 @@ internal static class FormCandidateScorer
 
         int posAffinityScore = PosAffinityScorer.Score(candidate, context);
 
+        int rubyPriorsScore = RubyPriorsScorer.Score(candidate, context);
+
         return new FormScoreTrace(
                                   wordScore,
                                   entryPriorityScore,
@@ -44,7 +46,8 @@ internal static class FormCandidateScorer
                                   scriptScore,
                                   readingMatchScore,
                                   posAffinityScore,
-                                  conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied);
+                                  conjugatedIdentityPenaltyApplied || expressionConflictPenaltyApplied,
+                                  rubyPriorsScore);
     }
 }
 

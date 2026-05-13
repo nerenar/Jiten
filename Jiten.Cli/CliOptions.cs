@@ -211,6 +211,21 @@ public class CliOptions
     [Option(longName: "cleanup-new-cards", Required = false, HelpText = "Delete legacy FsrsCards with State=New (pre-created cards that were never reviewed).")]
     public bool CleanupNewCards { get; set; }
 
+    [Option(longName: "extract-ruby", Required = false, HelpText = "Extract ruby/furigana from EPUBs in comma-separated directories. Produces coverage report. Use with -t for threads, -o for detailed output.")]
+    public string? ExtractRuby { get; set; }
+
+    [Option(longName: "align-ruby", Required = false, HelpText = "Align ruby JSONL sentences to parser tokens and build n-gram reading prior tables. Use with -t for threads, -o for output path.")]
+    public string? AlignRuby { get; set; }
+
+    [Option(longName: "check-ruby-readings", Required = false, HelpText = "Compare Sudachi readings against ruby annotations to measure how often Sudachi already gets the reading right. Takes a JSONL path.")]
+    public string? CheckRubyReadings { get; set; }
+
+    [Option(longName: "ruby-changed-winners", Required = false, HelpText = "Run full parser on held-out ruby JSONL and report cases where ruby priors change the form selection winner. Use -o for JSONL output.")]
+    public string? RubyChangedWinners { get; set; }
+
+    [Option(longName: "ruby-reprune", Required = false, HelpText = "Re-prune an existing ruby_reading_priors.msgpack artifact with tighter thresholds. Shows size at various thresholds. Use -o to write the pruned output.")]
+    public string? RubyReprune { get; set; }
+
     [Option(longName: "backfill-speech-stats", Required = false, HelpText = "Backfill speech stats from subtitle files in a directory. Each subdirectory must have metadata.json. Requires --deck-type.")]
     public string? BackfillSpeechStats { get; set; }
 

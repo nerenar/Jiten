@@ -41,6 +41,7 @@ public class Program
         var mlCommands = new MlCommands(context);
         var metadataCommands = new MetadataCommands();
         var benchmarkCommands = new BenchmarkCommands(context);
+        var rubyExtractCommands = new RubyExtractCommands(context);
 
         // Import commands
         if (options.Import)
@@ -258,6 +259,35 @@ public class Program
         if (!string.IsNullOrEmpty(options.ExportMlTags))
         {
             await mlCommands.ExportMlTags(options.ExportMlTags);
+        }
+
+        // Ruby extraction commands
+        if (!string.IsNullOrEmpty(options.ExtractRuby))
+        {
+            await rubyExtractCommands.ExtractRuby(options);
+        }
+
+        if (!string.IsNullOrEmpty(options.AlignRuby))
+        {
+            var rubyAlignCommands = new RubyAlignCommands(context);
+            await rubyAlignCommands.AlignRuby(options);
+        }
+
+        if (!string.IsNullOrEmpty(options.CheckRubyReadings))
+        {
+            var rubyAlignCommands = new RubyAlignCommands(context);
+            await rubyAlignCommands.CheckRubyReadings(options);
+        }
+
+        if (!string.IsNullOrEmpty(options.RubyChangedWinners))
+        {
+            var rubyAlignCommands = new RubyAlignCommands(context);
+            await rubyAlignCommands.RubyChangedWinnerReport(options);
+        }
+
+        if (!string.IsNullOrEmpty(options.RubyReprune))
+        {
+            RubyAlignCommands.RepruneArtifact(options.RubyReprune, options.Output);
         }
 
         // Benchmark commands

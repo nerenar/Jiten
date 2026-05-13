@@ -84,22 +84,33 @@ internal static class FormCandidateSelector
             var sorted = allCandidates.OrderByDescending(EffectiveScore).ToList();
             var topCandidates = sorted
                                 .Take(10)
-                                .Select(c => new FormCandidateDiagnostic
-                                             {
-                                                 WordId = c.Word.WordId,
-                                                 FormText = c.Form.Text,
-                                                 ReadingIndex = c.ReadingIndex,
-                                                 IsSelected = ReferenceEquals(c, best),
-                                                 TotalScore = c.TotalScore,
-                                                 WordScore = c.WordScore,
-                                                 EntryPriorityScore = c.EntryPriorityScore,
-                                                 FormPriorityScore = c.FormPriorityScore,
-                                                 FormFlagScore = c.FormFlagScore,
-                                                 SurfaceMatchScore = c.SurfaceMatchScore,
-                                                 ScriptScore = c.ScriptScore,
-                                                 ReadingMatchScore = c.ReadingMatchScore,
-                                                 PosAffinityScore = c.PosAffinityScore
-                                             })
+                                .Select(c =>
+                                {
+                                    var diag = new FormCandidateDiagnostic
+                                    {
+                                        WordId = c.Word.WordId,
+                                        FormText = c.Form.Text,
+                                        ReadingIndex = c.ReadingIndex,
+                                        IsSelected = ReferenceEquals(c, best),
+                                        TotalScore = c.TotalScore,
+                                        WordScore = c.WordScore,
+                                        EntryPriorityScore = c.EntryPriorityScore,
+                                        FormPriorityScore = c.FormPriorityScore,
+                                        FormFlagScore = c.FormFlagScore,
+                                        SurfaceMatchScore = c.SurfaceMatchScore,
+                                        ScriptScore = c.ScriptScore,
+                                        ReadingMatchScore = c.ReadingMatchScore,
+                                        PosAffinityScore = c.PosAffinityScore,
+                                        RubyPriorsScore = c.RubyPriorsScore
+                                    };
+                                    if (c.RubyPriorsScore != 0)
+                                    {
+                                        var detail = RubyPriorsScorer.ScoreDetailed(c, context);
+                                        diag.RubyPriorSupport = detail.Support;
+                                        diag.RubyPriorLevel = detail.Level;
+                                    }
+                                    return diag;
+                                })
                                 .ToList();
 
             diagnostics.Results.Add(new WordResult

@@ -21,6 +21,21 @@ internal sealed class FormCandidate(
     private HashSet<string>? _cachedReadingPos;
     public HashSet<string> CachedReadingPos => _cachedReadingPos ??= ReadingPosHelper.GetPosForReading(Word, ReadingIndex);
 
+    private string? _rubyReading;
+    private bool _rubyReadingResolved;
+    internal string? RubyReading
+    {
+        get
+        {
+            if (!_rubyReadingResolved)
+            {
+                _rubyReading = RubyReadingPriors.Current?.GetKanaReading(Word, ReadingIndex);
+                _rubyReadingResolved = true;
+            }
+            return _rubyReading;
+        }
+    }
+
     public FormScoreTrace ScoreTrace { get; private set; }
     public bool IsPosIncompatibleDirectSurface { get; set; }
 
@@ -33,6 +48,7 @@ internal sealed class FormCandidate(
     public int ScriptScore => ScoreTrace.ScriptScore;
     public int ReadingMatchScore => ScoreTrace.ReadingMatchScore;
     public int PosAffinityScore => ScoreTrace.PosAffinityScore;
+    public int RubyPriorsScore => ScoreTrace.RubyPriorsScore;
 
     public void SetScoreTrace(FormScoreTrace scoreTrace) => ScoreTrace = scoreTrace;
 }
@@ -109,9 +125,10 @@ internal readonly record struct FormScoreTrace(
     int ScriptScore,
     int ReadingMatchScore,
     int PosAffinityScore,
-    bool IdentityPenaltyApplied)
+    bool IdentityPenaltyApplied,
+    int RubyPriorsScore = 0)
 {
     public int TotalScore =>
         WordScore + EntryPriorityScore + FormPriorityScore + FormFlagScore + SurfaceMatchScore + ScriptScore +
-        ReadingMatchScore + PosAffinityScore;
+        ReadingMatchScore + PosAffinityScore + RubyPriorsScore;
 }
