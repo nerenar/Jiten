@@ -21,6 +21,7 @@ internal static class PriorityOverrides
         (1168660, 4), // 依る reading index 4 = よる (kana) — most common kana-only よる, beats 寄る
         (1495740, 2), // 付く reading index 2 = つく (kana) — most general つく, beats 点く (to be lit)
         (1508300, 2), // 柄 reading index 2 = ガラ (katakana) — "character/nature", exempts from short-kana gate
+        (2013900, 4), // 赤 reading index 4 = あか (kana) — "red", beats 垢 (dirt) and 銅 (copper) homophones
     ];
 
     public static void Apply(JmDictWord word)

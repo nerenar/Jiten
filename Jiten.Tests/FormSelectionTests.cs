@@ -74,7 +74,7 @@ public class FormSelectionTests
         yield return ["得るべし", "得る", 1454500, (byte)0];
 
         // 身体 in isolation: Sudachi gives reading シンタイ, so しんたい (2830705) wins via ReadingMatchScore.
-        // In sentence context where Sudachi gives カラダ, からだ (1409140) wins via EntryPriorityScore.
+        // Ruby priors favor からだ but ReadingMatchScore (+70) outweighs ruby (+30/-30 = 60pt swing).
         yield return ["身体", "身体", 2830705, (byte)0];
 
         // 石 should resolve to いし/rock (1382440), not こく/unit of volume (1382450)
@@ -1070,6 +1070,18 @@ public class FormSelectionTests
 
         // 鼠の糞 → ふん/droppings (2834408) — の preserves the フン reading
         yield return ["さらに黴や鼠の糞の臭いが淀んだ空気に漂っている。", "糞", 2834408, (byte)0];
+
+        // 額 → ひたい/forehead (1207510) — body-contact context triggers ひたい
+        yield return ["額にキスをした", "額", 1207510, (byte)0];
+
+        // 皆 → みんな (1202150) — standalone 皆 is みんな in modern Japanese, not みな
+        yield return ["皆で遊ぼう", "皆", 1202150, (byte)0];
+
+        // 抱く → だく (2844997) — いだく is literary; modern 抱く is だく
+        yield return ["彼女を抱く", "抱く", 2844997, (byte)0];
+
+        // 一枚 → いちまい (1166710) — number + counter combined
+        yield return ["一枚ください", "一枚", 1166710, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

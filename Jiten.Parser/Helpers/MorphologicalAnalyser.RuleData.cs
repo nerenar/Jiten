@@ -184,6 +184,7 @@ public partial class MorphologicalAnalyser
         ("なれ", "ど", PartOfSpeech.Conjunction),
         ("ここ", "ぞ", PartOfSpeech.Expression),
         ("並び", "に", PartOfSpeech.Conjunction),
+        ("真っ先","に", PartOfSpeech.Adverb)
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
