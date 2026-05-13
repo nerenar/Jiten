@@ -860,6 +860,8 @@ public static class AmountCombinations
         ("三", "国"),
         ("三", "次"),
         ("三", "枚"),
+        ("一", "枚"),
+        ("二", "枚"),
 
     ];
 }

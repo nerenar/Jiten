@@ -228,21 +228,35 @@ public partial class MorphologicalAnalyser
                     word.Reading = "カク";
             }
 
-            // 額 (ガク) → ヒタイ (forehead) when standalone
-            // がく reading primarily in compounds (金額, 総額, 月額, 高額) parsed as single tokens.
-            // Exception: 額にして (amounting to) is genuine standalone がく.
+            // 額 (ガク) → ヒタイ in body-contact context:
+            // 額にキスをした, 額に手を当てる, 額を叩く, 額の傷, etc.
             if (word is { Text: "額", Reading: "ガク" })
             {
-                bool isAmountExpression = i + 2 < wordInfos.Count &&
-                    wordInfos[i + 1].Text == "に" && wordInfos[i + 2].DictionaryForm == "する";
-                if (!isAmountExpression)
+                var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
+                var next2 = i + 2 < wordInfos.Count ? wordInfos[i + 2] : null;
+
+                bool isBodyContext = next is { Text: "に" or "を" or "の" } && next2 != null &&
+                    (next2.DictionaryForm is "キス" or "触れる" or "当てる" or "押す" or "押さえる"
+                         or "叩く" or "撫でる" or "拭く"
+                     || next2.Text is "手" or "キス" or "汗" or "傷" or "皺" or "シワ");
+
+                if (isBodyContext)
                     word.Reading = "ヒタイ";
             }
 
+            // 皆 (ミナ) → ミンナ — standalone 皆 is almost always みんな in modern Japanese;
+            // みな is literary/formal and typically written in kana.
+            // if (word is { Text: "皆", Reading: "ミナ" })
+            //     word.Reading = "ミンナ";
+
+            // 抱く (イダク) → ダク — いだく is literary; modern standalone 抱く is overwhelmingly だく.
+            if (word is { DictionaryForm: "抱く", Reading: { } r } && r.StartsWith("イダ"))
+                word.Reading = r.Replace("イダ", "ダ");
+
             // 様 disambiguation: さま (honorific suffix, 1545790) vs よう (appearance/manner, 1605840)
             // Sudachi reading reliably distinguishes: サマ → honorific, ヨウ → manner
-            if (word is { Text: "様", Reading: "サマ" })
-                word.PreMatchedWordId = 1545790;
+            // if (word is { Text: "様", Reading: "サマ" })
+            //     word.PreMatchedWordId = 1545790;
 
             // Kana よう as 形状詞/助動詞語幹 → 様/manner (1605840), not 陽/positive (1605845)
             if (word is { Text: "よう", Reading: "ヨウ", DictionaryForm: "よう" })
@@ -257,8 +271,7 @@ public partial class MorphologicalAnalyser
             // たった in time-elapsed context → 経つ (1251100), not 断つ/立つ.
             // When preceded by a time-unit noun (年/月/日/週/間), the intended meaning is
             // "X time has passed" (経つ), not "to cut" (断つ) or "to stand" (立つ).
-            if (word.Text == "たった" &&
-                word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary or PartOfSpeech.Unknown)
+            if (word is { Text: "たった", PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.Auxiliary or PartOfSpeech.Unknown })
             {
                 var prev = i > 0 ? wordInfos[i - 1] : null;
                 if (prev != null && prev.PartOfSpeech != PartOfSpeech.SupplementarySymbol)
@@ -289,12 +302,12 @@ public partial class MorphologicalAnalyser
 
             // 訳 (ヤク) → ワケ standalone — ヤク reading is for compounds (翻訳, 英訳) or 訳す;
             // standalone 訳 is always わけ (reason, meaning)
-            if (word is { Text: "訳", Reading: "ヤク", PartOfSpeech: PartOfSpeech.Noun })
-                word.Reading = "ワケ";
+            // if (word is { Text: "訳", Reading: "ヤク", PartOfSpeech: PartOfSpeech.Noun })
+            //     word.Reading = "ワケ";
 
             // 町 (チョウ) → マチ — チョウ reading primarily in compounds (町長, 市町村) parsed as single tokens.
-            if (word is { Text: "町", Reading: "チョウ" })
-                word.Reading = "マチ";
+            // if (word is { Text: "町", Reading: "チョウ" })
+            //     word.Reading = "マチ";
 
             // あの: Sudachi sometimes misclassifies as 感動詞 (filler) when it's prenominal,
             // and as 連体詞 when it's actually a filler interjection.

@@ -22,6 +22,12 @@ namespace Jiten.Parser
 {
     public static class Parser
     {
+        public static bool RubyPriorsEnabled
+        {
+            get => Scoring.RubyReadingPriors.Enabled;
+            set => Scoring.RubyReadingPriors.Enabled = value;
+        }
+
         private static readonly bool UseCache = true;
 
         private static readonly ParserRuntime _parserRuntime = new();
@@ -3654,20 +3660,16 @@ namespace Jiten.Parser
                     // which only affect WordPriorityScorer. Skip rescoring for interior non-archaic tokens.
                     bool skipRescore = fromFirstPassCache && !isArchaicSentence && i > 0 && i < sentenceWords.Count - 1;
 
-                    FormScoringContext scoringContext = default;
-                    if (!skipRescore)
-                    {
-                        scoringContext = FormScoringContext.Create(
-                            currentInfo.Text, currentInfo.DictionaryForm, currentInfo.NormalizedForm,
-                            currentInfo.IsPersonNameContext, currentInfo.Reading,
-                            isArchaicSentence,
-                            isSentenceInitial: i == 0,
-                            isSentenceFinal: i == sentenceWords.Count - 1,
-                            sudachiPOS: currentInfo.PartOfSpeech);
-                    }
+                    var scoringContext = FormScoringContext.Create(
+                        currentInfo.Text, currentInfo.DictionaryForm, currentInfo.NormalizedForm,
+                        currentInfo.IsPersonNameContext, currentInfo.Reading,
+                        isArchaicSentence,
+                        isSentenceInitial: i == 0,
+                        isSentenceFinal: i == sentenceWords.Count - 1,
+                        sudachiPOS: currentInfo.PartOfSpeech);
 
                     bool anyNonZeroBonus = false;
-                    var bonusCache = new Dictionary<FormCandidate, (int bonus, List<string>? rules)>();
+                    var bonusCache = new Dictionary<FormCandidate, (int bonus, List<string>? rules, int rubyBonus)>();
 
                     Dictionary<int, int>? collocMap = null;
                     for (int k = Math.Max(0, i - 3); k < i; k++)
@@ -3687,6 +3689,11 @@ namespace Jiten.Parser
                         foreach (var c in candidates)
                             c.IsPosIncompatibleDirectSurface = false;
 
+                    var leftDictForm = prevInfo?.DictionaryForm;
+                    var rightDictForm = nextInfo?.DictionaryForm;
+                    var left2DictForm = i >= 2 ? sentenceWords[i - 2].word.DictionaryForm : null;
+                    var right2DictForm = i < sentenceWords.Count - 2 ? sentenceWords[i + 2].word.DictionaryForm : null;
+
                     foreach (var candidate in candidates)
                     {
                         if (!skipRescore)
@@ -3695,13 +3702,18 @@ namespace Jiten.Parser
                             candidate.SetScoreTrace(trace);
                         }
 
+                        int rubyContextBonus = RubyPriorsScorer.ScoreWithContext(candidate, scoringContext,
+                                                 leftDictForm, rightDictForm, left2DictForm, right2DictForm)
+                                             - candidate.RubyPriorsScore;
+
                         int collocBonus = collocMap != null && collocMap.TryGetValue(candidate.Word.WordId, out var cb) ? cb : 0;
 
                         List<string>? rules = diagnostics != null ? new List<string>() : null;
-                        int bonus = AdjacentWordScorer.CalculateContextBonus(candidate, context, rules) + collocBonus;
+                        int effectiveRubyBonus = collocMap != null ? 0 : rubyContextBonus;
+                        int bonus = AdjacentWordScorer.CalculateContextBonus(candidate, context, rules) + collocBonus + effectiveRubyBonus;
                         if (collocBonus != 0)
                             (rules ??= []).Add("noun-verb-collocation");
-                        bonusCache[candidate] = (bonus, rules);
+                        bonusCache[candidate] = (bonus, rules, rubyContextBonus);
                         if (bonus != 0) anyNonZeroBonus = true;
                     }
 
@@ -3733,9 +3745,11 @@ namespace Jiten.Parser
                     if (diagnostics != null && newBest != null &&
                         bonusCache.TryGetValue(newBest, out var dnb) && dnb.rules is { Count: > 0 })
                     {
-                        var firstPassScore = candidates.FirstOrDefault(c =>
+                        var firstPassCandidate = candidates.FirstOrDefault(c =>
                                                                            c.Word.WordId == currentResult.WordId &&
-                                                                           c.ReadingIndex == currentResult.ReadingIndex)?.TotalScore ?? 0;
+                                                                           c.ReadingIndex == currentResult.ReadingIndex);
+                        var firstPassScore = firstPassCandidate?.TotalScore ?? 0;
+                        int firstPassRuby = firstPassCandidate != null && bonusCache.TryGetValue(firstPassCandidate, out var fpb) ? fpb.rubyBonus : 0;
 
                         diagnostics!.AdjacentScoring.Add(new AdjacentScoringEntry
                                                         {
@@ -3758,14 +3772,16 @@ namespace Jiten.Parser
                                                                                   WordId = currentResult.WordId,
                                                                                   ReadingIndex = currentResult.ReadingIndex,
                                                                                   Score = firstPassScore, ContextBonus = 0,
-                                                                                  AdjustedScore = firstPassScore
+                                                                                  AdjustedScore = firstPassScore,
+                                                                                  RubyContextBonus = firstPassRuby
                                                                               },
                                                             AdjustedWinner = new AdjacentCandidateInfo
                                                                              {
                                                                                  WordId = newBest.Word.WordId,
                                                                                  ReadingIndex = newBest.ReadingIndex,
                                                                                  Score = newBest.TotalScore, ContextBonus = newBestBonus,
-                                                                                 AdjustedScore = newBestAdjusted
+                                                                                 AdjustedScore = newBestAdjusted,
+                                                                                 RubyContextBonus = dnb.rubyBonus
                                                                              },
                                                             Changed = changed
                                                         });

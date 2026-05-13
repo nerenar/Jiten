@@ -180,6 +180,13 @@ public class FormCandidateDiagnostic
     public int ScriptScore { get; set; }
     public int ReadingMatchScore { get; set; }
     public int PosAffinityScore { get; set; }
+    public int RubyPriorsScore { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? RubyPriorSupport { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RubyPriorLevel { get; set; }
 }
 
 /// <summary>
@@ -262,4 +269,7 @@ public class AdjacentCandidateInfo
     public int Score { get; set; }
     public int ContextBonus { get; set; }
     public int AdjustedScore { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int RubyContextBonus { get; set; }
 }
