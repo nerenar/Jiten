@@ -663,7 +663,7 @@
     </div>
     <div>
       <div class="flex flex-col gap-1">
-        <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="decks" />
+        <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="decks" />
 
         <div v-if="status === 'pending'" class="flex flex-col gap-4">
           <Card v-for="i in 5" :key="i" class="p-2">
@@ -674,6 +674,12 @@
         </div>
 
         <div v-else-if="error">Error: {{ error }}</div>
+
+        <div v-else-if="!response?.data?.length" class="flex flex-col items-center justify-center py-16">
+          <i class="pi pi-search text-4xl text-primary-500 mb-4" />
+          <p class="text-lg font-medium text-primary-700 dark:text-primary-300">No decks found</p>
+          <p class="text-sm text-surface-400">Try adjusting your search or filters</p>
+        </div>
 
         <!-- Card View -->
         <div v-else-if="displayStyle === DisplayStyle.Card" class="flex flex-col gap-2">
@@ -690,7 +696,7 @@
           <MediaDeckTableView v-for="deck in response.data" :key="deck.id" :deck="deck" />
         </div>
       </div>
-      <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
+      <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
     </div>
   </div>
 </template>

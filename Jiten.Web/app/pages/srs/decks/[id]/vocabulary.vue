@@ -214,7 +214,7 @@
       :show-display-filter="auth.isAuthenticated"
     />
 
-    <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
+    <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
 
     <VocabularyList
       :words="response?.data ?? []"
@@ -222,6 +222,7 @@
       :error="error"
       :removable="isStaticDeck"
       :removing-key="removingKey"
+      empty-message="Try adjusting your search or filters"
       @remove="confirmRemoveWord"
     >
       <template #error="{ error: err }">
@@ -229,7 +230,7 @@
       </template>
     </VocabularyList>
 
-    <PaginationControls
+    <PaginationControls v-if="response?.data?.length"
       :previous-link="previousLink"
       :next-link="nextLink"
       :start="start"

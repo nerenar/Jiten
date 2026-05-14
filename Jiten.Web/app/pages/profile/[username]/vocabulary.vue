@@ -207,16 +207,16 @@
         </FloatLabel>
       </VocabularyFilters>
 
-      <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
+      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
 
       <VocabularyList
         :words="response?.data?.words ?? []"
         :status="status"
         :error="error"
-        empty-message="No vocabulary found. Complete some media to see your vocabulary!"
+        empty-message="Complete some media to see your vocabulary!"
       />
 
-      <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :scroll-to-top-on-next="true" />
+      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :scroll-to-top-on-next="true" />
     </div>
   </div>
 </template>

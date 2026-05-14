@@ -148,13 +148,13 @@
       :sort-by-options="sortByOptions"
       :show-display-filter="auth.isAuthenticated"
     />
-    <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
-    <VocabularyList :words="response?.data?.words ?? []" :status="status" :error="error">
+    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
+    <VocabularyList :words="response?.data?.words ?? []" :status="status" :error="error" empty-message="Try adjusting your search or filters">
       <template #error="{ error: err }">
         <div>Error: {{ err }}</div>
       </template>
     </VocabularyList>
-    <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
+    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
   </div>
 </template>
 
