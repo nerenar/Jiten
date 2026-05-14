@@ -2482,9 +2482,10 @@ public class StudyController(
 
         var now = DateTime.UtcNow;
         var oneHour = now.AddHours(1);
-        var oneDay = now.AddHours(24);
-        var twoDays = now.AddHours(48);
         var settings = await LoadStudySettings(userId);
+        var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
+        var tomorrowUtc = todayStart.AddHours(24);
+        var dayAfterUtc = todayStart.AddHours(48);
 
         var baseQuery = userContext.FsrsCards
             .AsNoTracking()
@@ -2501,15 +2502,16 @@ public class StudyController(
         if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
         {
             var upcomingCards = await baseQuery
-                .Where(c => c.Due <= twoDays)
+                .Where(c => c.Due <= dayAfterUtc)
                 .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
                 .ToListAsync();
             var filter = await BuildDeckReviewFilter(userId, upcomingCards.Select(c => (c.WordId, c.ReadingIndex)).ToList());
             var filtered = upcomingCards.Where(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex))).ToList();
 
             dueWithinHour = filtered.Count(c => c.Due <= oneHour);
-            dueToday = filtered.Count(c => c.Due > oneHour && c.Due <= oneDay);
-            dueTomorrow = filtered.Count(c => c.Due > oneDay && c.Due <= twoDays);
+            dueToday = filtered.Count(c => c.Due > oneHour && c.Due <= tomorrowUtc);
+            var tmrwLower = oneHour > tomorrowUtc ? oneHour : tomorrowUtc;
+            dueTomorrow = filtered.Count(c => c.Due > tmrwLower && c.Due <= dayAfterUtc);
 
             if (dueWithinHour == 0 && dueToday == 0)
             {
@@ -2531,8 +2533,8 @@ public class StudyController(
         else
         {
             var forecast = await baseQuery
-                .Where(c => c.Due <= twoDays)
-                .GroupBy(c => c.Due <= oneHour ? 0 : c.Due <= oneDay ? 1 : 2)
+                .Where(c => c.Due <= dayAfterUtc)
+                .GroupBy(c => c.Due <= oneHour ? 0 : c.Due <= tomorrowUtc ? 1 : 2)
                 .Select(g => new { Bucket = g.Key, Count = g.Count() })
                 .ToListAsync();
 

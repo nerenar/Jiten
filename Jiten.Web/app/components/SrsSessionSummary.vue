@@ -81,13 +81,12 @@
 
   const forecastText = computed(() => {
     if (!forecast.value) return null;
-    if (isAllCaughtUp.value) return null;
     const { dueWithinHour, dueToday, dueTomorrow } = forecast.value;
     const parts: string[] = [];
     if (dueWithinHour > 0) parts.push(`${dueWithinHour} due within the hour`);
     else if (dueToday > 0) parts.push(`${dueToday} due later today`);
     if (dueTomorrow > 0) parts.push(`${dueTomorrow} due tomorrow`);
-    return parts.join(' · ');
+    return parts.length > 0 ? parts.join(' · ') : null;
   });
 
   const streakMessage = computed(() => {
