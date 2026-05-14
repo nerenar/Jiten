@@ -571,8 +571,16 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
+            var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
+
             var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
-            var sentences = await parser.Parse(text, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
+            var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
+
+            // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
+            var cleanedOriginalFlat = cleanedOriginal.Replace("\r", "").Replace("\n", "");
+            FuriganaHint[]? relocatedHints = furiganaHints.Length > 0 && cleanedOriginalFlat.Length > 0
+                ? FuriganaHintExtractor.RelocateToCleanedOriginal(cleanedOriginalFlat, furiganaHints, cleanText)
+                : null;
 
             PreprocessSentences(sentences, diagnostics);
             PropagatePersonNameContexts(sentences);
@@ -643,7 +651,7 @@ namespace Jiten.Parser
                 }
             }
 
-            var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, candidateLookup, diagnostics);
+            var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, candidateLookup, diagnostics, relocatedHints);
             corrected = await ApplyMisparseGates(sentences, corrected, diagnostics);
             return ExcludeFinalMisparses(corrected);
         }
@@ -684,12 +692,22 @@ namespace Jiten.Parser
                 ? dictionaryEntries.ToDictionary(e => e.Surface.Trim())
                 : null;
 
+            var cleanTexts = new List<string>(texts.Count);
+            var hintsByText = new List<FuriganaHint[]>(texts.Count);
+            foreach (var t in texts)
+            {
+                var (clean, hints) = FuriganaHintExtractor.Extract(t);
+                cleanTexts.Add(clean);
+                hintsByText.Add(hints);
+            }
+
             var timer = new Stopwatch();
             timer.Start();
 
             // Batch morphological analysis
             var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
-            var batchedSentences = await parser.ParseBatch(texts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv);
+            var cleanedOriginals = new List<string>();
+            var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals);
 
             timer.Restart();
 
@@ -709,7 +727,13 @@ namespace Jiten.Parser
             {
                 var sentences = batchedSentences[textIndex];
                 var text = texts[textIndex];
-                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface);
+
+                var coFlat = cleanedOriginals[textIndex].Replace("\r", "").Replace("\n", "");
+                FuriganaHint[]? relocated = hintsByText[textIndex].Length > 0 && coFlat.Length > 0
+                    ? FuriganaHintExtractor.RelocateToCleanedOriginal(coFlat, hintsByText[textIndex], cleanTexts[textIndex])
+                    : null;
+
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated);
                 decks.Add(deck);
                 batchedSentences[textIndex] = null!;
             }
@@ -729,7 +753,8 @@ namespace Jiten.Parser
             bool predictDifficulty,
             MediaType mediatype,
             BenchmarkTimings? timings = null,
-            Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null)
+            Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null,
+            FuriganaHint[]? relocatedHints = null)
         {
             var sw = timings != null ? Stopwatch.StartNew() : null;
 
@@ -782,7 +807,7 @@ namespace Jiten.Parser
 
             if (sw != null) { timings!.ResegmentationMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            var corrected = await ApplyAdjacentScoring(sentences, resultLookup, candidateLookup);
+            var corrected = await ApplyAdjacentScoring(sentences, resultLookup, candidateLookup, relocatedHints: relocatedHints);
             corrected = await ApplyMisparseGates(sentences, corrected);
 
             if (sw != null) { timings!.AdjacentScoringMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
@@ -3473,11 +3498,33 @@ namespace Jiten.Parser
             return result;
         }
 
+        private static FuriganaHint? FindMatchingHint(FuriganaHint[]? hints, WordInfo token)
+        {
+            if (hints == null || token.StartOffset < 0) return null;
+            int tokenEnd = token.StartOffset + token.Text.Length;
+            foreach (var h in hints)
+            {
+                if (h.Offset < token.StartOffset || h.Offset >= tokenEnd) continue;
+                int hintEnd = h.Offset + h.Length;
+                if (hintEnd > tokenEnd) continue;
+
+                if (h.Length == token.Text.Length) return h;
+
+                // Partial hint (e.g. {開'あ}く) — extend reading with unhinted okurigana
+                int suffixStart = h.Offset - token.StartOffset + h.Length;
+                var suffix = token.Text.AsSpan(suffixStart);
+                var extendedReading = h.Reading + suffix.ToString();
+                return new FuriganaHint(token.StartOffset, token.Text.Length, extendedReading);
+            }
+            return null;
+        }
+
         private static async Task<List<DeckWord>> ApplyAdjacentScoring(
             List<SentenceInfo> sentences,
             List<(DeckWord? word, int? margin, List<FormCandidate>? candidates)> processedResults,
             Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>? candidateLookup = null,
-            ParserDiagnostics? diagnostics = null)
+            ParserDiagnostics? diagnostics = null,
+            FuriganaHint[]? relocatedHints = null)
         {
             int pos = 0;
             var sentencePairs = BuildSentencePairs(sentences, wi =>
@@ -3486,17 +3533,18 @@ namespace Jiten.Parser
                 var r = processedResults[pos++];
                 return (r.word, r.margin);
             });
-            return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics);
+            return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics, relocatedHints);
         }
 
         private static async Task<List<DeckWord>> ApplyAdjacentScoring(
             List<SentenceInfo> sentences,
             Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)> resultLookup,
             Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>? candidateLookup = null,
-            ParserDiagnostics? diagnostics = null)
+            ParserDiagnostics? diagnostics = null,
+            FuriganaHint[]? relocatedHints = null)
         {
             var sentencePairs = BuildSentencePairs(sentences, wi => LookupResult(wi, resultLookup));
-            return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics);
+            return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics, relocatedHints);
         }
 
         private static List<List<(WordInfo word, DeckWord? result, int? margin)>> BuildSentencePairs(
@@ -3523,7 +3571,8 @@ namespace Jiten.Parser
         private static async Task<List<DeckWord>> ApplyAdjacentScoringCore(
             List<List<(WordInfo word, DeckWord? result, int? margin)>> sentencePairs,
             Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>? candidateLookup = null,
-            ParserDiagnostics? diagnostics = null)
+            ParserDiagnostics? diagnostics = null,
+            FuriganaHint[]? relocatedHints = null)
         {
             // Pass 1: identify tokens needing rederivation and collect all word IDs
             var allWordIds = new HashSet<int>();
@@ -3545,16 +3594,17 @@ namespace Jiten.Parser
                     // High confidence → skip rederivation, unless archaic sentence (Phase 1 scored without archaic context)
                     // Exception: copula can only follow nominals, so always re-evaluate before だ/です/である
                     // But never rederive tokens with PreMatchedWordId — disambiguation is authoritative
+                    var cachedHint = FindMatchingHint(relocatedHints, currentInfo);
+                    bool hasHint = cachedHint != null;
                     bool isPreMatched = currentInfo.PreMatchedWordId.HasValue && currentInfo.PreMatchedCandidateWordIds == null;
-                    if (isPreMatched) continue;
-                    if (!isArchaicPass1 && !nextIsCopula && ScoringPolicy.IsHighConfidence(currentMargin)) continue;
+                    if (isPreMatched && !hasHint) continue;
+                    if (!isArchaicPass1 && !nextIsCopula && !hasHint && ScoringPolicy.IsHighConfidence(currentMargin)) continue;
 
                     WordInfo? prevInfo = i > 0 ? sentenceWords[i - 1].word : null;
                     var prevResult = i > 0 ? sentenceWords[i - 1].result : null;
                     var nextResult = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].result : null;
 
-                    // Low confidence → always rederive (bypass HasApplicableRules check)
-                    bool forceRederive = ScoringPolicy.IsLowConfidence(currentMargin);
+                    bool forceRederive = hasHint || ScoringPolicy.IsLowConfidence(currentMargin);
 
                     if (!forceRederive)
                         for (int k = Math.Max(0, i - 3); k < i; k++)
@@ -3570,8 +3620,10 @@ namespace Jiten.Parser
                          nextResult?.PartsOfSpeech, nextInfo?.Text))
                         continue;
 
-                    // Try reusing first-pass candidates instead of re-deriving
-                    if (candidateLookup != null)
+                    // Try reusing first-pass candidates instead of re-deriving.
+                    // When a furigana hint is present, skip the cache — rederivation
+                    // with skipPosFilter brings in candidates the first pass excluded.
+                    if (candidateLookup != null && !hasHint)
                     {
                         var key = GetDedupKey(currentInfo);
                         if (candidateLookup.TryGetValue(key, out var fpCandidates))
@@ -3625,6 +3677,8 @@ namespace Jiten.Parser
                         continue;
                     }
 
+                    bool tokenHasHint = FindMatchingHint(relocatedHints, currentInfo) != null;
+
                     List<FormCandidate>? candidates = null;
                     bool fromFirstPassCache = false;
                     if (cachedCandidates.TryGetValue((si, i), out var cached))
@@ -3634,7 +3688,7 @@ namespace Jiten.Parser
                     }
                     else if (rederiveStates.TryGetValue((si, i), out var state))
                     {
-                        candidates = RederivationHelper.BuildCandidatesFromWords(state, wordCache);
+                        candidates = RederivationHelper.BuildCandidatesFromWords(state, wordCache, skipPosFilter: tokenHasHint);
                     }
 
                     if (candidates == null || candidates.Count == 0)
@@ -3694,6 +3748,10 @@ namespace Jiten.Parser
                     var left2DictForm = i >= 2 ? sentenceWords[i - 2].word.DictionaryForm : null;
                     var right2DictForm = i < sentenceWords.Count - 2 ? sentenceWords[i + 2].word.DictionaryForm : null;
 
+                    FuriganaHint? matchingHint = FindMatchingHint(relocatedHints, currentInfo);
+                    string? hintHiragana = matchingHint.HasValue
+                        ? KanaScoringHelpers.ToNormalizedHiragana(matchingHint.Value.Reading, convertLongVowelMark: false)
+                        : null;
                     foreach (var candidate in candidates)
                     {
                         if (!skipRescore)
@@ -3707,12 +3765,15 @@ namespace Jiten.Parser
                                              - candidate.RubyPriorsScore;
 
                         int collocBonus = collocMap != null && collocMap.TryGetValue(candidate.Word.WordId, out var cb) ? cb : 0;
+                        int furiganaBonus = Scoring.FuriganaHintScorer.Score(candidate, hintHiragana);
 
                         List<string>? rules = diagnostics != null ? new List<string>() : null;
                         int effectiveRubyBonus = collocMap != null ? 0 : rubyContextBonus;
-                        int bonus = AdjacentWordScorer.CalculateContextBonus(candidate, context, rules) + collocBonus + effectiveRubyBonus;
+                        int bonus = AdjacentWordScorer.CalculateContextBonus(candidate, context, rules) + collocBonus + effectiveRubyBonus + furiganaBonus;
                         if (collocBonus != 0)
                             (rules ??= []).Add("noun-verb-collocation");
+                        if (furiganaBonus != 0)
+                            (rules ??= []).Add($"furigana-hint:{matchingHint!.Value.Reading}");
                         bonusCache[candidate] = (bonus, rules, rubyContextBonus);
                         if (bonus != 0) anyNonZeroBonus = true;
                     }

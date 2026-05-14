@@ -79,7 +79,7 @@
   <div class="flex flex-col">
     <blockquote class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
       <div class="flex items-start gap-2">
-        <div v-html="formattedText" class="md:text-lg text-sm transition-filter duration-200 flex-1" :class="{ 'blur-sm': isNsfw && !isRevealed }" @click="handleReveal"></div>
+        <div v-html="formattedText" class="md:text-lg text-sm transition-filter duration-200 flex-1" lang="ja" :class="{ 'blur-sm': isNsfw && !isRevealed }" @click="handleReveal"></div>
         <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
         <button
           v-if="authStore.isAuthenticated && wordId != null && readingIndex != null"

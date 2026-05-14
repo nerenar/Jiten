@@ -119,6 +119,15 @@ public class StudySettingsDto
     [JsonPropertyName("autoPlaySentence")]
     public bool AutoPlaySentence { get; set; } = true;
 
+    [JsonPropertyName("autoPlayWordOnFront")]
+    public bool AutoPlayWordOnFront { get; set; }
+
+    [JsonPropertyName("autoPlayWordOnFrontNewOnly")]
+    public bool AutoPlayWordOnFrontNewOnly { get; set; }
+
+    [JsonPropertyName("autoPlaySentenceOnFront")]
+    public bool AutoPlaySentenceOnFront { get; set; }
+
     [JsonPropertyName("showReviewActivity")]
     public bool ShowReviewActivity { get; set; } = true;
 
@@ -127,4 +136,29 @@ public class StudySettingsDto
 
     [JsonPropertyName("timezone")]
     public string? Timezone { get; set; }
+
+    [JsonPropertyName("showConfusableReadings")]
+    public bool ShowConfusableReadings { get; set; } = true;
+
+    [JsonPropertyName("dayBoundaryScheduling")]
+    public bool DayBoundaryScheduling { get; set; }
+
+    [JsonPropertyName("keybinds")]
+    public StudyKeybindsDto Keybinds { get; set; } = new();
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class StudyKeybindsDto
+{
+    [JsonPropertyName("grade1")] public string Grade1 { get; set; } = "1";
+    [JsonPropertyName("grade2")] public string Grade2 { get; set; } = "2";
+    [JsonPropertyName("grade3")] public string Grade3 { get; set; } = "3";
+    [JsonPropertyName("grade4")] public string Grade4 { get; set; } = "4";
+    [JsonPropertyName("flipCard")] public string FlipCard { get; set; } = " ";
+    [JsonPropertyName("blacklist")] public string Blacklist { get; set; } = "b";
+    [JsonPropertyName("forget")] public string Forget { get; set; } = "f";
+    [JsonPropertyName("master")] public string Master { get; set; } = "m";
+    [JsonPropertyName("suspend")] public string Suspend { get; set; } = "s";
+    [JsonPropertyName("undo")] public string Undo { get; set; } = "z";
+    [JsonPropertyName("wrapUp")] public string WrapUp { get; set; } = "w";
 }

@@ -7,6 +7,7 @@ interface SetStatusResponse {
   isIgnored: boolean;
   parentDeckId: number | null;
   parentStatus: DeckStatus | null;
+  allChildrenCompleted: boolean;
 }
 
 export function useDeckPreference(

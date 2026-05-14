@@ -5,6 +5,7 @@ using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Utils;
+using Jiten.Parser;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -265,13 +266,14 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (text.Length > 2000)
             return Results.BadRequest("Text is too long");
 
+        var (cleanText, _) = FuriganaHintExtractor.Extract(text);
         var parsedWords = await Parser.Parser.ParseText(contextFactory, text);
 
         var allWords = new List<ParsedWordDto>();
         var wordsWithPositions = new List<(ParsedWordDto Word, int Position)>();
         int currentPosition = 0;
 
-        BuildParseResult(text, parsedWords, wordsWithPositions, allWords);
+        BuildParseResult(cleanText, parsedWords, wordsWithPositions, allWords);
         return Results.Ok(allWords);
     }
 
@@ -291,15 +293,19 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (text.Length > 2000)
             return Results.BadRequest("Text is too long");
 
-        var normalisedText = TextNormalizationHelper.NormaliseForParsing(text);
-        var parsedWords = await Parser.Parser.ParseText(contextFactory, normalisedText);
+        var (cleanTextRaw, hints) = FuriganaHintExtractor.Extract(text);
+        var normalisedClean = TextNormalizationHelper.NormaliseForParsing(cleanTextRaw);
+        var textForParser = hints.Length > 0
+            ? FuriganaHintExtractor.Annotate(normalisedClean, hints)
+            : normalisedClean;
+        var parsedWords = await Parser.Parser.ParseText(contextFactory, textForParser);
 
         var allWords = new List<ParsedWordDto>();
         var wordsWithPositions = new List<(ParsedWordDto Word, int Position)>();
         int currentPosition = 0;
 
-        BuildParseResult(normalisedText, parsedWords, wordsWithPositions, allWords);
-        return Results.Ok(new ParseNormalisedResultDto { NormalisedText = normalisedText, Words = allWords });
+        BuildParseResult(normalisedClean, parsedWords, wordsWithPositions, allWords);
+        return Results.Ok(new ParseNormalisedResultDto { NormalisedText = normalisedClean, Words = allWords });
     }
 
     /// <summary>

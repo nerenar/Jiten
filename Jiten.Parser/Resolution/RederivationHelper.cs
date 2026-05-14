@@ -86,7 +86,8 @@ internal static class RederivationHelper
 
     public static List<FormCandidate> BuildCandidatesFromWords(
         RederiveState state,
-        Dictionary<int, JmDictWord> wordCache)
+        Dictionary<int, JmDictWord> wordCache,
+        bool skipPosFilter = false)
     {
         var allCandidates = new List<FormCandidate>();
 
@@ -121,10 +122,13 @@ internal static class RederivationHelper
         foreach (var id in state.CandidateIds)
         {
             if (!wordCache.TryGetValue(id, out var word)) continue;
-            bool isNameWord = word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
-            if (!PosMapper.IsJmDictCompatibleWithSudachi(word.CachedPOS, state.WordInfo.PartOfSpeech)
-                && !(state.WordInfo.IsPersonNameContext && isNameWord))
-                continue;
+            if (!skipPosFilter)
+            {
+                bool isNameWord = word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
+                if (!PosMapper.IsJmDictCompatibleWithSudachi(word.CachedPOS, state.WordInfo.PartOfSpeech)
+                    && !(state.WordInfo.IsPersonNameContext && isNameWord))
+                    continue;
+            }
 
             var forms = FormCandidateFactory.EnumerateCandidateForms(word, state.TextInHiragana, allowLooseLvmMatch: true, surface: state.Text);
             allCandidates.AddRange(forms);

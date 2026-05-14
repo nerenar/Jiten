@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
-import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto } from '~/types';
+import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
 import { FsrsRating } from '~/types';
+import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 
 interface SessionReview {
   wordId: number;
@@ -53,6 +54,7 @@ export const useSrsStore = defineStore('srs', () => {
   const isSessionComplete = ref(false);
   const isWrappingUp = ref(false);
   const preWrapUpBatch = ref<StudyCardDto[]>([]);
+  const settingsLoaded = ref(false);
   const studySettings = ref<StudySettingsDto>({
     newCardsPerDay: 20,
     maxReviewsPerDay: 1000,
@@ -78,9 +80,15 @@ export const useSrsStore = defineStore('srs', () => {
     furiganaOnFrontNewOnly: false,
     autoPlayWord: true,
     autoPlaySentence: true,
+    autoPlayWordOnFront: false,
+    autoPlayWordOnFrontNewOnly: false,
+    autoPlaySentenceOnFront: false,
     showReviewActivity: true,
     showReviewForecast: true,
     timezone: 'Europe/London',
+    showConfusableReadings: true,
+    dayBoundaryScheduling: false,
+    keybinds: { ...DEFAULT_KEYBINDS },
   });
   const sessionStats = ref({
     cardsReviewed: 0,
@@ -108,6 +116,16 @@ export const useSrsStore = defineStore('srs', () => {
   const exampleCache = ref(new Map<string, StudyExampleSentenceDto | null>());
   const examplePrefetchedUpTo = ref(-1);
   const sessionDirty = ref(false);
+  const sessionStreak = ref<SessionStreakDto | null>(null);
+  const sessionForecast = ref<ReviewForecastDto | null>(null);
+  let summaryPrefetched = false;
+
+  function prefetchSessionSummary() {
+    if (summaryPrefetched) return;
+    summaryPrefetched = true;
+    $api<SessionStreakDto>('srs/session-streak').then(r => { sessionStreak.value = r; }).catch(() => {});
+    $api<ReviewForecastDto>('srs/review-forecast').then(r => { sessionForecast.value = r; }).catch(() => {});
+  }
 
   function invalidateSession() {
     sessionDirty.value = true;
@@ -263,7 +281,7 @@ export const useSrsStore = defineStore('srs', () => {
           serverVersion = version;
           if (!force && overviewVersion.value > 0 && version === overviewVersion.value) return;
         } catch { /* fall through to full refresh */ }
-        await Promise.all([fetchStudyDecks(), fetchDueSummary(), fetchDeckStreak(), fetchSettings()]);
+        await Promise.all([fetchStudyDecks(), fetchDueSummary(), fetchDeckStreak(), fetchSettings(true)]);
         overviewVersion.value = serverVersion;
       } finally {
         refreshOverviewPromise = null;
@@ -615,6 +633,8 @@ export const useSrsStore = defineStore('srs', () => {
       else if (rating === FsrsRating.Good) sessionStats.value.gradeCounts.good++;
       else if (rating === FsrsRating.Easy) sessionStats.value.gradeCounts.easy++;
 
+      prefetchSessionSummary();
+
       if (rating === FsrsRating.Again) {
         const newSet = new Set(againCardKeys.value);
         newSet.add(cardKey);
@@ -803,9 +823,11 @@ export const useSrsStore = defineStore('srs', () => {
     srsEnrolled.value = res.enrolled;
   }
 
-  async function fetchSettings() {
+  async function fetchSettings(force = false) {
+    if (!force && settingsLoaded.value) return;
     try {
       studySettings.value = await $api<StudySettingsDto>('srs/study-settings');
+      settingsLoaded.value = true;
     } catch {
       // Use defaults
     }
@@ -838,6 +860,9 @@ export const useSrsStore = defineStore('srs', () => {
     exampleCache.value = new Map();
     examplePrefetchedUpTo.value = -1;
     sessionDirty.value = false;
+    sessionStreak.value = null;
+    sessionForecast.value = null;
+    summaryPrefetched = false;
   }
 
   function startStudyMore(params: StudyMoreParams) {
@@ -913,5 +938,7 @@ export const useSrsStore = defineStore('srs', () => {
     fetchSettings,
     updateSettings,
     resetSession,
+    sessionStreak,
+    sessionForecast,
   };
 });

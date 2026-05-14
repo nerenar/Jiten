@@ -129,6 +129,15 @@
     localStorage.setItem('srs-study-theme', id);
   }
 
+  const compactBar = ref(false);
+  onMounted(() => {
+    compactBar.value = localStorage.getItem('srs-compact-bar') === '1';
+  });
+  function toggleCompactBar() {
+    compactBar.value = !compactBar.value;
+    localStorage.setItem('srs-compact-bar', compactBar.value ? '1' : '0');
+  }
+
   const bottomBarRef = ref<HTMLElement | null>(null);
   const bottomBarHeight = ref(0);
   let barObserver: ResizeObserver | null = null;
@@ -148,11 +157,11 @@
   onUnmounted(() => barObserver?.disconnect());
 
   const barColors = {
-    rainbow: { easy: 'bg-emerald-400', good: 'bg-blue-400', hard: 'bg-orange-300', action: 'bg-gray-400', again: 'bg-red-400' },
+    rainbow: { easy: 'bg-blue-400', good: 'bg-emerald-400', hard: 'bg-orange-300', action: 'bg-gray-400', again: 'bg-red-400' },
     mono: { easy: 'bg-surface-500', good: 'bg-surface-400', hard: 'bg-surface-300', action: 'bg-surface-300', again: 'bg-surface-600 dark:bg-surface-500' },
   } as const;
   const dotColors = {
-    rainbow: { again: 'bg-red-400', hard: 'bg-orange-300', good: 'bg-blue-400', easy: 'bg-emerald-400' },
+    rainbow: { again: 'bg-red-400', hard: 'bg-orange-300', good: 'bg-emerald-400', easy: 'bg-blue-400' },
     mono: { again: 'bg-surface-600', hard: 'bg-surface-400', good: 'bg-surface-400', easy: 'bg-surface-500' },
   } as const;
 
@@ -268,10 +277,10 @@
     else srsStore.wrapUp();
   }
 
-  function exitStudy() {
+  async function exitStudy() {
     stopElapsedTimer();
+    await router.push('/srs/decks');
     srsStore.resetSession();
-    router.push('/srs/decks');
   }
 
   const showStudyMoreDialog = ref(false);
@@ -342,7 +351,7 @@
               v-for="theme in studyThemes"
               :key="theme.id"
               @click="setStudyTheme(theme.id)"
-              class="md:hidden p-2 rounded-lg transition-colors"
+              class="md:hidden p-2 rounded-lg transition-colors cursor-pointer"
               :class="studyTheme === theme.id
                 ? 'bg-indigo-500 text-white'
                 : 'bg-gray-200/60 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700'"
@@ -466,17 +475,19 @@
       </div>
 
       <!-- Fixed bottom buttons -->
-      <div ref="bottomBarRef" class="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 fixed bottom-0 left-0 right-0 z-40 isolate">
+      <div ref="bottomBarRef" class="border-t border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 fixed bottom-0 left-0 right-0 z-40 isolate" :class="compactBar ? 'px-3 pt-1.5 pb-2' : 'px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]'">
         <div class="w-full mx-auto" :class="cardWidthClass">
           <SrsGradeButtons
             :grading-buttons="srsStore.studySettings.gradingButtons"
             :is-flipped="srsStore.isFlipped"
             :can-undo="srsStore.canUndo"
+            :keybinds="srsStore.studySettings.keybinds"
             :monochrome="isMono"
             :interval-preview="srsStore.studySettings.showNextInterval ? srsStore.currentCard?.intervalPreview : undefined"
             :show-keybinds="srsStore.studySettings.showKeybinds"
             :show-swipe-hints="srsStore.studySettings.enableSwipeGesture"
             :disabled="srsStore.isBusy"
+            :compact="compactBar"
             :pressed-key="pressedKey"
             @grade="handleGrade"
             @flip="handleFlip"
@@ -486,14 +497,15 @@
             @forget="handleForget"
             @undo="handleUndo"
             @settings="showSettingsDialog = true"
+            @expand="toggleCompactBar"
           />
-          <div class="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
-            <div class="hidden md:flex gap-0.5">
+          <div v-if="!compactBar" class="mt-1 hidden md:flex items-center justify-center gap-2 text-xs text-gray-400">
+            <div class="flex gap-0.5">
               <button
                 v-for="(label, i) in cardWidthLabels"
                 :key="label"
                 @click="setCardWidth(i)"
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors"
+                class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer"
                 :class="cardWidthIndex === i
                   ? 'bg-indigo-500 text-white'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'"
@@ -501,12 +513,12 @@
                 {{ label }}
               </button>
             </div>
-            <div class="hidden md:flex gap-0.5">
+            <div class="flex gap-0.5">
               <button
                 v-for="theme in studyThemes"
                 :key="theme.id"
                 @click="setStudyTheme(theme.id)"
-                class="p-1 rounded transition-colors"
+                class="p-1 rounded transition-colors cursor-pointer"
                 :class="studyTheme === theme.id
                   ? 'bg-indigo-500 text-white'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'"
@@ -516,11 +528,18 @@
               </button>
             </div>
             <button
-              class="hidden md:block p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              class="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
               aria-label="SRS Settings"
               @click="showSettingsDialog = true"
             >
               <Icon name="material-symbols:settings-outline" size="14" />
+            </button>
+            <button
+              class="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+              aria-label="Collapse bar"
+              @click="toggleCompactBar"
+            >
+              <Icon name="material-symbols:keyboard-double-arrow-down" size="18" />
             </button>
           </div>
         </div>

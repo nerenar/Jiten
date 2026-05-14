@@ -261,9 +261,9 @@
               <div v-if="conjugationString != null" class="text-gray-500 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
               <div class="flex items-center gap-2">
                 <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
-                  <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.mainReading.text)" />
+                  <div class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(response.mainReading.text)" />
                 </NuxtLink>
-                <div v-if="!showRedirect" class="text-3xl font-noto-sans" v-html="convertToRuby(response.mainReading.text)" />
+                <div v-if="!showRedirect" class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(response.mainReading.text)" />
                 <TtsButton :text="stripRubyMarkup(response.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" />
               </div>
             </div>
@@ -290,7 +290,7 @@
             <div class="pl-2 flex flex-row flex-wrap gap-8">
               <span v-for="reading in sortedReadings" :key="reading.readingIndex">
                 <div :class="reading.readingIndex === currentReadingIndex ? 'font-bold !text-purple-500' : ' text-blue-500'">
-                  <div class="text-center font-noto-sans cursor-pointer hover:underline" @click="selectReading(reading.readingIndex)">
+                  <div class="text-center font-noto-sans cursor-pointer hover:underline" lang="ja" @click="selectReading(reading.readingIndex)">
                     {{ reading.text }}
                     <div class="text-xs">({{ formatPercentageApprox(reading.frequencyPercentage) }})</div>
                   </div>

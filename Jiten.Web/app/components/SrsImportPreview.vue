@@ -85,10 +85,10 @@
             :style="{ height: `${ITEM_HEIGHT}px` }"
             @click="emit('toggleExclude', word.wordId)"
           >
-            <span class="font-noto-sans truncate">{{ word.text }}</span>
+            <span class="font-noto-sans truncate" lang="ja">{{ word.text }}</span>
             <div class="flex items-center gap-2 shrink-0">
               <span v-if="word.occurrences && word.occurrences > 1" class="text-xs text-purple-500 dark:text-purple-400 tabular-nums">{{ word.occurrences }}x</span>
-              <span class="text-gray-400 font-noto-sans">{{ word.reading }}</span>
+              <span class="text-gray-400 font-noto-sans" lang="ja">{{ word.reading }}</span>
               <Icon
                 :name="excludedWordIds.has(word.wordId) ? 'material-symbols:add-circle-outline' : 'material-symbols:remove-circle-outline'"
                 size="16"
@@ -115,7 +115,7 @@
       <div
         v-for="(word, i) in unmatched.slice(0, 50)"
         :key="i"
-        class="px-3 py-1 text-sm text-red-400 font-noto-sans"
+        class="px-3 py-1 text-sm text-red-400 font-noto-sans" lang="ja"
       >
         {{ word }}
       </div>

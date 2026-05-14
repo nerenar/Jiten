@@ -28,6 +28,7 @@ public class StudyCardDto
     public IntervalPreviewDto? IntervalPreview { get; set; }
     public List<StudyDeckOccurrenceDto>? DeckOccurrences { get; set; }
     public string? SourceDeckName { get; set; }
+    public List<string>? ConfusableReadings { get; set; }
 }
 
 public class StudyDeckOccurrenceDto

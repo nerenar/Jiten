@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { HardestCard } from '~/stores/srsStore';
+  import { useSrsStore } from '~/stores/srsStore';
   import type { ReviewForecastDto, SessionStreakDto } from '~/types';
 
   const props = defineProps<{
@@ -17,12 +18,20 @@
   }>();
 
   const { $api } = useNuxtApp();
+  const srsStore = useSrsStore();
 
   const forecast = ref<ReviewForecastDto | null>(null);
   const streak = ref<SessionStreakDto | null>(null);
   const streakLoaded = ref(false);
 
   onMounted(async () => {
+    if (srsStore.sessionStreak && srsStore.sessionForecast) {
+      streak.value = srsStore.sessionStreak;
+      forecast.value = srsStore.sessionForecast;
+      streakLoaded.value = true;
+      return;
+    }
+
     const [forecastResult, streakResult] = await Promise.allSettled([
       $api<ReviewForecastDto>('srs/review-forecast'),
       $api<SessionStreakDto>('srs/session-streak'),
@@ -54,7 +63,10 @@
 
   const isAllCaughtUp = computed(() => {
     if (!forecast.value) return false;
-    return forecast.value.dueWithinHour === 0 && forecast.value.dueToday === 0;
+    const f = forecast.value;
+    if (f.dayBoundaryScheduling)
+      return f.dueWithinHour === 0 && f.dueToday === 0 && f.dueTomorrow === 0;
+    return f.dueWithinHour === 0 && f.dueToday === 0;
   });
 
   const caughtUpMessage = computed(() => {
@@ -72,13 +84,18 @@
 
   const forecastText = computed(() => {
     if (!forecast.value) return null;
-    if (isAllCaughtUp.value) return null;
-    const { dueWithinHour, dueToday, dueTomorrow } = forecast.value;
+    const { dueWithinHour, dueToday, dueTomorrow, dayBoundaryScheduling } = forecast.value;
     const parts: string[] = [];
-    if (dueWithinHour > 0) parts.push(`${dueWithinHour} due within the hour`);
-    else if (dueToday > 0) parts.push(`${dueToday} due later today`);
-    if (dueTomorrow > 0) parts.push(`${dueTomorrow} due tomorrow`);
-    return parts.join(' · ');
+    if (dayBoundaryScheduling) {
+      if (dueWithinHour > 0) parts.push(`${dueWithinHour} due tomorrow`);
+      if (dueToday > 0) parts.push(`${dueToday} due in 2 days`);
+      if (dueTomorrow > 0) parts.push(`${dueTomorrow} due in 3 days`);
+    } else {
+      if (dueWithinHour > 0) parts.push(`${dueWithinHour} due within the hour`);
+      else if (dueToday > 0) parts.push(`${dueToday} due later today`);
+      if (dueTomorrow > 0) parts.push(`${dueTomorrow} due tomorrow`);
+    }
+    return parts.length > 0 ? parts.join(' · ') : null;
   });
 
   const streakMessage = computed(() => {

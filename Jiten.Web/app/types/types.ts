@@ -805,6 +805,7 @@ export interface StudyCardDto {
   intervalPreview?: IntervalPreviewDto;
   deckOccurrences?: StudyDeckOccurrenceDto[];
   sourceDeckName?: string;
+  confusableReadings?: string[];
 }
 
 export interface StudyDeckOccurrenceDto {
@@ -864,6 +865,20 @@ export type StudyReviewFrom = 'AllTracked' | 'StudyDecksOnly';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
 
+export interface StudyKeybinds {
+  grade1: string;
+  grade2: string;
+  grade3: string;
+  grade4: string;
+  flipCard: string;
+  blacklist: string;
+  forget: string;
+  master: string;
+  suspend: string;
+  undo: string;
+  wrapUp: string;
+}
+
 export interface StudySettingsDto {
   newCardsPerDay: number;
   maxReviewsPerDay: number;
@@ -890,9 +905,15 @@ export interface StudySettingsDto {
   furiganaOnFrontNewOnly: boolean;
   autoPlayWord: boolean;
   autoPlaySentence: boolean;
+  autoPlayWordOnFront: boolean;
+  autoPlayWordOnFrontNewOnly: boolean;
+  autoPlaySentenceOnFront: boolean;
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;
+  showConfusableReadings: boolean;
+  dayBoundaryScheduling: boolean;
+  keybinds: StudyKeybinds;
 }
 
 export interface CardExamplesResponse {
@@ -912,6 +933,7 @@ export interface ReviewForecastDto {
   dueToday: number;
   dueTomorrow: number;
   nextReviewAt: string | null;
+  dayBoundaryScheduling: boolean;
 }
 
 export interface ReviewForecast30dDto {

@@ -100,19 +100,22 @@ public class DeckStatusCascadeTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task MarkAllChildrenCompleted_ParentBecomesCompleted()
+    public async Task MarkAllChildrenCompleted_ParentStaysOngoing_ResponseSignalsAllCompleted()
     {
         var (parentId, childIds) = await SeedParentWithChildren();
 
+        JsonElement body = default;
         foreach (var childId in childIds)
-            await SetDeckStatus(childId, DeckStatus.Completed);
+            body = await SetDeckStatus(childId, DeckStatus.Completed);
 
         var parentStatus = await GetDeckStatus(parentId);
-        parentStatus.Should().Be(DeckStatus.Completed);
+        parentStatus.Should().Be(DeckStatus.Ongoing);
+        body.GetProperty("allChildrenCompleted").GetBoolean().Should().BeTrue();
+        body.GetProperty("parentDeckId").GetInt32().Should().Be(parentId);
     }
 
     [Fact]
-    public async Task LastChildCompleted_ResponseIncludesParentCompleted()
+    public async Task LastChildCompleted_ResponseIncludesAllChildrenCompleted()
     {
         var (parentId, childIds) = await SeedParentWithChildren(2);
 
@@ -120,7 +123,9 @@ public class DeckStatusCascadeTests(JitenWebApplicationFactory factory)
         var body = await SetDeckStatus(childIds[1], DeckStatus.Completed);
 
         body.GetProperty("parentDeckId").GetInt32().Should().Be(parentId);
-        body.GetProperty("parentStatus").GetInt32().Should().Be((int)DeckStatus.Completed);
+        body.GetProperty("allChildrenCompleted").GetBoolean().Should().BeTrue();
+        var parentStatus = await GetDeckStatus(parentId);
+        parentStatus.Should().Be(DeckStatus.Ongoing);
     }
 
     [Fact]
@@ -182,10 +187,11 @@ public class DeckStatusCascadeTests(JitenWebApplicationFactory factory)
 
         await SetDeckStatus(parentId, DeckStatus.Dropped);
         await SetDeckStatus(childIds[0], DeckStatus.Completed);
-        await SetDeckStatus(childIds[1], DeckStatus.Completed);
+        var body = await SetDeckStatus(childIds[1], DeckStatus.Completed);
 
         var parentStatus = await GetDeckStatus(parentId);
         parentStatus.Should().Be(DeckStatus.Dropped);
+        body.GetProperty("allChildrenCompleted").GetBoolean().Should().BeFalse();
     }
 
     [Fact]
@@ -214,6 +220,7 @@ public class DeckStatusCascadeTests(JitenWebApplicationFactory factory)
 
         body.GetProperty("parentDeckId").ValueKind.Should().Be(JsonValueKind.Null);
         body.GetProperty("parentStatus").ValueKind.Should().Be(JsonValueKind.Null);
+        body.GetProperty("allChildrenCompleted").GetBoolean().Should().BeFalse();
     }
 
     [Fact]
@@ -222,14 +229,16 @@ public class DeckStatusCascadeTests(JitenWebApplicationFactory factory)
         var (parentId, childIds) = await SeedParentWithChildren(2);
 
         await SetDeckStatus(childIds[0], DeckStatus.Completed, TestUsers.UserA);
-        await SetDeckStatus(childIds[1], DeckStatus.Completed, TestUsers.UserA);
+        var bodyA = await SetDeckStatus(childIds[1], DeckStatus.Completed, TestUsers.UserA);
 
-        await SetDeckStatus(childIds[0], DeckStatus.Completed, TestUsers.UserB);
+        var bodyB = await SetDeckStatus(childIds[0], DeckStatus.Completed, TestUsers.UserB);
 
         var parentStatusA = await GetDeckStatus(parentId, TestUsers.UserA);
         var parentStatusB = await GetDeckStatus(parentId, TestUsers.UserB);
 
-        parentStatusA.Should().Be(DeckStatus.Completed);
+        parentStatusA.Should().Be(DeckStatus.Ongoing);
+        bodyA.GetProperty("allChildrenCompleted").GetBoolean().Should().BeTrue();
         parentStatusB.Should().Be(DeckStatus.Ongoing);
+        bodyB.GetProperty("allChildrenCompleted").GetBoolean().Should().BeFalse();
     }
 }

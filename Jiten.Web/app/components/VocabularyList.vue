@@ -32,8 +32,10 @@
     </slot>
   </div>
 
-  <div v-else-if="words.length === 0 && emptyMessage" class="text-center py-8">
-    <Message severity="info">{{ emptyMessage }}</Message>
+  <div v-else-if="words.length === 0" class="flex flex-col items-center justify-center py-16">
+    <i class="pi pi-book text-4xl text-primary-500 mb-4" />
+    <p class="text-lg font-medium text-primary-700 dark:text-primary-300">No vocabulary found</p>
+    <p v-if="emptyMessage" class="text-sm text-surface-400">{{ emptyMessage }}</p>
   </div>
 
   <div v-else class="flex flex-col gap-2">

@@ -8,6 +8,7 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
+  import { useConfirm } from 'primevue/useconfirm';
 
   const props = defineProps<{
     deck: Deck;
@@ -35,6 +36,7 @@
   const store = useJitenStore();
   const authStore = useAuthStore();
   const localiseTitle = useLocaliseTitle();
+  const confirm = useConfirm();
 
   const displayAdminFunctions = computed(() => store.displayAdminFunctions);
   const readingSpeed = computed(() => store.readingSpeed);
@@ -109,17 +111,38 @@
     );
   };
 
+  const { $api } = useNuxtApp();
+
+  const completeParentDeck = async (parentDeckId: number) => {
+    await $api(`/user/deck-preferences/${parentDeckId}/status`, {
+      method: 'POST',
+      body: { status: DeckStatus.Completed },
+    });
+    emit('parent-status-changed', parentDeckId, DeckStatus.Completed);
+    if (authStore.isAuthenticated) {
+      const rating = await fetchRating(parentDeckId);
+      if (rating == null) openRatingDialog(parentDeckId);
+    }
+  };
+
   const handleMarkCompleted = async () => {
     const response = await setStatus(DeckStatus.Completed);
 
     if (response?.parentDeckId != null && response.parentStatus != null) {
       emit('parent-status-changed', response.parentDeckId, response.parentStatus);
+    }
 
-      if (response.parentStatus === DeckStatus.Completed && authStore.isAuthenticated) {
-        const rating = await fetchRating(response.parentDeckId);
-        if (rating == null) openRatingDialog(response.parentDeckId);
-        return;
-      }
+    if (response?.allChildrenCompleted && response.parentDeckId != null) {
+      confirm.require({
+        message: 'All entries in this series are completed. Mark the series as completed too?',
+        header: 'Complete Series',
+        icon: 'pi pi-check-circle',
+        acceptLabel: 'Yes, complete it',
+        rejectLabel: 'No, it\'s still ongoing',
+        rejectProps: { severity: 'secondary' },
+        accept: () => completeParentDeck(response.parentDeckId!),
+      });
+      return;
     }
 
     if (authStore.isAuthenticated && !props.deck.parentDeckId) {
@@ -428,7 +451,7 @@
                       <span class="tabular-nums font-semibold">{{ readingDuration > 0 ? readingDuration : '<1' }} h</span>
                     </div>
 
-                    <div v-if="deck.externalRating != 0" class="flex justify-between flex-wrap stat-row">
+                    <div v-if="deck.externalRating != 0 && !store.hideExternalRating" class="flex justify-between flex-wrap stat-row">
                       <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
                         <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">External Rating</span>
                       </Tooltip>

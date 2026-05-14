@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
+  import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
+  import type { StudyKeybinds } from '~/types';
 
   const props = defineProps<{ inline?: boolean }>();
 
@@ -12,8 +14,9 @@
   const loaded = ref(false);
 
   onMounted(async () => {
-    await srsStore.fetchSettings();
+    await srsStore.fetchSettings(true);
     Object.assign(form, srsStore.studySettings);
+    form.keybinds = { ...srsStore.studySettings.keybinds };
     if (!form.timezone) applyDetectedTimezone();
     loaded.value = true;
     tickInterval = setInterval(() => { nowMinute.value = Date.now(); }, 60_000);
@@ -105,10 +108,30 @@
     } catch { /* no-op */ }
   }
 
+  const gradeLabels4: [keyof StudyKeybinds, string][] = [['grade1', 'Again'], ['grade2', 'Hard'], ['grade3', 'Good'], ['grade4', 'Easy']];
+  const gradeLabels2: [keyof StudyKeybinds, string][] = [['grade1', 'Again'], ['grade2', 'Good']];
+  const actionEntries: [keyof StudyKeybinds, string][] = [
+    ['flipCard', 'Flip card / Grade Good'], ['blacklist', 'Blacklist'], ['forget', 'Forget'],
+    ['master', 'Master'], ['suspend', 'Suspend'], ['undo', 'Undo'], ['wrapUp', 'Wrap up'],
+  ];
+
+  const gradeEntries = computed(() => form.gradingButtons === 4 ? gradeLabels4 : gradeLabels2);
+
+  function checkConflict(forKey: keyof StudyKeybinds, value: string): string | null {
+    for (const [key, label] of [...gradeEntries.value, ...actionEntries]) {
+      if (key !== forKey && form.keybinds[key] === value) return label;
+    }
+    return null;
+  }
+
+  function resetKeybinds() {
+    Object.assign(form.keybinds, DEFAULT_KEYBINDS);
+  }
+
   async function save() {
     saving.value = true;
     try {
-      await srsStore.updateSettings({ ...form });
+      await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds } });
       toast.add({ severity: 'success', summary: 'Study settings saved', life: 2000 });
     } catch {
       toast.add({ severity: 'error', summary: 'Failed to save settings', life: 3000 });
@@ -191,6 +214,16 @@
         </div>
       </div>
 
+      <div class="flex items-center gap-2 mt-3">
+        <ToggleSwitch v-model="form.dayBoundaryScheduling" input-id="dayBoundaryScheduling" />
+        <label for="dayBoundaryScheduling" class="text-sm cursor-pointer">
+          Group reviews by day
+          <Tooltip content="When enabled, all reviews scheduled for today become available at the start of the day instead of at their exact time." placement="top">
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+
       <Divider />
 
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Scheduling</h3>
@@ -253,6 +286,15 @@
             <label for="furiganaOnFrontNewOnly" class="text-sm cursor-pointer">
               New cards only
               <Tooltip content="Only show furigana on cards you haven't seen before. Review cards will show plain kanji." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.showConfusableReadings" input-id="showConfusableReadings" />
+            <label for="showConfusableReadings" class="text-sm cursor-pointer">
+              Show confusable readings
+              <Tooltip content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups." placement="right">
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
@@ -400,12 +442,65 @@
         <div class="flex items-center gap-2">
           <ToggleSwitch v-model="form.autoPlaySentence" input-id="autoPlaySentence" />
           <label for="autoPlaySentence" class="text-sm cursor-pointer">
-            Auto-play example sentence on flip
+            Auto-play example sentence audio on flip
             <Tooltip content="Automatically read the example sentence aloud when you flip a card. If both word and sentence are enabled, they play sequentially." placement="right">
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
         </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlayWordOnFront" input-id="autoPlayWordOnFront" />
+          <label for="autoPlayWordOnFront" class="text-sm cursor-pointer">
+            Auto-play headword audio on front
+            <Tooltip content="Automatically read the headword aloud when a new card appears, before flipping." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
+          <ToggleSwitch v-model="form.autoPlayWordOnFrontNewOnly" input-id="autoPlayWordOnFrontNewOnly" />
+          <label for="autoPlayWordOnFrontNewOnly" class="text-sm cursor-pointer">
+            New cards only
+            <Tooltip content="Only auto-play on cards you haven't seen before. Review cards will be silent." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
+          <ToggleSwitch v-model="form.autoPlaySentenceOnFront" input-id="autoPlaySentenceOnFront" />
+          <label for="autoPlaySentenceOnFront" class="text-sm cursor-pointer">
+            Also play example sentence
+            <Tooltip content="Play the example sentence after the headword audio finishes." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+      </div>
+
+      <Divider />
+
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Keyboard shortcuts</h3>
+      <p class="text-xs text-surface-500">Click a key and press the new key to rebind. Escape cancels.</p>
+      <div class="flex flex-col gap-2">
+        <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide">Grading</h4>
+        <KeybindInput
+          v-for="[key, label] in gradeEntries" :key="key"
+          v-model="form.keybinds[key]"
+          :label="label"
+          :conflict="checkConflict(key, form.keybinds[key])"
+        />
+
+        <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide mt-2">Actions</h4>
+        <KeybindInput
+          v-for="[key, label] in actionEntries" :key="key"
+          v-model="form.keybinds[key]"
+          :label="label"
+          :conflict="checkConflict(key, form.keybinds[key])"
+        />
+        <div class="mt-1">
+          <Button severity="secondary" size="small" label="Reset to defaults" @click="resetKeybinds" />
+        </div>
+        <p class="text-xs text-surface-400">Escape and Enter are always available as shortcuts for wrap up and flip card.</p>
       </div>
 
       <Divider />

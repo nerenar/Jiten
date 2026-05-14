@@ -11,7 +11,7 @@
 <template>
   <div class="flex flex-col">
     <blockquote class="relative inline-block border-l-4 border-yellow-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
-      <div v-html="formattedText" class="md:text-lg text-sm" />
+      <div v-html="formattedText" class="md:text-lg text-sm" lang="ja" />
     </blockquote>
     <div v-if="sentence.source" class="flex items-center mb-2">
       <span class="text-xs italic mr-2 ml-4">Source:</span>

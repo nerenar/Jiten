@@ -5,6 +5,7 @@
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
+  import { displayKeyName } from '~/composables/useStudyKeyboard';
 
   const props = defineProps<{
     card: StudyCardDto;
@@ -209,11 +210,39 @@
 
   watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
     tts.stop();
-  });
+
+    const settings = srsStore.studySettings;
+    if (!settings.autoPlayWordOnFront) return;
+    if (settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) return;
+    if (props.isFlipped) return;
+
+    const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
+    tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
+
+    if (settings.autoPlaySentenceOnFront) {
+      const example = cardExample.value;
+      if (example?.sentenceId) {
+        const unwatch = watch(tts.isAnyPlaying, (playing) => {
+          if (!playing) {
+            unwatch();
+            setTimeout(() => {
+              if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
+              tts.speakSentence(example.sentenceId, example.text);
+            }, 150);
+          }
+        });
+      }
+    }
+  }, { immediate: true });
 
   onUnmounted(() => tts.stop());
 
   const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
+
+  const confusableReadings = computed(() => {
+    if (!srsStore.studySettings.showConfusableReadings) return [];
+    return props.card.confusableReadings ?? [];
+  });
 
   function revealExample() {
     exampleRevealed.value = true;
@@ -311,14 +340,16 @@
           <div
             v-if="!isFlipped && srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || card.isNewCard)"
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+            lang="ja"
             v-html="convertToRuby(card.wordText || card.wordTextPlain, true)"
           />
-          <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans">
+          <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans" lang="ja">
             {{ card.wordTextPlain }}
           </div>
           <div
             v-else
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+            lang="ja"
             v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain, true)"
           />
           <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
@@ -331,7 +362,7 @@
             @click.stop="revealExample()"
           >
             <div class="flex items-start gap-2">
-              <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
+              <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
               <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
             </div>
           </blockquote>
@@ -395,9 +426,20 @@
           </div>
         </div>
 
+        <!-- Confusable readings -->
+        <div v-if="confusableReadings.length" class="mt-4 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400" @click.stop>
+          <i class="pi pi-exclamation-triangle text-xs shrink-0" />
+          <span>
+            Do not confuse with:
+            <template v-for="(cr, i) in confusableReadings" :key="i">
+              <strong>{{ cr }}</strong><span v-if="i < confusableReadings.length - 1">,&ensp;</span>
+            </template>
+          </span>
+        </div>
+
         <div v-if="!isFlipped" class="text-sm text-surface-400 dark:text-surface-300 mt-6">
           <span class="md:hidden">Tap to reveal</span>
-          <span class="hidden md:inline">Click or press Space to reveal</span>
+          <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
         </div>
       </div>
 
@@ -453,7 +495,7 @@
               @click.stop="revealExample()"
             >
               <div class="flex items-start gap-2">
-                <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
+                <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
                 <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
               </div>
             </blockquote>
