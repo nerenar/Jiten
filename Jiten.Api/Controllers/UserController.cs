@@ -1161,6 +1161,7 @@ public class UserController(
         // Auto-cascade status to parent deck
         int? parentDeckId = null;
         DeckStatus? parentStatus = null;
+        bool allChildrenCompleted = false;
         var deck = await jitenContext.Decks.AsNoTracking()
                                      .Where(d => d.DeckId == deckId)
                                      .Select(d => new { d.ParentDeckId })
@@ -1168,13 +1169,18 @@ public class UserController(
 
         if (deck?.ParentDeckId != null)
         {
-            (parentDeckId, parentStatus) = await UpdateParentDeckStatus(userId, deck.ParentDeckId.Value, request.Status);
+            var result = await UpdateParentDeckStatus(userId, deck.ParentDeckId.Value, request.Status);
+            parentDeckId = result.ParentDeckId;
+            parentStatus = result.ParentStatus;
+            allChildrenCompleted = result.AllChildrenCompleted;
+            if (allChildrenCompleted)
+                parentDeckId ??= deck.ParentDeckId;
         }
 
-        return Results.Ok(new { preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored, parentDeckId, parentStatus });
+        return Results.Ok(new { preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored, parentDeckId, parentStatus, allChildrenCompleted });
     }
 
-    private async Task<(int? ParentDeckId, DeckStatus? ParentStatus)> UpdateParentDeckStatus(string userId, int parentDeckId, DeckStatus childNewStatus)
+    private async Task<(int? ParentDeckId, DeckStatus? ParentStatus, bool AllChildrenCompleted)> UpdateParentDeckStatus(string userId, int parentDeckId, DeckStatus childNewStatus)
     {
         var siblingIds = await jitenContext.Decks.AsNoTracking()
                                            .Where(d => d.ParentDeckId == parentDeckId)
@@ -1194,11 +1200,16 @@ public class UserController(
             siblingStatuses.TryGetValue(id, out var status) && status == DeckStatus.Completed);
 
         DeckStatus? newParentStatus = null;
+        var allChildrenCompleted = false;
 
         if (allCompleted)
         {
             if (previousParentStatus is DeckStatus.None or DeckStatus.Planning or DeckStatus.Ongoing)
-                newParentStatus = DeckStatus.Completed;
+            {
+                allChildrenCompleted = true;
+                if (previousParentStatus is DeckStatus.None or DeckStatus.Planning)
+                    newParentStatus = DeckStatus.Ongoing;
+            }
         }
         else if (childNewStatus is DeckStatus.Completed or DeckStatus.Ongoing or DeckStatus.Dropped)
         {
@@ -1206,24 +1217,26 @@ public class UserController(
                 newParentStatus = DeckStatus.Ongoing;
         }
 
-        if (newParentStatus == null || newParentStatus == previousParentStatus)
-            return (null, null);
-
-        if (parentPref == null)
+        if (newParentStatus != null && newParentStatus != previousParentStatus)
         {
-            parentPref = new UserDeckPreference { UserId = userId, DeckId = parentDeckId };
-            userContext.UserDeckPreferences.Add(parentPref);
+            if (parentPref == null)
+            {
+                parentPref = new UserDeckPreference { UserId = userId, DeckId = parentDeckId };
+                userContext.UserDeckPreferences.Add(parentPref);
+            }
+
+            parentPref.Status = newParentStatus.Value;
+            await userContext.SaveChangesAsync();
+
+            if (previousParentStatus == DeckStatus.Completed || newParentStatus == DeckStatus.Completed)
+            {
+                backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
+            }
+
+            return (parentDeckId, newParentStatus, allChildrenCompleted);
         }
 
-        parentPref.Status = newParentStatus.Value;
-        await userContext.SaveChangesAsync();
-
-        if (previousParentStatus == DeckStatus.Completed || newParentStatus == DeckStatus.Completed)
-        {
-            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
-        }
-
-        return (parentDeckId, newParentStatus);
+        return (null, null, allChildrenCompleted);
     }
 
     /// <summary>
