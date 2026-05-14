@@ -215,6 +215,11 @@
 
   const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
 
+  const confusableReadings = computed(() => {
+    if (!srsStore.studySettings.showConfusableReadings) return [];
+    return props.card.confusableReadings ?? [];
+  });
+
   function revealExample() {
     exampleRevealed.value = true;
     const example = cardExample.value;
@@ -393,6 +398,17 @@
               Load more
             </button>
           </div>
+        </div>
+
+        <!-- Confusable readings -->
+        <div v-if="confusableReadings.length" class="mt-4 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400" @click.stop>
+          <i class="pi pi-exclamation-triangle text-xs shrink-0" />
+          <span>
+            Do not confuse with:
+            <template v-for="(cr, i) in confusableReadings" :key="i">
+              <strong>{{ cr }}</strong><span v-if="i < confusableReadings.length - 1">,&ensp;</span>
+            </template>
+          </span>
         </div>
 
         <div v-if="!isFlipped" class="text-sm text-surface-400 dark:text-surface-300 mt-6">

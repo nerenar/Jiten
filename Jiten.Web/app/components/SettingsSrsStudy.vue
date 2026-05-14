@@ -257,6 +257,15 @@
               </Tooltip>
             </label>
           </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.showConfusableReadings" input-id="showConfusableReadings" />
+            <label for="showConfusableReadings" class="text-sm cursor-pointer">
+              Show confusable readings
+              <Tooltip content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
         </div>
       </div>
 

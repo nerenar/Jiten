@@ -805,6 +805,7 @@ export interface StudyCardDto {
   intervalPreview?: IntervalPreviewDto;
   deckOccurrences?: StudyDeckOccurrenceDto[];
   sourceDeckName?: string;
+  confusableReadings?: string[];
 }
 
 export interface StudyDeckOccurrenceDto {
@@ -893,6 +894,7 @@ export interface StudySettingsDto {
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;
+  showConfusableReadings: boolean;
 }
 
 export interface CardExamplesResponse {

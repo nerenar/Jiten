@@ -1825,11 +1825,14 @@ public class StudyController(
 
         var wordIds = ordered.Select(c => c.WordId).Distinct().ToList();
 
-        var wordsData = await context.JMDictWords
+        var wordsDataTask = context.JMDictWords
             .AsNoTracking()
             .Include(w => w.Definitions)
             .Where(w => wordIds.Contains(w.WordId))
             .ToDictionaryAsync(w => w.WordId);
+        var confusablesTask = ConfusableReadingsHelper.LoadBatchConfusableReadings(contextFactory, wordIds);
+
+        var wordsData = await wordsDataTask;
         var wordForms = await context.WordForms
             .AsNoTracking()
             .Where(wf => wordIds.Contains(wf.WordId))
@@ -1838,6 +1841,7 @@ public class StudyController(
         var wordFormsMap = wordForms.GroupBy(wf => wf.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
         var freqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+        var confusables = await confusablesTask;
 
         var occDeckIds = studyDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToList();
         var deckOccurrences = occDeckIds.Count > 0
@@ -1928,7 +1932,8 @@ public class StudyController(
                             return dto;
                         }).ToList()
                     : null,
-                SourceDeckName = item.IsNew && sourceDeckNames.TryGetValue(exKey, out var srcName) ? srcName : null
+                SourceDeckName = item.IsNew && sourceDeckNames.TryGetValue(exKey, out var srcName) ? srcName : null,
+                ConfusableReadings = confusables.GetValueOrDefault(item.WordId)
             });
         }
 

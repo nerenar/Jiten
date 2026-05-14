@@ -127,4 +127,7 @@ public class StudySettingsDto
 
     [JsonPropertyName("timezone")]
     public string? Timezone { get; set; }
+
+    [JsonPropertyName("showConfusableReadings")]
+    public bool ShowConfusableReadings { get; set; } = true;
 }
