@@ -559,9 +559,9 @@ public class UserController(
 
     private static FsrsRating? MapJpdbGrade(string grade) => grade switch
     {
-        "nothing" or "unknown" => FsrsRating.Again,
+        "nothing" or "unknown" or "fail" => FsrsRating.Again,
         "something" or "hard" => FsrsRating.Hard,
-        "okay" => FsrsRating.Good,
+        "okay" or "pass" => FsrsRating.Good,
         "easy" or "known" => FsrsRating.Easy,
         _ => null
     };
