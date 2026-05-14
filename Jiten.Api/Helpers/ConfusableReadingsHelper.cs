@@ -6,26 +6,33 @@ namespace Jiten.Api.Helpers;
 
 public static class ConfusableReadingsHelper
 {
-    public static async Task<Dictionary<int, List<string>>> LoadBatchConfusableReadings(
-        IDbContextFactory<JitenDbContext> factory, List<int> wordIds)
+    public static async Task<Dictionary<(int, byte), List<string>>> LoadBatchConfusableReadings(
+        IDbContextFactory<JitenDbContext> factory, List<(int WordId, byte ReadingIndex)> wordPairs)
     {
-        if (wordIds.Count == 0) return new();
+        if (wordPairs.Count == 0) return new();
 
         await using var ctx = await factory.CreateDbContextAsync();
 
+        var pairWordIds = wordPairs.Select(p => p.WordId).Distinct().ToList();
+        var pairReadingIndexes = wordPairs.ToHashSet();
+
         var kanjiTexts = await ctx.WordForms.AsNoTracking()
-            .Where(wf => wordIds.Contains(wf.WordId)
+            .Where(wf => pairWordIds.Contains(wf.WordId)
                       && wf.FormType == JmDictFormType.KanjiForm
                       && !wf.IsSearchOnly)
-            .Select(wf => new { wf.WordId, wf.Text })
+            .Select(wf => new { wf.WordId, wf.ReadingIndex, wf.Text })
             .ToListAsync();
+
+        kanjiTexts = kanjiTexts
+            .Where(kt => pairReadingIndexes.Contains((kt.WordId, (byte)kt.ReadingIndex)))
+            .ToList();
 
         if (kanjiTexts.Count == 0) return new();
 
         var distinctTexts = kanjiTexts.Select(kt => kt.Text).Distinct().ToList();
-        var textToSourceWords = kanjiTexts
+        var textToSourcePairs = kanjiTexts
             .GroupBy(kt => kt.Text)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.WordId).Distinct().ToList());
+            .ToDictionary(g => g.Key, g => g.Select(x => (x.WordId, (byte)x.ReadingIndex)).Distinct().ToList());
 
         var allLookups = await ctx.Lookups.AsNoTracking()
             .Where(l => distinctTexts.Contains(l.LookupKey))
@@ -33,19 +40,19 @@ public static class ConfusableReadingsHelper
             .ToListAsync();
 
         var confusableWordIds = new HashSet<int>();
-        var sourceToConfusable = new Dictionary<int, HashSet<int>>();
+        var sourceToConfusable = new Dictionary<(int, byte), HashSet<int>>();
 
         foreach (var lookup in allLookups)
         {
-            if (!textToSourceWords.TryGetValue(lookup.LookupKey, out var sourceWords)) continue;
-            foreach (var sourceWordId in sourceWords)
+            if (!textToSourcePairs.TryGetValue(lookup.LookupKey, out var sourcePairs)) continue;
+            foreach (var sourcePair in sourcePairs)
             {
-                if (lookup.WordId == sourceWordId) continue;
+                if (lookup.WordId == sourcePair.WordId) continue;
                 confusableWordIds.Add(lookup.WordId);
-                if (!sourceToConfusable.TryGetValue(sourceWordId, out var set))
+                if (!sourceToConfusable.TryGetValue(sourcePair, out var set))
                 {
                     set = new HashSet<int>();
-                    sourceToConfusable[sourceWordId] = set;
+                    sourceToConfusable[sourcePair] = set;
                 }
                 set.Add(lookup.WordId);
             }
@@ -93,8 +100,8 @@ public static class ConfusableReadingsHelper
             validReadings.TryAdd(form.WordId, form.Text);
         }
 
-        var result = new Dictionary<int, List<string>>();
-        foreach (var (sourceWordId, confIds) in sourceToConfusable)
+        var result = new Dictionary<(int, byte), List<string>>();
+        foreach (var (sourcePair, confIds) in sourceToConfusable)
         {
             var readings = confIds
                 .Where(validReadings.ContainsKey)
@@ -104,7 +111,7 @@ public static class ConfusableReadingsHelper
                 .ToList();
 
             if (readings.Count > 0)
-                result[sourceWordId] = readings;
+                result[sourcePair] = readings;
         }
 
         return result;

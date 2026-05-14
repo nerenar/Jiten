@@ -1830,7 +1830,8 @@ public class StudyController(
             .Include(w => w.Definitions)
             .Where(w => wordIds.Contains(w.WordId))
             .ToDictionaryAsync(w => w.WordId);
-        var confusablesTask = ConfusableReadingsHelper.LoadBatchConfusableReadings(contextFactory, wordIds);
+        var confusablePairs = ordered.Select(c => (c.WordId, c.ReadingIndex)).Distinct().ToList();
+        var confusablesTask = ConfusableReadingsHelper.LoadBatchConfusableReadings(contextFactory, confusablePairs);
 
         var wordsData = await wordsDataTask;
         var wordForms = await context.WordForms
@@ -1933,7 +1934,7 @@ public class StudyController(
                         }).ToList()
                     : null,
                 SourceDeckName = item.IsNew && sourceDeckNames.TryGetValue(exKey, out var srcName) ? srcName : null,
-                ConfusableReadings = confusables.GetValueOrDefault(item.WordId)
+                ConfusableReadings = confusables.GetValueOrDefault((item.WordId, item.ReadingIndex))
             });
         }
 
