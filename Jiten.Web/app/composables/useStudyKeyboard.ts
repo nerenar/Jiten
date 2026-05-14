@@ -24,6 +24,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.repeat) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (store.isBusy) return;
