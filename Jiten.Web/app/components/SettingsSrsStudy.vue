@@ -12,7 +12,7 @@
   const loaded = ref(false);
 
   onMounted(async () => {
-    await srsStore.fetchSettings();
+    await srsStore.fetchSettings(true);
     Object.assign(form, srsStore.studySettings);
     if (!form.timezone) applyDetectedTimezone();
     loaded.value = true;

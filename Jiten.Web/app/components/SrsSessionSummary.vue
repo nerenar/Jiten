@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { HardestCard } from '~/stores/srsStore';
+  import { useSrsStore } from '~/stores/srsStore';
   import type { ReviewForecastDto, SessionStreakDto } from '~/types';
 
   const props = defineProps<{
@@ -17,12 +18,20 @@
   }>();
 
   const { $api } = useNuxtApp();
+  const srsStore = useSrsStore();
 
   const forecast = ref<ReviewForecastDto | null>(null);
   const streak = ref<SessionStreakDto | null>(null);
   const streakLoaded = ref(false);
 
   onMounted(async () => {
+    if (srsStore.sessionStreak && srsStore.sessionForecast) {
+      streak.value = srsStore.sessionStreak;
+      forecast.value = srsStore.sessionForecast;
+      streakLoaded.value = true;
+      return;
+    }
+
     const [forecastResult, streakResult] = await Promise.allSettled([
       $api<ReviewForecastDto>('srs/review-forecast'),
       $api<SessionStreakDto>('srs/session-streak'),

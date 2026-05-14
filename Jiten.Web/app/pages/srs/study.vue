@@ -268,10 +268,10 @@
     else srsStore.wrapUp();
   }
 
-  function exitStudy() {
+  async function exitStudy() {
     stopElapsedTimer();
+    await router.push('/srs/decks');
     srsStore.resetSession();
-    router.push('/srs/decks');
   }
 
   const showStudyMoreDialog = ref(false);
