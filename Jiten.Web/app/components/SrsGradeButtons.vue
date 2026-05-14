@@ -14,6 +14,7 @@
     showSwipeHints?: boolean;
     disabled?: boolean;
     pressedKey?: string | null;
+    compact?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -25,6 +26,7 @@
     forget: [event: Event];
     undo: [];
     settings: [];
+    expand: [];
   }>();
 
   const morePopover = ref();
@@ -67,7 +69,7 @@
 </script>
 
 <template>
-  <div class="flex flex-col gap-2 sm:gap-3 w-full mx-auto">
+  <div class="flex flex-col w-full mx-auto" :class="compact ? 'gap-1.5' : 'gap-2 sm:gap-3'">
     <!-- Undo (before flip) -->
     <div v-if="!isFlipped && canUndo" class="flex justify-center">
       <Button
@@ -91,19 +93,27 @@
     </div>
 
     <!-- Flip button when not flipped -->
-    <div v-if="!isFlipped" class="flex justify-center">
+    <div v-if="!isFlipped" class="flex gap-2 justify-center">
       <Button
         label="Show Answer"
         severity="secondary"
-        class="w-full min-h-[44px] md:min-h-[72px] text-lg"
-        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.flipCard }"
+        class="flex-1"
+        :class="[{ 'kb-pressed': props.pressedKey === props.keybinds.flipCard }, compact ? 'min-h-[36px] text-base' : 'min-h-[44px] md:min-h-[72px] text-lg']"
         @click="emit('flip')"
       >
         <template #default>
           <span>Show Answer</span>
-          <span v-if="showKeybinds" class="keybind ml-2 text-xs opacity-60">{{ displayKeyName(props.keybinds.flipCard) }}</span>
+          <span v-if="showKeybinds && !compact" class="keybind ml-2 text-xs opacity-60">{{ displayKeyName(props.keybinds.flipCard) }}</span>
         </template>
       </Button>
+      <button
+        v-if="compact"
+        class="px-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+        aria-label="Expand bar"
+        @click="emit('expand')"
+      >
+        <Icon name="material-symbols:keyboard-double-arrow-up" size="18" />
+      </button>
     </div>
 
     <!-- Grade buttons when flipped -->
@@ -115,23 +125,31 @@
         outlined
         :disabled="props.disabled"
         :aria-label="`Grade: ${btn.label}`"
-        class="grade-btn flex-1 min-h-[44px] md:min-h-[72px]"
-        :class="{ 'kb-pressed': props.pressedKey === btn.key }"
+        class="grade-btn flex-1"
+        :class="[{ 'kb-pressed': props.pressedKey === btn.key }, compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
         @click="emit('grade', btn.rating)"
       >
         <template #default>
           <div class="flex flex-col items-center">
-            <span v-if="getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-50">{{ getIntervalForRating(btn.rating) }}</span>
+            <span v-if="!compact && getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-50">{{ getIntervalForRating(btn.rating) }}</span>
             <span>{{ btn.label }}</span>
-            <span v-if="showKeybinds" class="keybind text-xs opacity-60">{{ displayKeyName(btn.key) }}</span>
+            <span v-if="showKeybinds && !compact" class="keybind text-xs opacity-60">{{ displayKeyName(btn.key) }}</span>
             <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-50">{{ btn.swipe }}</span>
           </div>
         </template>
       </Button>
+      <button
+        v-if="compact"
+        class="px-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+        aria-label="Expand bar"
+        @click="emit('expand')"
+      >
+        <Icon name="material-symbols:keyboard-double-arrow-up" size="18" />
+      </button>
     </div>
 
     <!-- Quick actions -->
-    <div v-if="isFlipped" class="flex gap-1.5 sm:gap-2 justify-center">
+    <div v-if="isFlipped && !compact" class="flex gap-1.5 sm:gap-2 justify-center">
       <Button
         severity="secondary"
         size="small"
