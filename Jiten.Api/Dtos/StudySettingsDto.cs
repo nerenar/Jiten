@@ -140,6 +140,9 @@ public class StudySettingsDto
     [JsonPropertyName("showConfusableReadings")]
     public bool ShowConfusableReadings { get; set; } = true;
 
+    [JsonPropertyName("dayBoundaryScheduling")]
+    public bool DayBoundaryScheduling { get; set; }
+
     [JsonPropertyName("keybinds")]
     public StudyKeybindsDto Keybinds { get; set; } = new();
 }

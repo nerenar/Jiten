@@ -912,6 +912,7 @@ export interface StudySettingsDto {
   showReviewForecast: boolean;
   timezone: string | null;
   showConfusableReadings: boolean;
+  dayBoundaryScheduling: boolean;
   keybinds: StudyKeybinds;
 }
 
@@ -932,6 +933,7 @@ export interface ReviewForecastDto {
   dueToday: number;
   dueTomorrow: number;
   nextReviewAt: string | null;
+  dayBoundaryScheduling: boolean;
 }
 
 export interface ReviewForecast30dDto {

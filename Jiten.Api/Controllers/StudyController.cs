@@ -119,7 +119,9 @@ public class StudyController(
             }
         }
 
-        var dueCutoff = DateTime.UtcNow;
+        var settings = await LoadStudySettings(userId);
+        var now = DateTime.UtcNow;
+        var dueCutoff = GetDueCutoff(now, settings);
         var resolvedDecks = new List<(UserStudyDeck Sd, Deck? Deck)>();
         var countOnlyStats = new Dictionary<int, (int Total, int Unseen, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, bool WasTruncated)>();
 
@@ -1503,7 +1505,8 @@ public class StudyController(
             .ToListAsync();
 
         // ── Phase 3: Collect due reviews ──
-        var dueCutoff = aheadMinutes.HasValue ? now.AddMinutes(aheadMinutes.Value) : now;
+        var baseCutoff = GetDueCutoff(now, settings);
+        var dueCutoff = aheadMinutes.HasValue ? baseCutoff.AddMinutes(aheadMinutes.Value) : baseCutoff;
         var batch = new List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)>();
         var dueCardLookup = new Dictionary<(int, byte), FsrsCard>();
 
@@ -2148,7 +2151,7 @@ public class StudyController(
         var settings = await LoadStudySettings(userId);
         var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
 
-        var dueCutoff = now;
+        var dueCutoff = GetDueCutoff(now, settings);
 
         var dueBaseQuery = userContext.FsrsCards
             .AsNoTracking()
@@ -2291,6 +2294,8 @@ public class StudyController(
             }
         }
 
+        nextReviewAt = SnapToLocalDayStart(nextReviewAt, settings);
+
         return Results.Ok(new
         {
             reviewsDue,
@@ -2316,6 +2321,7 @@ public class StudyController(
         var now = DateTime.UtcNow;
         var settings = await LoadStudySettings(userId);
         var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
+        var dueCutoff = GetDueCutoff(now, settings);
         int count = 0;
 
         switch (mode)
@@ -2398,7 +2404,7 @@ public class StudyController(
                                 && c.State != FsrsState.Blacklisted
                                 && c.State != FsrsState.Mastered
                                 && c.State != FsrsState.Suspended
-                                && c.Due <= now);
+                                && c.Due <= dueCutoff);
 
                 int totalDue;
                 if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
@@ -2419,7 +2425,7 @@ public class StudyController(
             case "ahead":
             {
                 var minutes = Math.Clamp(aheadMinutes ?? 1440, 60, 10080);
-                var aheadCutoff = now.AddMinutes(minutes);
+                var aheadCutoff = GetDueCutoff(now, settings).AddMinutes(minutes);
                 var aheadQuery = userContext.FsrsCards
                     .AsNoTracking()
                     .Where(c => c.UserId == userId
@@ -2486,6 +2492,23 @@ public class StudyController(
         var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
         var tomorrowUtc = todayStart.AddHours(24);
         var dayAfterUtc = todayStart.AddHours(48);
+        var dayBoundary = settings.DayBoundaryScheduling;
+
+        DateTime forecastBase, bucket0End, bucket1End, bucket2End;
+        if (dayBoundary)
+        {
+            forecastBase = LocalDayStartUtc(now, settings.Timezone, 1);
+            bucket0End = LocalDayStartUtc(now, settings.Timezone, 2);
+            bucket1End = LocalDayStartUtc(now, settings.Timezone, 3);
+            bucket2End = LocalDayStartUtc(now, settings.Timezone, 4);
+        }
+        else
+        {
+            forecastBase = now;
+            bucket0End = oneHour;
+            bucket1End = tomorrowUtc;
+            bucket2End = dayAfterUtc;
+        }
 
         var baseQuery = userContext.FsrsCards
             .AsNoTracking()
@@ -2494,7 +2517,7 @@ public class StudyController(
                         && c.State != FsrsState.Blacklisted
                         && c.State != FsrsState.Mastered
                         && c.State != FsrsState.Suspended
-                        && c.Due > now);
+                        && c.Due > forecastBase);
 
         int dueWithinHour, dueToday, dueTomorrow;
         DateTime? nextReviewAt = null;
@@ -2502,18 +2525,17 @@ public class StudyController(
         if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
         {
             var upcomingCards = await baseQuery
-                .Where(c => c.Due <= dayAfterUtc)
+                .Where(c => c.Due <= bucket2End)
                 .Select(c => new { c.WordId, c.ReadingIndex, c.Due })
                 .ToListAsync();
             var filter = await BuildDeckReviewFilter(userId, upcomingCards.Select(c => (c.WordId, c.ReadingIndex)).ToList());
             var filtered = upcomingCards.Where(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex))).ToList();
 
-            dueWithinHour = filtered.Count(c => c.Due <= oneHour);
-            dueToday = filtered.Count(c => c.Due > oneHour && c.Due <= tomorrowUtc);
-            var tmrwLower = oneHour > tomorrowUtc ? oneHour : tomorrowUtc;
-            dueTomorrow = filtered.Count(c => c.Due > tmrwLower && c.Due <= dayAfterUtc);
+            dueWithinHour = filtered.Count(c => c.Due <= bucket0End);
+            dueToday = filtered.Count(c => c.Due > bucket0End && c.Due <= bucket1End);
+            dueTomorrow = filtered.Count(c => c.Due > bucket1End && c.Due <= bucket2End);
 
-            if (dueWithinHour == 0 && dueToday == 0)
+            if (dueWithinHour == 0 && dueToday == 0 && (!dayBoundary || dueTomorrow == 0))
             {
                 var ordered = baseQuery.OrderBy(c => c.Due)
                     .Select(c => new { c.WordId, c.ReadingIndex, c.Due });
@@ -2533,8 +2555,8 @@ public class StudyController(
         else
         {
             var forecast = await baseQuery
-                .Where(c => c.Due <= dayAfterUtc)
-                .GroupBy(c => c.Due <= oneHour ? 0 : c.Due <= tomorrowUtc ? 1 : 2)
+                .Where(c => c.Due <= bucket2End)
+                .GroupBy(c => c.Due <= bucket0End ? 0 : c.Due <= bucket1End ? 1 : 2)
                 .Select(g => new { Bucket = g.Key, Count = g.Count() })
                 .ToListAsync();
 
@@ -2542,7 +2564,7 @@ public class StudyController(
             dueToday = forecast.FirstOrDefault(f => f.Bucket == 1)?.Count ?? 0;
             dueTomorrow = forecast.FirstOrDefault(f => f.Bucket == 2)?.Count ?? 0;
 
-            if (dueWithinHour == 0 && dueToday == 0)
+            if (dueWithinHour == 0 && dueToday == 0 && (!dayBoundary || dueTomorrow == 0))
             {
                 nextReviewAt = await baseQuery
                     .OrderBy(c => c.Due)
@@ -2551,12 +2573,15 @@ public class StudyController(
             }
         }
 
+        nextReviewAt = SnapToLocalDayStart(nextReviewAt, settings);
+
         return Results.Ok(new
         {
             dueWithinHour,
             dueToday,
             dueTomorrow,
             nextReviewAt,
+            dayBoundaryScheduling = dayBoundary,
         });
     }
 
@@ -2772,6 +2797,32 @@ public class StudyController(
         {
             return (utcNow.Date, 0);
         }
+    }
+
+    private static DateTime LocalDayStartUtc(DateTime utcNow, string? timezone, int daysOffset)
+    {
+        if (string.IsNullOrEmpty(timezone))
+            return utcNow.Date.AddDays(daysOffset);
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+            var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(daysOffset);
+            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified), tz);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return utcNow.Date.AddDays(daysOffset);
+        }
+    }
+
+    private static DateTime GetDueCutoff(DateTime utcNow, StudySettingsDto settings)
+        => settings.DayBoundaryScheduling ? LocalDayStartUtc(utcNow, settings.Timezone, 1) : utcNow;
+
+    private static DateTime? SnapToLocalDayStart(DateTime? utc, StudySettingsDto settings)
+    {
+        if (!utc.HasValue || !settings.DayBoundaryScheduling) return utc;
+        var (dayStart, _) = ResolveTimezone(utc.Value, settings.Timezone);
+        return dayStart;
     }
 
     [HttpPost("card-examples")]

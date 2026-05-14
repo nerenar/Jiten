@@ -214,6 +214,16 @@
         </div>
       </div>
 
+      <div class="flex items-center gap-2 mt-3">
+        <ToggleSwitch v-model="form.dayBoundaryScheduling" input-id="dayBoundaryScheduling" />
+        <label for="dayBoundaryScheduling" class="text-sm cursor-pointer">
+          Group reviews by day
+          <Tooltip content="When enabled, all reviews scheduled for today become available at the start of the day instead of at their exact time." placement="top">
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+
       <Divider />
 
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Scheduling</h3>

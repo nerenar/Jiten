@@ -87,6 +87,7 @@ export const useSrsStore = defineStore('srs', () => {
     showReviewForecast: true,
     timezone: 'Europe/London',
     showConfusableReadings: true,
+    dayBoundaryScheduling: false,
     keybinds: { ...DEFAULT_KEYBINDS },
   });
   const sessionStats = ref({
