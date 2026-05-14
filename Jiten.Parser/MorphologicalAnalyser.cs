@@ -28,10 +28,21 @@ public partial class MorphologicalAnalyser
         return results.Count > 0 ? results[0] : [];
     }
 
+    public async Task<(List<SentenceInfo> Sentences, string CleanedOriginal)> ParseWithCleanedOriginal(
+        string text, bool morphemesOnly = false, bool preserveStopToken = false,
+        ParserDiagnostics? diagnostics = null, BenchmarkTimings? timings = null,
+        byte[]? userDictCsv = null)
+    {
+        var cleanedOriginals = new List<string>();
+        var results = await ParseBatch([text], morphemesOnly, preserveStopToken, diagnostics, timings, userDictCsv, cleanedOriginals);
+        return (results.Count > 0 ? results[0] : [], cleanedOriginals.Count > 0 ? cleanedOriginals[0] : "");
+    }
+
     public Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
                                                      ParserDiagnostics? diagnostics = null,
                                                      BenchmarkTimings? timings = null,
-                                                     byte[]? userDictCsv = null)
+                                                     byte[]? userDictCsv = null,
+                                                     List<string>? cleanedOriginals = null)
     {
         if (texts.Count == 0) return Task.FromResult<List<List<SentenceInfo>>>([]);
 
@@ -53,6 +64,7 @@ public partial class MorphologicalAnalyser
             {
                 processedTexts.Add("");
                 originalTexts.Add("");
+                cleanedOriginals?.Add("");
                 continue;
             }
 
@@ -63,6 +75,7 @@ public partial class MorphologicalAnalyser
             if (!preserveStopToken)
                 cleanedOriginal = cleanedOriginal.Replace(_stopToken, "");
             originalTexts.Add(cleanedOriginal);
+            cleanedOriginals?.Add(cleanedOriginal);
         }
 
         // Join with batch delimiter (only if multiple texts)

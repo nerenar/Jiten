@@ -169,7 +169,13 @@ public class EbookExtractor
                                         );
             }
 
-            rubyElement.Parent?.ReplaceChild(document.CreateTextNode(baseText.Trim()), rubyElement);
+            var rtText = string.Concat(rubyElement.QuerySelectorAll("rt").Select(rt => rt.TextContent)).Trim();
+            var trimmedBase = baseText.Trim();
+            var replacement = !string.IsNullOrEmpty(rtText) && trimmedBase.Length > 0
+                ? $"{{{trimmedBase}'{rtText}}}"
+                : trimmedBase;
+
+            rubyElement.Parent?.ReplaceChild(document.CreateTextNode(replacement), rubyElement);
         }
 
         var textNodes = body.Descendants<IText>()
