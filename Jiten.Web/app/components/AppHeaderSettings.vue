@@ -14,6 +14,7 @@
     hideTags,
     hideRelations,
     hideDescriptions,
+    hideExternalRating,
     quickMasterVocabulary,
     displayAdminFunctions,
     readingSpeed,
@@ -188,6 +189,11 @@
       <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="hideDescriptions" input-id="hideDescriptions" name="hideDescriptions" :binary="true" />
         <label for="hideDescriptions" class="text-sm cursor-pointer">Hide descriptions</label>
+      </div>
+
+      <div class="flex items-center gap-2 py-1">
+        <Checkbox v-model="hideExternalRating" input-id="hideExternalRating" name="hideExternalRating" :binary="true" />
+        <label for="hideExternalRating" class="text-sm cursor-pointer">Hide external ratings</label>
       </div>
 
       <div v-if="auth.isAuthenticated && auth.isAdmin" class="flex items-center gap-2 py-1">

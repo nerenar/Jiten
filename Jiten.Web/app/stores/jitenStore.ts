@@ -35,6 +35,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const hideTags = createCookieState<boolean>('hide-tags', false);
   const hideRelations = createCookieState<boolean>('hide-relations', false);
   const hideDescriptions = createCookieState<boolean>('hide-descriptions', false);
+  const hideExternalRating = createCookieState<boolean>('hide-external-rating', false);
   const quickMasterVocabulary = createCookieState<boolean>('quick-master-vocabulary', false);
   const ttsVoice = createCookieState<'female' | 'female2' | 'male' | 'male2' | 'asmr' | 'system'>('tts-voice', 'female');
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
@@ -108,6 +109,7 @@ export const useJitenStore = defineStore('jiten', () => {
     hideTags,
     hideRelations,
     hideDescriptions,
+    hideExternalRating,
     quickMasterVocabulary,
     ttsVoice,
     difficultyDisplayStyle,

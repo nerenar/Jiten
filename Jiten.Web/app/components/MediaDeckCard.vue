@@ -451,7 +451,7 @@
                       <span class="tabular-nums font-semibold">{{ readingDuration > 0 ? readingDuration : '<1' }} h</span>
                     </div>
 
-                    <div v-if="deck.externalRating != 0" class="flex justify-between flex-wrap stat-row">
+                    <div v-if="deck.externalRating != 0 && !store.hideExternalRating" class="flex justify-between flex-wrap stat-row">
                       <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
                         <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">External Rating</span>
                       </Tooltip>
