@@ -218,7 +218,7 @@
                   target="_blank"
                   class="text-blue-500 hover:underline font-noto-sans"
                 >
-                  <span v-if="card.reading" v-html="convertToRuby(card.reading)" />
+                  <span v-if="card.reading" lang="ja" v-html="convertToRuby(card.reading)" />
                   <span v-else>—</span>
                 </NuxtLink>
               </template>

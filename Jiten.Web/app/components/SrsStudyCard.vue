@@ -316,14 +316,16 @@
           <div
             v-if="!isFlipped && srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || card.isNewCard)"
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+            lang="ja"
             v-html="convertToRuby(card.wordText || card.wordTextPlain, true)"
           />
-          <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans">
+          <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans" lang="ja">
             {{ card.wordTextPlain }}
           </div>
           <div
             v-else
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+            lang="ja"
             v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain, true)"
           />
           <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
@@ -336,7 +338,7 @@
             @click.stop="revealExample()"
           >
             <div class="flex items-start gap-2">
-              <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
+              <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
               <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
             </div>
           </blockquote>
@@ -469,7 +471,7 @@
               @click.stop="revealExample()"
             >
               <div class="flex items-start gap-2">
-                <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" />
+                <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
                 <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
               </div>
             </blockquote>

@@ -41,12 +41,13 @@
     <div class="cursor-pointer select-none" @click="expanded = !expanded">
       <div class="flex items-center gap-3 px-4 pt-2.5">
         <div class="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
-          <span v-if="entry.primaryKanjiText" class="text-lg font-noto-sans font-medium" v-html="convertToRuby(entry.primaryKanjiText)" />
+          <span v-if="entry.primaryKanjiText" class="text-lg font-noto-sans font-medium" lang="ja" v-html="convertToRuby(entry.primaryKanjiText)" />
           <span
             v-if="entry.primaryKanjiText"
             class="text-sm text-gray-500 dark:text-gray-400 font-noto-sans"
+            lang="ja"
           >{{ entry.text }}</span>
-          <span v-else class="text-lg font-noto-sans font-medium" v-html="convertToRuby(entry.rubyText)" />
+          <span v-else class="text-lg font-noto-sans font-medium" lang="ja" v-html="convertToRuby(entry.rubyText)" />
           <span
             v-for="pos in entry.partsOfSpeech.slice(0, 2)"
             :key="pos"

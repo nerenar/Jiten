@@ -108,7 +108,7 @@
         <template #body="{ data: card, index }">
           <template v-if="card">
             <NuxtLink v-tooltip.top="card.mainDefinition" :to="`/vocabulary/${card.wordId}/${card.readingIndex}`" target="_blank" class="text-blue-500 hover:underline">
-              <span class="text-base font-bold" v-html="convertToRuby(card.reading)" />
+              <span class="text-base font-bold" lang="ja" v-html="convertToRuby(card.reading)" />
             </NuxtLink>
           </template>
           <Skeleton v-else width="6rem" height="1.2rem" />

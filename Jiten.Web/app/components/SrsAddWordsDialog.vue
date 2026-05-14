@@ -297,12 +297,13 @@
               >
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-3 flex-wrap">
-                    <span v-if="entry.primaryKanjiText" class="text-lg font-noto-sans font-medium" v-html="convertToRuby(entry.primaryKanjiText)" />
+                    <span v-if="entry.primaryKanjiText" class="text-lg font-noto-sans font-medium" lang="ja" v-html="convertToRuby(entry.primaryKanjiText)" />
                     <span
                       v-if="entry.primaryKanjiText"
                       class="text-sm text-gray-500 dark:text-gray-400 font-noto-sans"
+                      lang="ja"
                     >{{ entry.text }}</span>
-                    <span v-else class="text-lg font-noto-sans font-medium" v-html="convertToRuby(entry.rubyText)" />
+                    <span v-else class="text-lg font-noto-sans font-medium" lang="ja" v-html="convertToRuby(entry.rubyText)" />
                     <span
                       v-for="pos in entry.partsOfSpeech.slice(0, 2)"
                       :key="pos"
@@ -334,7 +335,7 @@
               <Textarea
                 v-model="pasteText"
                 placeholder="Paste Japanese words here, one per line..."
-                class="w-full font-noto-sans flex-1 !resize-none"
+                class="w-full font-noto-sans flex-1 !resize-none" lang="ja"
                 :style="{ minHeight: '120px' }"
               />
               <div class="shrink-0 flex flex-col gap-3">
