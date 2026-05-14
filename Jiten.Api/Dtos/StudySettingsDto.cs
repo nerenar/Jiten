@@ -119,6 +119,15 @@ public class StudySettingsDto
     [JsonPropertyName("autoPlaySentence")]
     public bool AutoPlaySentence { get; set; } = true;
 
+    [JsonPropertyName("autoPlayWordOnFront")]
+    public bool AutoPlayWordOnFront { get; set; }
+
+    [JsonPropertyName("autoPlayWordOnFrontNewOnly")]
+    public bool AutoPlayWordOnFrontNewOnly { get; set; }
+
+    [JsonPropertyName("autoPlaySentenceOnFront")]
+    public bool AutoPlaySentenceOnFront { get; set; }
+
     [JsonPropertyName("showReviewActivity")]
     public bool ShowReviewActivity { get; set; } = true;
 

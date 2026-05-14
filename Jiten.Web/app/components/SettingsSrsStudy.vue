@@ -409,8 +409,35 @@
         <div class="flex items-center gap-2">
           <ToggleSwitch v-model="form.autoPlaySentence" input-id="autoPlaySentence" />
           <label for="autoPlaySentence" class="text-sm cursor-pointer">
-            Auto-play example sentence on flip
+            Auto-play example sentence audio on flip
             <Tooltip content="Automatically read the example sentence aloud when you flip a card. If both word and sentence are enabled, they play sequentially." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlayWordOnFront" input-id="autoPlayWordOnFront" />
+          <label for="autoPlayWordOnFront" class="text-sm cursor-pointer">
+            Auto-play headword audio on front
+            <Tooltip content="Automatically read the headword aloud when a new card appears, before flipping." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
+          <ToggleSwitch v-model="form.autoPlayWordOnFrontNewOnly" input-id="autoPlayWordOnFrontNewOnly" />
+          <label for="autoPlayWordOnFrontNewOnly" class="text-sm cursor-pointer">
+            New cards only
+            <Tooltip content="Only auto-play on cards you haven't seen before. Review cards will be silent." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
+          <ToggleSwitch v-model="form.autoPlaySentenceOnFront" input-id="autoPlaySentenceOnFront" />
+          <label for="autoPlaySentenceOnFront" class="text-sm cursor-pointer">
+            Also play example sentence
+            <Tooltip content="Play the example sentence after the headword audio finishes." placement="right">
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>

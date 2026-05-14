@@ -209,7 +209,30 @@
 
   watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
     tts.stop();
-  });
+
+    const settings = srsStore.studySettings;
+    if (!settings.autoPlayWordOnFront) return;
+    if (settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) return;
+    if (props.isFlipped) return;
+
+    const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
+    tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
+
+    if (settings.autoPlaySentenceOnFront) {
+      const example = cardExample.value;
+      if (example?.sentenceId) {
+        const unwatch = watch(tts.isAnyPlaying, (playing) => {
+          if (!playing) {
+            unwatch();
+            setTimeout(() => {
+              if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
+              tts.speakSentence(example.sentenceId, example.text);
+            }, 150);
+          }
+        });
+      }
+    }
+  }, { immediate: true });
 
   onUnmounted(() => tts.stop());
 

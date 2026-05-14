@@ -891,6 +891,9 @@ export interface StudySettingsDto {
   furiganaOnFrontNewOnly: boolean;
   autoPlayWord: boolean;
   autoPlaySentence: boolean;
+  autoPlayWordOnFront: boolean;
+  autoPlayWordOnFrontNewOnly: boolean;
+  autoPlaySentenceOnFront: boolean;
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;
