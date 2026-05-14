@@ -148,11 +148,11 @@
   onUnmounted(() => barObserver?.disconnect());
 
   const barColors = {
-    rainbow: { easy: 'bg-emerald-400', good: 'bg-blue-400', hard: 'bg-orange-300', action: 'bg-gray-400', again: 'bg-red-400' },
+    rainbow: { easy: 'bg-blue-400', good: 'bg-emerald-400', hard: 'bg-orange-300', action: 'bg-gray-400', again: 'bg-red-400' },
     mono: { easy: 'bg-surface-500', good: 'bg-surface-400', hard: 'bg-surface-300', action: 'bg-surface-300', again: 'bg-surface-600 dark:bg-surface-500' },
   } as const;
   const dotColors = {
-    rainbow: { again: 'bg-red-400', hard: 'bg-orange-300', good: 'bg-blue-400', easy: 'bg-emerald-400' },
+    rainbow: { again: 'bg-red-400', hard: 'bg-orange-300', good: 'bg-emerald-400', easy: 'bg-blue-400' },
     mono: { again: 'bg-surface-600', hard: 'bg-surface-400', good: 'bg-surface-400', easy: 'bg-surface-500' },
   } as const;
 
@@ -472,6 +472,7 @@
             :grading-buttons="srsStore.studySettings.gradingButtons"
             :is-flipped="srsStore.isFlipped"
             :can-undo="srsStore.canUndo"
+            :keybinds="srsStore.studySettings.keybinds"
             :monochrome="isMono"
             :interval-preview="srsStore.studySettings.showNextInterval ? srsStore.currentCard?.intervalPreview : undefined"
             :show-keybinds="srsStore.studySettings.showKeybinds"

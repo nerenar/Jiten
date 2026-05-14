@@ -2049,6 +2049,21 @@ public class StudyController(
         request.MaxReviewsPerDay = Math.Clamp(request.MaxReviewsPerDay, 0, 9999);
         request.BatchSize = Math.Clamp(request.BatchSize, 1, 999);
         request.GradingButtons = request.GradingButtons is 2 or 4 ? request.GradingButtons : 4;
+
+        var defaultKeybinds = new StudyKeybindsDto();
+        var kb = request.Keybinds;
+        kb.Grade1 = SanitizeKeybind(kb.Grade1, defaultKeybinds.Grade1);
+        kb.Grade2 = SanitizeKeybind(kb.Grade2, defaultKeybinds.Grade2);
+        kb.Grade3 = SanitizeKeybind(kb.Grade3, defaultKeybinds.Grade3);
+        kb.Grade4 = SanitizeKeybind(kb.Grade4, defaultKeybinds.Grade4);
+        kb.FlipCard = SanitizeKeybind(kb.FlipCard, defaultKeybinds.FlipCard);
+        kb.Blacklist = SanitizeKeybind(kb.Blacklist, defaultKeybinds.Blacklist);
+        kb.Forget = SanitizeKeybind(kb.Forget, defaultKeybinds.Forget);
+        kb.Master = SanitizeKeybind(kb.Master, defaultKeybinds.Master);
+        kb.Suspend = SanitizeKeybind(kb.Suspend, defaultKeybinds.Suspend);
+        kb.Undo = SanitizeKeybind(kb.Undo, defaultKeybinds.Undo);
+        kb.WrapUp = SanitizeKeybind(kb.WrapUp, defaultKeybinds.WrapUp);
+
         if (!string.IsNullOrEmpty(request.Timezone))
         {
             try { TimeZoneInfo.FindSystemTimeZoneById(request.Timezone); }
@@ -2088,6 +2103,12 @@ public class StudyController(
         {
             return new StudySettingsDto();
         }
+    }
+
+    private static string SanitizeKeybind(string value, string fallback)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length > 20) return fallback;
+        return value;
     }
 
     private static List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)> InterleaveMixed(

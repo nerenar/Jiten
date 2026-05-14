@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
+  import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
+  import type { StudyKeybinds } from '~/types';
 
   const props = defineProps<{ inline?: boolean }>();
 
@@ -14,6 +16,7 @@
   onMounted(async () => {
     await srsStore.fetchSettings(true);
     Object.assign(form, srsStore.studySettings);
+    form.keybinds = { ...srsStore.studySettings.keybinds };
     if (!form.timezone) applyDetectedTimezone();
     loaded.value = true;
     tickInterval = setInterval(() => { nowMinute.value = Date.now(); }, 60_000);
@@ -105,10 +108,30 @@
     } catch { /* no-op */ }
   }
 
+  const gradeLabels4: [keyof StudyKeybinds, string][] = [['grade1', 'Again'], ['grade2', 'Hard'], ['grade3', 'Good'], ['grade4', 'Easy']];
+  const gradeLabels2: [keyof StudyKeybinds, string][] = [['grade1', 'Again'], ['grade2', 'Good']];
+  const actionEntries: [keyof StudyKeybinds, string][] = [
+    ['flipCard', 'Flip card / Grade Good'], ['blacklist', 'Blacklist'], ['forget', 'Forget'],
+    ['master', 'Master'], ['suspend', 'Suspend'], ['undo', 'Undo'], ['wrapUp', 'Wrap up'],
+  ];
+
+  const gradeEntries = computed(() => form.gradingButtons === 4 ? gradeLabels4 : gradeLabels2);
+
+  function checkConflict(forKey: keyof StudyKeybinds, value: string): string | null {
+    for (const [key, label] of [...gradeEntries.value, ...actionEntries]) {
+      if (key !== forKey && form.keybinds[key] === value) return label;
+    }
+    return null;
+  }
+
+  function resetKeybinds() {
+    Object.assign(form.keybinds, DEFAULT_KEYBINDS);
+  }
+
   async function save() {
     saving.value = true;
     try {
-      await srsStore.updateSettings({ ...form });
+      await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds } });
       toast.add({ severity: 'success', summary: 'Study settings saved', life: 2000 });
     } catch {
       toast.add({ severity: 'error', summary: 'Failed to save settings', life: 3000 });
@@ -442,6 +465,32 @@
             </Tooltip>
           </label>
         </div>
+      </div>
+
+      <Divider />
+
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Keyboard shortcuts</h3>
+      <p class="text-xs text-surface-500">Click a key and press the new key to rebind. Escape cancels.</p>
+      <div class="flex flex-col gap-2">
+        <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide">Grading</h4>
+        <KeybindInput
+          v-for="[key, label] in gradeEntries" :key="key"
+          v-model="form.keybinds[key]"
+          :label="label"
+          :conflict="checkConflict(key, form.keybinds[key])"
+        />
+
+        <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide mt-2">Actions</h4>
+        <KeybindInput
+          v-for="[key, label] in actionEntries" :key="key"
+          v-model="form.keybinds[key]"
+          :label="label"
+          :conflict="checkConflict(key, form.keybinds[key])"
+        />
+        <div class="mt-1">
+          <Button severity="secondary" size="small" label="Reset to defaults" @click="resetKeybinds" />
+        </div>
+        <p class="text-xs text-surface-400">Escape and Enter are always available as shortcuts for wrap up and flip card.</p>
       </div>
 
       <Divider />

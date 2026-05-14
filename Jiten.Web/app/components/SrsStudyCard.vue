@@ -5,6 +5,7 @@
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
+  import { displayKeyName } from '~/composables/useStudyKeyboard';
 
   const props = defineProps<{
     card: StudyCardDto;
@@ -438,7 +439,7 @@
 
         <div v-if="!isFlipped" class="text-sm text-surface-400 dark:text-surface-300 mt-6">
           <span class="md:hidden">Tap to reveal</span>
-          <span class="hidden md:inline">Click or press Space to reveal</span>
+          <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
         </div>
       </div>
 

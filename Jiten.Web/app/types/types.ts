@@ -865,6 +865,20 @@ export type StudyReviewFrom = 'AllTracked' | 'StudyDecksOnly';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
 
+export interface StudyKeybinds {
+  grade1: string;
+  grade2: string;
+  grade3: string;
+  grade4: string;
+  flipCard: string;
+  blacklist: string;
+  forget: string;
+  master: string;
+  suspend: string;
+  undo: string;
+  wrapUp: string;
+}
+
 export interface StudySettingsDto {
   newCardsPerDay: number;
   maxReviewsPerDay: number;
@@ -898,6 +912,7 @@ export interface StudySettingsDto {
   showReviewForecast: boolean;
   timezone: string | null;
   showConfusableReadings: boolean;
+  keybinds: StudyKeybinds;
 }
 
 export interface CardExamplesResponse {

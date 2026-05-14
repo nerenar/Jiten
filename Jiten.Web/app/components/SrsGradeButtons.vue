@@ -1,11 +1,13 @@
 <script setup lang="ts">
-  import type { IntervalPreviewDto } from '~/types';
+  import type { IntervalPreviewDto, StudyKeybinds } from '~/types';
   import { FsrsRating } from '~/types';
+  import { displayKeyName } from '~/composables/useStudyKeyboard';
 
   const props = defineProps<{
     gradingButtons: number;
     isFlipped: boolean;
     canUndo: boolean;
+    keybinds: StudyKeybinds;
     monochrome?: boolean;
     intervalPreview?: IntervalPreviewDto;
     showKeybinds?: boolean;
@@ -30,17 +32,17 @@
     morePopover.value?.toggle(event);
   }
 
-  const buttons4 = [
-    { rating: FsrsRating.Again, label: 'Again', key: '1', severity: 'danger' as const, swipe: '← swipe' },
-    { rating: FsrsRating.Hard, label: 'Hard', key: '2', severity: 'warn' as const, swipe: null },
-    { rating: FsrsRating.Good, label: 'Good', key: '3', severity: 'success' as const, swipe: 'swipe →' },
-    { rating: FsrsRating.Easy, label: 'Easy', key: '4', severity: 'info' as const, swipe: null },
-  ];
+  const buttons4 = computed(() => [
+    { rating: FsrsRating.Again, label: 'Again', key: props.keybinds.grade1, severity: 'danger' as const, swipe: '← swipe' },
+    { rating: FsrsRating.Hard, label: 'Hard', key: props.keybinds.grade2, severity: 'warn' as const, swipe: null },
+    { rating: FsrsRating.Good, label: 'Good', key: props.keybinds.grade3, severity: 'success' as const, swipe: 'swipe →' },
+    { rating: FsrsRating.Easy, label: 'Easy', key: props.keybinds.grade4, severity: 'info' as const, swipe: null },
+  ]);
 
-  const buttons2 = [
-    { rating: FsrsRating.Again, label: 'Again', key: '1', severity: 'danger' as const, swipe: '← swipe' },
-    { rating: FsrsRating.Good, label: 'Good', key: '2', severity: 'success' as const, swipe: 'swipe →' },
-  ];
+  const buttons2 = computed(() => [
+    { rating: FsrsRating.Again, label: 'Again', key: props.keybinds.grade1, severity: 'danger' as const, swipe: '← swipe' },
+    { rating: FsrsRating.Good, label: 'Good', key: props.keybinds.grade2, severity: 'success' as const, swipe: 'swipe →' },
+  ]);
 
   function formatInterval(seconds: number): string {
     if (seconds < 60) return `${seconds}s`;
@@ -74,7 +76,7 @@
         text
         :disabled="props.disabled"
         class="min-h-[36px] !px-2 sm:!px-3"
-        :class="{ 'kb-pressed': props.pressedKey === 'z' }"
+        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.undo }"
         aria-label="Undo"
         @click="emit('undo')"
       >
@@ -82,7 +84,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-0">
             <Icon name="material-symbols:undo" size="16" class="sm:hidden" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Undo</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">Z</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
           </div>
         </template>
       </Button>
@@ -94,12 +96,12 @@
         label="Show Answer"
         severity="secondary"
         class="w-full min-h-[44px] md:min-h-[72px] text-lg"
-        :class="{ 'kb-pressed': props.pressedKey === 'space' }"
+        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.flipCard }"
         @click="emit('flip')"
       >
         <template #default>
           <span>Show Answer</span>
-          <span v-if="showKeybinds" class="keybind ml-2 text-xs opacity-60">Space</span>
+          <span v-if="showKeybinds" class="keybind ml-2 text-xs opacity-60">{{ displayKeyName(props.keybinds.flipCard) }}</span>
         </template>
       </Button>
     </div>
@@ -121,7 +123,7 @@
           <div class="flex flex-col items-center">
             <span v-if="getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-50">{{ getIntervalForRating(btn.rating) }}</span>
             <span>{{ btn.label }}</span>
-            <span v-if="showKeybinds" class="keybind text-xs opacity-60">{{ btn.key }}</span>
+            <span v-if="showKeybinds" class="keybind text-xs opacity-60">{{ displayKeyName(btn.key) }}</span>
             <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-50">{{ btn.swipe }}</span>
           </div>
         </template>
@@ -136,7 +138,7 @@
         outlined
         :disabled="props.disabled"
         class="min-h-[36px] !px-2 sm:!px-3"
-        :class="{ 'kb-pressed': props.pressedKey === 'b' }"
+        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.blacklist }"
         aria-label="Blacklist"
         @click="emit('blacklist')"
       >
@@ -144,7 +146,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-1.5">
             <Icon name="material-symbols:block" size="16" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Blacklist</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">B</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.blacklist) }}</span>
           </div>
         </template>
       </Button>
@@ -155,7 +157,7 @@
         outlined
         :disabled="props.disabled"
         class="min-h-[36px] !px-2 sm:!px-3"
-        :class="{ 'kb-pressed': props.pressedKey === 'm' }"
+        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.master }"
         aria-label="Master"
         @click="emit('master')"
       >
@@ -163,7 +165,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-1.5">
             <Icon name="material-symbols:star" size="16" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Master</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">M</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.master) }}</span>
           </div>
         </template>
       </Button>
@@ -175,7 +177,7 @@
         outlined
         :disabled="props.disabled"
         class="min-h-[36px] !px-2 sm:!px-3"
-        :class="{ 'kb-pressed': props.pressedKey === 'z' }"
+        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.undo }"
         aria-label="Undo"
         @click="emit('undo')"
       >
@@ -183,7 +185,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-1.5">
             <Icon name="material-symbols:undo" size="16" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Undo</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">Z</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
           </div>
         </template>
       </Button>

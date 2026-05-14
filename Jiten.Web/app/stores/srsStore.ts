@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
 import { FsrsRating } from '~/types';
+import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 
 interface SessionReview {
   wordId: number;
@@ -86,6 +87,7 @@ export const useSrsStore = defineStore('srs', () => {
     showReviewForecast: true,
     timezone: 'Europe/London',
     showConfusableReadings: true,
+    keybinds: { ...DEFAULT_KEYBINDS },
   });
   const sessionStats = ref({
     cardsReviewed: 0,

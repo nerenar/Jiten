@@ -139,4 +139,23 @@ public class StudySettingsDto
 
     [JsonPropertyName("showConfusableReadings")]
     public bool ShowConfusableReadings { get; set; } = true;
+
+    [JsonPropertyName("keybinds")]
+    public StudyKeybindsDto Keybinds { get; set; } = new();
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class StudyKeybindsDto
+{
+    [JsonPropertyName("grade1")] public string Grade1 { get; set; } = "1";
+    [JsonPropertyName("grade2")] public string Grade2 { get; set; } = "2";
+    [JsonPropertyName("grade3")] public string Grade3 { get; set; } = "3";
+    [JsonPropertyName("grade4")] public string Grade4 { get; set; } = "4";
+    [JsonPropertyName("flipCard")] public string FlipCard { get; set; } = " ";
+    [JsonPropertyName("blacklist")] public string Blacklist { get; set; } = "b";
+    [JsonPropertyName("forget")] public string Forget { get; set; } = "f";
+    [JsonPropertyName("master")] public string Master { get; set; } = "m";
+    [JsonPropertyName("suspend")] public string Suspend { get; set; } = "s";
+    [JsonPropertyName("undo")] public string Undo { get; set; } = "z";
+    [JsonPropertyName("wrapUp")] public string WrapUp { get; set; } = "w";
 }
