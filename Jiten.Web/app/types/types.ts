@@ -360,6 +360,8 @@ export interface FsrsCardWithWordDto {
   difficulty?: number;
   due: Date;
   lastReview?: Date;
+  createdAt: Date;
+  lapses: number;
   wordText: string;
   readingType: ReadingType;
   frequencyRank: number;
@@ -983,6 +985,7 @@ export interface ReviewHistoryDto {
     due: string;
     lastReview?: string;
     createdAt: string;
+    lapses: number;
   };
   reviews: {
     rating: FsrsRating;

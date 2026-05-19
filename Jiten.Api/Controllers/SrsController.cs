@@ -84,10 +84,14 @@ public class SrsController(
             var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
 
             var replayCard = new FsrsCard(userId, card.WordId, card.ReadingIndex);
+            var lapses = 0;
             foreach (var log in remainingLogs)
             {
+                var prevState = replayCard.State;
                 var reviewDt = DateTime.SpecifyKind(log.ReviewDateTime, DateTimeKind.Utc);
                 var result = scheduler.ReviewCard(replayCard, log.Rating, reviewDt);
+                if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
+                    lapses++;
                 replayCard = result.UpdatedCard;
             }
 
@@ -97,6 +101,7 @@ public class SrsController(
             card.Difficulty = replayCard.Difficulty;
             card.Due = replayCard.Due;
             card.LastReview = replayCard.LastReview;
+            card.Lapses = lapses;
         }
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
@@ -170,13 +175,14 @@ public class SrsController(
 
         if (isLapse)
         {
+            cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
+
             var studySettings = GetStudySettings(userSettings);
             var threshold = studySettings.LeechThreshold;
 
-            if (threshold > 0 && card.CardId > 0)
+            if (threshold > 0)
             {
-                var lapseCount = await CountLapsesFromHistory(card.CardId, parameters, desiredRetention) + 1;
-
+                var lapseCount = cardAndLog.UpdatedCard.Lapses;
                 var halfThreshold = Math.Max(threshold / 2, 1);
                 if (lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0))
                 {
@@ -188,6 +194,10 @@ public class SrsController(
                     }
                 }
             }
+        }
+        else
+        {
+            cardAndLog.UpdatedCard.Lapses = card.Lapses;
         }
 
         if (card.CardId == 0)
@@ -269,6 +279,7 @@ public class SrsController(
                 Due = card.Due,
                 LastReview = card.LastReview,
                 CreatedAt = card.CreatedAt,
+                Lapses = card.Lapses,
             },
             Reviews = card.ReviewLogs
                 .OrderByDescending(l => l.ReviewDateTime)
@@ -1329,34 +1340,6 @@ public class SrsController(
         return new StudySettingsDto();
     }
 
-    private async Task<int> CountLapsesFromHistory(long cardId, double[] parameters, double desiredRetention)
-    {
-        var logs = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(l => l.CardId == cardId)
-            .OrderBy(l => l.ReviewDateTime)
-            .ThenBy(l => l.ReviewLogId)
-            .Select(l => new { l.Rating, l.ReviewDateTime, l.ReviewDuration })
-            .ToListAsync();
-
-        if (logs.Count == 0) return 0;
-
-        var replayScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
-        var tempCard = new FsrsCard("", 0, 0);
-        var lapseCount = 0;
-
-        foreach (var log in logs)
-        {
-            var prevState = tempCard.State;
-            var reviewDt = DateTime.SpecifyKind(log.ReviewDateTime, DateTimeKind.Utc);
-            var result = replayScheduler.ReviewCard(tempCard, log.Rating, reviewDt, log.ReviewDuration);
-            if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
-                lapseCount++;
-            tempCard = result.UpdatedCard;
-        }
-
-        return lapseCount;
-    }
 
     [HttpPost("reader-study-decks")]
     [SwaggerOperation(Summary = "Get user's static word list decks for the reader extension")]
