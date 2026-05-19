@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
@@ -160,7 +161,34 @@ public class SrsController(
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
         }
 
+        var previousState = card.State;
         var cardAndLog = scheduler.ReviewCard(card, request.Rating, DateTime.UtcNow, request.ReviewDuration);
+
+        var leechDetected = false;
+        var leechSuspended = false;
+        var isLapse = previousState == FsrsState.Review && request.Rating == FsrsRating.Again;
+
+        if (isLapse)
+        {
+            var studySettings = GetStudySettings(userSettings);
+            var threshold = studySettings.LeechThreshold;
+
+            if (threshold > 0 && card.CardId > 0)
+            {
+                var lapseCount = await CountLapsesFromHistory(card.CardId, parameters, desiredRetention) + 1;
+
+                var halfThreshold = Math.Max(threshold / 2, 1);
+                if (lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0))
+                {
+                    leechDetected = true;
+                    if (studySettings.LeechAction == LeechAction.Suspend)
+                    {
+                        cardAndLog.UpdatedCard.State = FsrsState.Suspended;
+                        leechSuspended = true;
+                    }
+                }
+            }
+        }
 
         if (card.CardId == 0)
         {
@@ -191,6 +219,8 @@ public class SrsController(
             newState = (int)cardAndLog.UpdatedCard.State,
             stability = cardAndLog.UpdatedCard.Stability,
             difficulty = cardAndLog.UpdatedCard.Difficulty,
+            leechDetected,
+            leechSuspended,
             intervalPreview = new
             {
                 againSeconds = (int)intervals[FsrsRating.Again].TotalSeconds,
@@ -659,6 +689,21 @@ public class SrsController(
                     RestoreCardState(card);
                 }
 
+                break;
+
+            case "bury-add":
+                if (card != null)
+                {
+                    var burySettings = GetStudySettings(await LoadUserSettings(userId));
+                    card.Due = ComputeNextMidnightUtc(DateTime.UtcNow, burySettings.Timezone);
+                }
+                break;
+
+            case "bury-remove":
+                if (card != null)
+                {
+                    card.Due = DateTime.UtcNow;
+                }
                 break;
 
             default:
@@ -1256,6 +1301,61 @@ public class SrsController(
     private static string SerializeParametersCsv(double[] parameters)
     {
         return string.Join(", ", parameters.Select(value => value.ToString("0.####", CultureInfo.InvariantCulture)));
+    }
+
+    private static DateTime ComputeNextMidnightUtc(DateTime utcNow, string? timezone)
+    {
+        if (string.IsNullOrEmpty(timezone))
+            return utcNow.Date.AddDays(1);
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+            var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(1);
+            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified), tz);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return utcNow.Date.AddDays(1);
+        }
+    }
+
+    private static StudySettingsDto GetStudySettings(UserFsrsSettings? settings)
+    {
+        if (settings?.SettingsJson is { Length: > 2 } json)
+        {
+            try { return JsonSerializer.Deserialize<StudySettingsDto>(json) ?? new StudySettingsDto(); }
+            catch (JsonException) { }
+        }
+        return new StudySettingsDto();
+    }
+
+    private async Task<int> CountLapsesFromHistory(long cardId, double[] parameters, double desiredRetention)
+    {
+        var logs = await userContext.FsrsReviewLogs
+            .AsNoTracking()
+            .Where(l => l.CardId == cardId)
+            .OrderBy(l => l.ReviewDateTime)
+            .ThenBy(l => l.ReviewLogId)
+            .Select(l => new { l.Rating, l.ReviewDateTime, l.ReviewDuration })
+            .ToListAsync();
+
+        if (logs.Count == 0) return 0;
+
+        var replayScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+        var tempCard = new FsrsCard("", 0, 0);
+        var lapseCount = 0;
+
+        foreach (var log in logs)
+        {
+            var prevState = tempCard.State;
+            var reviewDt = DateTime.SpecifyKind(log.ReviewDateTime, DateTimeKind.Utc);
+            var result = replayScheduler.ReviewCard(tempCard, log.Rating, reviewDt, log.ReviewDuration);
+            if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
+                lapseCount++;
+            tempCard = result.UpdatedCard;
+        }
+
+        return lapseCount;
     }
 
     [HttpPost("reader-study-decks")]
