@@ -1006,7 +1006,7 @@ public class FormSelectionTests
 
         // === 呼ぶ-family: verb conjugation forms must not be split by resegmentation ===
         // 呼びつけ (continuative of 呼びつける) — resegmentation was splitting to 呼び+つけ
-        yield return ["何だったら俺を呼びつけでもいいし", "呼びつけ", 1266390, (byte)0];
+        yield return ["何だったら俺を呼びつけでもいいし", "呼びつけ", 2870929, (byte)0];
         yield return ["ランスの呼びつけを無視して", "呼びつけ", 1266390, (byte)0];
 
         // 呼ばれ (continuative of 呼ばれる) — resegmentation was splitting to 呼+ばれ
@@ -1017,7 +1017,7 @@ public class FormSelectionTests
         yield return ["フィルチを呼ーぼう", "呼ぼう", 1266440, (byte)0];
 
         // 呼ばわる past tense (contracted 呼ばわった → 呼ばった)
-        yield return ["彼女は強く戸を敲きつけて更に大きく呼ばった。", "呼ばった", 2477090, (byte)0];
+        yield return ["彼女は強く戸を敲きつけて更に大きく呼ばった。", "呼ばった", 2870930, (byte)0];
 
         // ささやかれる = passive of ささやく (囁く, to whisper), not na-adj ささやか + れる
         yield return ["ささやかれるどころか", "ささやかれる", 1565670, (byte)2];

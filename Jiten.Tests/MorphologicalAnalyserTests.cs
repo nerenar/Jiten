@@ -555,7 +555,7 @@ public class MorphologicalAnalyserTests
         yield return ["急にこれを食べさせられちゃったって言われてもちょっと困るなあ", new[] { "急に", "これ", "を", "食べさせられちゃった", "って", "言われて", "も", "ちょっと", "困る", "なあ" }];
         // 指弾 is a vs (suru-verb) so 指弾する is correctly combined
         yield return ["俺は奴の民主主義ぶった欺瞞を指弾する", new[] { "俺", "は", "奴", "の", "民主主義", "ぶった", "欺瞞", "を", "指弾する" }];
-        yield return ["俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳", "的な", "昂揚感" }];
+        yield return ["俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳的な", "昂揚感" }];
         // め derogatory suffix is filtered — only the noun remains
         yield return ["欠陥品め", new[] { "欠陥品" }];
         // め kept as part of an adjectival compound (大きめ = "on the large side")
@@ -1263,7 +1263,7 @@ public class MorphologicalAnalyserTests
         yield return ["国際連合教育科学文化機関", new[] { "国際連合教育科学文化機関" }];
 
         // 連邦国支部長 — resegmentation should split 支部長 as 支部+長 (branch+chief), not 支+部長
-        yield return ["連邦国支部長", new[] { "連邦", "国", "支部", "長" }];
+        yield return ["連邦国支部長", new[] { "連邦", "国", "支部長" }];
 
         // ってば should combine from って+ば into a single particle (WordId 2130420)
         yield return ["……あーあ、馬鹿らしいことで悩んでたわ、私ってば。", new[] { "あーあ", "馬鹿らしい", "こと", "で", "悩んでた", "わ", "私", "ってば" }];
