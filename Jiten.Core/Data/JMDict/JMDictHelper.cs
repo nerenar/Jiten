@@ -2538,7 +2538,9 @@ public static class JmDictHelper
             }
         }
 
-        // Sync lookups (delete-and-recreate from all current forms)
+        // Sync lookups (delete-and-recreate from all forms, including deactivated ones
+        // so the parser can still find words whose JMDict forms were removed — the scorer
+        // handles deprioritisation via a -30 penalty on IsActiveInLatestSource=false forms)
         context.Set<JmDictLookup>().RemoveRange(dbWord.Lookups);
         dbWord.Lookups.Clear();
 
@@ -2546,6 +2548,19 @@ public static class JmDictHelper
         foreach (var syncForm in allSyncForms)
         {
             foreach (var lookup in GenerateLookupsForForm(entry.WordId, syncForm.Text))
+            {
+                if (lookupKeys.Add(lookup.LookupKey))
+                {
+                    dbWord.Lookups.Add(lookup);
+                    lookupsCreated++;
+                }
+            }
+        }
+
+        foreach (var form in dbWord.Forms)
+        {
+            if (form.IsActiveInLatestSource) continue;
+            foreach (var lookup in GenerateLookupsForForm(entry.WordId, form.Text))
             {
                 if (lookupKeys.Add(lookup.LookupKey))
                 {
