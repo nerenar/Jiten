@@ -2525,7 +2525,7 @@ public class UserController(
             allKanji = await jitenContext.Kanjis
                                          .AsNoTracking()
                                          .OrderBy(k => k.FrequencyRank ?? int.MaxValue)
-                                         .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel))
+                                         .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel, k.Grade))
                                          .ToListAsync();
 
             var json = JsonSerializer.Serialize(allKanji);
@@ -2536,30 +2536,44 @@ public class UserController(
                                         .AsNoTracking()
                                         .FirstOrDefaultAsync(ukg => ukg.UserId == targetUserId);
 
-        var userScores = userGrid?.GetKanjiScoresOnce() ?? new Dictionary<string, double[]>();
-        var maxThreshold = double.Parse(configuration["KanjiGrid:MaxScoreThreshold"] ?? "10.0");
+        var userScores = userGrid?.GetKanjiScoresOnce() ?? new Dictionary<string, KanjiScoreEntry>();
 
         var kanjiData = allKanji!
                         .Where(k => !onlySeen || userScores.ContainsKey(k.Character))
                         .Select(k =>
                         {
-                            userScores.TryGetValue(k.Character, out var scoreData);
-                            return new KanjiGridItemDto
-                                   {
-                                       Character = k.Character, FrequencyRank = k.FrequencyRank, JlptLevel = k.JlptLevel,
-                                       Score = scoreData?[0] ?? 0, WordCount = (int)(scoreData?[1] ?? 0)
-                                   };
+                            userScores.TryGetValue(k.Character, out var entry);
+                            var dto = new KanjiGridItemDto
+                            {
+                                Character = k.Character,
+                                FrequencyRank = k.FrequencyRank,
+                                JlptLevel = k.JlptLevel,
+                                Grade = k.Grade,
+                                Score = entry?.Score ?? 0,
+                                WordCount = entry?.WordCount ?? 0
+                            };
+                            if (entry?.Readings != null)
+                            {
+                                dto.Readings = entry.Readings
+                                    .Select(r => new KanjiGridReadingDto
+                                    {
+                                        Reading = r.Reading, Known = r.Known,
+                                        Required = r.Required, Weight = r.Weight
+                                    })
+                                    .ToList();
+                            }
+                            return dto;
                         })
                         .ToList();
 
         return Results.Ok(new KanjiGridResponseDto
                           {
-                              Kanji = kanjiData, MaxScoreThreshold = maxThreshold, TotalKanjiCount = allKanji!.Count,
+                              Kanji = kanjiData, TotalKanjiCount = allKanji!.Count,
                               SeenKanjiCount = userScores.Count, LastComputedAt = userGrid?.LastComputedAt
                           });
     }
 
-    private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel);
+    private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel, short? Grade);
     private record ReadingFrequencyResult(int WordId, short ReadingIndex, int FrequencyRank);
 
     private static int StateRank(KnownState s) => s switch

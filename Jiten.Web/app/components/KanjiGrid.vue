@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { KanjiGridResponse } from '~/types';
+  import type { KanjiGridResponse, KanjiGridItem } from '~/types';
 
   const props = defineProps<{
     username: string;
@@ -14,8 +14,7 @@
   const gridRef = ref<HTMLElement | null>(null);
   const manuallyLoaded = ref(false);
 
-  // Single tooltip state (event delegation)
-  const tooltip = ref({ visible: false, text: '', x: 0, y: 0 });
+  const tooltip = ref({ visible: false, html: '', x: 0, y: 0 });
 
   const fetchKanjiGrid = async () => {
     isLoading.value = true;
@@ -37,34 +36,46 @@
     }
   };
 
-  // Colour interpolation: gray (0) -> red (1) -> green (maxThreshold)
-  const getKanjiColour = (score: number, maxThreshold: number): string => {
+  // Score is 0–1. Gray (0) → Red (low) → Green (1.0)
+  const getKanjiColour = (score: number): string => {
     if (score <= 0) return 'rgb(128,128,128)';
 
-    if (score <= 1) {
-      const t = score;
-      const r = Math.round(128 + (220 - 128) * t);
-      const g = Math.round(128 + (38 - 128) * t);
-      const b = Math.round(128 + (38 - 128) * t);
+    const t = Math.min(score, 1);
+    if (t <= 0.5) {
+      const p = t / 0.5;
+      const r = Math.round(128 + (220 - 128) * p);
+      const g = Math.round(128 + (38 - 128) * p);
+      const b = Math.round(128 + (38 - 128) * p);
       return `rgb(${r},${g},${b})`;
     }
 
-    const t = Math.min((score - 1) / (maxThreshold - 1), 1);
-    const r = Math.round(220 + (34 - 220) * t);
-    const g = Math.round(38 + (197 - 38) * t);
-    const b = Math.round(38 + (94 - 38) * t);
+    const p = (t - 0.5) / 0.5;
+    const r = Math.round(220 + (34 - 220) * p);
+    const g = Math.round(38 + (197 - 38) * p);
+    const b = Math.round(38 + (94 - 38) * p);
     return `rgb(${r},${g},${b})`;
   };
 
-  // Render grid using raw DOM (bypasses Vue's VDOM for 12k elements)
+  const buildTooltipData = (k: KanjiGridItem): string => {
+    const pct = (k.score * 100).toFixed(0);
+    let text = `${k.character}: ${pct}% (${k.wordCount} words)`;
+    if (k.readings?.length) {
+      for (const r of k.readings) {
+        const rpct = (r.weight * 100).toFixed(0);
+        text += `\n  ${r.reading}: ${r.known}/${r.required} (${rpct}% weight)`;
+      }
+    }
+    return text;
+  };
+
   const renderGrid = () => {
     if (!gridRef.value || !gridData.value?.kanji) return;
 
-    const maxThreshold = gridData.value.maxScoreThreshold;
     const html = gridData.value.kanji.map(k => {
-      const bg = getKanjiColour(k.score, maxThreshold);
+      const bg = getKanjiColour(k.score);
       const fg = k.score > 0 ? 'white' : 'inherit';
-      return `<a href="/kanji/${k.character}" class="kanji-cell" style="background:${bg};color:${fg}" data-tooltip="${k.character}: Score ${k.score.toFixed(1)}, ${k.wordCount} words" lang="ja">${k.character}</a>`;
+      const tooltipText = buildTooltipData(k).replace(/"/g, '&quot;');
+      return `<a href="/kanji/${k.character}" class="kanji-cell" style="background:${bg};color:${fg}" data-tooltip="${tooltipText}" lang="ja">${k.character}</a>`;
     }).join('');
 
     gridRef.value.innerHTML = sanitiseHtml(html);
@@ -75,7 +86,6 @@
     return new Date(dateString).toLocaleDateString();
   };
 
-  // Computed stats
   const seenPercentage = computed(() => {
     if (!gridData.value) return 0;
     return ((gridData.value.seenKanjiCount / gridData.value.totalKanjiCount) * 100).toFixed(1);
@@ -83,7 +93,7 @@
 
   const masteredCount = computed(() => {
     if (!gridData.value?.kanji) return 0;
-    return gridData.value.kanji.filter(k => k.score >= 10).length;
+    return gridData.value.kanji.filter(k => k.score >= 0.9).length;
   });
 
   const masteredPercentage = computed(() => {
@@ -91,13 +101,12 @@
     return ((masteredCount.value / gridData.value.totalKanjiCount) * 100).toFixed(1);
   });
 
-  // Event delegation for tooltips
   const showTooltip = (e: MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.classList.contains('kanji-cell')) {
       tooltip.value = {
         visible: true,
-        text: target.dataset.tooltip || '',
+        html: (target.dataset.tooltip || '').replace(/\n/g, '<br>'),
         x: e.clientX + 10,
         y: e.clientY + 10
       };
@@ -142,7 +151,6 @@
     </div>
 
     <div v-else-if="gridData" class="flex flex-col gap-4">
-      <!-- Header with stats and filter -->
       <div class="flex justify-between items-center flex-wrap gap-4">
         <div class="flex gap-4 text-sm text-surface-500 dark:text-surface-400">
           <span>{{ gridData.seenKanjiCount }} / {{ gridData.totalKanjiCount }} kanji tracked ({{ seenPercentage }}%)</span>
@@ -155,12 +163,11 @@
         </div>
       </div>
 
-      <!-- Colour legend -->
       <div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
         <span class="flex items-center gap-1">
-          Score:
+          Reading coverage:
           <Icon
-            v-tooltip="'Score is based on how many words you know containing this kanji. Mature/mastered words count as 1 point, young words as 0.5 points.'"
+            v-tooltip="'Score reflects how many readings of each kanji you know, weighted by reading frequency. 90%+ = mastered.'"
             name="material-symbols:info-outline"
             class="text-primary-700 dark:text-primary-300 cursor-help"
             style="font-size: 1rem"
@@ -168,32 +175,29 @@
         </span>
         <div class="flex items-center gap-1">
           <div class="w-4 h-4 rounded" style="background: rgb(128, 128, 128)"></div>
-          <span>0</span>
+          <span>0%</span>
         </div>
         <span class="mx-1">→</span>
         <div class="flex items-center gap-1">
           <div class="w-4 h-4 rounded" style="background: rgb(220, 38, 38)"></div>
-          <span>1</span>
+          <span>50%</span>
         </div>
         <span class="mx-1">→</span>
         <div class="flex items-center gap-1">
           <div class="w-4 h-4 rounded" style="background: rgb(34, 197, 94)"></div>
-          <span>{{ gridData.maxScoreThreshold }}+</span>
+          <span>100%</span>
         </div>
       </div>
 
-      <!-- Single floating tooltip -->
       <Teleport to="body">
         <div
           v-show="tooltip.visible"
           class="kanji-tooltip"
           :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
-        >
-          {{ tooltip.text }}
-        </div>
+          v-html="tooltip.html"
+        ></div>
       </Teleport>
 
-      <!-- Kanji grid rendered via innerHTML (bypasses Vue's VDOM) -->
       <div
         ref="gridRef"
         class="kanji-grid"
