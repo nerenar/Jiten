@@ -36,6 +36,7 @@ export interface Deck {
   youngCoverage: number;
   youngUniqueCoverage: number;
   hideDialoguePercentage: boolean;
+  hideAverageSentenceLength: boolean;
   externalRating: number;
   exampleSentence?: ExampleSentence;
   genres?: Genre[];
