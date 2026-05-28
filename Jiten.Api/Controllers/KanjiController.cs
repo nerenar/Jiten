@@ -154,17 +154,18 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                           "Returns a paginated list of words containing the specified kanji, ordered by frequency. Optionally filter by kanji reading.")]
     [ProducesResponseType(typeof(PaginatedResponse<List<WordSummaryDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["page", "reading"])]
+    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["page", "pageSize", "reading"])]
     public async Task<IResult> GetKanjiWords(
         [FromRoute] string character,
         [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100,
         [FromQuery] string? reading = null)
     {
         var kanjiExists = await context.Kanjis.AnyAsync(k => k.Character == character);
         if (!kanjiExists)
             return Results.NotFound();
 
-        var pageSize = 100;
+        pageSize = Math.Clamp(pageSize, 1, 5000);
         page = Math.Max(page, 1);
 
         IQueryable<WordRankResult> rankedQuery;

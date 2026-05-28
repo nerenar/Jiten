@@ -72,7 +72,7 @@
     try {
       const data = await $api<{ items: WordSummary[] }>(
         `kanji/${encodeURIComponent(character.value)}/words`,
-        { query: { reading: expandedReading.value } }
+        { query: { reading: expandedReading.value, pageSize: 5000 } }
       );
       allReadingWords.value = data.data;
     } finally {
@@ -88,7 +88,8 @@
     loadingTopWords.value = true;
     try {
       const data = await $api<{ items: WordSummary[] }>(
-        `kanji/${encodeURIComponent(character.value)}/words`
+        `kanji/${encodeURIComponent(character.value)}/words`,
+        { query: { pageSize: 5000 } }
       );
       allTopWords.value = data.data;
     } finally {
