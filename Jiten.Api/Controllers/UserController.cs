@@ -2525,7 +2525,7 @@ public class UserController(
             allKanji = await jitenContext.Kanjis
                                          .AsNoTracking()
                                          .OrderBy(k => k.FrequencyRank ?? int.MaxValue)
-                                         .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel, k.Grade))
+                                         .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel, k.Grade, k.StrokeCount))
                                          .ToListAsync();
 
             var json = JsonSerializer.Serialize(allKanji);
@@ -2549,6 +2549,7 @@ public class UserController(
                                 FrequencyRank = k.FrequencyRank,
                                 JlptLevel = k.JlptLevel,
                                 Grade = k.Grade,
+                                StrokeCount = k.StrokeCount,
                                 Score = entry?.Score ?? 0,
                                 WordCount = entry?.WordCount ?? 0
                             };
@@ -2573,7 +2574,7 @@ public class UserController(
                           });
     }
 
-    private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel, short? Grade);
+    private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel, short? Grade, short StrokeCount);
     private record ReadingFrequencyResult(int WordId, short ReadingIndex, int FrequencyRank);
 
     private static int StateRank(KnownState s) => s switch

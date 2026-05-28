@@ -47,6 +47,7 @@ public class KanjiGridItemDto
     public int? FrequencyRank { get; set; }
     public short? JlptLevel { get; set; }
     public short? Grade { get; set; }
+    public short StrokeCount { get; set; }
     public double Score { get; set; }
     public int WordCount { get; set; }
     public List<KanjiGridReadingDto>? Readings { get; set; }

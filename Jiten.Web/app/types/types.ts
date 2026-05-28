@@ -495,6 +495,7 @@ export interface KanjiGridItem {
   frequencyRank: number | null;
   jlptLevel: number | null;
   grade: number | null;
+  strokeCount: number;
   score: number;
   wordCount: number;
   readings: KanjiGridReading[] | null;
