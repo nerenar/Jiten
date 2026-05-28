@@ -753,7 +753,10 @@ public class ComputationJob(
                 kanji_reading_raw AS (
                     SELECT krw."KanjiCharacter", krw."Reading",
                            COUNT(*) as total_words,
-                           SUM(1.0 / sqrt(COALESCE(NULLIF(wff."FrequencyRank", 0), 200000))) as freq_score
+                           SUM(1.0 / sqrt(COALESCE(NULLIF(wff."FrequencyRank", 0), 200000))
+                               * CASE WHEN COALESCE(NULLIF(wff."FrequencyRank", 0), 200000) <= 100000 THEN 1.0
+                                      ELSE power(100000.0 / COALESCE(NULLIF(wff."FrequencyRank", 0), 200000), 2)
+                                 END) as freq_score
                     FROM jmdict."KanjiReadingWords" krw
                     LEFT JOIN jmdict."WordFormFrequencies" wff
                         ON wff."WordId" = krw."WordId" AND wff."ReadingIndex" = krw."ReadingIndex"
