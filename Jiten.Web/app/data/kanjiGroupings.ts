@@ -3,13 +3,14 @@ import { kankenGroups } from './kanken';
 import { wanikaniGroups } from './wanikani';
 import { rtkGroups } from './rtk';
 import { klcGroups } from './klc';
+import { tmwGroups } from './tmw';
 
 export interface KanjiGroup {
   name: string;
   kanji: KanjiGridItem[];
 }
 
-export type DisplayType = 'none' | 'jlpt' | 'grade' | 'frequency' | 'strokeCount' | 'kanken' | 'wanikani' | 'rtk' | 'klc';
+export type DisplayType = 'none' | 'jlpt' | 'grade' | 'frequency' | 'strokeCount' | 'kanken' | 'wanikani' | 'rtk' | 'klc' | 'tmw';
 
 export const displayTypeOptions: { label: string; value: DisplayType }[] = [
   { label: 'Frequency (flat)', value: 'none' },
@@ -21,6 +22,7 @@ export const displayTypeOptions: { label: string; value: DisplayType }[] = [
   { label: 'WaniKani Level', value: 'wanikani' },
   { label: 'RTK', value: 'rtk' },
   { label: 'KLC', value: 'klc' },
+  { label: 'TMW (TheMoeWay)', value: 'tmw' },
 ];
 
 const jlptNames: Record<number, string> = { 5: 'N5', 4: 'N4', 3: 'N3', 2: 'N2', 1: 'N1' };
@@ -154,6 +156,7 @@ export function groupKanji(kanji: KanjiGridItem[], displayType: DisplayType): Ka
   if (displayType === 'wanikani') return groupByExternalData(kanji, wanikaniGroups, 'Not in WaniKani');
   if (displayType === 'rtk') return groupByExternalData(kanji, rtkGroups, 'Non-RTK');
   if (displayType === 'klc') return groupByExternalData(kanji, klcGroups, 'Non-KLC');
+  if (displayType === 'tmw') return groupByExternalData(kanji, tmwGroups, 'Not in TMW');
 
   return [{ name: '', kanji }];
 }
