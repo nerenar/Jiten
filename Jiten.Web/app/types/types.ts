@@ -427,6 +427,7 @@ export interface UserProfile {
   userId: string;
   username: string;
   isPublic: boolean;
+  isMediaListPublic: boolean;
 }
 
 export interface UserAccomplishment {

@@ -1,3 +1,9 @@
+<script lang="ts">
+  import { ref } from 'vue';
+
+  const openOverlayDeckId = ref<number | null>(null);
+</script>
+
 <script setup lang="ts">
   import { type Deck, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -33,17 +39,17 @@
     return `${hours}h ${minutes}min`;
   });
 
-  const showOverlay = ref(false);
+  const showOverlay = computed(() => openOverlayDeckId.value === props.deck.deckId);
 
   function toggleOverlay(e: Event) {
     if (window.matchMedia('(hover: none)').matches) {
       e.preventDefault();
-      showOverlay.value = !showOverlay.value;
+      openOverlayDeckId.value = showOverlay.value ? null : props.deck.deckId;
     }
   }
 
   function closeOverlay() {
-    showOverlay.value = false;
+    openOverlayDeckId.value = null;
   }
 
   onMounted(() => document.addEventListener('click', closeOverlay));
