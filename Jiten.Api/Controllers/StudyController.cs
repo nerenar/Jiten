@@ -1415,9 +1415,8 @@ public class StudyController(
         if (aheadMinutes.HasValue) aheadMinutes = Math.Clamp(aheadMinutes.Value, 60, 10080);
         if (mistakeDays.HasValue) mistakeDays = Math.Clamp(mistakeDays.Value, 1, 7);
 
-        var resumedSession = !string.IsNullOrEmpty(sessionId) && await sessionService.ValidateSession(sessionId, userId);
-        if (resumedSession)
-            await sessionService.RefreshSession(sessionId!);
+        if (!string.IsNullOrEmpty(sessionId) && await sessionService.ValidateSession(sessionId, userId))
+            await sessionService.RefreshSession(sessionId);
         else
             sessionId = await sessionService.CreateSession(userId);
 
@@ -1648,8 +1647,6 @@ public class StudyController(
 
         // ── Phase 4: Resolve new word candidates from study decks ──
         var sourceDeckNames = new Dictionary<long, string>();
-        var newCandidatePoolSize = 0;
-        var newCardsTaken = 0;
         if (newCardBudget > 0)
         {
             var activeDecks = studyDecks.Where(sd => sd.IsActive).ToList();
@@ -1803,20 +1800,12 @@ public class StudyController(
             }
 
             var taken = candidates.Take(newCardBudget).ToList();
-            newCandidatePoolSize = candidates.Count;
-            newCardsTaken = taken.Count;
             foreach (var c in taken)
                 batch.Add((c.WordId, c.ReadingIndex, 0, true, (int)FsrsState.New));
         }
 
         if (batch.Count == 0)
         {
-            logger.LogInformation(
-                "StudyBatch diag (empty): User={UserId} Resumed={Resumed} Interleaving={Interleaving} NewPerDay={NewPerDay} NewToday={NewToday} NewBudget={NewBudget} CandidatePool={Pool} NewTaken={Taken} DueTotal={DueTotal} Limit={Limit} BatchSize={BatchSize} StudyMore={StudyMore}",
-                userId, resumedSession, settings.Interleaving, settings.NewCardsPerDay, newCardsToday, newCardBudget,
-                newCandidatePoolSize, newCardsTaken, totalDueCount, limit, settings.BatchSize,
-                extraNewCards.HasValue || extraReviews.HasValue || aheadMinutes.HasValue || mistakeDays.HasValue);
-
             return Results.Ok(new StudyBatchResponse
             {
                 SessionId = sessionId,
@@ -1835,15 +1824,7 @@ public class StudyController(
             _ => InterleaveMixed(batch)
         };
 
-        var orderedNewBeforeLimit = ordered.Count(c => c.IsNew);
         ordered = ordered.Take(limit).ToList();
-
-        logger.LogInformation(
-            "StudyBatch diag: User={UserId} Resumed={Resumed} Interleaving={Interleaving} NewPerDay={NewPerDay} NewToday={NewToday} NewBudget={NewBudget} CandidatePool={Pool} NewTaken={Taken} DueTotal={DueTotal} Limit={Limit} BatchSize={BatchSize} NewBeforeLimit={NewBeforeLimit} NewInBatch={NewInBatch} ReviewInBatch={ReviewInBatch} StudyMore={StudyMore}",
-            userId, resumedSession, settings.Interleaving, settings.NewCardsPerDay, newCardsToday, newCardBudget,
-            newCandidatePoolSize, newCardsTaken, totalDueCount, limit, settings.BatchSize,
-            orderedNewBeforeLimit, ordered.Count(c => c.IsNew), ordered.Count(c => !c.IsNew),
-            extraNewCards.HasValue || extraReviews.HasValue || aheadMinutes.HasValue || mistakeDays.HasValue);
 
         var wordIds = ordered.Select(c => c.WordId).Distinct().ToList();
 
