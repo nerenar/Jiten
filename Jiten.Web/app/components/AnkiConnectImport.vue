@@ -18,6 +18,8 @@
   let cantConnect = ref(false);
   let cardsIds: number[] = [];
 
+  const apiKey = ref('');
+
   const isLoading = ref(false);
 
   const showSkippedDialog = ref(false);
@@ -82,9 +84,11 @@
   const stripRuby = (text: string) => text.replace(/\[.*?\]/g, '');
 
   async function ankiInvoke(action: string, params: Record<string, any> = {}): Promise<any> {
+    const body: Record<string, any> = { action, version: 6, params };
+    if (apiKey.value) body.key = apiKey.value;
     const res = await fetch('http://127.0.0.1:8765', {
       method: 'POST',
-      body: JSON.stringify({ action, version: 6, params }),
+      body: JSON.stringify(body),
     });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
@@ -120,7 +124,7 @@
   const Connect = async () => {
     operationActive.value = true;
     try {
-      client = new YankiConnect();
+      client = new YankiConnect(apiKey.value ? { key: apiKey.value } : {});
       decks = await client.deck.deckNamesAndIds();
       deckEntries = Object.entries(decks);
       cantConnect.value = false;
@@ -477,6 +481,21 @@
         <p>
           Add words directly from Anki using the <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>.
         </p>
+        <div class="flex flex-col gap-1 p-4 pb-0 max-w-md">
+          <label for="ankiApiKey" class="text-sm text-surface-500">API key (optional)</label>
+          <InputText
+            v-model="apiKey"
+            inputId="ankiApiKey"
+            name="ankiApiKey"
+            autocomplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            placeholder="Only if you set an apiKey in AnkiConnect"
+            class="w-full"
+            @keyup.enter="Connect()"
+          />
+          <small class="text-surface-500">Leave blank unless you configured an <code>apiKey</code> in AnkiConnect's config.</small>
+        </div>
         <div class="p-4">
           <Button label="Connect to Anki" @click="Connect()" />
         </div>
