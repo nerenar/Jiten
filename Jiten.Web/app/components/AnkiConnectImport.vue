@@ -146,13 +146,17 @@
     NextStep();
   };
 
+  type SkipStats = { suspended: number; newCard: number; missingField: number; emptyWord: number };
+
   // Helper to build a single card payload from Anki card info
-  const buildCardPayload = (card: any, fieldName: string) => {
-    if (card.queue === -1 || card.queue === 0) return null; // Skip suspended & new/forgotten
+  const buildCardPayload = (card: any, fieldName: string, stats?: SkipStats) => {
+    if (card.queue === -1) { if (stats) stats.suspended++; return null; } // suspended
+    if (card.queue === 0) { if (stats) stats.newCard++; return null; } // new/forgotten
 
     const field = card.fields[fieldName];
+    if (field === undefined && stats) stats.missingField++; // selected field absent on this note type
     const word = stripRuby(field?.value?.trim() || '');
-    if (!word) return null;
+    if (!word) { if (stats && field !== undefined) stats.emptyWord++; return null; }
 
     const reviews = reviewByCard.get(card.cardId) ?? [];
 
@@ -208,7 +212,11 @@
       isLoading.value = true;
       operationActive.value = true;
       try {
-        cardsIds = await client.card.findCards({ query: `did:${selectedDeck.value}` });
+        // Search by deck name rather than `did:`, because `did:` matches the exact deck only.
+        // Anki's `deck:"Name"` is recursive, so selecting a parent also pulls in every subdeck.
+        const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+        const query = deckName ? `deck:"${deckName.replace(/["*_\\]/g, '\\$&')}"` : `did:${selectedDeck.value}`;
+        cardsIds = await client.card.findCards({ query });
         const previewCards = await fetchCardsInfo([cardsIds[0]]);
         selectedField.value = 0;
         if (previewCards && previewCards.length > 0) {
@@ -247,31 +255,36 @@
 
       const allSkippedWords: string[] = [];
       let skippedCountNoReviews = 0;
+      const skipStats: SkipStats = { suspended: 0, newCard: 0, missingField: 0, emptyWord: 0 };
 
       try {
-        // Fetch reviews only if requested
+        // Fetch reviews only if requested. cardReviews filters on the exact deck only, so to cover
+        // subdecks we query the selected deck plus every descendant (Anki encodes hierarchy as
+        // "Parent::Child" deck names). This mirrors the recursive deck:"Name" card search above.
         reviewByCard = new Map();
         if (importReviewHistory.value) {
-          const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
-          if (deckName) {
-            const reviews = await client.statistic.cardReviews({
-              deck: deckName,
-              startID: 1,
-            });
+          const selectedName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+          if (selectedName) {
+            const deckNames = deckEntries
+              .map(([name]) => name)
+              .filter((name) => name === selectedName || name.startsWith(selectedName + '::'));
 
-            // Build map incrementally
-            for (const [reviewTime, cardID, _usn, buttonPressed, _newInterval, _previousInterval, _newFactor, reviewDuration, _reviewType] of reviews) {
-              const existing = reviewByCard.get(cardID) ?? [];
-              existing.push({
-                Rating: buttonPressed,
-                ReviewDateTime: new Date(reviewTime),
-                ReviewDuration: reviewDuration,
-              });
-              reviewByCard.set(cardID, existing);
+            for (const name of deckNames) {
+              const reviews = await client.statistic.cardReviews({ deck: name, startID: 1 });
+
+              for (const [reviewTime, cardID, _usn, buttonPressed, _newInterval, _previousInterval, _newFactor, reviewDuration, _reviewType] of reviews) {
+                const existing = reviewByCard.get(cardID) ?? [];
+                existing.push({
+                  Rating: buttonPressed,
+                  ReviewDateTime: new Date(reviewTime),
+                  ReviewDuration: reviewDuration,
+                });
+                reviewByCard.set(cardID, existing);
+              }
+
+              // Clear raw array immediately to help GC
+              reviews.length = 0;
             }
-
-            // Clear raw array immediately to help GC
-            reviews.length = 0;
 
             // Sort and limit to 10 most recent reviews per card
             for (const [key, arr] of reviewByCard.entries()) {
@@ -315,7 +328,7 @@
           const allPayloads: any[] = [];
           for (const chunkCards of allChunkCards) {
             for (const card of chunkCards || []) {
-              const payload = buildCardPayload(card, selectedFieldName);
+              const payload = buildCardPayload(card, selectedFieldName, skipStats);
               if (!payload) continue;
               if (seenWords.has(payload.Card.Word)) continue;
               seenWords.add(payload.Card.Word);
@@ -356,7 +369,7 @@
 
             const chunkPayload: any[] = [];
             for (const card of chunkCards || []) {
-              const payload = buildCardPayload(card, selectedFieldName);
+              const payload = buildCardPayload(card, selectedFieldName, skipStats);
               if (payload) chunkPayload.push(payload);
             }
 
@@ -400,7 +413,14 @@
           message += `${skippedCountNoReviews} card${skippedCountNoReviews === 1 ? '' : 's'} skipped (no reviews)`;
         }
         if (!message) {
-          message = 'No cards were imported';
+          // Nothing was imported: explain why by reporting how each card was filtered out.
+          console.log('AnkiConnect import: 0 cards imported. Skip breakdown:', skipStats, 'field:', selectedFieldName);
+          const reasons: string[] = [];
+          if (skipStats.missingField > 0) reasons.push(`${skipStats.missingField} missing the "${selectedFieldName}" field (different note type?)`);
+          if (skipStats.emptyWord > 0) reasons.push(`${skipStats.emptyWord} with an empty "${selectedFieldName}" field`);
+          if (skipStats.newCard > 0) reasons.push(`${skipStats.newCard} new/unstudied`);
+          if (skipStats.suspended > 0) reasons.push(`${skipStats.suspended} suspended`);
+          message = reasons.length > 0 ? `No cards were imported — ${reasons.join(', ')}.` : 'No cards were imported.';
         } else {
           message += '.';
         }
