@@ -20,6 +20,9 @@
 
   const isLoading = ref(false);
 
+  const showSkippedDialog = ref(false);
+  const skippedWords = ref<string[]>([]);
+
   let reviewByCard: Map<number, Array<{ Rating: number; ReviewDateTime: Date; ReviewDuration: number }>> = new Map();
   let selectedFieldName = '';
   let supportsFieldsFilter = false;
@@ -348,13 +351,8 @@
         });
 
         if (allSkippedWords.length > 0) {
-          console.log('Skipped words (not parsed):', allSkippedWords);
-          toast.add({
-            severity: 'warn',
-            summary: 'Some words not found',
-            detail: `${allSkippedWords.length} words could not be parsed or were not in the dictionary. Check console for list.`,
-            life: 10000,
-          });
+          skippedWords.value = allSkippedWords;
+          showSkippedDialog.value = true;
         }
 
         // Notify parent to refresh vocabulary counts
@@ -470,6 +468,28 @@
       </div>
     </template>
   </Card>
+
+  <Dialog
+    v-model:visible="showSkippedDialog"
+    modal
+    header="Some words could not be imported"
+    class="w-[95vw] sm:w-[90vw] md:w-[36rem]"
+  >
+    <div class="flex flex-col gap-3">
+      <Message severity="warn" :closable="false">
+        {{ skippedWords.length }} word{{ skippedWords.length === 1 ? '' : 's' }} could not be parsed or {{ skippedWords.length === 1 ? 'was' : 'were' }} not
+        found in the dictionary.
+      </Message>
+      <div class="max-h-[50vh] overflow-y-auto rounded border border-surface-200 dark:border-surface-700 p-3">
+        <ul class="flex flex-col gap-1">
+          <li v-for="(word, index) in skippedWords" :key="index" class="font-noto-sans">{{ word }}</li>
+        </ul>
+      </div>
+    </div>
+    <template #footer>
+      <Button label="Close" @click="showSkippedDialog = false" />
+    </template>
+  </Dialog>
 </template>
 
 <style scoped></style>
