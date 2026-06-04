@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed } from 'vue';
+  import { ref, computed, onMounted, onUnmounted } from 'vue';
   import { YankiConnect } from 'yanki-connect';
   import { useToast } from 'primevue/usetoast';
 
@@ -22,6 +22,56 @@
 
   const showSkippedDialog = ref(false);
   const skippedWords = ref<string[]>([]);
+
+  const showErrorDialog = ref(false);
+  const errorMessage = ref('');
+  const errorDetail = ref('');
+  const errorCopied = ref(false);
+  const operationActive = ref(false);
+
+  const copyErrorDetails = async () => {
+    const text = [errorMessage.value, errorDetail.value].filter(Boolean).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      errorCopied.value = true;
+      setTimeout(() => (errorCopied.value = false), 2000);
+    } catch {
+      errorCopied.value = false;
+    }
+  };
+
+  const reportError = (err: unknown, fallback = 'An unexpected error occurred.') => {
+    let message = extractApiError(err, '');
+    if (!message) {
+      if (err instanceof Error) message = err.message;
+      else if (typeof err === 'string') message = err;
+    }
+    errorMessage.value = message || fallback;
+    errorDetail.value = err instanceof Error && err.stack ? err.stack : '';
+    errorCopied.value = false;
+    showErrorDialog.value = true;
+    console.error(err);
+  };
+
+  // Safety net: surface any uncaught frontend error/rejection that occurs while an
+  // Anki operation is in flight, instead of letting it disappear into the console.
+  const handleWindowError = (event: ErrorEvent) => {
+    if (!operationActive.value || !event.error) return;
+    reportError(event.error);
+  };
+  const handleRejection = (event: PromiseRejectionEvent) => {
+    if (!operationActive.value) return;
+    reportError(event.reason);
+  };
+
+  onMounted(() => {
+    window.addEventListener('error', handleWindowError);
+    window.addEventListener('unhandledrejection', handleRejection);
+  });
+  onUnmounted(() => {
+    window.removeEventListener('error', handleWindowError);
+    window.removeEventListener('unhandledrejection', handleRejection);
+  });
 
   let reviewByCard: Map<number, Array<{ Rating: number; ReviewDateTime: Date; ReviewDuration: number }>> = new Map();
   let selectedFieldName = '';
@@ -68,6 +118,7 @@
   );
 
   const Connect = async () => {
+    operationActive.value = true;
     try {
       client = new YankiConnect();
       decks = await client.deck.deckNamesAndIds();
@@ -85,6 +136,8 @@
     } catch (e) {
       cantConnect.value = true;
       console.log(e);
+    } finally {
+      operationActive.value = false;
     }
   };
 
@@ -153,15 +206,23 @@
       }
 
       isLoading.value = true;
-      cardsIds = await client.card.findCards({ query: `did:${selectedDeck.value}` });
-      const previewCards = await fetchCardsInfo([cardsIds[0]]);
-      selectedField.value = 0;
-      if (previewCards && previewCards.length > 0) {
-        fields.value = Object.entries(previewCards[0].fields || {});
-      } else {
-        fields.value = [];
+      operationActive.value = true;
+      try {
+        cardsIds = await client.card.findCards({ query: `did:${selectedDeck.value}` });
+        const previewCards = await fetchCardsInfo([cardsIds[0]]);
+        selectedField.value = 0;
+        if (previewCards && previewCards.length > 0) {
+          fields.value = Object.entries(previewCards[0].fields || {});
+        } else {
+          fields.value = [];
+        }
+      } catch (e) {
+        reportError(e, 'Failed to load deck from Anki.');
+        currentStep.value = 1;
+      } finally {
+        isLoading.value = false;
+        operationActive.value = false;
       }
-      isLoading.value = false;
     }
 
     if (currentStep.value == 3) {
@@ -178,6 +239,7 @@
 
     if (currentStep.value == 4) {
       isLoading.value = true;
+      operationActive.value = true;
       fetchProgress.value = 0;
       uploadProgress.value = 0;
       importPhase.value = 'fetch';
@@ -361,10 +423,10 @@
         // Clear review map to free memory
         reviewByCard = new Map();
       } catch (error) {
-        console.error('Error importing Anki data:', error);
-        toast.add({ severity: 'error', detail: extractApiError(error, 'Failed to import data.'), life: 5000 });
+        reportError(error, 'Failed to import data.');
       } finally {
         isLoading.value = false;
+        operationActive.value = false;
         currentStep.value = 1;
       }
     }
@@ -488,6 +550,33 @@
     </div>
     <template #footer>
       <Button label="Close" @click="showSkippedDialog = false" />
+    </template>
+  </Dialog>
+
+  <Dialog
+    v-model:visible="showErrorDialog"
+    modal
+    header="An error occurred during import"
+    class="w-[95vw] sm:w-[90vw] md:w-[36rem]"
+  >
+    <div class="flex flex-col gap-3">
+      <Message severity="error" :closable="false">{{ errorMessage }}</Message>
+      <p class="text-sm text-surface-500">Please report these details if you need assistance.</p>
+      <details v-if="errorDetail" class="text-sm">
+        <summary class="cursor-pointer select-none text-surface-500">Technical details</summary>
+        <pre
+          class="mt-2 max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded border border-surface-200 dark:border-surface-700 p-3 text-xs"
+        >{{ errorDetail }}</pre>
+      </details>
+    </div>
+    <template #footer>
+      <Button
+        :label="errorCopied ? 'Copied' : 'Copy details'"
+        :icon="errorCopied ? 'pi pi-check' : 'pi pi-copy'"
+        :severity="errorCopied ? 'success' : 'secondary'"
+        @click="copyErrorDetails"
+      />
+      <Button label="Close" @click="showErrorDialog = false" />
     </template>
   </Dialog>
 </template>
