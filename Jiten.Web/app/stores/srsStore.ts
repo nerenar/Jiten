@@ -96,7 +96,7 @@ export const useSrsStore = defineStore('srs', () => {
     showKanjiBreakdown: true,
     showWordComposition: true,
     showWordUsedIn: true,
-    showNextInterval: false,
+    showNextInterval: true,
     showKeybinds: true,
     showElapsedTime: true,
     enableSwipeGesture: true,

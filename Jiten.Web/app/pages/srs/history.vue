@@ -48,12 +48,10 @@
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto px-4 py-6">
-    <div class="flex items-center gap-3 mb-4">
-      <NuxtLink to="/srs/decks">
-        <Button icon="pi pi-arrow-left" severity="secondary" text />
-      </NuxtLink>
-      <h2 class="text-2xl font-bold">Review History</h2>
+  <div class="container mx-auto p-2 md:p-4">
+    <SrsSubNav />
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
+      <h1 class="text-2xl font-bold">Review History</h1>
     </div>
 
     <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="reviews" />

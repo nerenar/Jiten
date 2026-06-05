@@ -2188,19 +2188,21 @@ public class StudyController(
             .AsNoTracking()
             .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart);
 
-        var reviewsToday = settings.CountFailedReviews
-            ? await todayLogs.CountAsync()
-            : await todayLogs.Select(rl => rl.CardId).Distinct().CountAsync();
+        // Mirror the study-batch path exactly so "done today" matches the new-card budget logic.
+        var todayStats = await todayLogs
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                ReviewsToday = g.Count(),
+                UniqueCardsToday = g.Select(l => l.CardId).Distinct().Count(),
+                NewCardsToday = g.Where(l => l.Card.CreatedAt >= todayStart).Select(l => l.CardId).Distinct().Count(),
+            })
+            .FirstOrDefaultAsync();
 
-        var newCardIds = userContext.FsrsCards
-            .Where(c => c.UserId == userId && c.CreatedAt >= todayStart)
-            .Select(c => c.CardId);
-        var newCardsToday = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(rl => newCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart)
-            .Select(rl => rl.CardId)
-            .Distinct()
-            .CountAsync();
+        var reviewsToday = settings.CountFailedReviews
+            ? todayStats?.ReviewsToday ?? 0
+            : todayStats?.UniqueCardsToday ?? 0;
+        var newCardsToday = todayStats?.NewCardsToday ?? 0;
 
         var newCardBudget = Math.Max(0, settings.NewCardsPerDay - newCardsToday);
         var newCardsAvailable = 0;
@@ -2301,6 +2303,7 @@ public class StudyController(
             reviewsDue,
             newCardsAvailable,
             reviewsToday,
+            newCardsToday,
             reviewBudgetLeft,
             nextReviewAt,
         });

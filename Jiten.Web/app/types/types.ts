@@ -956,6 +956,7 @@ export interface DueSummaryDto {
   reviewsDue: number;
   newCardsAvailable: number;
   reviewsToday: number;
+  newCardsToday: number;
   reviewBudgetLeft: number;
   nextReviewAt: string | null;
 }

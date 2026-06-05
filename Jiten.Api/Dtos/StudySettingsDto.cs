@@ -97,7 +97,7 @@ public class StudySettingsDto
     public bool ShowWordUsedIn { get; set; } = true;
 
     [JsonPropertyName("showNextInterval")]
-    public bool ShowNextInterval { get; set; }
+    public bool ShowNextInterval { get; set; } = true;
 
     [JsonPropertyName("showKeybinds")]
     public bool ShowKeybinds { get; set; } = true;

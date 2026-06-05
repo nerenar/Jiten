@@ -29,12 +29,6 @@ const expandedCards = ref(new Set<string>());
 const page = ref(1);
 const pageSize = 50;
 
-const router = useRouter();
-const backLink = computed(() => {
-  const prev = router.options.history.state?.back as string | undefined;
-  return prev?.startsWith('/srs') ? '/srs/decks' : '/settings';
-});
-
 const wordSetTotalWords = computed(() => subscriptions.value.reduce((sum, s) => sum + s.wordCount, 0));
 const hasWordSetSubscriptions = computed(() => subscriptions.value.length > 0);
 
@@ -427,12 +421,10 @@ function toggleSortDir() {
 
 <template>
   <div class="container mx-auto p-2 md:p-4 pb-24" @click="closeActions">
+    <SrsSubNav />
     <!-- Header -->
-    <div class="flex items-center justify-between gap-3 mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <div class="flex items-center gap-2">
-        <NuxtLink :to="backLink">
-          <Button icon="pi pi-arrow-left" severity="secondary" text rounded size="small" />
-        </NuxtLink>
         <h1 class="text-2xl font-bold">My Cards</h1>
         <span v-if="!loading" class="text-surface-500 text-sm">({{ stats.total }})</span>
       </div>
