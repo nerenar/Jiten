@@ -241,6 +241,11 @@
     toast.add({ severity: 'warn', summary, life: 3000 });
   });
 
+  watch(() => srsStore.lastReviewError, (err) => {
+    if (!err) return;
+    toast.add({ severity: 'error', summary: 'Review not saved due to an error', detail: `“${err.wordText}” will be shown again.`, life: 5000 });
+  });
+
   function handleFlip() {
     srsStore.revealCard();
   }
