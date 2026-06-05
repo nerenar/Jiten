@@ -2736,6 +2736,74 @@ public class StudyController(
         });
     }
 
+    [HttpGet("retention")]
+    [SwaggerOperation(Summary = "Get measured true retention (overall / young / mature) over 30d, 90d, all-time and a monthly series")]
+    public async Task<IResult> GetRetention()
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var settings = await LoadStudySettings(userId);
+        var now = DateTime.UtcNow;
+        var (_, offsetHours) = ResolveTimezone(now, settings.Timezone);
+
+        var userSettings = await userContext.UserFsrsSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+        var desiredRetention = userSettings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
+
+        var userCardIds = userContext.FsrsCards
+            .Where(c => c.UserId == userId)
+            .Select(c => c.CardId);
+
+        var rawLogs = await userContext.FsrsReviewLogs
+            .AsNoTracking()
+            .Where(l => userCardIds.Contains(l.CardId))
+            .Select(l => new { l.CardId, l.ReviewDateTime, IsAgain = l.Rating == FsrsRating.Again })
+            .ToListAsync();
+
+        var result = RetentionCalculator.Compute(
+            rawLogs.Select(l => new RetentionCalculator.ReviewEntry(l.CardId, l.ReviewDateTime, l.IsAgain)),
+            offsetHours,
+            now);
+
+        return Results.Ok(new
+        {
+            desiredRetention,
+            matureThresholdDays = RetentionCalculator.MatureThresholdDays,
+            windows = new
+            {
+                last30 = MapWindow(result.Last30),
+                last90 = MapWindow(result.Last90),
+                all = MapWindow(result.AllTime),
+            },
+            weekly = result.Weekly.Select(MapPeriod),
+            monthly = result.Monthly.Select(MapPeriod),
+        });
+    }
+
+    private static object MapPeriod(RetentionCalculator.PeriodRetention p) => new
+    {
+        period = p.Period,
+        overall = MapBucket(p.Overall),
+        young = MapBucket(p.Young),
+        mature = MapBucket(p.Mature),
+    };
+
+    private static object MapWindow(RetentionCalculator.RetentionWindow w) => new
+    {
+        overall = MapBucket(w.Overall),
+        young = MapBucket(w.Young),
+        mature = MapBucket(w.Mature),
+    };
+
+    private static object MapBucket(RetentionCalculator.RetentionBucket b) => new
+    {
+        total = b.Total,
+        passed = b.Passed,
+        retention = b.Retention,
+    };
+
     private static (int currentStreak, int longestStreak) ComputeStreaks(List<DateTime> sortedDatesDesc, DateTime today)
     {
         if (sortedDatesDesc.Count == 0)

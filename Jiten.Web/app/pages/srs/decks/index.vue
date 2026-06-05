@@ -516,6 +516,11 @@
       </div>
     </div>
 
+    <!-- Measured retention -->
+    <div v-if="srsStore.studySettings.showReviewActivity && srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0" class="mb-6">
+      <SrsRetentionPanel />
+    </div>
+
     <!-- Deck Skeletons -->
     <div v-if="decksLoading && !srsStore.studyDecks.length" class="flex flex-col gap-3">
       <div

@@ -332,7 +332,13 @@
       <div class="mb-4">
         <h4 class="text-md font-semibold mb-1">Desired retention</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">Target recall rate (0–1). For example, 0.9 = 90% retention.</p>
-        <InputNumber v-model="desiredRetention" class="w-full md:w-40" :min="0.01" :max="0.99" :step="0.01" :min-fraction-digits="2" :max-fraction-digits="4" />
+        <div class="flex flex-wrap items-center gap-2">
+          <InputNumber v-model="desiredRetention" class="w-40" input-class="w-40" :min="0.01" :max="0.99" :step="0.01" :min-fraction-digits="2" :max-fraction-digits="4" />
+          <Button label="Save" :loading="isSaving" :disabled="!!formError || isLoading || isRecomputing || isResetting" @click="saveParameters" />
+        </div>
+        <Message v-if="retentionError" key="retention-error" severity="error" :closable="false" class="mt-2">
+          {{ retentionError }}
+        </Message>
       </div>
 
       <div class="mb-5">

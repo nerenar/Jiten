@@ -989,6 +989,37 @@ export interface DeckStreakDto {
   recentDays: { date: string; count: number }[];
 }
 
+export interface RetentionBucketDto {
+  total: number;
+  passed: number;
+  retention: number | null;
+}
+
+export interface RetentionWindowDto {
+  overall: RetentionBucketDto;
+  young: RetentionBucketDto;
+  mature: RetentionBucketDto;
+}
+
+export interface PeriodRetentionDto {
+  period: string;
+  overall: RetentionBucketDto;
+  young: RetentionBucketDto;
+  mature: RetentionBucketDto;
+}
+
+export interface RetentionResponseDto {
+  desiredRetention: number;
+  matureThresholdDays: number;
+  windows: {
+    last30: RetentionWindowDto;
+    last90: RetentionWindowDto;
+    all: RetentionWindowDto;
+  };
+  weekly: PeriodRetentionDto[];
+  monthly: PeriodRetentionDto[];
+}
+
 export interface StudyHeatmapResponse {
   year: number;
   days: HeatmapDay[];
