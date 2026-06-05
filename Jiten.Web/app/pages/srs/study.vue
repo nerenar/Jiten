@@ -311,9 +311,25 @@
 
 <template>
   <div class="flex-1 min-h-0 flex flex-col">
-    <!-- Loading -->
-    <div v-if="loading" class="flex-1 flex justify-center items-center">
-      <ProgressSpinner style="width: 40px; height: 40px" />
+    <!-- Loading (card-front skeleton) -->
+    <div v-if="loading" class="flex-1 overflow-y-auto min-h-0 flex flex-col items-center px-2 pt-4 md:pt-8">
+      <!-- Progress row placeholder -->
+      <div class="w-full mb-4 grid grid-cols-[1fr_auto_1fr] items-center" :class="cardWidthClass">
+        <div class="flex items-center gap-2">
+          <div class="h-5 w-14 rounded bg-surface-200 dark:bg-surface-700 animate-pulse" />
+          <div class="h-5 w-16 rounded bg-surface-200 dark:bg-surface-700 animate-pulse" />
+        </div>
+        <div class="h-6 w-16 rounded bg-surface-200 dark:bg-surface-700 animate-pulse justify-self-center" />
+        <div />
+      </div>
+      <!-- Card front placeholder -->
+      <div class="w-full" :class="cardWidthClass">
+        <div class="rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-6 md:p-8 flex flex-col items-center">
+          <div class="h-4 w-16 rounded bg-surface-200 dark:bg-surface-700 animate-pulse mb-6" />
+          <div class="h-12 md:h-14 w-48 md:w-56 rounded-lg bg-surface-200 dark:bg-surface-700 animate-pulse" />
+          <div class="h-4 w-40 rounded bg-surface-200 dark:bg-surface-700 animate-pulse mt-10" />
+        </div>
+      </div>
     </div>
 
     <!-- Error state -->

@@ -58,8 +58,17 @@
 
     <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="reviews" />
 
-    <div v-if="status === 'pending'" class="flex justify-center py-12">
-      <i class="pi pi-spin pi-spinner text-2xl text-surface-400" />
+    <div v-if="status === 'pending'" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden divide-y divide-surface-100 dark:divide-surface-800">
+      <div
+        v-for="i in 10"
+        :key="i"
+        class="flex items-center gap-2 py-2 px-3"
+      >
+        <div class="h-4 w-28 rounded bg-surface-200 dark:bg-surface-700 animate-pulse shrink-0" />
+        <div class="h-4 w-24 rounded bg-surface-200 dark:bg-surface-700 animate-pulse" />
+        <div class="h-4 w-[40px] rounded bg-surface-200 dark:bg-surface-700 animate-pulse ml-auto shrink-0" />
+        <div class="h-5 w-[48px] rounded bg-surface-200 dark:bg-surface-700 animate-pulse shrink-0" />
+      </div>
     </div>
 
     <template v-else-if="response?.data?.length">
