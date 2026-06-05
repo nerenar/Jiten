@@ -1456,44 +1456,49 @@ public class StudyController(
         var knownKanjiWordIds = new HashSet<int>();
         HashSet<long>? existingKeys = newCardBudget > 0 ? new HashSet<long>() : null;
 
-        await foreach (var c in userContext.FsrsCards
-            .AsNoTracking()
-            .Where(c => c.UserId == userId)
-            .Select(c => new { c.WordId, c.ReadingIndex })
-            .AsAsyncEnumerable())
+        // Both collections are only consumed during new-card selection (Phase 4, gated on
+        // newCardBudget > 0), so skip the full-table scan + word-set query on pure-review fetches.
+        if (newCardBudget > 0)
         {
-            if (wordFormCache.GetKanaIndexesForKanji(c.WordId, c.ReadingIndex) != null)
-                knownKanjiWordIds.Add(c.WordId);
-
-            existingKeys?.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
-        }
-
-        var wordSetStates = await userContext.UserWordSetStates
-            .AsNoTracking()
-            .Where(uwss => uwss.UserId == userId)
-            .Select(uwss => new { uwss.SetId, uwss.State })
-            .ToListAsync();
-
-        if (wordSetStates.Count > 0)
-        {
-            var allSetIds = wordSetStates.Select(s => s.SetId).ToList();
-            var masteredSetIdSet = wordSetStates
-                .Where(s => s.State == WordSetStateType.Mastered)
-                .Select(s => s.SetId)
-                .ToHashSet();
-
-            var setMembers = await context.WordSetMembers
+            await foreach (var c in userContext.FsrsCards
                 .AsNoTracking()
-                .Where(wsm => allSetIds.Contains(wsm.SetId))
-                .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
+                .Where(c => c.UserId == userId)
+                .Select(c => new { c.WordId, c.ReadingIndex })
+                .AsAsyncEnumerable())
+            {
+                if (wordFormCache.GetKanaIndexesForKanji(c.WordId, c.ReadingIndex) != null)
+                    knownKanjiWordIds.Add(c.WordId);
+
+                existingKeys?.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
+            }
+
+            var wordSetStates = await userContext.UserWordSetStates
+                .AsNoTracking()
+                .Where(uwss => uwss.UserId == userId)
+                .Select(uwss => new { uwss.SetId, uwss.State })
                 .ToListAsync();
 
-            foreach (var m in setMembers)
+            if (wordSetStates.Count > 0)
             {
-                if (masteredSetIdSet.Contains(m.SetId)
-                    && wordFormCache.GetKanaIndexesForKanji(m.WordId, (byte)m.ReadingIndex) != null)
-                    knownKanjiWordIds.Add(m.WordId);
-                existingKeys?.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
+                var allSetIds = wordSetStates.Select(s => s.SetId).ToList();
+                var masteredSetIdSet = wordSetStates
+                    .Where(s => s.State == WordSetStateType.Mastered)
+                    .Select(s => s.SetId)
+                    .ToHashSet();
+
+                var setMembers = await context.WordSetMembers
+                    .AsNoTracking()
+                    .Where(wsm => allSetIds.Contains(wsm.SetId))
+                    .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
+                    .ToListAsync();
+
+                foreach (var m in setMembers)
+                {
+                    if (masteredSetIdSet.Contains(m.SetId)
+                        && wordFormCache.GetKanaIndexesForKanji(m.WordId, (byte)m.ReadingIndex) != null)
+                        knownKanjiWordIds.Add(m.WordId);
+                    existingKeys?.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
+                }
             }
         }
 

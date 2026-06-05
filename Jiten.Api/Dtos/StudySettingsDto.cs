@@ -55,7 +55,7 @@ public class StudySettingsDto
     public int NewCardsPerDay { get; set; } = 20;
 
     [JsonPropertyName("maxReviewsPerDay")]
-    public int MaxReviewsPerDay { get; set; } = 1000;
+    public int MaxReviewsPerDay { get; set; } = 200;
 
     [JsonPropertyName("batchSize")]
     public int BatchSize { get; set; } = 100;

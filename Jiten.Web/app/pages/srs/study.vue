@@ -220,6 +220,7 @@
     loading.value = true;
     await srsStore.fetchSettings();
     await srsStore.fetchBatch();
+    srsStore.fetchDueSummary();
     loading.value = false;
     if (!srsStore.isSessionComplete && srsStore.currentCard) startElapsedTimer();
   });
@@ -312,6 +313,33 @@
     await srsStore.fetchBatch();
     if (!srsStore.isSessionComplete) startElapsedTimer();
   }
+
+  // Human-readable time until the next review comes due (from the due summary).
+  const nextReviewText = computed(() => {
+    const at = srsStore.dueSummary?.nextReviewAt;
+    if (!at) return null;
+    const diffMs = new Date(at).getTime() - Date.now();
+    if (diffMs <= 0) return 'now';
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 60) return `${diffMin}m`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m`;
+    return `${Math.floor(diffHr / 24)}d ${diffHr % 24}h`;
+  });
+
+  // Why is the queue empty? The batch returned nothing, so disambiguate the cause
+  // using the due summary (raw due/budget counts) rather than just the new-card budget.
+  type EmptyReason = 'reviewCap' | 'newLimit' | 'caughtUp';
+  const emptyReason = computed<EmptyReason>(() => {
+    const ds = srsStore.dueSummary;
+    // Reviews are due right now but blocked by today's review cap.
+    if (ds && ds.reviewsDue > 0 && ds.reviewBudgetLeft <= 0) return 'reviewCap';
+    // Daily new-card budget used up — reviews are caught up, more new words may remain for tomorrow.
+    if (srsStore.newCardsRemaining <= 0) return 'newLimit';
+    // New-card budget remains but nothing was servable: every available word is tracked and
+    // no reviews are due → genuinely caught up.
+    return 'caughtUp';
+  });
 </script>
 
 <template>
@@ -585,14 +613,29 @@
     <!-- No cards available -->
     <div v-else class="flex-1 flex items-center justify-center px-2">
       <div class="text-center py-16">
-        <Icon name="material-symbols:check-circle" size="3rem" class="mb-4 text-gray-300 dark:text-gray-600" />
-        <div class="text-gray-400 text-lg mb-4">No cards to study right now</div>
+        <Icon
+          :name="emptyReason === 'reviewCap' ? 'material-symbols:hourglass-top' : 'material-symbols:check-circle'"
+          size="3rem"
+          class="mb-4"
+          :class="emptyReason === 'reviewCap' ? 'text-amber-400 dark:text-amber-500' : 'text-gray-300 dark:text-gray-600'"
+        />
+        <div class="text-gray-400 text-lg mb-4">
+          <template v-if="emptyReason === 'reviewCap'">Daily review limit reached</template>
+          <template v-else-if="emptyReason === 'newLimit'">Daily new cards done</template>
+          <template v-else>All caught up!</template>
+        </div>
         <p class="text-gray-500 mb-6">
-          <template v-if="srsStore.newCardsRemaining > 0">
-            All words in your study decks are already tracked. Try adding a new deck or adjusting your filters.
+          <template v-if="emptyReason === 'reviewCap'">
+            {{ srsStore.dueSummary?.reviewsDue }} review{{ srsStore.dueSummary?.reviewsDue === 1 ? '' : 's' }} waiting, but you've hit your daily cap of {{ srsStore.studySettings.maxReviewsPerDay }}. They'll be ready tomorrow or you can use Study More to push ahead.
+          </template>
+          <template v-else-if="emptyReason === 'newLimit'">
+            You've added your {{ srsStore.studySettings.newCardsPerDay }} new card{{ srsStore.studySettings.newCardsPerDay === 1 ? '' : 's' }} for today.
+            <template v-if="nextReviewText"> Next review in {{ nextReviewText }}.</template>
+            <template v-else> Reviews are all caught up.</template>
           </template>
           <template v-else>
-            You've reached your daily new card limit. Check back later when reviews are due.
+            <template v-if="nextReviewText">You're all caught up — next review in {{ nextReviewText }}.</template>
+            <template v-else>Every available word is tracked and no reviews are due. Add a deck or adjust your filters to learn more.</template>
           </template>
         </p>
         <div class="flex justify-center gap-6 text-xs text-gray-400 mb-6">

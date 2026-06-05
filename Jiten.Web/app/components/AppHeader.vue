@@ -160,7 +160,6 @@
             title="Local Settings"
             severity="secondary"
             @mouseover="showSettings($event)"
-            @mouseleave="onSettingsMouseLeave"
             @click="toggleSettings($event)"
           >
             <Icon name="material-symbols-light:settings" />

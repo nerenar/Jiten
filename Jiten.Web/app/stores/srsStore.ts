@@ -82,7 +82,7 @@ export const useSrsStore = defineStore('srs', () => {
   const settingsLoaded = ref(false);
   const studySettings = ref<StudySettingsDto>({
     newCardsPerDay: 20,
-    maxReviewsPerDay: 1000,
+    maxReviewsPerDay: 200,
     batchSize: 100,
     gradingButtons: 4,
     interleaving: 'Mixed',
