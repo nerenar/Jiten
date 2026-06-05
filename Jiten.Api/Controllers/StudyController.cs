@@ -1355,8 +1355,11 @@ public class StudyController(
 
         if (request.ExcludeKana)
         {
-            var kanaOnlyWords = await WordFormHelper.GetKanaOnlyWordIds(context, wordPairs.Select(w => w.WordId));
-            wordPairs = wordPairs.Where(w => !kanaOnlyWords.Contains(w.WordId)).ToList();
+            var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, wordPairs.Select(w => w.WordId));
+            if (kanaFormKeys.Count > 0)
+                wordPairs = wordPairs
+                    .Where(w => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)))
+                    .ToList();
         }
 
         var total = wordPairs.Count;
