@@ -786,6 +786,8 @@ export interface StudyDeckDto {
   unseenCount: number;
   learningCount: number;
   reviewCount: number;
+  youngCount: number;
+  matureCount: number;
   masteredCount: number;
   blacklistedCount: number;
   suspendedCount: number;

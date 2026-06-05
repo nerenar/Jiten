@@ -101,6 +101,10 @@
     return pct(deck.masteredCount + deck.reviewCount, deck.totalWords);
   }
 
+  function maturePct(deck: StudyDeckDto) {
+    return pct(deck.masteredCount + deck.matureCount, deck.totalWords);
+  }
+
   function combinedPct(deck: StudyDeckDto) {
     return pct(deck.masteredCount + deck.reviewCount + deck.learningCount, deck.totalWords);
   }
@@ -655,8 +659,9 @@
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2">
                   <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                    <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                     <span class="absolute inset-0 flex items-center pl-2 text-xs font-bold z-10 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">
                       {{ knownPct(deck) }}%
                     </span>
@@ -664,7 +669,8 @@
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
                     <span>{{ deck.unseenCount }} unknown</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
-                    <span class="text-purple-600">{{ deck.reviewCount + deck.masteredCount }} known</span>
+                    <span class="text-purple-500">{{ deck.youngCount }} young</span>
+                    <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>
@@ -837,8 +843,9 @@
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2">
                   <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                    <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                     <span class="absolute inset-0 flex items-center pl-2 text-xs font-bold z-10 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">
                       {{ knownPct(deck) }}%
                     </span>
@@ -846,7 +853,8 @@
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
                     <span>{{ deck.unseenCount }} unseen</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
-                    <span class="text-purple-600">{{ deck.reviewCount + deck.masteredCount }} known</span>
+                    <span class="text-purple-500">{{ deck.youngCount }} young</span>
+                    <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>
