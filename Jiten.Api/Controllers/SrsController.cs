@@ -363,11 +363,15 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var isDefault = IsSettingsDefault(parameters, desiredRetention);
+        var reviewCount = await userContext.FsrsReviewLogs
+            .CountAsync(r => r.Card.UserId == userId);
         var response = new FsrsParametersResponse
         {
             Parameters = SerializeParametersCsv(parameters),
             IsDefault = isDefault,
-            DesiredRetention = desiredRetention
+            DesiredRetention = desiredRetention,
+            ReviewCount = reviewCount,
+            MinimumReviewsForOptimize = FsrsOptimizer.MinimumReviews
         };
 
         return Results.Ok(response);

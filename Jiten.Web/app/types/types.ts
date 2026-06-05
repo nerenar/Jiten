@@ -177,6 +177,8 @@ export interface FsrsParametersResponse {
   parameters: string;
   isDefault: boolean;
   desiredRetention: number;
+  reviewCount: number;
+  minimumReviewsForOptimize: number;
 }
 
 export interface SrsRecomputeBatchResponse {
