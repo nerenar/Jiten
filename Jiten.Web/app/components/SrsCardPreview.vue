@@ -4,7 +4,7 @@
   const props = defineProps<{ settings: StudySettingsDto }>();
 
   const convertToRuby = useConvertToRuby();
-  
+
   const SAMPLE = {
     isNew: true,
     wordRuby: '事[じ]典[てん]',
@@ -56,15 +56,18 @@
 
 <template>
   <div>
-    <!-- On mobile the preview is gated behind a button; on desktop it is always shown. -->
-    <Button
-      type="button"
-      severity="secondary"
-      class="md:hidden w-full mb-3"
-      :icon="showMobilePreview ? 'pi pi-eye-slash' : 'pi pi-eye'"
-      :label="showMobilePreview ? 'Hide preview' : 'Show card preview'"
-      @click="showMobilePreview = !showMobilePreview"
-    />
+    <!-- On mobile the preview is gated behind a button; on desktop it is always shown.
+         The wrapper carries md:hidden — PrimeVue's .p-button display rule would override it on the Button itself. -->
+    <div class="md:hidden mb-3">
+      <Button
+        type="button"
+        severity="secondary"
+        class="w-full"
+        :icon="showMobilePreview ? 'pi pi-eye-slash' : 'pi pi-eye'"
+        :label="showMobilePreview ? 'Hide preview' : 'Show card preview'"
+        @click="showMobilePreview = !showMobilePreview"
+      />
+    </div>
     <div :class="showMobilePreview ? 'block' : 'hidden md:block'">
       <div class="flex items-center justify-between mb-2">
         <span class="text-xs text-surface-500 dark:text-surface-400">Preview — sample card</span>
