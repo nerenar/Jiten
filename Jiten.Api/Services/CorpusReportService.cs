@@ -49,9 +49,9 @@ public static class CorpusReportService
         {
             sb.AppendLine("<section>");
             sb.AppendLine("<h2>Comparison Overview</h2>");
-            sb.AppendLine("<table><thead><tr><th>Term</th><th>Matching Decks</th><th>Decks/M Chars</th><th>Avg Dialogue %</th></tr></thead><tbody>");
+            sb.AppendLine("<table><thead><tr><th>Term</th><th>Matching Decks</th><th>Occurrences</th><th>Occ/M Chars</th><th>Avg Dialogue %</th></tr></thead><tbody>");
             foreach (var r in data.Results)
-                sb.AppendLine($"<tr><td><strong>{E(r.Term)}</strong></td><td>{r.MatchingDecks:N0}</td><td>{r.HitsPerMillion:N1}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
+                sb.AppendLine($"<tr><td><strong>{E(r.Term)}</strong></td><td>{r.MatchingDecks:N0}</td><td>{r.TotalOccurrences:N0}</td><td>{r.HitsPerMillion:N1}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
             sb.AppendLine("</tbody></table>");
 
             if (coOccurrences.Count > 0)
@@ -75,7 +75,7 @@ public static class CorpusReportService
         {
             sb.AppendLine("<section class=\"term-section\">");
             sb.AppendLine($"<h2>{E(result.Term)}</h2>");
-            sb.AppendLine($"<p>{result.MatchingDecks:N0} matching decks · {result.HitsPerMillion:N1} decks/M chars · Avg dialogue: {result.DialogueWeightedAvg:N1}%</p>");
+            sb.AppendLine($"<p>{result.MatchingDecks:N0} matching decks · {result.TotalOccurrences:N0} occurrences · {result.HitsPerMillion:N1} occ/M chars · Avg dialogue: {result.DialogueWeightedAvg:N1}%</p>");
 
             RenderMediaChart(sb, result, ref chartId);
             RenderDifficultyChart(sb, result, ref chartId);
@@ -98,7 +98,7 @@ public static class CorpusReportService
         var labels = JsArray(sorted.Select(m => m.MediaType.ToString()));
         var values = JsNumArray(sorted.Select(m => m.HitsPerMillion));
 
-        sb.AppendLine("<h3>Media Type Breakdown (decks/M chars)</h3>");
+        sb.AppendLine("<h3>Media Type Breakdown (occ/M chars)</h3>");
         sb.AppendLine("<div class=\"chart-container\">");
         sb.AppendLine($"<canvas id=\"{id}\"></canvas>");
         sb.AppendLine("</div>");

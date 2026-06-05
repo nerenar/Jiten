@@ -90,9 +90,9 @@
 
     try {
       const [searchResult, coOccResult] = await Promise.all([
-        $api<CorpusSearchResponse>('admin/corpus/search', { method: 'POST', body: req }),
+        $api<CorpusSearchResponse>('corpus/search', { method: 'POST', body: req }),
         req.terms.length > 1
-          ? $api<CorpusCoOccurrence[]>('admin/corpus/co-occurrences', { method: 'POST', body: req })
+          ? $api<CorpusCoOccurrence[]>('corpus/co-occurrences', { method: 'POST', body: req })
           : Promise.resolve([]),
       ]);
       searchResponse.value = searchResult;
@@ -112,7 +112,7 @@
 
     exporting.value = true;
     try {
-      const blob = await $api<Blob>('admin/corpus/export', {
+      const blob = await $api<Blob>('corpus/export', {
         method: 'POST',
         body: req,
         responseType: 'blob',
@@ -172,7 +172,7 @@
       labels: sorted.map((m) => getMediaTypeText(m.mediaType)),
       datasets: [
         {
-          label: 'Decks/M chars',
+          label: 'Occ/M chars',
           data: sorted.map((m) => +m.hitsPerMillion.toFixed(1)),
           backgroundColor: '#bd93f9',
           borderRadius: 4,
@@ -359,7 +359,10 @@
               </template>
             </Column>
             <Column field="matchingDecks" header="Matching Decks" />
-            <Column header="Decks/M">
+            <Column header="Occurrences">
+              <template #body="{ data }">{{ data.totalOccurrences.toLocaleString() }}</template>
+            </Column>
+            <Column header="Occ/M chars">
               <template #body="{ data }">{{ data.hitsPerMillion.toFixed(1) }}</template>
             </Column>
             <Column header="Dialogue %">
@@ -405,12 +408,13 @@
           <template #title>{{ activeResult.term }}</template>
           <template #subtitle>
             {{ activeResult.matchingDecks.toLocaleString() }} matching decks ·
-            {{ activeResult.hitsPerMillion.toFixed(1) }} decks/M chars · Avg dialogue: {{ activeResult.dialogueWeightedAvg.toFixed(1) }}%
+            {{ activeResult.totalOccurrences.toLocaleString() }} occurrences ·
+            {{ activeResult.hitsPerMillion.toFixed(1) }} occ/M chars · Avg dialogue: {{ activeResult.dialogueWeightedAvg.toFixed(1) }}%
           </template>
           <template #content>
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div v-if="mediaChartData">
-                <h3 class="mb-2 font-semibold text-surface-200">Media Type Breakdown (decks/M chars)</h3>
+                <h3 class="mb-2 font-semibold text-surface-200">Media Type Breakdown (occ/M chars)</h3>
                 <Bar :data="mediaChartData" :options="defaultBarOptions" />
               </div>
 

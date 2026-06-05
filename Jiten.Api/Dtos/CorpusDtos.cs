@@ -24,6 +24,7 @@ public class CorpusTermResult
 {
     public required string Term { get; set; }
     public int MatchingDecks { get; set; }
+    public long TotalOccurrences { get; set; }
     public double HitsPerMillion { get; set; }
     public List<CorpusSnippet> Snippets { get; set; } = [];
     public List<CorpusMediaBreakdown> MediaBreakdown { get; set; } = [];
@@ -58,6 +59,7 @@ public class CorpusMediaBreakdown
     public MediaType MediaType { get; set; }
     public int DeckCount { get; set; }
     public long TotalCharacters { get; set; }
+    public long Occurrences { get; set; }
     public double HitsPerMillion { get; set; }
     public double Percentage { get; set; }
 }
@@ -65,7 +67,7 @@ public class CorpusMediaBreakdown
 public class CorpusTrendPoint
 {
     public int Year { get; set; }
-    public long MatchingChars { get; set; }
+    public long Occurrences { get; set; }
     public long TotalCharsInYear { get; set; }
     public double Percentage { get; set; }
 }
