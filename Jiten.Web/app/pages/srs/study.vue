@@ -272,7 +272,7 @@
 
   function handleForget() {
     confirm.require({
-      message: 'Reset this card? All review history will be lost.',
+      message: 'Reset this card? All review history will be permanently deleted. This cannot be undone.',
       header: 'Forget Card',
       acceptLabel: 'Forget',
       rejectLabel: 'Cancel',

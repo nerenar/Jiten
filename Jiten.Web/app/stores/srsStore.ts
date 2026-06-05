@@ -131,7 +131,9 @@ export const useSrsStore = defineStore('srs', () => {
   const reviewsToday = ref(0);
   const againCardKeys = ref(new Set<string>());
   const clearedGrades = ref<('hard' | 'good' | 'easy' | 'action')[]>([]);
-  const undoState = ref<UndoSnapshot | null>(null);
+
+  const MAX_UNDO_DEPTH = 100;
+  const undoStack = ref<UndoSnapshot[]>([]);
   const sessionReviews = ref<SessionReview[]>([]);
   const sessionLeeches = ref<LeechCard[]>([]);
   const cardShownAt = ref<number | null>(null);
@@ -166,7 +168,7 @@ export const useSrsStore = defineStore('srs', () => {
     sessionDirty.value = true;
   }
 
-  const canUndo = computed(() => undoState.value !== null);
+  const canUndo = computed(() => undoStack.value.length > 0);
 
   const currentCard = computed(() =>
     currentCardIndex.value < currentBatch.value.length
@@ -233,7 +235,7 @@ export const useSrsStore = defineStore('srs', () => {
   });
 
   function takeSnapshot(card: StudyCardDto, type: UndoSnapshot['type'], rating?: FsrsRating) {
-    undoState.value = {
+    const snapshot: UndoSnapshot = {
       card,
       type,
       rating,
@@ -245,6 +247,9 @@ export const useSrsStore = defineStore('srs', () => {
       leeches: [...sessionLeeches.value],
       stats: JSON.parse(JSON.stringify(sessionStats.value)),
     };
+    const stack = [...undoStack.value, snapshot];
+    if (stack.length > MAX_UNDO_DEPTH) stack.shift();
+    undoStack.value = stack;
   }
 
   let fetchStudyDecksPromise: Promise<void> | null = null;
@@ -500,7 +505,7 @@ export const useSrsStore = defineStore('srs', () => {
       preWrapUpBatch.value = [];
       againCardKeys.value = new Set();
       clearedGrades.value = [];
-      undoState.value = null;
+      undoStack.value = [];
       inFlightReviews.clear();
       sessionEpoch++;
       exampleCache.value = new Map();
@@ -819,7 +824,8 @@ export const useSrsStore = defineStore('srs', () => {
       isSessionComplete.value = false;
     }
 
-    if (undoState.value?.card === ctx.card) undoState.value = null;
+    // The re-queue shifts indices, so snapshots taken after this card can no longer be trusted.
+    undoStack.value = [];
 
     lastReviewError.value = { wordText: ctx.card.wordTextPlain };
   }
@@ -838,8 +844,10 @@ export const useSrsStore = defineStore('srs', () => {
     };
 
     try {
+      // Forget permanently deletes the card and its review logs server-side — there is no restore
+      // path, so it can't be undone. Clear the stack rather than offer a misleading undo past it.
       if (action !== 'forget') takeSnapshot(card, action);
-      else undoState.value = null;
+      else undoStack.value = [];
 
       await $api('srs/set-vocabulary-state', {
         method: 'POST',
@@ -866,7 +874,8 @@ export const useSrsStore = defineStore('srs', () => {
         }
       }
     } catch (error) {
-      undoState.value = null;
+      // The action failed before mutating local state — drop the snapshot we optimistically pushed.
+      undoStack.value = undoStack.value.slice(0, -1);
       console.error('Failed to set vocabulary state:', error);
       return false;
     } finally {
@@ -891,7 +900,7 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   async function undoLastAction(): Promise<boolean> {
-    const snap = undoState.value;
+    const snap = undoStack.value[undoStack.value.length - 1];
     if (!snap || isBusy.value) return true;
     isBusy.value = true;
 
@@ -900,8 +909,8 @@ export const useSrsStore = defineStore('srs', () => {
         // Make sure the (possibly still in-flight) review for this card has landed before undoing it.
         const key = `${snap.card.wordId}-${snap.card.readingIndex}`;
         await inFlightReviews.get(key)?.catch(() => {});
-        // If that review failed, it already reverted itself and cleared the snapshot — nothing to undo.
-        if (undoState.value !== snap) return true;
+        // If that review failed, it already reverted itself and cleared the stack — nothing to undo.
+        if (undoStack.value[undoStack.value.length - 1] !== snap) return true;
         await $api('srs/undo-review', {
           method: 'POST',
           body: { wordId: snap.card.wordId, readingIndex: snap.card.readingIndex },
@@ -937,7 +946,7 @@ export const useSrsStore = defineStore('srs', () => {
       isFlipped.value = true;
       cardShownAt.value = Date.now();
       isSessionComplete.value = false;
-      undoState.value = null;
+      undoStack.value = undoStack.value.slice(0, -1);
       return true;
     } catch (error) {
       console.error('Failed to undo:', error);
@@ -1026,7 +1035,7 @@ export const useSrsStore = defineStore('srs', () => {
     sessionReviews.value = [];
     sessionLeeches.value = [];
     sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 } };
-    undoState.value = null;
+    undoStack.value = [];
     isBusy.value = false;
     fetchError.value = null;
     lastReviewError.value = null;

@@ -41,7 +41,7 @@ public class SrsController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
-        if (!debounceService.TryAcquire(userId, request.WordId, request.ReadingIndex))
+        if (!debounceService.TryAcquire("undo", userId, request.WordId, request.ReadingIndex))
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
@@ -146,7 +146,7 @@ public class SrsController(
                 return Results.Content(cached, "application/json");
         }
 
-        if (!debounceService.TryAcquire(userId, request.WordId, request.ReadingIndex))
+        if (!debounceService.TryAcquire("review", userId, request.WordId, request.ReadingIndex))
         {
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }
@@ -594,7 +594,7 @@ public class SrsController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
-        if (!debounceService.TryAcquire(userId, request.WordId, request.ReadingIndex))
+        if (!debounceService.TryAcquire("state", userId, request.WordId, request.ReadingIndex))
         {
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }
