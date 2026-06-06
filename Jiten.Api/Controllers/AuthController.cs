@@ -90,8 +90,8 @@ public class AuthController : ControllerBase
         if (emailExists != null) return Conflict(new { message = "Email already registered." });
 
 
-        if (userName.Length is < 2 or > 20)
-            return BadRequest(new { message = "Username must be between 2 and 20 characters." });
+        if (userName.Length is < 3 or > 30)
+            return BadRequest(new { message = "Username must be between 3 and 30 characters." });
 
         var user = new User
                    {
@@ -493,9 +493,9 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Username is required" });
         }
 
-        if (username.Length < 3 || username.Length > 20)
+        if (username.Length < 3 || username.Length > 30)
         {
-            return BadRequest(new { message = "Username must be between 3 and 20 characters" });
+            return BadRequest(new { message = "Username must be between 3 and 30 characters" });
         }
 
         var userExists = await _userManager.FindByNameAsync(username);
