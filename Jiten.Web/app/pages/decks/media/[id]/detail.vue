@@ -49,6 +49,19 @@
     }
   };
 
+  const jumpToSimilar = () => {
+    // Update the URL hash so the position is shareable, without a full route navigation.
+    history.pushState(null, '', '#similar-media');
+    document.getElementById('similar-media')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Honour a shared link that already points at the anchor (#similar-media in the URL on load).
+  onMounted(() => {
+    if (window.location.hash === '#similar-media') {
+      nextTick(() => document.getElementById('similar-media')?.scrollIntoView({ block: 'start' }));
+    }
+  });
+
   const updateParentStatus = (parentDeckId: number, status: import('~/types').DeckStatus) => {
     if (response.value?.data?.mainDeck && response.value.data.mainDeck.deckId === parentDeckId) {
       response.value = { ...response.value, data: { ...response.value.data, mainDeck: { ...response.value.data.mainDeck, status } } };
@@ -111,7 +124,12 @@
       </div>
 
       <div v-if="response.data.subDecks.length > 0" class="pt-4">
-        <span class="font-bold">Subdecks</span>
+        <div class="flex items-baseline justify-between gap-4">
+          <span class="font-bold">Subdecks</span>
+          <a href="#similar-media" class="text-primary text-sm cursor-pointer" @click.prevent="jumpToSimilar">
+            Jump to similar media ↓
+          </a>
+        </div>
         <div v-if="previousLink != null || nextLink != null" class="flex flex-col md:flex-row justify-between">
           <div class="flex gap-8 pl-2">
             <NuxtLink :to="previousLink" :class="previousLink == null ? 'text-gray-500 pointer-events-none' : ''">
@@ -132,7 +150,9 @@
       </div>
       <!--      <div v-else class="pt-4">This deck has no subdecks</div>-->
 
-      <SimilarMediaSection :deck="response.data.mainDeck" />
+      <div id="similar-media" class="scroll-mt-4">
+        <SimilarMediaSection :deck="response.data.mainDeck" />
+      </div>
     </div>
   </div>
 </template>
