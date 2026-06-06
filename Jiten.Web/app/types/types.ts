@@ -1161,6 +1161,7 @@ export interface CorpusTopDeck {
 
 export interface CorpusTermResult {
   term: string;
+  excludedTerms: string[];
   totalOccurrences: number;
   matchingDecks: number;
   hitsPerMillion: number;
