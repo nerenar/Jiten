@@ -6,6 +6,7 @@ services:
       args:
         PG_VERSION: 17
     image: jiten/postgres-pgroonga:17
+    shm_size: 1gb
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_USER: ${DB_USER}
