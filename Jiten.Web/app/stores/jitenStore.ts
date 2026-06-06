@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, ThemeMode, TitleLanguage } from '~/types';
+import type { KanjiScalePref } from '~/data/kanjiGroupings';
 
 const YEAR = 60 * 60 * 24 * 365;
 
@@ -39,6 +40,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const quickMasterVocabulary = createCookieState<boolean>('quick-master-vocabulary', false);
   const ttsVoice = createCookieState<'female' | 'female2' | 'male' | 'male2' | 'asmr' | 'system'>('tts-voice', 'female');
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
+  const kanjiScale = createCookieState<KanjiScalePref>('kanji-scale', 'jlpt');
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
     default: () => DifficultyValueDisplayStyle.ZeroToFive,
@@ -114,6 +116,7 @@ export const useJitenStore = defineStore('jiten', () => {
     ttsVoice,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
+    kanjiScale,
     coverageVersion,
     bumpCoverageVersion,
   };

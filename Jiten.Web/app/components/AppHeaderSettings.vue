@@ -2,6 +2,7 @@
   import { storeToRefs } from 'pinia';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
+  import { kanjiScaleOptions } from '~/data/kanjiGroupings';
 
   const store = useJitenStore();
   const {
@@ -20,6 +21,7 @@
     readingSpeed,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
+    kanjiScale,
     ttsVoice,
   } = storeToRefs(store);
   const auth = useAuthStore();
@@ -229,6 +231,20 @@
           @hide="isSettingsInteracted = false"
         />
         <label for="difficultyValueDisplayStyle">Difficulty Value Style</label>
+      </FloatLabel>
+
+      <FloatLabel variant="on" class="">
+        <Select
+          v-model="kanjiScale"
+          :options="kanjiScaleOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="Kanji breakdown scale"
+          input-id="kanjiScale"
+          @show="isSettingsInteracted = true"
+          @hide="isSettingsInteracted = false"
+        />
+        <label for="kanjiScale">Kanji breakdown scale</label>
       </FloatLabel>
     </div>
   </Popover>

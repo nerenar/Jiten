@@ -495,6 +495,7 @@ export interface KanjiList {
   meanings: string[];
   strokeCount: number;
   jlptLevel: number | null;
+  grade: number | null;
   frequencyRank: number | null;
 }
 

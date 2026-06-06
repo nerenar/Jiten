@@ -1,6 +1,8 @@
 <script setup lang="ts">
+  import { storeToRefs } from 'pinia';
   import type { KanjiList } from '~/types';
-  import { jlptLabelForKanji } from '~/data/kanjiGroupings';
+  import { useJitenStore } from '~/stores/jitenStore';
+  import { kanjiScaleMembership } from '~/data/kanjiGroupings';
 
   const props = defineProps({
     wordId: {
@@ -17,7 +19,10 @@
     () => `vocabulary/${props.wordId}/${props.readingIndex}/kanji`
   );
 
-  const jlptText = (character: string) => jlptLabelForKanji(character);
+  const { kanjiScale } = storeToRefs(useJitenStore());
+
+  const scaleLabel = (kanji: KanjiList) =>
+    kanjiScale.value === 'none' ? null : kanjiScaleMembership(kanji.character, kanjiScale.value, kanji.grade);
 </script>
 
 <template>
@@ -38,8 +43,8 @@
           <span v-if="kanji.meanings?.length" class="text-surface-700 dark:text-surface-300 text-sm max-w-[10rem] truncate">
             {{ kanji.meanings[0] }}
           </span>
-          <span v-if="jlptText(kanji.character)" class="text-primary-600 dark:text-primary-400 text-[10px]">
-           JLPT {{ jlptText(kanji.character) }}
+          <span v-if="scaleLabel(kanji)" class="text-primary-600 dark:text-primary-400 text-[10px]">
+            {{ scaleLabel(kanji) }}
           </span>
         </div>
 
