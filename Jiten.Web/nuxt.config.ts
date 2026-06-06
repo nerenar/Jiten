@@ -73,6 +73,7 @@ export default defineNuxtConfig({
     },
   },
   modules: [
+    '@nuxt/eslint',
     '@primevue/nuxt-module',
     '@nuxt/icon',
     '@pinia/nuxt',
