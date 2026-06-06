@@ -41,6 +41,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const ttsVoice = createCookieState<'female' | 'female2' | 'male' | 'male2' | 'asmr' | 'system'>('tts-voice', 'female');
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
   const kanjiScale = createCookieState<KanjiScalePref>('kanji-scale', 'jlpt');
+  const similarMediaPinnedType = createCookieState<number>('similar-media-pinned-type', 0);
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
     default: () => DifficultyValueDisplayStyle.ZeroToFive,
@@ -59,7 +60,6 @@ export const useJitenStore = defineStore('jiten', () => {
   watch(difficultyValueDisplayStyle, (newValue) => {
     difficultyValueDisplayStyleCookie.value = newValue;
   });
-
 
   const getKnownWordIds = (): number[] => {
     if (import.meta.client) {
@@ -117,6 +117,7 @@ export const useJitenStore = defineStore('jiten', () => {
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
     kanjiScale,
+    similarMediaPinnedType,
     coverageVersion,
     bumpCoverageVersion,
   };
