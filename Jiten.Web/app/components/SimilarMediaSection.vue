@@ -117,7 +117,7 @@
 <template>
   <!-- Initial load only: a refetch on filter change keeps the section + dropdown in place. -->
   <div v-if="availableTypes.length === 0 && typesStatus !== 'success'" class="pt-4">
-    <span class="font-bold">Similar Media</span>
+    <h2 class="font-bold">Similar Media</h2>
     <div class="flex flex-row flex-wrap gap-4 justify-center pt-4">
       <Skeleton v-for="i in 7" :key="i" width="136px" height="192px" />
     </div>
@@ -125,7 +125,7 @@
   <div v-else-if="availableTypes.length > 0" class="pt-4">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
       <div class="flex flex-wrap items-baseline gap-x-2">
-        <span class="font-bold">Similar Media</span>
+        <h2 class="font-bold">Similar Media</h2>
         <span class="text-xs text-gray-500 dark:text-gray-400">
           <span class="rounded bg-primary px-1 py-0.5 font-bold text-primary-contrast">xx%</span>
           = content similarity
