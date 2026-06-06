@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { KanjiList } from '~/types';
+  import { jlptLabelForKanji } from '~/data/kanjiGroupings';
 
   const props = defineProps({
     wordId: {
@@ -16,10 +17,7 @@
     () => `vocabulary/${props.wordId}/${props.readingIndex}/kanji`
   );
 
-  const jlptText = (level: number | null) => {
-    if (!level) return null;
-    return `N${level}`;
-  };
+  const jlptText = (character: string) => jlptLabelForKanji(character);
 </script>
 
 <template>
@@ -40,8 +38,8 @@
           <span v-if="kanji.meanings?.length" class="text-surface-700 dark:text-surface-300 text-sm max-w-[10rem] truncate">
             {{ kanji.meanings[0] }}
           </span>
-          <span v-if="kanji.jlptLevel" class="text-primary-600 dark:text-primary-400 text-[10px]">
-           JLPT {{ jlptText(kanji.jlptLevel) }}
+          <span v-if="jlptText(kanji.character)" class="text-primary-600 dark:text-primary-400 text-[10px]">
+           JLPT {{ jlptText(kanji.character) }}
           </span>
         </div>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { Kanji, WordSummary } from '~/types';
+  import { jlptLabelForKanji } from '~/data/kanjiGroupings';
 
   const route = useRoute();
   const { $api } = useNuxtApp();
@@ -12,10 +13,7 @@
 
   const { data: kanji, status } = useApiFetch<Kanji>(() => `kanji/${encodeURIComponent(character.value)}`);
 
-  const jlptText = computed(() => {
-    if (!kanji.value?.jlptLevel) return null;
-    return `N${kanji.value.jlptLevel}`;
-  });
+  const jlptText = computed(() => jlptLabelForKanji(character.value));
 
   const gradeText = computed(() => {
     if (!kanji.value?.grade) return null;

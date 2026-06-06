@@ -4,10 +4,33 @@ import { wanikaniGroups } from './wanikani';
 import { rtkGroups } from './rtk';
 import { klcGroups } from './klc';
 import { tmwGroups } from './tmw';
+import { jlptGroups } from './jlpt';
 
 export interface KanjiGroup {
   name: string;
   kanji: KanjiGridItem[];
+}
+
+// KANJIDIC's <jlpt> tag is the obsolete 4-level scale (no N5). Derive the modern
+// N5–N1 level from the Tanos-based jlptGroups lists instead of the DB field.
+const jlptCharToLevel = (() => {
+  const map = new Map<string, number>();
+  for (const g of jlptGroups) {
+    const level = Number(g.name.slice(1));
+    for (const ch of g.characters) {
+      if (!map.has(ch)) map.set(ch, level);
+    }
+  }
+  return map;
+})();
+
+export function jlptLevelForKanji(character: string): number | null {
+  return jlptCharToLevel.get(character) ?? null;
+}
+
+export function jlptLabelForKanji(character: string): string | null {
+  const level = jlptCharToLevel.get(character);
+  return level ? `N${level}` : null;
 }
 
 export type DisplayType = 'none' | 'jlpt' | 'grade' | 'frequency' | 'strokeCount' | 'kanken' | 'wanikani' | 'rtk' | 'klc' | 'tmw';
@@ -25,7 +48,6 @@ export const displayTypeOptions: { label: string; value: DisplayType }[] = [
   { label: 'TMW (TheMoeWay)', value: 'tmw' },
 ];
 
-const jlptNames: Record<number, string> = { 5: 'N5', 4: 'N4', 3: 'N3', 2: 'N2', 1: 'N1' };
 const gradeNames: Record<number, string> = {
   1: 'Grade 1', 2: 'Grade 2', 3: 'Grade 3', 4: 'Grade 4',
   5: 'Grade 5', 6: 'Grade 6', 8: 'Secondary', 9: 'Jinmeiyou', 10: 'Jinmeiyou (variant)',
@@ -98,7 +120,7 @@ export function groupKanji(kanji: KanjiGridItem[], displayType: DisplayType): Ka
   }
 
   if (displayType === 'jlpt') {
-    return groupByProperty(kanji, k => k.jlptLevel, jlptNames, [5, 4, 3, 2, 1], 'Non-JLPT');
+    return groupByExternalData(kanji, jlptGroups, 'Non-JLPT');
   }
 
   if (displayType === 'grade') {
