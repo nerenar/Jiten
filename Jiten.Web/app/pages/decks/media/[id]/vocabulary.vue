@@ -134,9 +134,8 @@
 <template>
   <div class="flex flex-col gap-2">
     <DeckBreadcrumb
-      v-if="response?.data?.deck"
-      :deck="response.data.deck"
-      :parent-deck="response.data.parentDeck"
+      :deck="response?.data?.deck"
+      :parent-deck="response?.data?.parentDeck"
       current="Vocabulary"
     />
     <VocabularyFilters

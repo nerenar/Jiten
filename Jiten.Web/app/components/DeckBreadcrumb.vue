@@ -4,7 +4,9 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 
   const props = defineProps<{
-    deck: Deck;
+    // Optional so the breadcrumb can render its home icon (reserving its row height) before the deck
+    // has loaded, avoiding a layout shift when data arrives.
+    deck?: Deck | null;
     parentDeck?: Deck | null;
     // When set, the deck title becomes a link and this label is appended as the (unlinked) current page.
     current?: string;
@@ -15,17 +17,19 @@
   const home = { icon: 'pi pi-home', route: '/' };
 
   const items = computed(() => {
+    const deck = props.deck;
+    if (!deck) return [];
     const list: { label?: string; route?: string; icon?: string }[] = [
       // Links to the searchable media browser pre-filtered by type (better for navigation than the
       // static list hub). The JSON-LD breadcrumb in useDeckSchema keeps the crawlable list-hub URL.
-      { label: getMediaTypeText(props.deck.mediaType), route: `/decks/media?mediaType=${props.deck.mediaType}` },
+      { label: getMediaTypeText(deck.mediaType), route: `/decks/media?mediaType=${deck.mediaType}` },
     ];
     if (props.parentDeck) {
       list.push({ label: localiseTitle(props.parentDeck), route: `/decks/media/${props.parentDeck.deckId}/detail` });
     }
     list.push({
-      label: localiseTitle(props.deck),
-      route: props.current ? `/decks/media/${props.deck.deckId}/detail` : undefined,
+      label: localiseTitle(deck),
+      route: props.current ? `/decks/media/${deck.deckId}/detail` : undefined,
     });
     if (props.current) {
       list.push({ label: props.current });

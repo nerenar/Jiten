@@ -125,6 +125,7 @@
 
 <template>
   <div>
+    <DeckBreadcrumb :deck="response?.data?.mainDeck" :parent-deck="response?.data?.parentDeck" class="mb-2" />
     <div v-if="status === 'pending'" class="flex flex-col gap-4">
       <Card v-for="i in 5" :key="i" class="p-2">
         <template #content>
@@ -133,7 +134,6 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <DeckBreadcrumb :deck="response.data.mainDeck" :parent-deck="response.data.parentDeck" class="mb-2" />
       <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
 
       <div v-if="response.data.parentDeck != null" class="pt-4">

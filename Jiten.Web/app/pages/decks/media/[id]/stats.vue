@@ -104,9 +104,8 @@
 <template>
   <div class="flex flex-col gap-4">
     <DeckBreadcrumb
-      v-if="deckResponse?.data?.mainDeck"
-      :deck="deckResponse.data.mainDeck"
-      :parent-deck="deckResponse.data.parentDeck"
+      :deck="deckResponse?.data?.mainDeck"
+      :parent-deck="deckResponse?.data?.parentDeck"
       current="Statistics"
     />
 
