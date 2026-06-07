@@ -138,6 +138,7 @@
       :parent-deck="response?.data?.parentDeck"
       current="Vocabulary"
     />
+    <h1 v-if="title" class="text-2xl font-bold">{{ title }} - Vocabulary List</h1>
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"

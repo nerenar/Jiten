@@ -109,6 +109,8 @@
       current="Statistics"
     />
 
+    <h1 v-if="title" class="text-2xl font-bold">{{ title }} - Statistics</h1>
+
     <!-- Coverage Section -->
     <Card v-if="statsStatus === 'pending' || curveStatus === 'pending'" class="p-2">
       <template #content>

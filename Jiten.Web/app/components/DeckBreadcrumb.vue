@@ -19,10 +19,12 @@
   const items = computed(() => {
     const deck = props.deck;
     if (!deck) return [];
-    const list: { label?: string; route?: string; icon?: string }[] = [
+    const list: { label?: string; route?: string; icon?: string; rel?: string }[] = [
       // Links to the searchable media browser pre-filtered by type (better for navigation than the
-      // static list hub). The JSON-LD breadcrumb in useDeckSchema keeps the crawlable list-hub URL.
-      { label: getMediaTypeText(deck.mediaType), route: `/decks/media?mediaType=${deck.mediaType}` },
+      // static list hub). robots.txt disallows /decks/media, so nofollow stops crawlers discovering
+      // the query-param URL here and indexing it without a snippet; the JSON-LD breadcrumb in
+      // useDeckSchema points crawlers at the crawlable list-hub URL instead.
+      { label: getMediaTypeText(deck.mediaType), route: `/decks/media?mediaType=${deck.mediaType}`, rel: 'nofollow' },
     ];
     if (props.parentDeck) {
       list.push({ label: localiseTitle(props.parentDeck), route: `/decks/media/${props.parentDeck.deckId}/detail` });
@@ -41,7 +43,7 @@
 <template>
   <Breadcrumb :home="home" :model="items" class="!bg-transparent !p-0 !text-xs !gap-1 overflow-x-auto">
     <template #item="{ item }">
-      <NuxtLink v-if="item.route" :to="item.route" class="flex items-center gap-1 text-primary hover:underline">
+      <NuxtLink v-if="item.route" :to="item.route" :rel="item.rel" class="flex items-center gap-1 text-primary hover:underline">
         <span v-if="item.icon" :class="item.icon" />
         <span v-if="item.label" class="truncate max-w-[45vw] md:max-w-xs">{{ item.label }}</span>
       </NuxtLink>
