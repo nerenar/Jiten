@@ -187,6 +187,84 @@ public partial class RequestController(
         return Results.Ok(new PaginatedResponse<List<MediaRequestDto>>(dtos, totalCount, limit, offset));
     }
 
+    [HttpGet("facets")]
+    public async Task<IResult> GetRequestFacets(
+        [FromQuery] MediaType? mediaType = null,
+        [FromQuery] MediaRequestStatus? status = null,
+        [FromQuery] bool mine = false,
+        [FromQuery] bool contributed = false,
+        [FromQuery] string? search = null,
+        [FromQuery] string? attachments = null)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        // Shared scope (tab + search) applied to every facet.
+        IQueryable<MediaRequest> BaseQuery()
+        {
+            var q = context.MediaRequests.AsNoTracking().AsQueryable();
+            if (mine)
+                q = q.Where(r => r.RequesterId == userId);
+            else if (contributed)
+            {
+                var contributedRequestIds = context.MediaRequestComments
+                    .Where(c => c.UserId == userId)
+                    .Where(c => context.MediaRequestUploads.Any(u => u.MediaRequestCommentId == c.Id && !u.FileDeleted))
+                    .Select(c => c.MediaRequestId)
+                    .Distinct();
+                q = q.Where(r => contributedRequestIds.Contains(r.Id) && r.RequesterId != userId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var escaped = search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                q = q.Where(r => EF.Functions.ILike(r.Title, $"%{escaped}%", "\\"));
+            }
+
+            return q;
+        }
+
+        // Each facet's counts reflect the OTHER active filters but ignore its own selection,
+        // so picking a value never zeroes out the rest of that dimension.
+        IQueryable<MediaRequest> WithMediaType(IQueryable<MediaRequest> q) =>
+            mediaType.HasValue ? q.Where(r => r.MediaType == mediaType.Value) : q;
+        IQueryable<MediaRequest> WithStatus(IQueryable<MediaRequest> q) =>
+            status.HasValue ? q.Where(r => r.Status == status.Value) : q;
+        IQueryable<MediaRequest> WithAttachments(IQueryable<MediaRequest> q) =>
+            attachments == "yes"
+                ? q.Where(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted))
+                : attachments == "no"
+                    ? q.Where(r => !context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted))
+                    : q;
+
+        var mediaTypeCounts = await WithAttachments(WithStatus(BaseQuery()))
+            .GroupBy(r => r.MediaType)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var statusCounts = await WithAttachments(WithMediaType(BaseQuery()))
+            .GroupBy(r => r.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var attachmentBase = WithStatus(WithMediaType(BaseQuery()));
+        var attachmentTotal = await attachmentBase.CountAsync();
+        var attachmentsYes = await attachmentBase
+            .CountAsync(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted));
+
+        return Results.Ok(new
+        {
+            mediaTypes = mediaTypeCounts.ToDictionary(x => (int)x.Key, x => x.Count),
+            mediaTypeTotal = mediaTypeCounts.Sum(x => x.Count),
+            statuses = statusCounts.ToDictionary(x => (int)x.Key, x => x.Count),
+            statusTotal = statusCounts.Sum(x => x.Count),
+            attachmentsYes,
+            attachmentsNo = attachmentTotal - attachmentsYes,
+            attachmentTotal,
+        });
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IResult> GetRequest(int id)
     {
