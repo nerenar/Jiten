@@ -180,6 +180,20 @@ export function useMediaRequests() {
     }
   };
 
+  const addAdminComment = async (requestId: number, commentId: number, text: string): Promise<boolean> => {
+    error.value = null;
+    try {
+      await $api(`requests/${requestId}/comments/${commentId}/admin-comment`, {
+        method: 'POST',
+        body: { text },
+      });
+      return true;
+    } catch (e) {
+      error.value = e as Error;
+      return false;
+    }
+  };
+
   const editRequestDescription = async (id: number, description?: string, externalUrl?: string): Promise<boolean> => {
     error.value = null;
     try {
@@ -363,6 +377,7 @@ export function useMediaRequests() {
     fetchComments,
     addComment,
     editComment,
+    addAdminComment,
     editRequestDescription,
     deleteUpload,
     reviewUpload,
