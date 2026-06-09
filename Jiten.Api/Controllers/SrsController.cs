@@ -1346,7 +1346,9 @@ public class SrsController(
 
 
     [HttpPost("reader-study-decks")]
-    [SwaggerOperation(Summary = "Get user's static word list decks for the reader extension")]
+    [SwaggerOperation(Summary = "Get user's study decks for the reader extension",
+                      Description = "Returns all the user's study decks with their type. The extension uses the type to "
+                                    + "classify deck membership and to offer only static word-list decks for manual adding.")]
     public async Task<IResult> GetReaderStudyDecks()
     {
         var userId = currentUserService.UserId;
@@ -1354,9 +1356,9 @@ public class SrsController(
 
         var decks = await userContext.UserStudyDecks
             .AsNoTracking()
-            .Where(sd => sd.UserId == userId && sd.DeckType == StudyDeckType.StaticWordList)
+            .Where(sd => sd.UserId == userId && sd.IsActive)
             .OrderBy(sd => sd.SortOrder)
-            .Select(sd => new { sd.UserStudyDeckId, sd.Name })
+            .Select(sd => new { sd.UserStudyDeckId, sd.Name, DeckType = (int)sd.DeckType })
             .ToListAsync();
 
         return Results.Ok(decks);
