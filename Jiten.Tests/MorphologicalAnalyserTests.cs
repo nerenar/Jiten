@@ -1392,6 +1392,31 @@ public class MorphologicalAnalyserTests
 
         // 撃ち放つ — compound verb not in JMDict; must split into 撃ち (撃つ stem) + 放った (放つ past)
         yield return ["銃弾を撃ち放った", new[] { "銃弾", "を", "撃ち", "放った" }];
+
+        // === Quotative って re-cuts (RepairQuotativeTte) ===
+        // のかなって — Sudachi cuts の|か|なっ|て; かな is the sentence-final particle, って quotes it
+        yield return ["だから、嫌いにならないといけないのかなって……",
+            new[] { "だから", "嫌い", "に", "ならない", "と", "いけない", "の", "かな", "って" }];
+        // って eats the final mora of katakana words: デー|トっ|て → デート + って
+        yield return ["「……デートって雰囲気じゃなかったけど？",
+            new[] { "デート", "って", "雰囲気", "じゃなかった", "けど" }];
+        yield return ["僕にプレゼントって？", new[] { "僕", "に", "プレゼント", "って" }];
+        // fused variant: Sudachi emits ケン|カって (カって = かつて homograph) as a single token
+        yield return ["ケンカって？", new[] { "ケンカ", "って" }];
+        // prohibitive な quoted by って: 言う|なっ|て → 言う + な + って
+        yield return ["誰にも言うなって", new[] { "誰にも", "言う", "な", "って" }];
+        // volitional う stolen by うなっ: だろ|うなっ|て → だろう + な + って
+        yield return ["何でだろうなって考えて、最近わかったんだ",
+            new[] { "何で", "だろう", "な", "って", "考えて", "最近", "わかった", "んだ" }];
+        // imperative re-attached to kanji stem: 信|じろっ|て → 信じろ + って
+        yield return ["信じろって", new[] { "信じろ", "って" }];
+        // volitional re-attached through te-form chain: い|こうっ|て → いこう + って
+        yield return ["一緒に生きていこうって決めてたのに",
+            new[] { "一緒に", "生きていこう", "って", "決めてた", "のに" }];
+        // guards: genuine te-forms of なる/かなう must NOT be re-cut
+        yield return ["いつの間にかなっていた", new[] { "いつの間にか", "なっていた" }];
+        yield return ["なんとかなって良かった", new[] { "なんとかなって", "良かった" }];
+        yield return ["犬がうなっている", new[] { "犬", "が", "うなっている" }];
     }
 
     [Theory]

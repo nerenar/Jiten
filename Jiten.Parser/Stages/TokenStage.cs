@@ -86,6 +86,11 @@ internal static class TokenFeatureScanner
                 f |= TokenFeatures.LongVowelMark;
             if (text.Length > 0 && text[^1] == 'っ')
                 f |= TokenFeatures.EndsWithTsu;
+            // Fused katakana-mora theft (ケン|カって): single Xって token with a katakana head,
+            // handled by RepairQuotativeTte alongside the two-token Xっ|て shape.
+            if (text.Length == 3 && text[0] is >= 'ァ' and <= 'ヺ'
+                && text.EndsWith("って", StringComparison.Ordinal))
+                f |= TokenFeatures.EndsWithTsu;
 
             switch (text)
             {
