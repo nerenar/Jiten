@@ -160,10 +160,13 @@ public partial class MorphologicalAnalyser
 
         List<WordInfo> allWordInfos;
 
-        bool useStreaming = SudachiInterop.StreamingAvailable && (diagnostics == null || userDictCsv != null);
-        if (useStreaming)
+        if (SudachiInterop.StreamingAvailable)
         {
-            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode, userDictCsv: userDictCsv);
+            // Diagnostics runs capture raw output and request lattice segmentation margins
+            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic,
+                                                               out var rawOutput, captureRaw: diagnostics != null,
+                                                               mode: mode, userDictCsv: userDictCsv,
+                                                               emitMargins: diagnostics != null);
             sudachiStopwatch?.Stop();
 
             if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
@@ -173,13 +176,15 @@ public partial class MorphologicalAnalyser
                 diagnostics.Sudachi = new SudachiDiagnostics
                                       {
                                           ElapsedMs = sudachiStopwatch!.Elapsed.TotalMilliseconds,
+                                          RawOutput = rawOutput ?? string.Empty,
                                           Tokens = allWordInfos.Select(w => new SudachiToken
                                           {
                                               Surface = w.Text,
                                               PartOfSpeech = w.PartOfSpeech.ToString(),
                                               DictionaryForm = w.DictionaryForm,
                                               Reading = w.Reading,
-                                              NormalizedForm = w.NormalizedForm
+                                              NormalizedForm = w.NormalizedForm,
+                                              Margin = w.SudachiBoundaryMargin
                                           }).ToList()
                                       };
             }
@@ -208,8 +213,7 @@ public partial class MorphologicalAnalyser
         }
         else
         {
-            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic, mode: mode, userDictCsv: userDictCsv);
-            if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
+            throw new InvalidOperationException("Sudachi streaming FFI unavailable and no diagnostics fallback requested");
         }
 
         // Split by delimiter tokens (if batch)

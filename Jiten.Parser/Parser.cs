@@ -157,7 +157,7 @@ namespace Jiten.Parser
 
             CleanSentenceTokens(sentences);
             SplitSuruInflectionsForNounCompounding(sentences);
-            SplitUnknownNounTokens(sentences, protectedSurfaces);
+            SplitUnknownNounTokens(sentences, protectedSurfaces, diagnostics);
 
             if (sw != null) { timings!.PrepOtherMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
@@ -177,13 +177,14 @@ namespace Jiten.Parser
 
             if (sw != null) { timings!.PrepOtherMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            FilterOrphanedMisparses(sentences);
+            FilterOrphanedMisparses(sentences, diagnostics);
             ValidateGrammaticalSequences(sentences, diagnostics);
             StripTrailingParticles(sentences);
 
             if (sw != null) { timings!.PrepGrammarMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            ResegmentationEngine.TryImproveUncertainSpans(sentences, _lookups, _wordFrequencyRanks, WordMeta, protectedSurfaces);
+            ResegmentationEngine.TryImproveUncertainSpans(sentences, _lookups, _wordFrequencyRanks, WordMeta, protectedSurfaces,
+                                                          diagnostics);
 
             if (sw != null) { timings!.PrepResegmentationMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
@@ -645,7 +646,7 @@ namespace Jiten.Parser
             var candidateLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>();
 
             if (ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
-                                                                    WordMeta))
+                                                                    WordMeta, diagnostics))
             {
                 diagnostics?.Results.Clear();
 
@@ -705,7 +706,7 @@ namespace Jiten.Parser
 
             var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, candidateLookup, diagnostics, relocatedHints);
             corrected = await ApplyMisparseGates(sentences, corrected, diagnostics);
-            return ExcludeFinalMisparses(corrected);
+            return ExcludeFinalMisparses(corrected, diagnostics);
         }
 
         /// <summary>
@@ -786,7 +787,7 @@ namespace Jiten.Parser
                     ? FuriganaHintExtractor.RelocateToCleanedOriginal(coFlat, hintsByText[textIndex], cleanTexts[textIndex])
                     : null;
 
-                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex]);
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics);
                 decks.Add(deck);
                 batchedSentences[textIndex] = null!;
             }
@@ -808,7 +809,8 @@ namespace Jiten.Parser
             BenchmarkTimings? timings = null,
             Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null,
             FuriganaHint[]? relocatedHints = null,
-            int? rawContentCharCount = null)
+            int? rawContentCharCount = null,
+            ParserDiagnostics? diagnostics = null)
         {
             var sw = timings != null ? Stopwatch.StartNew() : null;
 
@@ -832,7 +834,7 @@ namespace Jiten.Parser
 
             var marginMap = BuildMarginMapFromLookup(sentences, resultLookup);
             if (ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
-                                                                    WordMeta))
+                                                                    WordMeta, diagnostics))
             {
                 var newWordInfos = ExtractWordInfos(sentences);
                 var newUniqueWords = new List<(WordInfo wordInfo, int occurrences)>();
@@ -877,7 +879,7 @@ namespace Jiten.Parser
                                  })
                                  .ToArray();
 
-            processedWords = ExcludeFinalMisparses(processedWords).ToArray();
+            processedWords = ExcludeFinalMisparses(processedWords, diagnostics).ToArray();
 
             List<ExampleSentence>? exampleSentences = null;
 
@@ -1396,6 +1398,11 @@ namespace Jiten.Parser
 
                         if (processedWord != null)
                         {
+                            if (wordData.wordInfo.Text != baseWord)
+                                diagnostics?.LogParserEvent(
+                                    "ProcessWord", "variant-resolved", [baseWord], [wordData.wordInfo.Text],
+                                    $"resolved after fallback text mutation (WordId={processedWord.WordId})");
+
                             // Restore original text (before any stripping/modifications)
                             processedWord.OriginalText = baseWord;
                             break;
@@ -2530,7 +2537,7 @@ namespace Jiten.Parser
         }
 
 
-        private static void FilterOrphanedMisparses(List<SentenceInfo> sentences)
+        private static void FilterOrphanedMisparses(List<SentenceInfo> sentences, ParserDiagnostics? diagnostics = null)
         {
             foreach (var sentence in sentences)
             {
@@ -2556,6 +2563,9 @@ namespace Jiten.Parser
                         ) ||
                         word.PartOfSpeech == PartOfSpeech.Symbol && isSingleKanaStutter)
                     {
+                        diagnostics?.LogParserEvent(
+                            "FilterOrphanedMisparses", "remove", [word.Text], null,
+                            shouldFilter ? "in MisparsesRemove list" : "single-kana stutter / noise noun");
                         anyFiltered = true;
                         continue;
                     }
@@ -2588,7 +2598,8 @@ namespace Jiten.Parser
         /// e.g. Sudachi gives 各党 + 幹部, but 各党 has no lookup. Splitting into 各 + 党 lets
         /// CombineNounCompounds find 党幹部 in lookups and produce 各 + 党幹部.
         /// </summary>
-        private static void SplitUnknownNounTokens(List<SentenceInfo> sentences, HashSet<string>? protectedSurfaces = null)
+        private static void SplitUnknownNounTokens(List<SentenceInfo> sentences, HashSet<string>? protectedSurfaces = null,
+                                                   ParserDiagnostics? diagnostics = null)
         {
             foreach (var sentence in sentences)
             {
@@ -2623,6 +2634,9 @@ namespace Jiten.Parser
                                 Text = suffixText, DictionaryForm = suffixText, NormalizedForm = suffixText,
                                 PartOfSpeech = PartOfSpeech.Suffix, Reading = suffixLen == 2 ? "テキナ" : "テキ"
                             };
+                            diagnostics?.LogParserEvent(
+                                "SplitUnknownNounTokens", "split", [word.Text], [baseText, suffixText],
+                                "的-suffix split: full form has no lookup, base does");
                             result.Add((baseWord, position, baseText.Length));
                             result.Add((suffixWord, position + baseText.Length, suffixLen));
                             anySplit = true;
@@ -2635,6 +2649,11 @@ namespace Jiten.Parser
                         word.Text.All(JapaneseTextHelper.IsKanji) &&
                         !(_lookups.TryGetValue(word.Text, out var ids) && ids.Count > 0))
                     {
+                        diagnostics?.LogParserEvent(
+                            "SplitUnknownNounTokens", "split", [word.Text],
+                            word.Text.Select(c => c.ToString()).ToArray(),
+                            "kanji-only noun without lookup split to single chars for recombination");
+
                         for (int j = 0; j < word.Text.Length; j++)
                         {
                             var charText = word.Text[j].ToString();
@@ -2824,6 +2843,13 @@ namespace Jiten.Parser
 
         private static readonly HashSet<string> NounCompoundExclusions = ["おつもり", "ものたち"];
 
+        // ・/＝ between noun tokens (ハーヴェイ・カイテル, サン＝テグジュペリ): Sudachi emits the
+        // separator as its own SupplementarySymbol token, so dictionary compounds containing it can
+        // only be recovered by allowing it as an inner connector. The lookup gate keeps this safe —
+        // ad-hoc enumerations (リンゴ・ミカン) have no dictionary entry and never merge.
+        private static bool IsNameConnectorSymbol(WordInfo w) =>
+            w.PartOfSpeech == PartOfSpeech.SupplementarySymbol && w.Text is "・" or "＝";
+
         private static void CombineNounCompounds(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
@@ -2882,9 +2908,10 @@ namespace Jiten.Parser
                         {
                             var w = sentence.Words[i + j].word;
                             bool isNoun = PosMapper.IsNounForCompounding(w.PartOfSpeech);
-                            bool isNoParticle = w is { PartOfSpeech: PartOfSpeech.Particle, Text: "の" }
-                                                && j > 0 && j < windowSize - 1;
-                            if (!isNoun && !isNoParticle)
+                            bool isInnerConnector = j > 0 && j < windowSize - 1 &&
+                                                    (w is { PartOfSpeech: PartOfSpeech.Particle, Text: "の" } ||
+                                                     IsNameConnectorSymbol(w));
+                            if (!isNoun && !isInnerConnector)
                             {
                                 allValid = false;
                                 break;
@@ -2945,8 +2972,10 @@ namespace Jiten.Parser
                                 for (int aj = 0; aj < altSize; aj++)
                                 {
                                     var aw = sentence.Words[altStart + aj].word;
-                                    if (!PosMapper.IsNounForCompounding(aw.PartOfSpeech)
-                                        && !(aw is { PartOfSpeech: PartOfSpeech.Particle, Text: "の" } && aj > 0 && aj < altSize - 1))
+                                    bool altInnerConnector = aj > 0 && aj < altSize - 1 &&
+                                                             (aw is { PartOfSpeech: PartOfSpeech.Particle, Text: "の" } ||
+                                                              IsNameConnectorSymbol(aw));
+                                    if (!PosMapper.IsNounForCompounding(aw.PartOfSpeech) && !altInnerConnector)
                                     {
                                         altAllValid = false;
                                         break;
@@ -3052,9 +3081,60 @@ namespace Jiten.Parser
         private static void CombineExpressions(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
+                CombineExpressionsInSentence(sentence);
+        }
+
+        /// <summary>
+        /// Chars whose HiraRollingHash katakana fold (c - 0x60) agrees with KanaConverter.ToHiragana,
+        /// so a hash-set miss proves the hiragana lookup probe would also miss. Anything else
+        /// (ヶ/ヵ/ゎ/ヮ, romaji, halfwidth kana, punctuation) must take the slow lookup path.
+        /// </summary>
+        private static bool IsHashFoldSafeChar(char c) =>
+            (c >= 'ぁ' && c <= 'ゔ' && c != 'ゎ') ||  // hiragana ぁ..ゔ except ゎ
+            (c >= 'ァ' && c <= 'ヴ' && c != 'ヮ') ||  // katakana ァ..ヴ except ヮ
+            c == 'ー' || c == '々' ||                     // ー and 々
+            (c >= '一' && c <= '鿿');                     // CJK unified ideographs
+
+        private static bool IsHashFoldSafe(string s)
+        {
+            for (int i = 0; i < s.Length; i++)
+                if (!IsHashFoldSafeChar(s[i]))
+                    return false;
+            return true;
+        }
+
+        private static readonly HashSet<long> ExpressionExclusionHashes = BuildExpressionExclusionHashes();
+
+        private static HashSet<long> BuildExpressionExclusionHashes()
+        {
+            var set = new HashSet<long>();
+            foreach (var text in ExpressionExclusions)
+                set.Add(HiraRollingHash(text));
+            return set;
+        }
+
+        private static void CombineExpressionsInSentence(SentenceInfo sentence)
+        {
             {
                 if (sentence.Words.Count < 3)
-                    continue;
+                    return;
+
+                var words = sentence.Words;
+                var tokenHashes = new long[words.Count];
+                var tokenLens = new int[words.Count];
+                var tokenSafe = new bool[words.Count];
+                for (int w = 0; w < words.Count; w++)
+                {
+                    var text = words[w].word.Text;
+                    tokenHashes[w] = HiraRollingHash(text);
+                    tokenLens[w] = text.Length;
+                    tokenSafe[w] = IsHashFoldSafe(text);
+                }
+
+                // Cumulative window hash/length over tokens i..i+k-1, rebuilt lazily per start index
+                Span<long> cumHash = stackalloc long[9];
+                Span<int> cumLen = stackalloc int[9];
+                Span<bool> cumLenOk = stackalloc bool[9];
 
                 var result = new List<(WordInfo word, int position, int length)>(sentence.Words.Count);
                 int i = 0;
@@ -3065,6 +3145,12 @@ namespace Jiten.Parser
                     string? matchedText = null;
 
                     int maxWindow = Math.Min(8, sentence.Words.Count - i);
+                    int cumBuilt = 0;
+                    int safeUpTo = 0;
+                    cumHash[0] = 0;
+                    cumLen[0] = 0;
+                    cumLenOk[0] = true;
+
                     for (int windowSize = maxWindow; windowSize >= 3; windowSize--)
                     {
                         bool hasParticle = false;
@@ -3086,15 +3172,44 @@ namespace Jiten.Parser
                         if (hasSupplementarySymbol || !hasParticle)
                             continue;
 
-                        var combinedText = ConcatTokenTexts(sentence.Words, i, windowSize);
+                        if (cumBuilt < windowSize)
+                        {
+                            for (int k = cumBuilt + 1; k <= windowSize; k++)
+                            {
+                                int t = i + k - 1;
+                                cumLen[k] = cumLen[k - 1] + tokenLens[t];
+                                bool ok = cumLenOk[k - 1] && cumLen[k] <= _maxLookupKeyLength;
+                                cumLenOk[k] = ok;
+                                cumHash[k] = ok
+                                    ? unchecked(cumHash[k - 1] * _hashBasePowers[tokenLens[t]] + tokenHashes[t])
+                                    : 0;
+                                if (safeUpTo == k - 1 && tokenSafe[t]) safeUpTo = k;
+                            }
 
-                        if (ExpressionExclusions.Contains(combinedText))
-                            continue;
+                            cumBuilt = windowSize;
+                        }
 
-                        bool matched = IsExpressionLookupMatch(combinedText);
+                        bool windowSafe = safeUpTo >= windowSize;
+                        bool surfaceMayMatch = !windowSafe ||
+                                               (cumLenOk[windowSize] &&
+                                                (_compoundHashSet!.Contains(cumHash[windowSize]) ||
+                                                 ExpressionExclusionHashes.Contains(cumHash[windowSize])));
 
-                        if (!matched)
-                            matched = IsMultiWordAdverbMatch(combinedText);
+                        bool matched = false;
+                        string? combinedText = null;
+
+                        if (surfaceMayMatch)
+                        {
+                            combinedText = ConcatTokenTexts(sentence.Words, i, windowSize);
+
+                            if (ExpressionExclusions.Contains(combinedText))
+                                continue;
+
+                            matched = IsExpressionLookupMatch(combinedText);
+
+                            if (!matched)
+                                matched = IsMultiWordAdverbMatch(combinedText);
+                        }
 
                         if (!matched)
                         {
@@ -3103,12 +3218,28 @@ namespace Jiten.Parser
                                 && !string.IsNullOrEmpty(lastWord.DictionaryForm)
                                 && lastWord.DictionaryForm != lastWord.Text)
                             {
-                                var prefix = ConcatTokenTexts(sentence.Words, i, windowSize - 1);
-                                var dictCandidate = prefix + lastWord.DictionaryForm;
-                                if (IsExpressionLookupMatch(dictCandidate))
+                                var dictForm = lastWord.DictionaryForm;
+                                bool dictMayMatch = true;
+                                if (safeUpTo >= windowSize - 1 && IsHashFoldSafe(dictForm))
                                 {
-                                    matched = true;
-                                    combinedText = dictCandidate;
+                                    int dictLen = cumLen[windowSize - 1] + dictForm.Length;
+                                    dictMayMatch = cumLenOk[windowSize - 1] &&
+                                                   dictForm.Length <= _maxLookupKeyLength &&
+                                                   dictLen <= _maxLookupKeyLength &&
+                                                   _compoundHashSet!.Contains(
+                                                       unchecked(cumHash[windowSize - 1] * _hashBasePowers[dictForm.Length] +
+                                                                 HiraRollingHash(dictForm)));
+                                }
+
+                                if (dictMayMatch)
+                                {
+                                    var prefix = ConcatTokenTexts(sentence.Words, i, windowSize - 1);
+                                    var dictCandidate = prefix + dictForm;
+                                    if (IsExpressionLookupMatch(dictCandidate))
+                                    {
+                                        matched = true;
+                                        combinedText = dictCandidate;
+                                    }
                                 }
                             }
                         }
@@ -3126,15 +3257,28 @@ namespace Jiten.Parser
                         var nextW = sentence.Words[i + 1].word;
                         if (nextW is { Text: "と", PartOfSpeech: PartOfSpeech.Particle })
                         {
-                            var adverbCandidate = sentence.Words[i].word.Text + "と";
-                            var adverbHiragana = KanaConverter.ToHiragana(adverbCandidate, convertLongVowelMark: false);
-                            List<int>? advWordIds = null;
-                            if ((_lookups.TryGetValue(adverbCandidate, out advWordIds) || _lookups.TryGetValue(adverbHiragana, out advWordIds))
-                                && advWordIds.Count > 0
-                                && HasAdverbInMeta(advWordIds))
+                            bool advMayMatch = true;
+                            if (tokenSafe[i])
                             {
-                                bestMatch = 2;
-                                matchedText = adverbCandidate;
+                                int advLen = tokenLens[i] + 1;
+                                advMayMatch = tokenLens[i] <= _maxLookupKeyLength &&
+                                              advLen <= _maxLookupKeyLength &&
+                                              _compoundHashSet!.Contains(
+                                                  unchecked(tokenHashes[i] * HASH_BASE + 'と'));
+                            }
+
+                            if (advMayMatch)
+                            {
+                                var adverbCandidate = sentence.Words[i].word.Text + "と";
+                                var adverbHiragana = KanaConverter.ToHiragana(adverbCandidate, convertLongVowelMark: false);
+                                List<int>? advWordIds = null;
+                                if ((_lookups.TryGetValue(adverbCandidate, out advWordIds) || _lookups.TryGetValue(adverbHiragana, out advWordIds))
+                                    && advWordIds.Count > 0
+                                    && HasAdverbInMeta(advWordIds))
+                                {
+                                    bestMatch = 2;
+                                    matchedText = adverbCandidate;
+                                }
                             }
                         }
                     }
@@ -3295,12 +3439,25 @@ namespace Jiten.Parser
             return result;
         }
 
-        private static List<DeckWord> ExcludeFinalMisparses(IEnumerable<DeckWord> words)
+        private static List<DeckWord> ExcludeFinalMisparses(IEnumerable<DeckWord> words, ParserDiagnostics? diagnostics = null)
         {
             if (ExcludedMisparses.Count == 0)
                 return words.ToList();
 
-            return words.Where(w => !ExcludedMisparses.Contains((w.WordId, w.ReadingIndex))).ToList();
+            var kept = new List<DeckWord>();
+            foreach (var w in words)
+            {
+                if (ExcludedMisparses.Contains((w.WordId, w.ReadingIndex)))
+                {
+                    diagnostics?.LogParserEvent(
+                        "ExcludeFinalMisparses", "remove", [w.OriginalText], null,
+                        $"(WordId={w.WordId}, ReadingIndex={w.ReadingIndex}) in ExcludedMisparses");
+                    continue;
+                }
+                kept.Add(w);
+            }
+
+            return kept;
         }
 
         private static string ConcatSlice<T>(List<T> list, int start, int count, Func<T, string> selector)

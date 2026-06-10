@@ -128,11 +128,16 @@ internal sealed class ParserRuntime
             var pos = new PartOfSpeech[posStrings.Length];
             bool hasUk = false;
             bool hasName = false;
+            bool hasTrueName = false;
             for (int i = 0; i < posStrings.Length; i++)
             {
                 pos[i] = posStrings[i].ToPartOfSpeech();
                 if (posStrings[i] == "uk") hasUk = true;
-                if (pos[i] == PartOfSpeech.Name) hasName = true;
+                if (pos[i] == PartOfSpeech.Name)
+                {
+                    hasName = true;
+                    if (posStrings[i] != "unclass") hasTrueName = true;
+                }
             }
 
             int baseScore = ComputePriorityBaseScore(priorities, hasName);
@@ -155,7 +160,8 @@ internal sealed class ParserRuntime
             result[wordId] = new JmDictWordMeta(pos,
                 (short)Math.Clamp(kanaScore, short.MinValue, short.MaxValue),
                 (short)Math.Clamp(kanjiScore, short.MinValue, short.MaxValue),
-                origin);
+                origin,
+                hasTrueName);
         }
 
         return result;

@@ -198,7 +198,6 @@ public partial class MorphologicalAnalyser
         ("いつまで", "も", PartOfSpeech.Adverb),
         ("だから", "こそ", PartOfSpeech.Expression),
         ("では", "あるまい", PartOfSpeech.Expression),
-        ("より", "も", PartOfSpeech.Expression),
         ("に", "於いて", PartOfSpeech.Expression),
     ];
 

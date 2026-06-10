@@ -192,6 +192,34 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Split かって misparsed as the adverb かつて (historical kana surface) → か + って.
+            // かつて right after a verb is implausible; verb+か+って is the quotative question frame
+            // (飲むかってこと "the question of whether to drink").
+            if (i > 0 &&
+                word is { Text: "かって", PartOfSpeech: PartOfSpeech.Adverb, Reading: "カツテ" } &&
+                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
+            {
+                result.Add(new WordInfo
+                {
+                    Text = "か", DictionaryForm = "か", NormalizedForm = "か",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle,
+                    Reading = "カ",
+                    StartOffset = word.StartOffset,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
+                });
+                result.Add(new WordInfo
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    PartOfSpeechSection1 = PartOfSpeechSection.ConjunctionParticle,
+                    Reading = "ッテ",
+                    StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                    EndOffset = word.EndOffset
+                });
+                continue;
+            }
+
             // Check if this is たって/だって as a conjunctive particle following a verb
             if (i > 0 &&
                 word.PartOfSpeech == PartOfSpeech.Particle &&
