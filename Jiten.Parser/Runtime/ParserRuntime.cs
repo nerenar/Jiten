@@ -8,6 +8,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Parser.Data;
 using Jiten.Parser.Data.Redis;
+using Jiten.Parser.Scoring;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Parser.Runtime;
@@ -77,7 +78,25 @@ internal sealed class ParserRuntime
         // works correctly even while the cache is still being populated on a cold start.
         _ = Task.Run(() => PrefillRedisCacheAsync(jmDictCache, contextFactory));
 
-        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies);
+        var kanjiBackedWordIds = BuildKanjiBackedWordIds(lookups);
+
+        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies, kanjiBackedWordIds);
+    }
+
+    /// Word ids reachable from a lookup key containing at least one kanji — i.e. words that have
+    /// a kanji written form. A pure-kana surface matching one of these via reading-key collision
+    /// is only plausible when the word is also usually-kana (see Parser.IsKanaAppropriateId).
+    private static HashSet<int> BuildKanjiBackedWordIds(Dictionary<string, List<int>> lookups)
+    {
+        var result = new HashSet<int>();
+        foreach (var (key, ids) in lookups)
+        {
+            if (!KanaScoringHelpers.ContainsKanji(key)) continue;
+            foreach (var id in ids)
+                result.Add(id);
+        }
+
+        return result;
     }
 
     private static async Task<(Dictionary<string, List<int>> lookups, Dictionary<int, int> wordFrequencyRanks,
@@ -263,7 +282,8 @@ internal sealed class ParserRuntimeSnapshot(
     HashSet<int> nameOnlyWordIds,
     HashSet<int> expressionWordIds,
     Dictionary<int, JmDictWordMeta> wordMeta,
-    Dictionary<int, double> wordObservedFrequencies)
+    Dictionary<int, double> wordObservedFrequencies,
+    HashSet<int> kanjiBackedWordIds)
 {
     public IDeckWordCache DeckWordCache { get; } = deckWordCache;
     public IJmDictCache JmDictCache { get; } = jmDictCache;
@@ -273,4 +293,5 @@ internal sealed class ParserRuntimeSnapshot(
     public HashSet<int> ExpressionWordIds { get; } = expressionWordIds;
     public Dictionary<int, JmDictWordMeta> WordMeta { get; } = wordMeta;
     public Dictionary<int, double> WordObservedFrequencies { get; } = wordObservedFrequencies;
+    public HashSet<int> KanjiBackedWordIds { get; } = kanjiBackedWordIds;
 }

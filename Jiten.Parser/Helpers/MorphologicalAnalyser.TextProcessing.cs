@@ -25,6 +25,9 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<!が)はやる")]
     private static partial Regex HayaruWithoutGaRegex();
 
+    [GeneratedRegex(@"(?<!あ)やつれ")]
+    private static partial Regex YatsureRegex();
+
     [GeneratedRegex(@"(外|家)出(ない|なかった|なく)")]
     private static partial Regex DeNaiCompoundRegex();
 
@@ -131,6 +134,8 @@ public partial class MorphologicalAnalyser
             .Replace("はたまたま", $"は{_stopToken}たまたま")
             .Replace("悶え苦しむ", $"悶え{_stopToken}苦しむ")
             .Replace("悶え苦しん", $"悶え{_stopToken}苦しん")
+            // すぐそこ (user_dic) must not eat the すぐ of もうすぐ
+            .Replace("もうすぐそこ", $"もうすぐ{_stopToken}そこ")
             ;
 
         text = text.Replace('頚', '頸');
@@ -139,6 +144,15 @@ public partial class MorphologicalAnalyser
 
         text = DeNaiCompoundRegex().Replace(text, $"$1{_stopToken}出$2");
         text = text.Replace("届出さ", $"届{_stopToken}出さ");
+        // Sudachi's archaic 射出す(いだす) eats the noun 射出 before される/して
+        text = text.Replace("射出さ", $"射出{_stopToken}さ");
+        text = text.Replace("射出し", $"射出{_stopToken}し");
+        // Boundary anchors so connection costs can't drag these user_dic entries apart:
+        // や+連れて行く must not eat やつれ (操れ=あやつれ excluded), 小木+曽って must not eat
+        // 小木曽, 耳にする+する must not eat するすると
+        text = YatsureRegex().Replace(text, $"{_stopToken}やつれ");
+        text = text.Replace("小木曽", $"小木曽{_stopToken}");
+        text = text.Replace("するすると", $"{_stopToken}するすると");
         text = text.Replace("ぶっち切", "ぶち切");
         text = text.Replace("ぶっ壊れ", $"ぶっ{_stopToken}壊れ");
         text = EmphaticTsuRegex().Replace(text, $"{_stopToken}$1");

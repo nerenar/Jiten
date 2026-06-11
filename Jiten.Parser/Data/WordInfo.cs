@@ -25,6 +25,12 @@ public class WordInfo
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
+    /// Set when Sudachi originally tagged this pure-kana token as an interjection/filler.
+    /// POS-relaxed lookup fallbacks must not let such exclamations match kanji-backed words
+    /// through their reading keys (イエーイ → 遺影/家居). Survives the POS rewrites that the
+    /// ProcessWord escalation chain performs.
+    public bool IsKanaExclamation { get; set; }
+
     /// Sudachi lattice segmentation margin: extra cost of the cheapest competing lattice path
     /// crossing one of this token's boundaries (clamped to 99999 = no competitor).
     /// Null when margin output was not requested. Low values = uncertain segmentation.
@@ -54,6 +60,7 @@ public class WordInfo
         IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;
         SudachiBoundaryMargin = other.SudachiBoundaryMargin;
+        IsKanaExclamation = other.IsKanaExclamation;
     }
 
     public WordInfo(string sudachiLine)

@@ -1484,6 +1484,45 @@ public class MorphologicalAnalyserTests
             new[] { "ヴァレリア", "様", "に", "言わせれば", "絶世の美女", "らしい" }];
         // そりゃそうだ + stranded ろう reattaches as the presumptive form
         yield return ["そりゃそうだろう", new[] { "そりゃそうだろう" }];
+
+        // === kana-appropriateness gate: hiragana shards must not merge into reading keys of rare kanji words ===
+        // はい+そう must not merge into 配送
+        yield return ["「はいそうですか」", new[] { "はい", "そう", "ですか" }];
+        yield return ["素直にはいそうですかと告げ口できなくなってしまう",
+            new[] { "素直", "に", "はい", "そう", "ですか", "と", "告げ口", "できなく", "なってしまう" }];
+        // どう+なん must not merge into 童男
+        yield return ["「……詩乃は、どうなんだろう」", new[] { "詩乃", "は", "どう", "なん", "だろう" }];
+
+        // 意地でも merges as a lexicalized adverb; emphatic ぞ survives before a vocative
+        yield return ["意地でもここを出るぞ無名！", new[] { "意地でも", "ここ", "を", "出る", "ぞ", "無名" }];
+
+        // === shred join-rescue: dropped kana fragments rejoin their neighbours ===
+        yield return ["微笑みあう私たち。", new[] { "微笑み", "あう", "私たち" }];
+        yield return ["分かっているくせに、すっとぼける。", new[] { "分かっている", "くせに", "すっとぼける" }];
+        yield return ["１つまねたくらいでいい気になるな", new[] { "１つ", "まねた", "くらい", "で", "いい気になる", "な" }];
+
+        // にせよ recombines after any verb, not just なる
+        yield return ["あんたの恋の結末がどうなるにせよ――振られるにせよ、成就するにせよ、現状ほど悪くないさ。",
+            new[] { "あんた", "の", "恋", "の", "結末", "が", "どう", "なる", "にせよ", "振られる", "にせよ",
+                    "成就する", "にせよ", "現状", "ほど", "悪くない", "さ" }];
+        // どっ+か/から recombine into the colloquial adverbs
+        yield return ["お前こそどっから入った", new[] { "お前", "こそ", "どっから", "入った" }];
+        yield return ["どっか言ってちゃえ", new[] { "どっか", "言ってちゃえ" }];
+        // か+い must not steal the 居る stem from いない
+        yield return ["彼の声が聞こえているのかいないのか。",
+            new[] { "彼", "の", "声", "が", "聞こえている", "の", "か", "いない", "の", "か" }];
+        // trailing expressive small vowel must not block the lookup
+        yield return ["……なんちゃってぇ！", new[] { "なんちゃってぇ" }];
+
+        // === user_dic / preprocess lattice fixes ===
+        // すぐそこ (user_dic) must not eat the すぐ of もうすぐ
+        yield return ["もうすぐそこまでドアが近づいてきている",
+            new[] { "もうすぐ", "そこ", "まで", "ドア", "が", "近づいてきている" }];
+        // 小木曽 is a surname; Sudachi split it as 小木+曽って(嘗て)
+        yield return ["「…そいや、小木曽って依緒と同じクラスだよな？」",
+            new[] { "そい", "や", "小木曽", "って", "依緒", "と", "同じ", "クラス", "だ", "よ", "な" }];
+        // 耳にする (user_dic expression) must not eat the onomatopoeia するすると
+        yield return ["耳にするすると入り込んで", new[] { "耳", "に", "するする", "と", "入り込んで" }];
     }
 
     [Theory]

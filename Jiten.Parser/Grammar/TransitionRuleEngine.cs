@@ -118,6 +118,9 @@ internal static class TransitionRuleEngine
                 MatchCondition.PrevIsAuxiliaryOrParticle =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle,
 
+                MatchCondition.IsNotEmphaticSfp =>
+                    w.Current.Text is not ("ぞ" or "ぜ"),
+
                 MatchCondition.PrevExists =>
                     w.Prev != null,
 
@@ -296,7 +299,8 @@ internal static class TransitionRuleEngine
         bool CandidateHasHonorificRegister = false,
         // Defaults to true: the CouldAnySoftRuleApply prefilter has no candidate, so
         // deconjugation-dependent rules must be assumed applicable there.
-        bool CandidateHasVolitionalChainVal = true)
+        bool CandidateHasVolitionalChainVal = true,
+        bool CandidateIsInfinitiveVal = true)
     {
         public static ConditionContext FromScoringWindow(ScoringWindow w) => new(
             w.Candidate.Word.CachedPOSMask,
@@ -307,7 +311,9 @@ internal static class TransitionRuleEngine
             TransitionRuleSets.HonorificSuffixes.Contains(w.Candidate.Form.Text) &&
             PosMask.Has(w.Candidate.Word.CachedPOSMask, PosMask.SuffixGroup) &&
             w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains),
-            w.Candidate.DeconjForm?.Process.Contains("volitional") == true);
+            w.Candidate.DeconjForm?.Process.Contains("volitional") == true,
+            w.Candidate.DeconjForm?.Process is { Count: > 0 } process
+                && process[^1] is "(infinitive)" or "(unstressed infinitive)" or "imperative");
     }
 
     private static bool MatchesAll(ConditionContext ctx, ScoringCondition[] conditions)
@@ -503,6 +509,9 @@ internal static class TransitionRuleEngine
 
                 ScoringCondition.NextIsVolitionalToVerb =>
                     ctx.NextText != null && TransitionRuleSets.VolitionalToVerbForms.Contains(ctx.NextText),
+
+                ScoringCondition.CandidateIsInfinitiveOrImperative =>
+                    ctx.CandidateIsInfinitiveVal,
 
                 _ => false
             };

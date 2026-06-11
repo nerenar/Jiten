@@ -177,6 +177,19 @@ internal static class TransitionRuleSets
             [ScoringCondition.PrevIsNoParticle],
             20),
 
+        // A 連用形 cannot directly follow the genitive の (子供たちの群れ is the noun 群れ,
+        // never 群れる's infinitive); after a bare noun it's nearly as implausible
+        // (群れ、群れ、群れ enumerations) — real compounds are fused upstream.
+        new("genitive-infinitive-penalty",
+            [ScoringCondition.CandidateIsVerb, ScoringCondition.CandidateIsInfinitiveOrImperative],
+            [ScoringCondition.PrevIsNoParticle],
+            -60),
+
+        new("noun-adjacent-infinitive-penalty",
+            [ScoringCondition.CandidateIsVerb, ScoringCondition.CandidateIsInfinitiveOrImperative],
+            [ScoringCondition.PrevIsNounLike],
+            -70),
+
         new("na-adj-no-connector-penalty",
             [ScoringCondition.CandidateIsNaAdj, ScoringCondition.CandidateIsNotAdverb],
             [ScoringCondition.NextIsNotNaAdjConnector],
@@ -320,10 +333,12 @@ internal static class TransitionRuleSets
 
         // Phase 4: sentence-final particles (よ/ね/な/ぞ/ぜ/わ) must be near clause end
         // Exception: SFP after an auxiliary or particle (e.g. だな, はね) is valid
+        // Emphatic ぞ/ぜ are excluded: they never merge into a longer expression, and vocatives
+        // follow them directly (出るぞ無名！) — merging would just delete the particle.
         new(
             Id: "sfp-must-be-near-clause-end",
             Severity: RuleSeverity.Hard,
-            WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.NextIsContentWord, MatchCondition.NextIsNotQuotative],
+            WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.IsNotEmphaticSfp, MatchCondition.NextIsContentWord, MatchCondition.NextIsNotQuotative],
             ValidIf: [MatchCondition.PrevIsAuxiliaryOrParticle],
             OnViolation: ViolationAction.MergeWithPrevious),
 

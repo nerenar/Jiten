@@ -77,6 +77,9 @@ public partial class MorphologicalAnalyser
             var prev = wordInfos;
             wordInfos = TrackStage(stage, wordInfos, diagnostics);
 
+            if (Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 })
+                Console.WriteLine($"[stage] {stage.Name}: {string.Join("|", wordInfos.Select(w => w.Text))}");
+
             if (!ReferenceEquals(prev, wordInfos))
                 features = TokenFeatureScanner.Scan(wordInfos);
 

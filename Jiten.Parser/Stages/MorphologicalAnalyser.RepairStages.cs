@@ -418,6 +418,45 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Pattern: [verb] + [あ interjection] + [う interjection] → reciprocal auxiliary あう (合う)
+            // Sudachi shreds kana 〜あう compounds into interjections (微笑みあう → 微笑み + あ + う).
+            if (current is { PartOfSpeech: PartOfSpeech.Interjection, Text: "う" } &&
+                result.Count >= 2 &&
+                prev is { PartOfSpeech: PartOfSpeech.Interjection, Text: "あ" } &&
+                result[^2].PartOfSpeech == PartOfSpeech.Verb)
+            {
+                result[^1] = new WordInfo(prev)
+                {
+                    Text = "あう", DictionaryForm = "あう", NormalizedForm = "合う", Reading = "アウ",
+                    PartOfSpeech = PartOfSpeech.Verb,
+                    PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant,
+                    EndOffset = current.EndOffset
+                };
+                changed = true;
+                continue;
+            }
+
+            // Pattern: [short っ-final kana adverb] + [verb] → intensifying-prefix verb when the fused
+            // dictionary form is a real kana word (すっ + とぼける → すっとぼける).
+            if (current.PartOfSpeech == PartOfSpeech.Verb &&
+                prev.PartOfSpeech is PartOfSpeech.Adverb or PartOfSpeech.Prefix &&
+                prev.Text.Length == 2 && prev.Text[^1] == 'っ' &&
+                prev.Text[0] >= '぀' && prev.Text[0] <= 'ゟ' &&
+                current.DictionaryForm.Length > 0 &&
+                (HasKanaAppropriateCompoundLookup ?? HasCompoundLookup)?.Invoke(prev.Text + current.DictionaryForm) == true)
+            {
+                result[^1] = new WordInfo(current)
+                {
+                    Text = prev.Text + current.Text,
+                    DictionaryForm = prev.Text + current.DictionaryForm,
+                    NormalizedForm = prev.Text + current.DictionaryForm,
+                    Reading = prev.Reading + current.Reading,
+                    StartOffset = prev.StartOffset,
+                };
+                changed = true;
+                continue;
+            }
+
             // Pattern 0: [prefix/suffix] + [る OOV] + [ー symbol]
             // Sudachi splits る-verbs when followed by expressive elongation ー
             // e.g., 来るー → 来(prefix) + る(OOV noun) + ー(symbol)
@@ -739,6 +778,26 @@ public partial class MorphologicalAnalyser
                 result ??= CopyAccumulatorUpTo(source, i);
                 bool combined = false;
 
+                // し(為る・連用形)+ん+だ/で is ungrammatical — explanatory のだ attaches to the
+                // 連体形 (するんだ), never the 連用形 — so kana しんだ here is 死んだ
+                // (きみのなかまもすべてしんだ).
+                if (i + 1 < source.Count && source[i + 1].Text is "だ" or "で"
+                    && result.Count > 0
+                    && result[^1] is { Text: "し", PartOfSpeech: PartOfSpeech.Verb } prevShi
+                    && prevShi.DictionaryForm is "する" or "為る")
+                {
+                    result[^1] = new WordInfo(prevShi)
+                    {
+                        Text = "しん" + source[i + 1].Text,
+                        DictionaryForm = "死ぬ", NormalizedForm = "死ぬ",
+                        Reading = "シン" + source[i + 1].Reading,
+                        EndOffset = source[i + 1].EndOffset
+                    };
+                    changed = true;
+                    i++;
+                    continue;
+                }
+
                 // Try んだ/んで pattern (past/te-form) - only for verb conjugation, not explanatory ん
                 // Skip when ん is explanatory particle (DictionaryForm = "の" or "ん") or negative auxiliary (DictionaryForm = "ぬ")
                 if (i + 1 < source.Count && source[i + 1].Text is "だ" or "で" &&
@@ -852,6 +911,40 @@ public partial class MorphologicalAnalyser
             {
                 newList.Add(new WordInfo { Text = "ノ", DictionaryForm = "の", NormalizedForm = "の", PartOfSpeech = PartOfSpeech.Particle, Reading = "ノ", StartOffset = w1.StartOffset, EndOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1 });
                 newList.Add(new WordInfo { Text = "ヨ", DictionaryForm = "よ", NormalizedForm = "よ", PartOfSpeech = PartOfSpeech.Particle, Reading = "ヨ", StartOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1, EndOffset = w1.EndOffset });
+                i++;
+                continue;
+            }
+
+            // A case-particle が cannot follow conjunctive から — the kana verb がなる "to yell"
+            // (2101910, uk) is the only grammatical reading (頼むからがなるな). No dictionary
+            // entry: a がなる row would steal ベルが鳴る-type splits lattice-wide.
+            if (w1 is { Text: "が", PartOfSpeech: PartOfSpeech.Particle }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].DictionaryForm is "成る" or "なる"
+                && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Verb
+                && newList.Count > 0 && newList[^1].Text.EndsWith("から"))
+            {
+                var naru = wordInfos[i + 1];
+                newList.Add(new WordInfo(naru)
+                {
+                    Text = "が" + naru.Text,
+                    DictionaryForm = "がなる",
+                    NormalizedForm = "がなる",
+                    Reading = "ガ" + naru.Reading,
+                    StartOffset = w1.StartOffset,
+                });
+                i += 2;
+                continue;
+            }
+
+            // Standalone ひと tagged with Sudachi's 一-lexeme is almost always 人 — the 一 lemma
+            // otherwise feeds the scorer a +50 lemma bonus toward the bound-prefix entry
+            // (しょうがないひと must be 人, not 一). Genuine prefix usages (ひと月) are tagged
+            // 接頭辞 or kept fused by Sudachi.
+            if (w1 is { Text: "ひと", PartOfSpeech: PartOfSpeech.Noun }
+                && (w1.DictionaryForm == "一" || w1.NormalizedForm == "一"))
+            {
+                newList.Add(new WordInfo(w1) { DictionaryForm = "人", NormalizedForm = "人" });
                 i++;
                 continue;
             }
@@ -1619,9 +1712,16 @@ public partial class MorphologicalAnalyser
                         (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                          wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun));
 
+                    // か+い stays split when the い is the 居る stem claimed by a following
+                    // auxiliary (聞こえているのか|いない|のか) — merging would steal the verb stem.
+                    bool kaIBlocked = w1.Text == "か" && i + 2 < wordInfos.Count
+                        && w2.DictionaryForm is "居る" or "いる"
+                        && wordInfos[i + 2].Text is "ない" or "なかった" or "ます" or "た" or "て";
+
                     foreach (var sc in sc2Candidates)
                     {
                         if (sc.Second == "べき" && suBekiBlocked) continue;
+                        if (sc.Second == "い" && kaIBlocked) continue;
                         if (w2.Text == sc.Second
                             && !(sc.Pos == PartOfSpeech.Verb && w1.PartOfSpeech == PartOfSpeech.Conjunction))
                         {
@@ -2323,6 +2423,10 @@ public partial class MorphologicalAnalyser
 
         var hasNonNameLookup = HasNonNameCompoundLookup ?? HasCompoundLookup;
         var hasPrioritizedLookup = HasPrioritizedNonNameCompoundLookup ?? hasNonNameLookup;
+        // The merged surface is pure hiragana, so the lookup hit must be a word plausibly written
+        // in kana — otherwise reading-key collisions merge shards into rare kanji words
+        // (はい+そう → 配送, どう+なん → 童男, うん+ま → ウンマ).
+        var hasKanaAppropriateLookup = HasKanaAppropriateCompoundLookup ?? hasNonNameLookup;
 
         var deconjugator = Deconjugator.Instance;
         var result = new List<WordInfo>(wordInfos.Count);
@@ -2382,7 +2486,7 @@ public partial class MorphologicalAnalyser
                     _ => wordInfos[i].Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text + wordInfos[i + 3].Text,
                 };
 
-                if (hasNonNameLookup(combinedText))
+                if (hasKanaAppropriateLookup(combinedText))
                 {
                     result.Add(BuildMergedHiraganaToken(wordInfos, i, spanLen, combinedText, combinedText, PartOfSpeech.CommonNoun));
                     i += spanLen;

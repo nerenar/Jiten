@@ -39,6 +39,7 @@ namespace Jiten.Parser
         private static Dictionary<int, int> _wordFrequencyRanks = null!;
         private static HashSet<int> _nameOnlyWordIds = null!;
         private static HashSet<int> _expressionWordIds = null!;
+        private static HashSet<int> _kanjiBackedWordIds = null!;
         internal static Dictionary<int, Data.JmDictWordMeta> WordMeta = null!;
 
         private static int _maxLookupKeyLength;
@@ -81,7 +82,8 @@ namespace Jiten.Parser
             (1246880, 1), (1246880, 2), (1461140, 8), (1461140, 6), (2029700, 0), (2594040, 2),
             (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1),
             (1533340,3), (5050910,0), (2406530,0), (1243650,2), (1158500,1), (2759530,0),
-            (1689970,3), (5257597,0), (1446210, 2), (2416380,1), (1244220,1)
+            (1689970,3), (5257597,0), (1446210, 2), (2416380,1), (1244220,1),
+            (1578010,2)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -101,6 +103,7 @@ namespace Jiten.Parser
             WordFrequencyPriors.Current = runtime.WordObservedFrequencies;
             _nameOnlyWordIds = runtime.NameOnlyWordIds;
             _expressionWordIds = runtime.ExpressionWordIds;
+            _kanjiBackedWordIds = runtime.KanjiBackedWordIds;
             WordMeta = runtime.WordMeta;
             if (_compoundHashSet == null)
                 BuildCompoundHashSet();
@@ -156,25 +159,40 @@ namespace Jiten.Parser
         {
             Stopwatch? sw = timings != null ? Stopwatch.StartNew() : null;
 
+            void DbgDump(string label)
+            {
+                if (Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 })
+                    Console.WriteLine($"[prep] {label}: " + string.Join("|", sentences.SelectMany(s => s.Words).Select(w => w.word.Text)));
+            }
+
             CleanSentenceTokens(sentences);
+            DbgDump("CleanSentenceTokens");
             SplitSuruInflectionsForNounCompounding(sentences);
             SplitUnknownNounTokens(sentences, protectedSurfaces, diagnostics);
+            DbgDump("SplitUnknownNounTokens");
 
             if (sw != null) { timings!.PrepOtherMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
             CombineNounCompounds(sentences);
+            DbgDump("CombineNounCompounds");
 
             if (sw != null) { timings!.PrepNounCompoundsMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
             CombineCompounds(sentences);
+            DbgDump("CombineCompounds");
 
             if (sw != null) { timings!.PrepCompoundsMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
             CombineExpressions(sentences);
+            DbgDump("CombineExpressions");
+
+            CombineLexicalAdverbs(sentences);
+            DbgDump("CombineLexicalAdverbs");
 
             if (sw != null) { timings!.PrepExpressionsMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
             RepairLongVowels(sentences);
+            DbgDump("RepairLongVowels");
 
             if (sw != null) { timings!.PrepOtherMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
@@ -706,7 +724,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
@@ -839,7 +857,7 @@ namespace Jiten.Parser
             timer.Start();
 
             // Batch morphological analysis
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup };
             var cleanedOriginals = new List<string>();
             var rawCharCounts = new List<int>();
             var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
@@ -1013,7 +1031,7 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup };
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
@@ -1181,6 +1199,12 @@ namespace Jiten.Parser
                 DeckWord? processedWord = null;
                 int? resolvedMargin = null;
                 List<FormCandidate>? firstPassCandidates = null;
+
+                // Captured before the escalation chain rewrites the POS — gates POS-relaxed lookups
+                // for exclamations throughout this token's resolution.
+                wordData.wordInfo.IsKanaExclamation =
+                    wordData.wordInfo.PartOfSpeech is PartOfSpeech.Interjection or PartOfSpeech.Filler
+                    && WanaKana.IsKana(wordData.wordInfo.Text);
                 bool isProcessed = false;
                 int attemptCount = 0;
                 const int maxAttempts = 3; // Limit how many attempts we make to prevent infinite loops
@@ -1478,6 +1502,36 @@ namespace Jiten.Parser
                             }
                         }
 
+                        // Final safety net for exclamation tokens: whatever path produced the match
+                        // (relaxed POS, escalation retries, DVOA dictionary-form fallback), an
+                        // interjection must not resolve to a kanji-backed word through its reading key
+                        // unless that word is directly attested for the surface (イエイ must never
+                        // become 遺影; いえ → いえ "no" stays, あなた → 貴方's kana form stays).
+                        if (processedWord != null && wordData.wordInfo.IsKanaExclamation
+                            && !IsKanaAppropriateId(processedWord.WordId)
+                            && !(_lookups.TryGetValue(wordData.wordInfo.Text, out var exclDirectIds)
+                                 && exclDirectIds.Contains(processedWord.WordId)))
+                        {
+                            processedWord = null;
+                            resolvedMargin = null;
+                            firstPassCandidates = null;
+                        }
+
+                        // Same idea for matches the fallback text mutations invented on other pure-kana
+                        // tokens: stripping ー/っ/small kana from ひゅーん until 庇陰's reading key bites
+                        // is not a resolution. The original surface must attest the word, or the word
+                        // must be one plausibly written in kana.
+                        if (processedWord != null && !wordData.wordInfo.IsKanaExclamation
+                            && wordData.wordInfo.Text != baseWord && WanaKana.IsKana(baseWord)
+                            && !IsKanaAppropriateId(processedWord.WordId)
+                            && !(_lookups.TryGetValue(baseWord, out var baseDirectIds)
+                                 && baseDirectIds.Contains(processedWord.WordId)))
+                        {
+                            processedWord = null;
+                            resolvedMargin = null;
+                            firstPassCandidates = null;
+                        }
+
                         if (processedWord != null)
                         {
                             if (wordData.wordInfo.Text != baseWord)
@@ -1490,9 +1544,11 @@ namespace Jiten.Parser
                             break;
                         }
 
-                        // We haven't found a match, let's try to remove the last character if it's a っ, a ー or a duplicate
+                        // We haven't found a match, let's try to remove the last character if it's a っ, a ー,
+                        // an expressive small vowel (なんちゃってぇ) or a duplicate
                         if (wordData.wordInfo.Text.Length > 2 &&
-                            (wordData.wordInfo.Text[^1] == 'っ' || wordData.wordInfo.Text[^1] == 'ー' ||
+                            (wordData.wordInfo.Text[^1] is 'っ' or 'ー' or 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ'
+                                 or 'ァ' or 'ィ' or 'ゥ' or 'ェ' or 'ォ' ||
                              wordData.wordInfo.Text[^2] == wordData.wordInfo.Text[^1]))
                         {
                             wordData.wordInfo.Text = wordData.wordInfo.Text[..^1];
@@ -1631,8 +1687,14 @@ namespace Jiten.Parser
             }
             else
             {
+                // For pure-kana surfaces, candidates reachable only through long-vowel/kana rewrites
+                // must be kana-appropriate words — otherwise いえー/イエーイ resolve to 遺影 via its
+                // reading key. Kanji-containing surfaces are unaffected.
+                Func<int, bool>? normalizedTierGate = WanaKana.IsKana(text) ? IsKanaAppropriateId : null;
+
                 var collected = LookupCandidateCollector.CollectIds(_lookups, text,
-                                                                    includeKanaNormalized: true, includeLongVowelStripped: true);
+                                                                    includeKanaNormalized: true, includeLongVowelStripped: true,
+                                                                    normalizedTierGate: normalizedTierGate);
 
                 // Also look up Sudachi's NormalizedForm when it differs from the surface (e.g., チックショー → チクショー for 畜生)
                 if (!string.IsNullOrEmpty(wordData.wordInfo.NormalizedForm) &&
@@ -1641,7 +1703,8 @@ namespace Jiten.Parser
                 {
                     var normalizedCollected = LookupCandidateCollector.CollectIds(_lookups, wordData.wordInfo.NormalizedForm,
                                                                                   includeKanaNormalized: true,
-                                                                                  includeLongVowelStripped: true);
+                                                                                  includeLongVowelStripped: true,
+                                                                                  normalizedTierGate: normalizedTierGate);
                     if (normalizedCollected.Count > 0)
                         collected = collected.Concat(normalizedCollected).Distinct().ToList();
                 }
@@ -1775,9 +1838,17 @@ namespace Jiten.Parser
                 {
                     // POS-relaxed fallback: strict POS matching filtered out all candidates.
                     // Allow any non-Name entry through so the scoring system gets a chance.
+                    // Exception: a pure-kana interjection/filler relaxing into a kanji-backed word
+                    // is a reading-key collision, not a real match (イエーイ/イエイ → 遺影).
+                    bool requireKanaAppropriate = wordData.wordInfo.IsKanaExclamation;
                     foreach (var id in candidates)
                     {
                         if (!wordCache.TryGetValue(id, out var word)) continue;
+                        // Exact-surface forms are real written forms, not collisions — keep them even
+                        // when not kana-appropriate (あなた → 貴方's kana form, ファルマ → name entry).
+                        if (requireKanaAppropriate && !IsKanaAppropriateId(id) &&
+                            !word.Forms.Any(f => f.Text == text))
+                            continue;
                         var posList = word.CachedPOS;
                         if (posList.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown)))
                             compatibleNonNameMatches.Add(word);
@@ -1789,10 +1860,21 @@ namespace Jiten.Parser
                 else
                 {
                     var lastResortCandidates = new List<JmDictWord>();
+                    bool surfaceIsHiragana = WanaKana.IsHiragana(text);
                     foreach (var id in candidates)
                     {
-                        if (wordCache.TryGetValue(id, out var word))
-                            lastResortCandidates.Add(word);
+                        if (!wordCache.TryGetValue(id, out var word))
+                            continue;
+
+                        // A pure-hiragana surface reaching a name entry only through the katakana fold
+                        // is onomatopoeia/colloquial speech, not a name (ひゅーん must not become ヒューン).
+                        // Names genuinely written in hiragana keep an exact-surface form and stay eligible.
+                        if (surfaceIsHiragana &&
+                            word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown) &&
+                            !word.Forms.Any(f => f.Text == text))
+                            continue;
+
+                        lastResortCandidates.Add(word);
                     }
 
                     if (lastResortCandidates.Count > 0)
@@ -2360,6 +2442,98 @@ namespace Jiten.Parser
             }
         }
 
+        // X+に/X+でも pairs lexicalized as adverbs in JMDict whose X is not a strong standalone
+        // word. Hyper-common standalone nouns stay split even when a combined entry exists
+        // (本当に, 絶対に, 外に, ように) — that's the project segmentation convention — so these
+        // are curated rather than derived from entry existence.
+        private static readonly HashSet<string> LexicalizedAdverbPairs = ["フルに", "無性に", "意地でも"];
+
+        /// Merges X+に into a single token when the combined surface is a lexicalized adverb:
+        /// any X的+に (always adverbial, JMDict entry required) or a curated pair (フルに, 無性に,
+        /// 意地でも). Bare entry existence is deliberately NOT enough — それに/ことに/本当に would
+        /// merge over genuine case-particle uses.
+        private static void CombineLexicalAdverbs(List<SentenceInfo> sentences)
+        {
+            foreach (var sentence in sentences)
+            {
+                var words = sentence.Words;
+                if (words.Count < 2)
+                    continue;
+
+                var result = new List<(WordInfo word, int position, int length)>(words.Count);
+                bool changed = false;
+
+                for (int i = 0; i < words.Count; i++)
+                {
+                    var (word, _, _) = words[i];
+
+                    if (i + 1 < words.Count
+                        && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                            or PartOfSpeech.NaAdjective or PartOfSpeech.NominalAdjective)
+                    {
+                        var next = words[i + 1];
+                        bool isNiPair = next.word.Text == "に"
+                                        && next.word.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
+                                        && word.Text.EndsWith('的');
+                        bool isCuratedPair = next.word.Text is "に" or "でも"
+                                             && LexicalizedAdverbPairs.Contains(word.Text + next.word.Text);
+
+                        if ((isNiPair || isCuratedPair) && HasLexicalAdverbEntry(word.Text + next.word.Text))
+                        {
+                            var combinedText = word.Text + next.word.Text;
+                            var merged = new WordInfo(word)
+                            {
+                                Text = combinedText,
+                                DictionaryForm = combinedText,
+                                NormalizedForm = combinedText,
+                                Reading = word.Reading + next.word.Reading,
+                                PartOfSpeech = PartOfSpeech.Adverb,
+                                EndOffset = next.word.EndOffset,
+                            };
+
+                            result.Add((merged, words[i].position, words[i].length + next.length));
+                            changed = true;
+                            i++;
+                            continue;
+                        }
+                    }
+
+                    result.Add(words[i]);
+                }
+
+                if (changed)
+                    sentence.Words = result;
+            }
+        }
+
+        private static bool HasLexicalAdverbEntry(string text)
+        {
+            if (HasAdverbIds(text))
+                return true;
+            try
+            {
+                var hira = KanaConverter.ToNormalizedHiragana(text);
+                return hira != text && HasAdverbIds(hira);
+            }
+            catch
+            {
+                return false;
+            }
+
+            static bool HasAdverbIds(string key)
+            {
+                if (!_lookups.TryGetValue(key, out var ids)) return false;
+                foreach (var id in ids)
+                {
+                    if (_nameOnlyWordIds.Contains(id)) continue;
+                    if (WordMeta.TryGetValue(id, out var meta) && meta.Pos.Contains(PartOfSpeech.Adverb))
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
         private static void RepairLongVowels(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
@@ -2642,7 +2816,7 @@ namespace Jiten.Parser
 
             foreach (var form in Deconjugator.Instance.Deconjugate(hira))
             {
-                if (form.Tags.Any(t => t == "adj-i") && form.Text == hira + "い" && TryLongVowelLookup(form.Text))
+                if (form.Tags.Any(t => t == "adj-i") && form.Text == hira + "い" && HasIAdjectiveLookup(form.Text))
                 {
                     word.Text = stem + "い";
                     word.DictionaryForm = stem + "い";
@@ -2651,6 +2825,18 @@ namespace Jiten.Parser
                 }
             }
 
+            return false;
+        }
+
+        /// The slang-elongation rescue (ヤバー→ヤバい) claims the token is an i-adjective, so the
+        /// lookup target must actually be one — a bare existence check lets noun reading-keys
+        /// hijack interjections (いえー → いえい → 遺影).
+        private static bool HasIAdjectiveLookup(string text)
+        {
+            if (!_lookups.TryGetValue(text, out var ids)) return false;
+            foreach (var id in ids)
+                if (WordMeta.TryGetValue(id, out var meta) && meta.Pos.Contains(PartOfSpeech.IAdjective))
+                    return true;
             return false;
         }
 
@@ -2701,6 +2887,29 @@ namespace Jiten.Parser
                         ) ||
                         word.PartOfSpeech == PartOfSpeech.Symbol && isSingleKanaStutter)
                     {
+                        // Join-rescue before deleting: the shard may be the first mora of a real word
+                        // that Sudachi cut off (１つ|ま|ねた → ま+ねた = 真似た). Joining wins when the
+                        // combined surface deconjugates to a kana-appropriate verb/adjective.
+                        if (result.Count > 0 && TryJoinShredWithFollowing(word, result[^1].word, out var joinedDictForm))
+                        {
+                            var following = result[^1];
+                            var joined = new WordInfo(following.word)
+                            {
+                                Text = word.Text + following.word.Text,
+                                DictionaryForm = joinedDictForm,
+                                NormalizedForm = joinedDictForm,
+                                Reading = word.Reading + following.word.Reading,
+                                PartOfSpeech = PartOfSpeech.Verb,
+                                StartOffset = word.StartOffset >= 0 ? word.StartOffset : following.word.StartOffset,
+                            };
+                            result[^1] = (joined, words[i].position, words[i].length + following.length);
+                            diagnostics?.LogParserEvent(
+                                "FilterOrphanedMisparses", "join", [word.Text, following.word.Text],
+                                [joined.Text], $"shred joined to following token (dict form {joinedDictForm})");
+                            anyFiltered = true;
+                            continue;
+                        }
+
                         diagnostics?.LogParserEvent(
                             "FilterOrphanedMisparses", "remove", [word.Text], null,
                             shouldFilter ? "in MisparsesRemove list" : "single-kana stutter / noise noun");
@@ -2717,6 +2926,51 @@ namespace Jiten.Parser
                     sentence.Words = result;
                 }
             }
+        }
+
+        /// A dropped kana shard + its following kana token form a rescuable word when the joined
+        /// surface deconjugates (with at least one real conjugation step) to a kana-appropriate
+        /// verb or adjective in the lookups (まねた → 真似る uk). Nouns are excluded — joining into
+        /// bare noun reading-keys would recreate the collision class this gate exists to prevent.
+        private static bool TryJoinShredWithFollowing(WordInfo shred, WordInfo following, out string dictForm)
+        {
+            dictForm = "";
+
+            if (!WanaKana.IsKana(shred.Text) || following.Text.Length == 0 || !WanaKana.IsKana(following.Text))
+                return false;
+            if (following.PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
+                or PartOfSpeech.Particle or PartOfSpeech.Auxiliary or PartOfSpeech.BlankSpace)
+                return false;
+
+            string joined;
+            try
+            {
+                joined = KanaConverter.ToHiragana(shred.Text + following.Text, convertLongVowelMark: false);
+            }
+            catch
+            {
+                return false;
+            }
+
+            foreach (var form in Deconjugator.Instance.Deconjugate(joined))
+            {
+                if (form.Process.Count == 0 || form.Tags.Count == 0) continue;
+                var lastTag = form.Tags[^1];
+                if (!lastTag.StartsWith('v') && lastTag != "adj-i") continue;
+                if (!_lookups.TryGetValue(form.Text, out var ids)) continue;
+                // The conjugation-step requirement above is already a strong structural signal,
+                // so common (prioritized) verbs qualify alongside usually-kana ones (まねた →
+                // 真似る is ichi1 but not uk).
+                if (!ids.Any(id => IsKanaAppropriateId(id)
+                                   || (WordMeta.TryGetValue(id, out var meta)
+                                       && !meta.IsTrueName && meta.GetPriorityScore(true) > 0)))
+                    continue;
+
+                dictForm = form.Text;
+                return true;
+            }
+
+            return false;
         }
 
         private static void ValidateGrammaticalSequences(List<SentenceInfo> sentences,
@@ -2863,6 +3117,38 @@ namespace Jiten.Parser
                 var hira = KanaConverter.ToNormalizedHiragana(text);
                 if (hira != text && _lookups.TryGetValue(hira, out ids) && ids.Count > 0
                     && !ids.All(id => _nameOnlyWordIds.Contains(id)))
+                    return true;
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        /// A word id is "kana-appropriate" when matching it from a pure-kana surface is plausible:
+        /// the word is usually written in kana (uk), or it has no kanji written form at all.
+        /// Kanji-backed non-uk words (配送, 童男, 遺影) reject — their kana lookup keys are readings,
+        /// not attested written forms. Name-bank entries always reject (ウンマ, ヒューン).
+        private static bool IsKanaAppropriateId(int id)
+        {
+            if (_nameOnlyWordIds.Contains(id)) return false;
+            if (!WordMeta.TryGetValue(id, out var meta)) return false;
+            if (meta.IsTrueName) return false;
+
+            // uk is folded into the priority scores as ±10 at load time (kana = base + 10, kanji = base − 10)
+            bool isUsuallyKana = meta.PriorityScoreKana > meta.PriorityScoreKanji;
+            return isUsuallyKana || !_kanjiBackedWordIds.Contains(id);
+        }
+
+        private static bool HasKanaAppropriateLookup(string text)
+        {
+            if (_lookups.TryGetValue(text, out var ids) && ids.Any(IsKanaAppropriateId))
+                return true;
+            try
+            {
+                var hira = KanaConverter.ToNormalizedHiragana(text);
+                if (hira != text && _lookups.TryGetValue(hira, out ids) && ids.Any(IsKanaAppropriateId))
                     return true;
             }
             catch
@@ -4213,6 +4499,9 @@ namespace Jiten.Parser
             return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics, relocatedHints);
         }
 
+        private static bool IsInfinitiveResult(DeckWord? word) =>
+            word?.Conjugations is { Count: > 0 } conj && conj[^1] is "(infinitive)" or "(unstressed infinitive)";
+
         private static List<List<(WordInfo word, DeckWord? result, int? margin)>> BuildSentencePairs(
             List<SentenceInfo> sentences,
             Func<WordInfo, (DeckWord? word, int? margin)> lookupResult)
@@ -4262,11 +4551,22 @@ namespace Jiten.Parser
                     bool hasHint = cachedHint != null;
                     bool isPreMatched = currentInfo.PreMatchedWordId.HasValue && currentInfo.PreMatchedCandidateWordIds == null;
                     if (isPreMatched && !hasHint) continue;
-                    if (!isArchaicPass1 && !nextIsCopula && !hasHint && ScoringPolicy.IsHighConfidence(currentMargin)) continue;
 
                     WordInfo? prevInfo = i > 0 ? sentenceWords[i - 1].word : null;
                     var prevResult = i > 0 ? sentenceWords[i - 1].result : null;
                     var nextResult = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].result : null;
+
+                    // A standalone infinitive after の / a noun / another infinitive is grammatically
+                    // suspect (子供たちの群れ、群れ — the noun homograph should win), so these get
+                    // rescored even when the first pass was confident. The infinitive-after-infinitive
+                    // trigger keeps enumeration chains rescorable as corrections cascade left-to-right.
+                    bool infinitiveAfterNominal = IsInfinitiveResult(currentResult) && i > 0 &&
+                        (prevInfo!.Text == "の"
+                         || IsInfinitiveResult(prevResult)
+                         || prevResult?.PartsOfSpeech.Any(p => PosMask.Has(PosMask.NounLike, PosMask.Bit(p))) == true);
+
+                    if (!isArchaicPass1 && !nextIsCopula && !hasHint && !infinitiveAfterNominal
+                        && ScoringPolicy.IsHighConfidence(currentMargin)) continue;
 
                     bool forceRederive = hasHint || ScoringPolicy.IsLowConfidence(currentMargin);
 
@@ -4278,7 +4578,10 @@ namespace Jiten.Parser
                             { forceRederive = true; break; }
                         }
 
-                    if (!forceRederive && !nextIsCopula && !isArchaicPass1 && !TransitionRuleEngine.CouldAnySoftRuleApply(
+                    // infinitiveAfterNominal bypasses the prefilter: its prev context may only become
+                    // noun-like after an earlier token is corrected in pass 2 (群れ、群れ cascades).
+                    if (!forceRederive && !nextIsCopula && !isArchaicPass1 && !infinitiveAfterNominal
+                        && !TransitionRuleEngine.CouldAnySoftRuleApply(
                          currentResult.PartsOfSpeech, currentInfo.Text,
                          prevResult?.PartsOfSpeech, prevInfo?.Text,
                          nextResult?.PartsOfSpeech, nextInfo?.Text))
@@ -4469,6 +4772,8 @@ namespace Jiten.Parser
                     var newBest = FormCandidateSelector.PickTopCandidatesWithBonus(candidates, getBonusFunc);
                     if (newBest != null)
                         newBest = WordFrequencyPriors.Apply(newBest, candidates, scoringContext) ?? newBest;
+                    if (newBest != null)
+                        newBest = FormCandidateSelector.ApplyKanjiHomographPriorityCap(newBest, candidates, scoringContext) ?? newBest;
                     int newBestBonus = newBest != null ? getBonusFunc(newBest) : 0;
                     int newBestAdjusted = newBest != null ? ScoringPolicy.EffectiveScore(newBest) + newBestBonus : int.MinValue;
 

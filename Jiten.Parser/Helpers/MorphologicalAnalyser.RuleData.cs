@@ -205,6 +205,15 @@ public partial class MorphologicalAnalyser
         ("だから", "こそ", PartOfSpeech.Expression),
         ("では", "あるまい", PartOfSpeech.Expression),
         ("に", "於いて", PartOfSpeech.Expression),
+        // user_dic にせよ only wins the lattice after なる; recombine the に+せよ(為る命令形) cut
+        // that Sudachi produces after other verbs (振られるにせよ, 成就するにせよ)
+        ("に", "せよ", PartOfSpeech.Expression),
+        // Sudachi splits colloquial どっか/どっから as どっ(代名詞)+particle
+        ("どっ", "か", PartOfSpeech.Adverb),
+        ("どっ", "から", PartOfSpeech.Adverb),
+        // CombineTte builds ちゃってぇ with the expressive small-vowel tail; merged back onto なん,
+        // the lookup's small-kana strip resolves なんちゃって (matched via CombineFinal, post-tte)
+        ("なん", "ちゃってぇ", PartOfSpeech.Expression),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
