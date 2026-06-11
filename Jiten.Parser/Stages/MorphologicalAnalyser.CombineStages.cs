@@ -1031,9 +1031,15 @@ public partial class MorphologicalAnalyser
 
             if (SpecialCases2Dict.TryGetValue(currentWord.Text, out var sc2List))
             {
+                // す+べき stays split after a suru-noun — す attaches left instead (満足す|べき)
+                bool suBekiBlocked = currentWord.Text == "す" && i > 0 &&
+                    (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
+                     wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun));
+
                 bool matched = false;
                 foreach (var sc in sc2List)
                 {
+                    if (sc.Second == "べき" && suBekiBlocked) continue;
                     if (nextWord.Text == sc.Second)
                     {
                         newList ??= CopyUpTo(wordInfos, i);

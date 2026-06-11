@@ -60,7 +60,7 @@ internal sealed class ParserRuntime
             await new MorphologicalAnalyser().Parse("食べた");
         });
 
-        var (lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, lookupsMs, freqMs, nameOnlyMs, metaMs) =
+        var (lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies, lookupsMs, freqMs, nameOnlyMs, metaMs) =
             await LoadPreloadDataAsync(contextFactory);
         var dbWallMs = overallSw.ElapsedMilliseconds;
 
@@ -77,11 +77,12 @@ internal sealed class ParserRuntime
         // works correctly even while the cache is still being populated on a cold start.
         _ = Task.Run(() => PrefillRedisCacheAsync(jmDictCache, contextFactory));
 
-        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta);
+        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies);
     }
 
     private static async Task<(Dictionary<string, List<int>> lookups, Dictionary<int, int> wordFrequencyRanks,
         HashSet<int> nameOnlyWordIds, HashSet<int> expressionWordIds, Dictionary<int, JmDictWordMeta> wordMeta,
+        Dictionary<int, double> wordObservedFrequencies,
         long lookupsMs, long freqMs, long nameOnlyMs, long metaMs)>
         LoadPreloadDataAsync(IDbContextFactory<JitenDbContext> contextFactory)
     {
@@ -91,6 +92,7 @@ internal sealed class ParserRuntime
         await using var ctx4 = await contextFactory.CreateDbContextAsync();
         await using var ctx5 = await contextFactory.CreateDbContextAsync();
         await using var ctx6 = await contextFactory.CreateDbContextAsync();
+        await using var ctx7 = await contextFactory.CreateDbContextAsync();
 
         long lookupsMs = 0, freqMs = 0, nameOnlyMs = 0, metaMs = 0;
         var sw = Stopwatch.StartNew();
@@ -109,12 +111,13 @@ internal sealed class ParserRuntime
             .ContinueWith(t => { metaMs = sw.ElapsedMilliseconds; return t.Result; },
                 TaskContinuationOptions.ExecuteSynchronously);
         var t6 = JmDictHelper.LoadFullyArchaicWordIds(ctx6);
+        var t7 = JmDictHelper.LoadWordObservedFrequencies(ctx7);
 
-        await Task.WhenAll(t1, t2, t3, t4, t5, t6);
+        await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7);
 
         var wordMeta = BuildWordMetadata(t5.Result, t6.Result);
 
-        return (t1.Result, t2.Result, t3.Result, t4.Result, wordMeta, lookupsMs, freqMs, nameOnlyMs, metaMs);
+        return (t1.Result, t2.Result, t3.Result, t4.Result, wordMeta, t7.Result, lookupsMs, freqMs, nameOnlyMs, metaMs);
     }
 
     private static Dictionary<int, JmDictWordMeta> BuildWordMetadata(
@@ -259,7 +262,8 @@ internal sealed class ParserRuntimeSnapshot(
     Dictionary<int, int> wordFrequencyRanks,
     HashSet<int> nameOnlyWordIds,
     HashSet<int> expressionWordIds,
-    Dictionary<int, JmDictWordMeta> wordMeta)
+    Dictionary<int, JmDictWordMeta> wordMeta,
+    Dictionary<int, double> wordObservedFrequencies)
 {
     public IDeckWordCache DeckWordCache { get; } = deckWordCache;
     public IJmDictCache JmDictCache { get; } = jmDictCache;
@@ -268,4 +272,5 @@ internal sealed class ParserRuntimeSnapshot(
     public HashSet<int> NameOnlyWordIds { get; } = nameOnlyWordIds;
     public HashSet<int> ExpressionWordIds { get; } = expressionWordIds;
     public Dictionary<int, JmDictWordMeta> WordMeta { get; } = wordMeta;
+    public Dictionary<int, double> WordObservedFrequencies { get; } = wordObservedFrequencies;
 }

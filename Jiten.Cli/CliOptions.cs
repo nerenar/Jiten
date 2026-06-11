@@ -221,6 +221,10 @@ public class CliOptions
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }
 
+    [Option(longName: "audit-conjugations", Required = false,
+            HelpText = "Scan a corpus file for merged/conjugated tokens whose Conjugations chain is empty (S-G invariant). Requires --input.")]
+    public bool AuditConjugations { get; set; }
+
     [Option(longName: "input", Required = false, HelpText = "Input corpus file path (used with --scan-confidence).")]
     public string? Input { get; set; }
 

@@ -293,7 +293,10 @@ internal static class TransitionRuleEngine
         bool HasNext,
         string? NextText,
         bool CandidateIsSuruNounVal = false,
-        bool CandidateHasHonorificRegister = false)
+        bool CandidateHasHonorificRegister = false,
+        // Defaults to true: the CouldAnySoftRuleApply prefilter has no candidate, so
+        // deconjugation-dependent rules must be assumed applicable there.
+        bool CandidateHasVolitionalChainVal = true)
     {
         public static ConditionContext FromScoringWindow(ScoringWindow w) => new(
             w.Candidate.Word.CachedPOSMask,
@@ -303,7 +306,8 @@ internal static class TransitionRuleEngine
             w.Candidate.Word.IsSuruVerb,
             TransitionRuleSets.HonorificSuffixes.Contains(w.Candidate.Form.Text) &&
             PosMask.Has(w.Candidate.Word.CachedPOSMask, PosMask.SuffixGroup) &&
-            w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains));
+            w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains),
+            w.Candidate.DeconjForm?.Process.Contains("volitional") == true);
     }
 
     private static bool MatchesAll(ConditionContext ctx, ScoringCondition[] conditions)
@@ -493,6 +497,12 @@ internal static class TransitionRuleEngine
 
                 ScoringCondition.CandidateIsNotName =>
                     !PosMask.Has(ctx.CandidateMask, PosMask.NameBit),
+
+                ScoringCondition.CandidateHasVolitionalChain =>
+                    ctx.CandidateHasVolitionalChainVal,
+
+                ScoringCondition.NextIsVolitionalToVerb =>
+                    ctx.NextText != null && TransitionRuleSets.VolitionalToVerbForms.Contains(ctx.NextText),
 
                 _ => false
             };

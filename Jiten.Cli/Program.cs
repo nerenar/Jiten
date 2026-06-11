@@ -194,6 +194,11 @@ public class Program
             await diagnosticCommands.ScanConfidence(options);
         }
 
+        if (options.AuditConjugations)
+        {
+            await diagnosticCommands.AuditConjugations(options);
+        }
+
         // Dictionary commands
         if (!string.IsNullOrEmpty(options.UserDicMassAdd))
         {

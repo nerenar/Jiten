@@ -1102,9 +1102,13 @@ public partial class MorphologicalAnalyser
 
             // Sudachi misclassifies 着 as noun suffix (ギ = clothing suffix) after nouns like 服,
             // but when followed by a particle/auxiliary it's the verb 着る (きる, to wear).
+            // Exception: when the preceding noun forms a JMDict compound with 着 (部屋着, 晴れ着),
+            // keep the suffix reading so CombineNounCompounds can join them.
             if (w1 is { Text: "着", PartOfSpeech: PartOfSpeech.Suffix, Reading: "ギ" }
                 && i + 1 < wordInfos.Count
-                && wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary)
+                && wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
+                && !(i > 0 && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                     && HasNonNameCompoundLookup?.Invoke(wordInfos[i - 1].Text + "着") == true))
             {
                 w1.PartOfSpeech = PartOfSpeech.Verb;
                 w1.DictionaryForm = "着る";
@@ -1610,8 +1614,14 @@ public partial class MorphologicalAnalyser
                 bool found = false;
                 if (SpecialCases2Dict.TryGetValue(w1.Text, out var sc2Candidates))
                 {
+                    // す+べき stays split after a suru-noun — す attaches left instead (満足す|べき)
+                    bool suBekiBlocked = w1.Text == "す" && i > 0 &&
+                        (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
+                         wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun));
+
                     foreach (var sc in sc2Candidates)
                     {
+                        if (sc.Second == "べき" && suBekiBlocked) continue;
                         if (w2.Text == sc.Second
                             && !(sc.Pos == PartOfSpeech.Verb && w1.PartOfSpeech == PartOfSpeech.Conjunction))
                         {
@@ -1791,6 +1801,22 @@ public partial class MorphologicalAnalyser
             if (i == 0)
             {
                 result.Add(word);
+                continue;
+            }
+
+            // Lattice expression units ending in だ (そりゃそうだ) eat the だ of a following だろう,
+            // stranding ろう as a noun (蝋). Reattach it: surface+ろう is the presumptive form of
+            // the same expression, so the dictionary form stays.
+            if (word is { Text: "ろう", PartOfSpeech: PartOfSpeech.Noun }
+                && result[^1] is { PartOfSpeech: PartOfSpeech.Expression } prevExpr
+                && prevExpr.Text.EndsWith('だ'))
+            {
+                result[^1] = new WordInfo(prevExpr)
+                {
+                    Text = prevExpr.Text + "ろう",
+                    EndOffset = word.EndOffset
+                };
+                changed = true;
                 continue;
             }
 

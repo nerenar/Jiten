@@ -52,22 +52,28 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"どし(?=[たてよ])")]
     private static partial Regex ColloquialDoshiRegex();
 
-    // ー followed by っ/ッ after hiragana is always emphatic/expressive, never semantically meaningful.
-    // e.g., けどーっ → けど, 写るーっ → 写る
-    [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+")]
+    // ー followed by っ/っ after hiragana is emphatic/expressive (けどーっ → けど, 写るーっ → 写る)
+    // EXCEPT before と, where ーっ is part of a mimetic adverb (ぼーっと, じーっと, ずーっと).
+    [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+(?!と)")]
     private static partial Regex EmphLongVowelSokuonRegex();
 
+    // Comma-separated stutter fragment attached to the word it stutters: ぼ、ぼく / ぼっ、ぼぼ僕 / ば、ばっか.
+    // The fragment must not be preceded by kana or kanji: stutters follow punctuation/quotes/start,
+    // while a preceding word means a real particle (今は、はっきり) or repetition (ええ、ええ).
+    [GeneratedRegex(@"(?<![ぁ-んァ-ヶー一-龯々])([ぁ-んァ-ヶ])[っッ]?[、,，]\s*(?=\1)")]
+    private static partial Regex StutterFragmentRegex();
 
-    // 3+ identical kana with optional break chars (っ/ッ/、/comma/space) between reps.
-    // No Japanese word has 3+ identical kana — this is always stuttering or sound effects.
+    // 4+ identical kana with optional っ/ッ/space between reps — spam/sound effects (ぼぼぼぼぼ).
+    // Runs of exactly 3 are left alone: they occur in real words and across word boundaries
+    // (落ち着いた+たたずまい, とっとと); short stutters are handled with context by MisparseGates.
     // Range ぁ-んァ-ヶ excludes ー (U+30FC) which is handled by MultipleLongVowelRegex.
-    [GeneratedRegex(@"([ぁ-んァ-ヶ])([\s、,，っッ]*\1){2,}")]
+    [GeneratedRegex(@"([ぁ-んァ-ヶ])([\sっッ]*\1){3,}")]
     private static partial Regex StutteringRunRegex();
 
     // 3+ identical digraph mora (じょじょじょ, ちゅちゅちゅ, しょしょしょ, etc.)
     // Small kana (ぁぃぅぇぉっゃゅょゎ / ァィゥェォッャュョヮ) cannot start a mora,
     // so (normal kana + small kana) captures exactly one digraph mora.
-    [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\s、,，っッ]*\1){2,}")]
+    [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\sっッ]*\1){2,}")]
     private static partial Regex StutteringDigraphRunRegex();
 
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
@@ -102,6 +108,7 @@ public partial class MorphologicalAnalyser
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
         text = EmphLongVowelSokuonRegex().Replace(text, "");
 
+        text = StutterFragmentRegex().Replace(text, "");
         text = StutteringDigraphRunRegex().Replace(text, "");
         text = StutteringRunRegex().Replace(text, "");
 

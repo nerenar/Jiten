@@ -19,6 +19,7 @@ public partial class MorphologicalAnalyser
     [
         Stage(TokenStageGroup.Split, SplitOovGarbageTokens, TokenFeatures.OovGarbage),
         Stage(TokenStageGroup.Split, SplitCompoundAuxiliaryVerbs),
+        Stage(TokenStageGroup.Split, SplitUnresolvableCompoundVerbs),
         Stage(TokenStageGroup.Split, SplitTatteParticle, TokenFeatures.TextTatte),
         Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
         Stage(TokenStageGroup.Split, SplitTawakeNoun, TokenFeatures.TextTawake),

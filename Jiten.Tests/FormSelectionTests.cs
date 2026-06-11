@@ -1198,6 +1198,39 @@ public class FormSelectionTests
         // ３時 should be "3 o'clock" (1300520), not 三次 "third/tertiary" (1657930)
         yield return ["時刻は、午後３時３３分。", "３時", 1300520, (byte)0];
         yield return ["午前３時過ぎの街角は、まったく人の姿がない。", "３時", 1300520, (byte)0];
+
+        // て下さる chain deconjugates to 信じる (1359040), not 信ずる (1359070)
+        yield return ["お嬢様が私のことを信じて下さっていて", "信じて下さっていて", 1359040, (byte)0];
+        // ずにいる chain resolves to 気付く
+        yield return ["周囲の誰もがそれに気付かずにいた", "気付かずにいた", 1591330, (byte)1];
+        // め after a noun is the derogatory suffix 奴 (2089650), not 目
+        yield return ["そうして欲しいがな、畜生め", "め", 2089650, (byte)1];
+
+        // S-E script gate: pure-katakana surface with a direct katakana entry must not fold to
+        // a kanji/hiragana-only homograph (家紋 / 降る)
+        yield return ["カモン。", "カモン", 2806650, (byte)0];
+        yield return ["五感をフルに活動する。", "フル", 1112030, (byte)0];
+        // S-E lopsided-frequency override (≥10× word-level prior between surface-exact homographs)
+        yield return ["こちら側か、むこう側か", "むこう", 1277140, (byte)2];
+        yield return ["雪さん――主をカイロ代わりとはいかがなものかと", "カイロ", 1200640, (byte)2];
+        // ...but it must not flip context decisions: にもよる is 依る, not the more frequent homographs
+        yield return ["懐具合にもよるが", "よる", 1168660, (byte)4];
+        yield return ["あんまりそういうふうには見えないけどなー", "ふう", 1499730, (byte)1];
+        // NormalizedForm script-crossing guard: 屈し must not become 屈指 via Sudachi normalization
+        yield return ["だが絶望はない、屈しはしない、諦観など以っての外だ。", "屈し", 1246540, (byte)0];
+        // Classical attributive: 由々しき is its own entry (2423900), not a 由々しい conjugation
+        yield return ["由々しき事態だと思う。", "由々しき", 2423900, (byte)0];
+
+        // Classical す + べき merges to すべき (1006200) instead of dropping す…
+        yield return ["己の魂を代償とする、本来なら禁忌とすべき戦術だ。", "すべき", 1006200, (byte)1];
+        // …but after a suru-noun, す attaches left instead (満足す|べき policy)
+        yield return ["それほど、大切な――尊敬すべき方です、あなたは", "尊敬す", 1406400, (byte)0];
+        // なさ+すぎる merges and deconjugates to ない instead of dropping なさ
+        yield return ["こんな調査方法では、当てがなさすぎるでしょう。", "なさすぎる", 1529520, (byte)1];
+        // kanji adjective stem + すぎ → 近い, not the JMnedict name 近
+        yield return ["レイスはあまりにも近すぎ、私とお嬢様はあまりに密着しすぎていた。", "近すぎ", 1242130, (byte)0];
+        // volitional before とする outranks the seemingness reading (走り出す, not 走り出る)
+        yield return ["走り出そうとする。", "走り出そう", 1402480, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

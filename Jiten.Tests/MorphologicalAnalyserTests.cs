@@ -557,7 +557,7 @@ public class MorphologicalAnalyserTests
         yield return ["俺は奴の民主主義ぶった欺瞞を指弾する", new[] { "俺", "は", "奴", "の", "民主主義", "ぶった", "欺瞞", "を", "指弾する" }];
         yield return ["俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳的な", "昂揚感" }];
         // め derogatory suffix is filtered — only the noun remains
-        yield return ["欠陥品め", new[] { "欠陥品" }];
+        yield return ["欠陥品め", new[] { "欠陥品", "め" }]; // め = derogatory suffix 奴
         // め kept as part of an adjectival compound (大きめ = "on the large side")
         yield return ["大きめの箱を買った", new[] { "大きめ", "の", "箱", "を", "買った" }];
         yield return ["小さめの服", new[] { "小さめ", "の", "服" }];
@@ -968,7 +968,7 @@ public class MorphologicalAnalyserTests
         yield return ["要するに負ける要素なんざない訳で", new[] { "要するに", "負ける", "要素", "なんざ", "ない", "訳", "で" }];
 
         // === 守銭奴 should be a single noun (め is consumed as a suffix) ===
-        yield return ["守銭奴め", new[] { "守銭奴" }];
+        yield return ["守銭奴め", new[] { "守銭奴", "め" }]; // め = derogatory suffix 奴
 
         // === この前 should be combined as a single adverb ===
         yield return ["ついこの前えん罪で監禁されたばっかだしな", new[] { "つい", "この前", "えん罪", "で", "監禁された", "ばっか", "だ", "し", "な" }];
@@ -1030,7 +1030,7 @@ public class MorphologicalAnalyserTests
         yield return ["ほうどこから来なすった？",
             new[] { "ほう", "どこ", "から", "来なすった" }];
         // ああまた — Sudachi mis-splits as あ+あまた; should be ああ+また
-        yield return ["ああまたこれか", new[] { "また", "これ", "か" }];  // ああ is gated (archaic kanji 嗚呼)
+        yield return ["ああまたこれか", new[] { "ああ", "また", "これ", "か" }];  // sentence-initial interjection kept
         // 事を運ぶ idiom — should merge as a single expression
         yield return ["スザンナに見つからないように事を運ばないと",
             new[] { "スザンナ", "に", "見つからない", "ように", "事を運ばない", "と" }];
@@ -1195,7 +1195,7 @@ public class MorphologicalAnalyserTests
         yield return ["ぼっ、ぼぼぼぼぼぼくはぼくは学園都市第六位", new[] { "は", "ぼく", "は", "学園都市", "第六", "位" }];
 
         // === Stuttering: comma-separated reps (3+ with breaks) ===
-        yield return ["ぼ、ぼぼ僕一人で", new[] { "僕", "一人", "で" }];
+        yield return ["ぼ、ぼぼ僕一人で", new[] { "僕", "一人で" }]; // 一人で = JMDict exp 1163700
 
         // === Stuttering: repeated digraph mora (じょ = 2 kana but 1 mora) ===
         yield return ["じょじょじょ、冗談だよ！", new[] { "冗談", "だ", "よ" }];
@@ -1417,6 +1417,73 @@ public class MorphologicalAnalyserTests
         yield return ["いつの間にかなっていた", new[] { "いつの間にか", "なっていた" }];
         yield return ["なんとかなって良かった", new[] { "なんとかなって", "良かった" }];
         yield return ["犬がうなっている", new[] { "犬", "が", "うなっている" }];
+
+        // === Counter compounds joined via JMDict lookup (CombineNounCompounds) ===
+        yield return ["指一本動かすのさえ", new[] { "指", "一本", "動かす", "の", "さえ" }];
+        yield return ["俺は三年生だから", new[] { "俺", "は", "三年生", "だから" }];
+        yield return ["ホントに牛一匹倒した", new[] { "ホント", "に", "牛", "一匹", "倒した" }];
+        yield return ["数人が肩を組んだ", new[] { "数人", "が", "肩を組んだ" }];
+        // 着[ギ] stays a suffix when the noun compound exists in JMDict; verb reading otherwise
+        yield return ["部屋着のまま外に出た", new[] { "部屋着", "の", "まま", "外", "に", "出た" }];
+        yield return ["服着て出かけた", new[] { "服", "着て", "出かけた" }];
+
+        // === Doc-level name split rescue: honorific anywhere in the document licenses re-joining ===
+        yield return ["七海さんはこちらを見た。と、七海は飲むのをやめて、ムッとした表情になった。",
+            new[] { "七海", "さん", "は", "こちら", "を", "見た", "と", "七海", "は", "飲む", "の", "を", "やめて", "ムッと", "した", "表情", "に", "なった" }];
+        // without document evidence the bare split must survive (counter reading wins)
+        yield return ["と、七海は飲むのをやめて、ムッとした表情になった。",
+            new[] { "と", "七", "海", "は", "飲む", "の", "を", "やめて", "ムッと", "した", "表情", "に", "なった" }];
+        // pair+honorific confirmation (希里|乃|ちゃん) including 乃-as-particle name tail
+        yield return ["希里乃ちゃんが笑った。カァーッ、と赤くなる希里乃は見ていて",
+            new[] { "希里乃", "ちゃん", "が", "笑った", "と", "赤く", "なる", "希里乃", "は", "見ていて" }];
+        // counter usage of a name-only surface must NOT merge without evidence
+        yield return ["二条の光芒が走った。", new[] { "二", "条", "の", "光芒", "が", "走った" }];
+
+        // === Preprocess stutter/elongation collapse must not delete real words ===
+        // とっとと is a JMDict adverb — previously deleted whole by StutteringRunRegex
+        yield return ["動け、動け、とっとと動け！", new[] { "動け", "動け", "とっとと", "動け" }];
+        // た(past) + たたずまい forms a たたた run across the word boundary — must survive
+        yield return ["いつものように落ち着いたたたずまいでドアの前に立っていた",
+            new[] { "いつものように", "落ち着いた", "たたずまい", "で", "ドア", "の", "前", "に", "立っていた" }];
+        // mimetic ーっと adverbs — previously EmphLongVowelSokuonRegex deleted the ーっ
+        yield return ["ぼーっとして、泣きそうな顔で", new[] { "ぼーっと", "して", "泣きそう", "な", "顔", "で" }];
+        yield return ["ずーっと一緒にいた", new[] { "ずっと", "一緒にいた" }];
+        // doubled interjection with comma is repetition, not a stutter run
+        yield return ["ええ、ええ、分かりました", new[] { "ええ", "ええ", "分かりました" }];
+        // particle + comma + same-kana word start is not a stutter (今は、はっきり)
+        yield return ["今は、はっきりと感じる", new[] { "今", "は", "はっきり", "と", "感じる" }];
+
+        // === Suffix/interjection drop-gate exemptions ===
+        // め after a noun is the derogatory suffix 奴, not 目
+        yield return ["そうして欲しいがな、畜生め", new[] { "そうして", "欲しい", "が", "な", "畜生", "め" }];
+        // sentence-initial ああ is a real interjection
+        yield return ["ああもう、全く", new[] { "ああ", "もう", "全く" }];
+
+        // === Compound verbs absent from JMDict decompose into stem + verb instead of dropping ===
+        yield return ["苛立つことに驚き戸惑う", new[] { "苛立つ", "こと", "に", "驚き", "戸惑う" }];
+        yield return ["剣を心臓に突き刺して縫い止める", new[] { "剣", "を", "心臓", "に", "突き刺して", "縫い", "止める" }];
+        yield return ["挑みかかるような目つき", new[] { "挑み", "かかる", "ような", "目つき" }];
+        yield return ["寝乱れた姿を見ても", new[] { "寝", "乱れた", "姿", "を", "見て", "も" }];
+        // renyokei compounds that exist as JMDict nouns stay whole (買い支え)
+        yield return ["買い支えたいと思う", new[] { "買い支え", "たい", "と", "思う" }];
+
+        // === 2-token expression whitelist + window-3 cluster/completion merges ===
+        yield return ["だが、どちらもまだ本気ではない", new[] { "だが", "どちらも", "まだ", "本気", "ではない" }];
+        yield return ["休みたいときはいつでも言ってくださいね", new[] { "休みたい", "とき", "は", "いつでも", "言ってください", "ね" }];
+        yield return ["もう、どうして一人で行っちゃうんですか", new[] { "もう", "どうして", "一人で", "行っちゃう", "んです", "か" }];
+        yield return ["負ける、ものか", new[] { "負ける", "ものか" }];
+        yield return ["そんな奴がいてたまるか", new[] { "そんな", "奴", "が", "いて", "たまるか" }];
+        yield return ["吼えたのか、それとも喚いたのか", new[] { "吼えた", "の", "か", "それとも", "喚いた", "の", "か" }];
+        yield return ["四肢の先端に至るまで凍りつく", new[] { "四肢", "の", "先端", "に", "至るまで", "凍りつく" }];
+        // を-elided idiom (カマをかける); compositional 服(を)着る must stay split (covered above)
+        yield return ["カマかけただけなんだけど", new[] { "カマかけた", "だけ", "なんだ", "けど" }];
+        // dict-form completion via deconjugation: 取られ → 取られる → 呆気に取られる
+        yield return ["さすがのレイスも呆気に取られた", new[] { "さすが", "の", "レイス", "も", "呆気に取られた" }];
+        // honorific stays with its name: 様 must not be eaten by ように言う
+        yield return ["ヴァレリア様に言わせれば、絶世の美女らしい",
+            new[] { "ヴァレリア", "様", "に", "言わせれば", "絶世の美女", "らしい" }];
+        // そりゃそうだ + stranded ろう reattaches as the presumptive form
+        yield return ["そりゃそうだろう", new[] { "そりゃそうだろう" }];
     }
 
     [Theory]

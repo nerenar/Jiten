@@ -46,6 +46,13 @@ internal static class TransitionRuleSets
         "する", "した", "して", "し", "される", "させる"
     ];
 
+    // 〜(volitional)とする "try to" — the と+する after a volitional ending demands the
+    // volitional reading (走り出そう = 走り出す volitional, not 走り出る + seemingness そう)
+    internal static readonly HashSet<string> VolitionalToVerbForms =
+    [
+        "とする", "として", "とした", "としている", "としていた", "とすれば", "としたら", "と思う", "と思った"
+    ];
+
     internal static readonly HashSet<string> HonorificSuffixes =
     [
         "さん", "くん", "ちゃん", "様", "殿", "氏"
@@ -269,6 +276,11 @@ internal static class TransitionRuleSets
             [ScoringCondition.CandidateIsVerb],
             [ScoringCondition.PrevIsToParticle],
             20),
+
+        new("volitional-to-suru-synergy",
+            [ScoringCondition.CandidateIsVerb, ScoringCondition.CandidateHasVolitionalChain],
+            [ScoringCondition.NextIsVolitionalToVerb],
+            40),
     ];
 
     // Parity rules encoding current ValidateGrammaticalSequences behavior (phases 1–3)

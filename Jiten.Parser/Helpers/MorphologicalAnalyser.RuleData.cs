@@ -78,6 +78,12 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
         ("じゃ", "ない", PartOfSpeech.Expression),
+        ("だ", "ろう", PartOfSpeech.Auxiliary), // Sudachi shreds そりゃそうだろう into …だ|ろう(蝋)
+        ("す", "べき", PartOfSpeech.Expression), // classical す + べき → すべき 1006200 (とすべき戦術)
+        ("なさ", "すぎる", PartOfSpeech.Verb), // なさ[ない]+すぎる → ない via さすぎる excess deconj
+        ("なさ", "すぎ", PartOfSpeech.Verb),
+        ("近", "すぎ", PartOfSpeech.Verb), // adjective stem + すぎ → 近い via excess deconj
+        ("近", "すぎる", PartOfSpeech.Verb),
         ("だ", "けど", PartOfSpeech.Conjunction),
         ("だ", "が", PartOfSpeech.Conjunction),
         ("で", "さえ", PartOfSpeech.Expression),

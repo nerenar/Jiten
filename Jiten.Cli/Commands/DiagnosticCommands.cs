@@ -734,6 +734,112 @@ public class DiagnosticCommands(CliContext context)
         }
     }
 
+    /// Every merged/conjugated token must carry a deconjugation chain.
+    /// Flags tokens whose OriginalText matches none of the resolved word's forms (i.e. the
+    /// surface is inflected or beam-merged) while Conjugations is empty — each hit is a
+    /// subsidiary-verb merge with no deconjugator.json counterpart (e.g. ~て下さる before fix).
+    public async Task AuditConjugations(CliOptions options)
+    {
+        if (string.IsNullOrEmpty(options.Input))
+        {
+            Console.WriteLine("--audit-conjugations requires --input <corpus.txt>");
+            return;
+        }
+
+        if (!File.Exists(options.Input))
+        {
+            Console.WriteLine($"File not found: {options.Input}");
+            return;
+        }
+
+        var lines = await File.ReadAllLinesAsync(options.Input);
+        Console.WriteLine($"Auditing {lines.Length} lines...");
+
+        // (wordId, originalText) → (count, example sentence)
+        var suspects = new Dictionary<(int WordId, string Surface), (int Count, string Example)>();
+        int totalTokens = 0;
+
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            var words = await Jiten.Parser.Parser.ParseText(context.ContextFactory, line);
+            foreach (var word in words)
+            {
+                totalTokens++;
+                if (word.Conjugations is { Count: > 0 }) continue;
+                if (string.IsNullOrEmpty(word.OriginalText) || word.OriginalText.Length < 2) continue;
+
+                var key = (word.WordId, word.OriginalText);
+                suspects[key] = suspects.TryGetValue(key, out var prev)
+                    ? (prev.Count + word.Occurrences, prev.Example)
+                    : (word.Occurrences, line);
+            }
+        }
+
+        // Resolve forms in one batch and keep only tokens whose surface matches no form
+        // (raw or kana-fold) — those are merged/inflected surfaces missing their chain.
+        var wordIds = suspects.Keys.Select(k => k.WordId).Distinct().ToList();
+        var formsByWord = new Dictionary<int, List<string>>();
+        await using (var ctx = await context.ContextFactory.CreateDbContextAsync())
+        {
+            var rows = await ctx.JMDictWords.AsNoTracking()
+                                .Where(w => wordIds.Contains(w.WordId))
+                                .Select(w => new { w.WordId, Forms = w.Forms.Select(f => f.Text).ToList() })
+                                .ToListAsync();
+            foreach (var row in rows)
+                formsByWord[row.WordId] = row.Forms;
+        }
+
+        static string Fold(string s) => KanaNormalizer.Normalize(WanaKana.ToHiragana(s));
+
+        var findings = suspects
+                       .Where(kv =>
+                       {
+                           if (!formsByWord.TryGetValue(kv.Key.WordId, out var forms)) return true;
+                           var surface = kv.Key.Surface;
+                           var surfaceFold = Fold(surface);
+                           bool matches = forms.Any(f => f == surface || Fold(f) == surfaceFold);
+                           // Form + な/に attachments (na-adjectives/adverbs) are not missing chains
+                           if (!matches && surface.Length > 1 && (surface[^1] == 'な' || surface[^1] == 'に'))
+                           {
+                               var stripped = surface[..^1];
+                               var strippedFold = Fold(stripped);
+                               matches = forms.Any(f => f == stripped || Fold(f) == strippedFold);
+                           }
+                           return !matches;
+                       })
+                       .OrderByDescending(kv => kv.Value.Count)
+                       .Select(kv => new
+                       {
+                           surface = kv.Key.Surface,
+                           wordId = kv.Key.WordId,
+                           occurrences = kv.Value.Count,
+                           example = kv.Value.Example,
+                           forms = formsByWord.GetValueOrDefault(kv.Key.WordId)
+                       })
+                       .ToList();
+
+        Console.WriteLine($"Scanned {totalTokens} tokens; {findings.Count} merged-surface tokens with empty Conjugations.");
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+        var json = JsonSerializer.Serialize(findings, jsonOptions);
+
+        if (!string.IsNullOrEmpty(options.ParseTestOutput))
+        {
+            await File.WriteAllTextAsync(options.ParseTestOutput, json);
+            Console.WriteLine($"Results written to {options.ParseTestOutput}");
+        }
+        else
+        {
+            Console.WriteLine(json);
+        }
+    }
+
     public async Task FlushRedisCache()
     {
         var redisConnectionString = context.Configuration.GetConnectionString("Redis");

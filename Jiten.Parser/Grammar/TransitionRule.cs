@@ -114,6 +114,8 @@ internal enum ScoringCondition
     NextIsNaAdj,
     PrevIsToParticle,
     CandidateIsNotName,
+    CandidateHasVolitionalChain,
+    NextIsVolitionalToVerb,
 }
 
 internal sealed record ScoringRule(

@@ -1,3 +1,4 @@
+using Jiten.Core.Data;
 using Jiten.Parser.Diagnostics;
 
 namespace Jiten.Parser.Scoring;
@@ -22,6 +23,18 @@ internal static class FormCandidateSelector
         if (context.IsKanaSurface)
             allCandidates.RemoveAll(c =>
                 KanaScoringHelpers.IsKanaSurfaceWithNoMatchingReading(context, c.Word, c.Form.Text));
+
+        // A pure-katakana surface with a script-exact non-name
+        // candidate must not fall through to hiragana-fold matches of words attested only in
+        // kanji/hiragana (フル must stay フル, not 降る — even in rederivation pools).
+        if (KanaScoringHelpers.IsPureKatakanaToken(context.Surface)
+            && allCandidates.Any(c => c.Form.Text == context.Surface
+                && c.Word.CachedPOS.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))))
+        {
+            allCandidates.RemoveAll(c =>
+                c.Form.Text != context.Surface
+                && !c.Word.Forms.Any(f => KanaScoringHelpers.ContainsKatakana(f.Text)));
+        }
 
         if (allCandidates.Count == 0)
             return new CandidateSelectionResult(null, null);
@@ -51,6 +64,9 @@ internal static class FormCandidateSelector
                 best = candidate;
             }
         }
+
+        if (best != null)
+            best = WordFrequencyPriors.Apply(best, allCandidates, context) ?? best;
 
         // Compute margin via linear scan for the second-best alternate (different WordId).
         // Filter out POS-incompatible runners-up so their -15 penalty doesn't produce a false low margin.
