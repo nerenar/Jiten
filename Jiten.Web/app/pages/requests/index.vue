@@ -12,7 +12,7 @@ definePageMeta({
 
 useHead({ title: 'Media Requests - Jiten' });
 
-const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchFacets } = useMediaRequests();
+const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchFacets, error: apiError } = useMediaRequests();
 const facets = ref<RequestFacets | null>(null);
 
 function withCount(label: string, count: number | undefined) {
@@ -194,6 +194,9 @@ async function handleUpvote(request: MediaRequestDto) {
     if (result.upvoted) {
       request.isSubscribed = true;
     }
+  } else {
+    const detail = extractApiError(apiError.value, 'Failed to update your vote. Please try again.');
+    toast.add({ severity: 'error', summary: 'Vote failed', detail, life: 6000 });
   }
 }
 
@@ -201,9 +204,17 @@ async function handleSubscribe(request: MediaRequestDto) {
   if (request.isSubscribed) {
     const success = await unsubscribe(request.id);
     if (success) request.isSubscribed = false;
+    else {
+      const detail = extractApiError(apiError.value, 'Failed to unsubscribe. Please try again.');
+      toast.add({ severity: 'error', summary: 'Unsubscribe failed', detail, life: 6000 });
+    }
   } else {
     const success = await subscribe(request.id);
     if (success) request.isSubscribed = true;
+    else {
+      const detail = extractApiError(apiError.value, 'Failed to subscribe. Please try again.');
+      toast.add({ severity: 'error', summary: 'Subscribe failed', detail, life: 6000 });
+    }
   }
 }
 

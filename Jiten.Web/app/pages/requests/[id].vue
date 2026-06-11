@@ -145,6 +145,9 @@ async function handleUpvote() {
     request.value.hasUserUpvoted = result.upvoted;
     request.value.upvoteCount = result.upvoteCount;
     if (result.upvoted) request.value.isSubscribed = true;
+  } else {
+    const detail = extractApiError(apiError.value, 'Failed to update your vote. Please try again.');
+    toast.add({ severity: 'error', summary: 'Vote failed', detail, life: 6000 });
   }
 }
 
@@ -153,9 +156,17 @@ async function handleSubscribe() {
   if (request.value.isSubscribed) {
     const success = await unsubscribe(request.value.id);
     if (success) request.value.isSubscribed = false;
+    else {
+      const detail = extractApiError(apiError.value, 'Failed to unsubscribe. Please try again.');
+      toast.add({ severity: 'error', summary: 'Unsubscribe failed', detail, life: 6000 });
+    }
   } else {
     const success = await subscribe(request.value.id);
     if (success) request.value.isSubscribed = true;
+    else {
+      const detail = extractApiError(apiError.value, 'Failed to subscribe. Please try again.');
+      toast.add({ severity: 'error', summary: 'Subscribe failed', detail, life: 6000 });
+    }
   }
 }
 
