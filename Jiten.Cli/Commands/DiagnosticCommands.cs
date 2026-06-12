@@ -770,10 +770,12 @@ public class DiagnosticCommands(CliContext context)
                 if (word.Conjugations is { Count: > 0 }) continue;
                 if (string.IsNullOrEmpty(word.OriginalText) || word.OriginalText.Length < 2) continue;
 
+                // ParseText does not populate Occurrences (that happens in the deck path),
+                // so count each appearance as 1 to make the ranking meaningful.
                 var key = (word.WordId, word.OriginalText);
                 suspects[key] = suspects.TryGetValue(key, out var prev)
-                    ? (prev.Count + word.Occurrences, prev.Example)
-                    : (word.Occurrences, line);
+                    ? (prev.Count + Math.Max(1, word.Occurrences), prev.Example)
+                    : (Math.Max(1, word.Occurrences), line);
             }
         }
 
@@ -815,6 +817,9 @@ public class DiagnosticCommands(CliContext context)
                            surface = kv.Key.Surface,
                            wordId = kv.Key.WordId,
                            occurrences = kv.Value.Count,
+                           // "elongation" = surface is just a base form + a trailing long-vowel mark
+                           // (RepairVowelElongation gap, not a missing deconjugator rule); "gap" = genuine.
+                           category = kv.Key.Surface.EndsWith('ー') ? "elongation" : "gap",
                            example = kv.Value.Example,
                            forms = formsByWord.GetValueOrDefault(kv.Key.WordId)
                        })
