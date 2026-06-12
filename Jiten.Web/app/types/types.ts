@@ -1070,6 +1070,44 @@ export interface PeriodRetentionDto {
   mature: RetentionBucketDto;
 }
 
+// The three time-window views of a per-window stats block.
+export interface StatWindows<T> {
+  last30: T;
+  last90: T;
+  all: T;
+}
+
+export interface AnswerButtonsDto {
+  // Each array is indexed [again, hard, good, easy].
+  learning: number[];
+  young: number[];
+  mature: number[];
+}
+
+export interface HourlyReviewDto {
+  count: number;
+  passRate: number | null;
+}
+
+// Per-window review-time stats; bucketLabels are window-invariant (top level).
+export interface ReviewTimeWindowDto {
+  buckets: number[];
+  averageSeconds: number | null;
+  totalHours: number;
+  count: number;
+}
+
+export interface ReviewTimeDto extends StatWindows<ReviewTimeWindowDto> {
+  bucketLabels: string[];
+}
+
+export interface RetentionTodayDto {
+  reviews: number;
+  passRate: number | null;
+  minutes: number;
+  newCards: number;
+}
+
 export interface RetentionResponseDto {
   desiredRetention: number;
   matureThresholdDays: number;
@@ -1080,6 +1118,50 @@ export interface RetentionResponseDto {
   };
   weekly: PeriodRetentionDto[];
   monthly: PeriodRetentionDto[];
+  answerButtons: StatWindows<AnswerButtonsDto>;
+  hourly: StatWindows<HourlyReviewDto[]>;
+  reviewTime: ReviewTimeDto;
+  today: RetentionTodayDto;
+}
+
+export interface CardStateCountsDto {
+  new: number;
+  learning: number;
+  relearning: number;
+  young: number;
+  mature: number;
+  suspended: number;
+  mastered: number;
+  blacklisted: number;
+  total: number;
+}
+
+export interface DifficultyStatsDto {
+  buckets: number[];
+  medianPct: number | null;
+  count: number;
+}
+
+export interface StabilityStatsDto {
+  buckets: number[];
+  bucketLabels: string[];
+  medianDays: number | null;
+  count: number;
+}
+
+export interface RetrievabilityStatsDto {
+  buckets: number[];
+  averagePct: number | null;
+  estimatedKnowledge: number;
+  count: number;
+  masteredCount: number;
+}
+
+export interface CardStatsResponseDto {
+  stateCounts: CardStateCountsDto;
+  difficulty: DifficultyStatsDto;
+  stability: StabilityStatsDto;
+  retrievability: RetrievabilityStatsDto;
 }
 
 export interface StudyHeatmapResponse {
