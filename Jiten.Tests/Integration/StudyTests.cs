@@ -405,6 +405,37 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task KnownWordsState_SuspendedCard_CarriesTierWithoutDue()
+    {
+        await EnsureSeedDataWithKanjiForms();
+
+        // A suspended card whose stored Due is already in the past previously leaked KnownState.Due.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 100, 0,
+                state: FsrsState.Suspended,
+                stability: 9, difficulty: 5,
+                due: DateTime.UtcNow.AddDays(-1),
+                lastReview: DateTime.UtcNow.AddDays(-5)));
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/reader/lookup-vocabulary")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words = new[] { new[] { 100, 0 } } });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var states = body.GetProperty("result")[0].EnumerateArray().Select(s => (KnownState)s.GetInt32()).ToList();
+
+        states.Should().Contain(KnownState.Suspended, "a suspended card must surface the Suspended state");
+        states.Should().NotContain(KnownState.Due, "a suspended card is parked and must never present as Due");
+        states.Should().Contain(KnownState.Young, "interval < 21 days keeps the Young tier for coverage");
+    }
+
+    [Fact]
     public async Task KnownWordsState_KanjiNeverReviewed_KanaRedundantWithNew()
     {
         await EnsureSeedDataWithKanjiForms();
