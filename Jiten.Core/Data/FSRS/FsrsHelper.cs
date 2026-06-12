@@ -45,12 +45,19 @@ public static class FsrsHelper
     }
 
     /// <summary>
-    /// Applies fuzzing to a review interval
+    /// Applies fuzzing to a review interval. When a <paramref name="loadBalancer"/> and
+    /// <paramref name="anchorDate"/> are supplied, the fuzzed interval is chosen so the resulting due
+    /// date lands on the least-loaded day within the fuzz window (ties resolved toward the un-fuzzed
+    /// centre), instead of a uniformly random day. The window is identical either way, so this adds no
+    /// scheduling deviation beyond ordinary fuzz — it only spreads day-to-day review load.
     /// </summary>
     /// <param name="interval">Base interval to fuzz</param>
     /// <param name="maximumInterval">Maximum allowed interval</param>
+    /// <param name="anchorDate">Review time the interval is measured from (required for load balancing)</param>
+    /// <param name="loadBalancer">Optional load balancer used to pick the least-loaded day</param>
     /// <returns>Fuzzed interval</returns>
-    public static TimeSpan ApplyFuzzing(TimeSpan interval, int maximumInterval)
+    public static TimeSpan ApplyFuzzing(TimeSpan interval, int maximumInterval, DateTime? anchorDate = null,
+                                        IFsrsLoadBalancer? loadBalancer = null)
     {
         var intervalDays = interval.Days;
 
@@ -58,10 +65,47 @@ public static class FsrsHelper
             return interval;
 
         var (minInterval, maxInterval) = GetFuzzRange(intervalDays, maximumInterval);
+
+        if (loadBalancer != null && anchorDate.HasValue)
+        {
+            var balancedDays = SelectBalancedInterval(minInterval, maxInterval, intervalDays, anchorDate.Value, loadBalancer);
+            return TimeSpan.FromDays(balancedDays);
+        }
+
         var fuzzedDays = Random.NextDouble() * (maxInterval - minInterval + 1) + minInterval;
         var clampedDays = Math.Min(Math.Round(fuzzedDays), maximumInterval);
 
         return TimeSpan.FromDays(clampedDays);
+    }
+
+    /// <summary>
+    /// Picks the interval (in days, within [<paramref name="minDays"/>, <paramref name="maxDays"/>]) whose
+    /// resulting due date falls on the least-loaded day, breaking ties toward <paramref name="centerDays"/>
+    /// (the un-fuzzed interval). On a flat calendar this returns the centre, reproducing no-fuzz behaviour
+    /// with no early/late bias. Registers the chosen day so later cards in the same batch balance around it.
+    /// </summary>
+    private static int SelectBalancedInterval(int minDays, int maxDays, int centerDays, DateTime anchorDate,
+                                              IFsrsLoadBalancer loadBalancer)
+    {
+        var bestDays = centerDays;
+        var bestLoad = int.MaxValue;
+        var bestDistance = int.MaxValue;
+
+        for (var days = minDays; days <= maxDays; days++)
+        {
+            var load = loadBalancer.GetLoad(anchorDate.AddDays(days));
+            var distance = Math.Abs(days - centerDays);
+
+            if (load < bestLoad || (load == bestLoad && distance < bestDistance))
+            {
+                bestLoad = load;
+                bestDistance = distance;
+                bestDays = days;
+            }
+        }
+
+        loadBalancer.Register(anchorDate.AddDays(bestDays));
+        return bestDays;
     }
 
     private static (int Min, int Max) GetFuzzRange(int intervalDays, int maximumInterval)

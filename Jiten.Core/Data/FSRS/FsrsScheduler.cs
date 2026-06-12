@@ -32,6 +32,13 @@ public class FsrsScheduler
     /// </summary>
     public bool EnableFuzzing { get; }
 
+    /// <summary>
+    /// Optional load balancer. When set (and fuzzing is enabled), a review card's fuzzed due date is
+    /// placed on the least-loaded day within its fuzz window instead of a random day, flattening
+    /// day-to-day review load without leaving the window the algorithm already permits.
+    /// </summary>
+    private readonly IFsrsLoadBalancer? _loadBalancer;
+
 
     /// <summary>
     /// Creates a new FSRS scheduler with specified configuration
@@ -42,13 +49,15 @@ public class FsrsScheduler
     /// <param name="relearningSteps">Relearning intervals (default: 10min)</param>
     /// <param name="maximumInterval">Max interval in days (default: 36500)</param>
     /// <param name="enableFuzzing">Enable interval randomization (default: true)</param>
+    /// <param name="loadBalancer">Optional load balancer for spreading fuzzed due dates across days</param>
     public FsrsScheduler(
         double desiredRetention = FsrsConstants.DefaultDesiredRetention,
         double[]? parameters = null,
         TimeSpan[]? learningSteps = null,
         TimeSpan[]? relearningSteps = null,
         int maximumInterval = 36500,
-        bool enableFuzzing = true)
+        bool enableFuzzing = true,
+        IFsrsLoadBalancer? loadBalancer = null)
     {
         Parameters = parameters is { Length: > 0 } ? parameters : FsrsConstants.DefaultParameters;
         DesiredRetention = desiredRetention;
@@ -56,6 +65,7 @@ public class FsrsScheduler
         RelearningSteps = relearningSteps ?? [TimeSpan.FromMinutes(10)];
         MaximumInterval = maximumInterval;
         EnableFuzzing = enableFuzzing;
+        _loadBalancer = loadBalancer;
     }
 
     /// <summary>
@@ -107,7 +117,7 @@ public class FsrsScheduler
 
         if (EnableFuzzing && card.State == FsrsState.Review)
         {
-            nextInterval = FsrsHelper.ApplyFuzzing(nextInterval, MaximumInterval);
+            nextInterval = FsrsHelper.ApplyFuzzing(nextInterval, MaximumInterval, reviewDateTime, _loadBalancer);
         }
 
         card.Due = nextInterval == TimeSpan.MaxValue ? DateTime.MaxValue : reviewDateTime + nextInterval;

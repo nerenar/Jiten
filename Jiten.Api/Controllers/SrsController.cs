@@ -160,7 +160,9 @@ public class SrsController(
         var userSettings = await LoadUserSettings(userId);
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters);
+        var studySettings = GetStudySettings(userSettings);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, loadBalancer: loadBalancer);
         if (card == null)
         {
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
@@ -177,7 +179,6 @@ public class SrsController(
         {
             cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
 
-            var studySettings = GetStudySettings(userSettings);
             var threshold = studySettings.LeechThreshold;
 
             if (threshold > 0)
@@ -289,7 +290,8 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, loadBalancer: loadBalancer);
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
 
@@ -652,7 +654,7 @@ public class SrsController(
         await userContext.SaveChangesAsync();
 
         if (reschedule)
-            await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention);
+            await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention, GetStudySettings(settings).LoadBalancing);
         await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new
@@ -682,7 +684,7 @@ public class SrsController(
         var userSettings = await LoadUserSettings(userId);
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
-        await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention);
+        await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention, GetStudySettings(userSettings).LoadBalancing);
         await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
@@ -710,7 +712,8 @@ public class SrsController(
         var userSettings = await LoadUserSettings(userId);
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
-        var result = await recomputeJob.RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, batchSize);
+        var result = await recomputeJob.RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, batchSize,
+                                                              GetStudySettings(userSettings).LoadBalancing);
         await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(result);
@@ -1472,6 +1475,30 @@ public class SrsController(
             catch (JsonException) { }
         }
         return new StudySettingsDto();
+    }
+
+    /// <summary>
+    /// Builds a load balancer seeded from the user's currently-scheduled review load, so freshly fuzzed
+    /// due dates settle on the least-busy day within their fuzz window. Returns null when load balancing
+    /// is disabled, leaving the scheduler on plain random fuzz.
+    /// </summary>
+    private async Task<IFsrsLoadBalancer?> BuildLoadBalancer(string userId, bool enabled)
+    {
+        if (!enabled) return null;
+
+        var now = DateTime.UtcNow;
+        var dues = await userContext.FsrsCards
+                                    .AsNoTracking()
+                                    .Where(c => c.UserId == userId
+                                                && c.Due > now
+                                                && c.Due < DateTime.MaxValue
+                                                && (c.State == FsrsState.Review
+                                                    || c.State == FsrsState.Relearning
+                                                    || c.State == FsrsState.Learning))
+                                    .Select(c => c.Due)
+                                    .ToListAsync();
+
+        return new DictionaryFsrsLoadBalancer(dues);
     }
 
 

@@ -304,6 +304,87 @@ public class FsrsTests
         Assert.True(intervals.All(i => i == intervals.First()));
     }
 
+    private static readonly DateTime BalancerAnchor = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void LoadBalancing_FlatLoad_ReturnsUnfuzzedCentre()
+    {
+        // With an empty calendar every day in the window is equally loaded, so the balancer must fall
+        // back to the un-fuzzed interval (the window centre) — no early/late bias.
+        var balancer = new DictionaryFsrsLoadBalancer();
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        Assert.Equal(30, result.Days);
+    }
+
+    [Fact]
+    public void LoadBalancing_PicksLeastLoadedDayWithinWindow()
+    {
+        // Interval 30 → fuzz window [27, 33]. Load every day except 33; the balancer must choose 33.
+        var balancer = new DictionaryFsrsLoadBalancer();
+        for (var day = 27; day <= 32; day++)
+            for (var n = 0; n < 5; n++)
+                balancer.Register(BalancerAnchor.AddDays(day));
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        Assert.Equal(33, result.Days);
+    }
+
+    [Fact]
+    public void LoadBalancing_NeverLeavesFuzzWindow()
+    {
+        // Even when the whole window is uniformly loaded, the choice stays inside [27, 33].
+        var balancer = new DictionaryFsrsLoadBalancer();
+        for (var day = 27; day <= 33; day++)
+            balancer.Register(BalancerAnchor.AddDays(day));
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        Assert.InRange(result.Days, 27, 33);
+    }
+
+    [Fact]
+    public void LoadBalancing_RegistersChosenDay()
+    {
+        var balancer = new DictionaryFsrsLoadBalancer();
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        // The placement must be recorded so later cards in the same batch balance around it.
+        Assert.Equal(1, balancer.GetLoad(BalancerAnchor.AddDays(result.Days)));
+    }
+
+    [Fact]
+    public void LoadBalancing_SharedBalancer_FlattensRepeatedIdenticalIntervals()
+    {
+        // 20 cards with the same 30-day interval reviewed at the same time would all pile onto one day
+        // under naive scheduling. Sharing one balancer spreads them evenly across the [27, 33] window.
+        var balancer = new DictionaryFsrsLoadBalancer();
+        var perDay = new Dictionary<int, int>();
+
+        for (var i = 0; i < 20; i++)
+        {
+            var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+            Assert.InRange(result.Days, 27, 33);
+            perDay[result.Days] = perDay.GetValueOrDefault(result.Days) + 1;
+        }
+
+        // All 7 days used, and no day carries more than ceil(20 / 7) = 3 cards.
+        Assert.Equal(7, perDay.Count);
+        Assert.True(perDay.Values.All(count => count <= 3), "Load was not evenly distributed across the window.");
+    }
+
+    [Fact]
+    public void LoadBalancing_NullBalancer_FallsBackToRandomFuzz()
+    {
+        // Without a balancer the result must still land within the fuzz window (random behaviour preserved).
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500);
+
+        Assert.InRange(result.Days, 27, 33);
+    }
+
     private List<int> GenerateReviewIntervals(bool enableFuzzing, int iterations)
     {
         var intervals = new List<int>();

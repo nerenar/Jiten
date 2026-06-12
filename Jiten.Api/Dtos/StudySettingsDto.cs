@@ -150,6 +150,9 @@ public class StudySettingsDto
     [JsonPropertyName("dayBoundaryScheduling")]
     public bool DayBoundaryScheduling { get; set; }
 
+    [JsonPropertyName("loadBalancing")]
+    public bool LoadBalancing { get; set; } = true;
+
     [JsonPropertyName("leechThreshold")]
     public int LeechThreshold { get; set; } = 8;
 
