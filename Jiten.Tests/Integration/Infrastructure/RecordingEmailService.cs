@@ -42,6 +42,12 @@ public class RecordingEmailService : IEmailService, IEmailSender
         return Task.CompletedTask;
     }
 
+    public Task SendEmailChangedAwayNoticeAsync(string oldEmail, string newEmail)
+    {
+        _sent.Enqueue(new SentEmail(nameof(SendEmailChangedAwayNoticeAsync), oldEmail, null, null, newEmail, null));
+        return Task.CompletedTask;
+    }
+
     public Task SendEmailChangedConfirmationAsync(string newEmail)
     {
         _sent.Enqueue(new SentEmail(nameof(SendEmailChangedConfirmationAsync), newEmail, null, null, null, null));

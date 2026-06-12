@@ -34,6 +34,14 @@ public class EmailService : IEmailSender, IEmailService
                              $"<br/>If this wasn't you, please reset your password immediately.");
     }
 
+    public async Task SendEmailChangedAwayNoticeAsync(string oldEmail, string newEmail)
+    {
+        await SendEmailAsync(oldEmail, "Jiten - Your account email was changed",
+                             $"Your Jiten.moe account email was changed to {HtmlEncoder.Default.Encode(newEmail)}." +
+                             $"<br/>This address is no longer associated with the account." +
+                             $"<br/>If you did not request this change, please contact support immediately.");
+    }
+
     public async Task SendEmailChangedConfirmationAsync(string newEmail)
     {
         await SendEmailAsync(newEmail, "Jiten - Your email was changed",

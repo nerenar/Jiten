@@ -277,9 +277,36 @@ public class AccountTests(JitenWebApplicationFactory factory)
 
         (await GetUserAsync(user.Id))!.Email.Should().Be(newEmail);
 
+        factory.Emails.ForRecipient("ce_ok_old@test.dev")
+               .Count(e => e.Method == nameof(RecordingEmailService.SendEmailChangeNoticeAsync))
+               .Should().Be(1, "the old address must not receive the request notice twice");
+        factory.Emails.Sent.Should().Contain(e =>
+            e.Method == nameof(RecordingEmailService.SendEmailChangedAwayNoticeAsync) && e.Recipient == "ce_ok_old@test.dev");
+
         // Refresh tokens were revoked on confirm.
         var refreshResult = await RefreshAsync(session.AccessToken, session.RefreshToken);
         refreshResult.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ChangeEmail_SecondRequestWithinCooldown_Returns429_NoSecondEmail()
+    {
+        var user = await CreateUserAsync("ce_cd", "ce_cd_old@test.dev", DefaultPassword);
+
+        var first = new HttpRequestMessage(HttpMethod.Post, "/api/account/change-email")
+            .WithUser(user.Id)
+            .WithJsonContent(new { newEmail = "ce_cd_new@test.dev", currentPassword = DefaultPassword });
+        (await _client.SendAsync(first)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var second = new HttpRequestMessage(HttpMethod.Post, "/api/account/change-email")
+            .WithUser(user.Id)
+            .WithJsonContent(new { newEmail = "ce_cd_new2@test.dev", currentPassword = DefaultPassword });
+        var secondResponse = await _client.SendAsync(second);
+
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        factory.Emails.Sent
+               .Count(e => e.Method == nameof(RecordingEmailService.SendChangeEmailConfirmationAsync))
+               .Should().Be(1, "the throttled second request must not send another confirmation email");
     }
 
     [Fact]

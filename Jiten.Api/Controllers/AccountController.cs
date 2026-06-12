@@ -29,6 +29,8 @@ public class AccountController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AccountController> _logger;
 
+    private static readonly TimeSpan EmailChangeCooldown = TimeSpan.FromMinutes(15);
+
     public AccountController(
         UserManager<User> userManager,
         TokenService tokenService,
@@ -159,6 +161,13 @@ public class AccountController : ControllerBase
         if (emailExists != null)
             return BadRequest(new { message = "Email is already in use." });
 
+        if (user.LastEmailChangeRequestedAt is { } lastChange && DateTime.UtcNow - lastChange < EmailChangeCooldown)
+            return StatusCode(StatusCodes.Status429TooManyRequests,
+                              new { message = "Please wait a moment before requesting another email change." });
+
+        user.LastEmailChangeRequestedAt = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
+
         var code = await _userManager.GenerateChangeEmailTokenAsync(user, newEmail);
         code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
 
@@ -206,7 +215,7 @@ public class AccountController : ControllerBase
         await _context.SaveChangesAsync();
 
         if (!string.IsNullOrEmpty(oldEmail) && !string.Equals(oldEmail, model.NewEmail, StringComparison.OrdinalIgnoreCase))
-            await _emailService.SendEmailChangeNoticeAsync(oldEmail, model.NewEmail);
+            await _emailService.SendEmailChangedAwayNoticeAsync(oldEmail, model.NewEmail);
         await _emailService.SendEmailChangedConfirmationAsync(model.NewEmail);
 
         _logger.LogInformation("Email changed: UserId={UserId}", user.Id);

@@ -38,6 +38,8 @@ public class AuthController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IUserActivityTracker _activityTracker;
 
+    private static readonly TimeSpan EmailRequestCooldown = TimeSpan.FromMinutes(15);
+
     public AuthController(
         UserManager<User> userManager,
         SignInManager<User> signInManager,
@@ -299,6 +301,20 @@ public class AuthController : ControllerBase
                               "If your email address is registered and confirmed, you will receive a password reset link. If you created your account with google auth, you will need to connect through google."
                       });
         }
+
+        // Throttle reset emails per account. Silently skip within the cooldown so the response is
+        // identical to the success path and doesn't leak whether an account exists.
+        if (user.LastPasswordResetRequestedAt is { } lastReset && DateTime.UtcNow - lastReset < EmailRequestCooldown)
+        {
+            return Ok(new
+                      {
+                          message =
+                              "If your email address is registered and confirmed, you will receive a password reset link. If you created your account with google auth, you will need to connect through google."
+                      });
+        }
+
+        user.LastPasswordResetRequestedAt = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
 
         var code = await _userManager.GeneratePasswordResetTokenAsync(user);
         code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
