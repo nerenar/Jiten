@@ -186,6 +186,10 @@ watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset, debouncedSe
   router.replace({ query });
 });
 
+function toastApiError(summary: string, fallback: string) {
+  toast.add({ severity: 'error', summary, detail: extractApiError(apiError.value, fallback), life: 6000 });
+}
+
 async function handleUpvote(request: MediaRequestDto) {
   const result = await toggleUpvote(request.id);
   if (result) {
@@ -195,8 +199,7 @@ async function handleUpvote(request: MediaRequestDto) {
       request.isSubscribed = true;
     }
   } else {
-    const detail = extractApiError(apiError.value, 'Failed to update your vote. Please try again.');
-    toast.add({ severity: 'error', summary: 'Vote failed', detail, life: 6000 });
+    toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
   }
 }
 
@@ -204,17 +207,11 @@ async function handleSubscribe(request: MediaRequestDto) {
   if (request.isSubscribed) {
     const success = await unsubscribe(request.id);
     if (success) request.isSubscribed = false;
-    else {
-      const detail = extractApiError(apiError.value, 'Failed to unsubscribe. Please try again.');
-      toast.add({ severity: 'error', summary: 'Unsubscribe failed', detail, life: 6000 });
-    }
+    else toastApiError('Unsubscribe failed', 'Failed to unsubscribe. Please try again.');
   } else {
     const success = await subscribe(request.id);
     if (success) request.isSubscribed = true;
-    else {
-      const detail = extractApiError(apiError.value, 'Failed to subscribe. Please try again.');
-      toast.add({ severity: 'error', summary: 'Subscribe failed', detail, life: 6000 });
-    }
+    else toastApiError('Subscribe failed', 'Failed to subscribe. Please try again.');
   }
 }
 

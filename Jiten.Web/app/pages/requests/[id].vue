@@ -138,6 +138,10 @@ async function loadData() {
   isLoading.value = false;
 }
 
+function toastApiError(summary: string, fallback: string) {
+  toast.add({ severity: 'error', summary, detail: extractApiError(apiError.value, fallback), life: 6000 });
+}
+
 async function handleUpvote() {
   if (!request.value) return;
   const result = await toggleUpvote(request.value.id);
@@ -146,8 +150,7 @@ async function handleUpvote() {
     request.value.upvoteCount = result.upvoteCount;
     if (result.upvoted) request.value.isSubscribed = true;
   } else {
-    const detail = extractApiError(apiError.value, 'Failed to update your vote. Please try again.');
-    toast.add({ severity: 'error', summary: 'Vote failed', detail, life: 6000 });
+    toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
   }
 }
 
@@ -156,17 +159,11 @@ async function handleSubscribe() {
   if (request.value.isSubscribed) {
     const success = await unsubscribe(request.value.id);
     if (success) request.value.isSubscribed = false;
-    else {
-      const detail = extractApiError(apiError.value, 'Failed to unsubscribe. Please try again.');
-      toast.add({ severity: 'error', summary: 'Unsubscribe failed', detail, life: 6000 });
-    }
+    else toastApiError('Unsubscribe failed', 'Failed to unsubscribe. Please try again.');
   } else {
     const success = await subscribe(request.value.id);
     if (success) request.value.isSubscribed = true;
-    else {
-      const detail = extractApiError(apiError.value, 'Failed to subscribe. Please try again.');
-      toast.add({ severity: 'error', summary: 'Subscribe failed', detail, life: 6000 });
-    }
+    else toastApiError('Subscribe failed', 'Failed to subscribe. Please try again.');
   }
 }
 
