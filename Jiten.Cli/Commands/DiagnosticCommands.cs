@@ -845,6 +845,42 @@ public class DiagnosticCommands(CliContext context)
         }
     }
 
+    /// Dumps every token's (WordId, ReadingIndex, Conjugations) for a corpus, one token per line,
+    /// for exact before/after diffing of output-identical refactors. Deterministic line order.
+    public async Task SnapshotTokens(CliOptions options)
+    {
+        if (string.IsNullOrEmpty(options.Input) || !File.Exists(options.Input))
+        {
+            Console.WriteLine("--snapshot-tokens requires an existing --input <corpus.txt>");
+            return;
+        }
+
+        var lines = await File.ReadAllLinesAsync(options.Input);
+        Console.WriteLine($"Snapshotting {lines.Length} lines...");
+
+        var sb = new StringBuilder();
+        int lineNo = 0, tokenCount = 0;
+        foreach (var line in lines)
+        {
+            lineNo++;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            var words = await Jiten.Parser.Parser.ParseText(context.ContextFactory, line);
+            int idx = 0;
+            foreach (var w in words)
+            {
+                var conj = w.Conjugations is { Count: > 0 } ? string.Join(",", w.Conjugations) : "";
+                sb.Append(lineNo).Append('\t').Append(idx++).Append('\t')
+                  .Append(w.WordId).Append('\t').Append(w.ReadingIndex).Append('\t').Append(conj).Append('\n');
+                tokenCount++;
+            }
+        }
+
+        var outPath = string.IsNullOrEmpty(options.ParseTestOutput) ? "token_snapshot.tsv" : options.ParseTestOutput;
+        await File.WriteAllTextAsync(outPath, sb.ToString());
+        Console.WriteLine($"Wrote {tokenCount} tokens to {outPath}");
+    }
+
     public async Task FlushRedisCache()
     {
         var redisConnectionString = context.Configuration.GetConnectionString("Redis");
