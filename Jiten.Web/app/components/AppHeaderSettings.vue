@@ -281,7 +281,7 @@
       <template v-if="auth.isAuthenticated">
         <Divider class="!my-1 md:!my-2 !mx-2" />
         <NuxtLink to="/settings" class="flex items-center justify-between py-1 text-sm font-medium" @click="hide()">
-          <span>Account settings</span>
+          <span>All settings</span>
           <i class="pi pi-arrow-right text-xs" />
         </NuxtLink>
       </template>

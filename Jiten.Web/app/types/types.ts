@@ -280,6 +280,47 @@ export interface TokenResponse {
   refreshToken: string;
 }
 
+export interface AccountInfo {
+  userId: string;
+  userName: string;
+  email: string;
+  emailConfirmed: boolean;
+  hasPassword: boolean;
+  createdAt: string;
+  receivesNewsletter: boolean;
+  rateLimitTier: string;
+  roles: string[];
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface SetPasswordRequest {
+  newPassword: string;
+}
+
+export interface ChangeEmailRequest {
+  newEmail: string;
+  currentPassword?: string;
+}
+
+export interface ConfirmEmailChangeRequest {
+  userId: string;
+  newEmail: string;
+  code: string;
+}
+
+export interface ResendConfirmationRequest {
+  email: string;
+  recaptchaResponse: string;
+}
+
+export interface UpdateAccountPreferencesRequest {
+  receivesNewsletter: boolean;
+}
+
 export interface ExampleSentence {
   sentenceId: number;
   text: string;

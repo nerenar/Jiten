@@ -362,14 +362,22 @@ public class AuthController : ControllerBase
 
     [HttpPost("revoke-token")]
     [Authorize]
-    public async Task<IActionResult> RevokeToken()
+    public async Task<IActionResult> RevokeToken([FromBody] RevokeTokenRequest? model = null)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-        var userRefreshTokens = await _context.RefreshTokens
-                                              .Where(rt => rt.UserId == userId && !rt.IsRevoked && !rt.IsUsed)
-                                              .ToListAsync();
+        var query = _context.RefreshTokens
+                            .Where(rt => rt.UserId == userId && !rt.IsRevoked && !rt.IsUsed);
+
+        if (model?.KeepCurrent == true)
+        {
+            var currentJti = User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti);
+            if (!string.IsNullOrEmpty(currentJti))
+                query = query.Where(rt => rt.JwtId != currentJti);
+        }
+
+        var userRefreshTokens = await query.ToListAsync();
 
         if (!userRefreshTokens.Any())
         {
