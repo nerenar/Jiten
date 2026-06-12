@@ -85,6 +85,8 @@
   const settings = ref();
   const userMenu = ref();
 
+  const userInitial = computed(() => auth.user?.userName?.trim()?.slice(0, 2)?.toUpperCase() || '');
+
   const userMenuItems = computed(() => [
     {
       label: 'Profile',
@@ -92,7 +94,7 @@
       route: '/profile',
     },
     {
-      label: 'User Settings',
+      label: 'Account Settings',
       icon: 'pi pi-cog',
       route: '/settings',
     },
@@ -151,13 +153,24 @@
           <nuxt-link to="/faq" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'">FAQ</nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions" to="/Dashboard" :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'">Dashboard</nuxt-link>
           <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'">Login</nuxt-link>
-          <Button v-if="auth.isAuthenticated" severity="secondary" @click="userMenu.toggle($event)" aria-label="User menu">
-            <Icon name="material-symbols:person" />
-          </Button>
+          <button
+            v-if="auth.isAuthenticated"
+            type="button"
+            class="inline-flex items-center gap-0.5 p-1 rounded-full text-white cursor-pointer hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
+            aria-label="User menu"
+            aria-haspopup="true"
+            @click="userMenu.toggle($event)"
+          >
+            <span v-if="userInitial" class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-200 text-indigo-900 text-xs font-bold tracking-tight">{{ userInitial }}</span>
+            <span v-else class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-200 text-indigo-900">
+              <Icon name="material-symbols:person" />
+            </span>
+            <Icon name="material-symbols:keyboard-arrow-down" size="16" />
+          </button>
           <NotificationBell v-if="auth.isAuthenticated" />
           <Button
             type="button"
-            title="Local Settings"
+            title="Display Settings"
             severity="secondary"
             @mouseover="showSettings($event)"
             @click="toggleSettings($event)"
@@ -165,7 +178,7 @@
             <Icon name="material-symbols-light:settings" />
           </Button>
 
-          <Button :label="themeLabel" severity="secondary" @click="cycleTheme()">
+          <Button text :title="`Theme: ${themeLabel}`" :aria-label="`Theme: ${themeLabel}`" class="!text-white hover:!bg-indigo-800" @click="cycleTheme()">
             <Icon :name="themeIcon" />
           </Button>
 
@@ -196,7 +209,7 @@
             </nuxt-link>
             <nuxt-link v-if="auth.isAuthenticated" to="/profile" class="py-2 px-3" :class="route.path.startsWith('/profile') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Profile</nuxt-link>
             <nuxt-link v-if="auth.isAuthenticated" to="/ratings" class="py-2 px-3" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Ratings</nuxt-link>
-            <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="py-2 px-3" :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Settings</nuxt-link>
+            <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="py-2 px-3" :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Account Settings</nuxt-link>
             <nuxt-link to="/other" class="py-2 px-3" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Tools</nuxt-link>
             <nuxt-link to="/faq" class="py-2 px-3" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">FAQ</nuxt-link>
             <nuxt-link
@@ -219,7 +232,7 @@
           <div class="flex items-center gap-3 py-3 px-3">
             <Button
               type="button"
-              label="Settings"
+              label="Display"
               severity="secondary"
               class="w-full justify-center"
               @click="toggleSettings($event)"
