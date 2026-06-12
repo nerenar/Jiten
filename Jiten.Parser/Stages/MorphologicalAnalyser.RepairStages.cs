@@ -915,6 +915,32 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Clause-initial いいか、/いいか! is the "Listen!" interjection (JMDict 2555520), not
+            // adjective いい + question か. Gated on clause position AND a following 、/! so the
+            // genuine question reading keeps its split everywhere else (行っていいか分からない,
+            // standalone いいか?).
+            if (w1 is { Text: "いい", PartOfSpeech: PartOfSpeech.IAdjective }
+                && (newList.Count == 0 || newList[^1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
+                    or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace)
+                && i + 2 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "か", PartOfSpeech: PartOfSpeech.Particle }
+                && wordInfos[i + 2].Text is "、" or "!" or "！")
+            {
+                var ka = wordInfos[i + 1];
+                newList.Add(new WordInfo
+                {
+                    Text = "いいか",
+                    DictionaryForm = "いいか",
+                    NormalizedForm = "いいか",
+                    PartOfSpeech = PartOfSpeech.Expression,
+                    Reading = "イイカ",
+                    StartOffset = w1.StartOffset,
+                    EndOffset = ka.EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
             // A case-particle が cannot follow conjunctive から — the kana verb がなる "to yell"
             // (2101910, uk) is the only grammatical reading (頼むからがなるな). No dictionary
             // entry: a がなる row would steal ベルが鳴る-type splits lattice-wide.
@@ -2260,6 +2286,10 @@ public partial class MorphologicalAnalyser
     // that actually produces a JMDict word (悪|いっ|て → 悪い ✓, ギシギシ|いっ|て → ギシギシい ✗).
     private static readonly HashSet<string> IuIkuDictForms = ["いう", "言う", "いく", "行く"];
 
+    // Demonstratives whose exclamation homograph (それっ!) Sudachi prefers before って;
+    // the stripped form is re-tagged Pronoun so lookup picks the everyday word.
+    private static readonly HashSet<string> QuotativeStrippedPronouns = ["それ", "これ", "あれ", "どれ"];
+
     // Clause-final shapes that can precede sentence-final かな. Nouns and case particles
     // (に/と) are deliberately excluded so どうにかなって/なんとかなって/夢かなって keep
     // their te-form-of-なる/かなう reading.
@@ -2355,6 +2385,61 @@ public partial class MorphologicalAnalyser
                     StartOffset = fusedThief.StartOffset >= 0 ? fusedThief.StartOffset + 1 : -1,
                     EndOffset = fusedThief.EndOffset
                 });
+                changed = true;
+                continue;
+            }
+
+            // Interjection homograph stealing the っ of a quotative って: それっ|て → それ + って.
+            // Sudachi's own NormalizedForm vouches for the stripped form (それっ → それ), so the
+            // re-cut is safe; without it CombineTte glues the pair back into a bogus "te form"
+            // of the exclamation entry. Demonstrative strips are re-tagged Pronoun so the lookup
+            // matches それ/これ the word, not それ! the shout.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i].PartOfSpeech == PartOfSpeech.Interjection
+                && wordInfos[i].Text.Length >= 2
+                && wordInfos[i].Text[^1] == 'っ'
+                && wordInfos[i + 1].Text == "て"
+                && wordInfos[i].NormalizedForm == wordInfos[i].Text[..^1])
+            {
+                var interjThief = wordInfos[i];
+                var interjStripped = interjThief.Text[..^1];
+                result.Add(new WordInfo(interjThief)
+                {
+                    Text = interjStripped,
+                    DictionaryForm = interjStripped,
+                    NormalizedForm = interjStripped,
+                    PartOfSpeech = QuotativeStrippedPronouns.Contains(interjStripped)
+                        ? PartOfSpeech.Pronoun
+                        : interjThief.PartOfSpeech,
+                    EndOffset = interjThief.EndOffset >= 0 ? interjThief.EndOffset - 1 : -1
+                });
+                AddTte(interjThief, wordInfos[i + 1]);
+                i++;
+                changed = true;
+                continue;
+            }
+
+            // がる suffix misread before a quotative って: 何|がっ|て → 何 + が + って.
+            // がる attaches to adjective stems (怖がる), never to a pronoun, so after a pronoun
+            // the only grammatical cut is case-particle が + quotative って.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i] is { Text: "がっ", PartOfSpeech: PartOfSpeech.Suffix, DictionaryForm: "がる" }
+                && wordInfos[i + 1].Text == "て"
+                && result.Count > 0 && result[^1].PartOfSpeech == PartOfSpeech.Pronoun)
+            {
+                var gaThief = wordInfos[i];
+                result.Add(new WordInfo
+                {
+                    Text = "が",
+                    DictionaryForm = "が",
+                    NormalizedForm = "が",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    Reading = "ガ",
+                    StartOffset = gaThief.StartOffset,
+                    EndOffset = gaThief.StartOffset >= 0 ? gaThief.StartOffset + 1 : -1
+                });
+                AddTte(gaThief, wordInfos[i + 1]);
+                i++;
                 changed = true;
                 continue;
             }

@@ -2521,15 +2521,20 @@ namespace Jiten.Parser
             }
         }
 
-        // X+に/X+でも pairs lexicalized as adverbs in JMDict whose X is not a strong standalone
-        // word. Hyper-common standalone nouns stay split even when a combined entry exists
-        // (本当に, 絶対に, 外に, ように) — that's the project segmentation convention — so these
-        // are curated rather than derived from entry existence.
-        private static readonly HashSet<string> LexicalizedAdverbPairs = ["フルに", "無性に", "意地でも"];
+        // Particles allowed to open an expression window in TryMatchCompoundWindow. Curated
+        // because particles in general would over-merge (とは, には have genuine compositional
+        // uses); しか has no reading other than the expression head of しかない/しかねぇ.
+        private static readonly HashSet<string> ParticleExpressionOpeners = ["しか"];
+
+        // X+に/X+でも pairs lexicalized as adverbs in JMDict. Curated rather than derived from
+        // entry existence because many X+に pairs have genuine case-particle readings that an
+        // automatic merge would destroy (それに気づいた, ことに決めた, 外に出る). Pairs whose
+        // combined surface is effectively always the adverb (絶対に) are safe to list.
+        private static readonly HashSet<string> LexicalizedAdverbPairs = ["フルに", "無性に", "意地でも", "絶対に"];
 
         /// Merges X+に into a single token when the combined surface is a lexicalized adverb:
         /// any X的+に (always adverbial, JMDict entry required) or a curated pair (フルに, 無性に,
-        /// 意地でも). Bare entry existence is deliberately NOT enough — それに/ことに/本当に would
+        /// 意地でも, 絶対に). Bare entry existence is deliberately NOT enough — それに/ことに would
         /// merge over genuine case-particle uses.
         private static void CombineLexicalAdverbs(List<SentenceInfo> sentences)
         {
@@ -4312,6 +4317,23 @@ namespace Jiten.Parser
                 if (result.HasValue) return result;
             }
 
+            // Colloquial negative ねぇ/ねえ/ねー (= ない) blocks expression windows because the
+            // candidate is built from the literal dictForm (ろくでも+ねぇ never hits a lookup key).
+            // Sudachi normalizes these tokens to 無い, so retry with the canonical ない ending —
+            // the deconjugator maps the surface back (ろくでもねぇ → ろくでもない) for the
+            // conjugation chain on the merged token. Covers 仕方ねぇ, とんでもねぇ, しかねぇ etc.
+            if ((verb.PartOfSpeech == PartOfSpeech.IAdjective || verb.NormalizedForm is "無い" or "ない")
+                && dictForm.Length >= 2
+                && (dictForm.EndsWith("ねぇ", StringComparison.Ordinal)
+                    || dictForm.EndsWith("ねえ", StringComparison.Ordinal)
+                    || dictForm.EndsWith("ねー", StringComparison.Ordinal)))
+            {
+                var naiForm = dictForm[..^2] + "ない";
+                result = TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, naiForm, forceExpressionOnly,
+                    HiraRollingHash(naiForm), prefCumHash, prefCumLen);
+                if (result.HasValue) return result;
+            }
+
             if (dictForm != verb.Text && verb.Text.Length > dictForm.Length)
             {
                 var deconj = Deconjugator.Instance.Deconjugate(verb.Text);
@@ -4459,7 +4481,13 @@ namespace Jiten.Parser
                     continue;
 
                 var firstWord = wordInfos[startIndex];
-                if (firstWord.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Interjection)
+                // Particles never open expression windows (とは/には would over-merge), except a
+                // curated few that only exist as expression heads: Vしか+ない is unmatchable
+                // otherwise. Curated openers are forced expression-only below.
+                bool curatedParticleOpener = firstWord.PartOfSpeech == PartOfSpeech.Particle
+                                             && ParticleExpressionOpeners.Contains(firstWord.Text);
+                if (firstWord.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Interjection
+                    && !curatedParticleOpener)
                     continue;
                 if (firstWord is { PartOfSpeech: PartOfSpeech.Conjunction, Text.Length: 1 })
                     continue;
@@ -4497,7 +4525,8 @@ namespace Jiten.Parser
                 if (!_compoundHashSet!.Contains(candidateHash))
                     continue;
 
-                bool expressionOnly = forceExpressionOnly || firstWord.PartOfSpeech is PartOfSpeech.Suffix or PartOfSpeech.Auxiliary or PartOfSpeech.Adverb;
+                bool expressionOnly = forceExpressionOnly || curatedParticleOpener
+                    || firstWord.PartOfSpeech is PartOfSpeech.Suffix or PartOfSpeech.Auxiliary or PartOfSpeech.Adverb;
 
                 // Build candidate span on stack: [prefix tokens...][dictForm]
                 var candidateSpan = candidateBuf[..totalLen];
