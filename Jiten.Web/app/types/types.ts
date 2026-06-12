@@ -131,6 +131,35 @@ export interface DeckRelationship {
   isInverse: boolean;
 }
 
+export interface FranchiseNode {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle: string;
+  englishTitle: string;
+  coverName: string;
+  mediaType: MediaType;
+  releaseDate: string;
+  difficulty: number;
+  difficultyRaw: number;
+  characterCount: number;
+  wordCount: number;
+  childrenDeckCount: number;
+  coverage: number;
+  uniqueCoverage: number;
+}
+
+export interface FranchiseEdge {
+  sourceDeckId: number;
+  targetDeckId: number;
+  relationshipType: DeckRelationshipType;
+}
+
+export interface Franchise {
+  nodes: FranchiseNode[];
+  edges: FranchiseEdge[];
+  truncated: boolean;
+}
+
 export interface MetadataTag {
   name: string;
   percentage: number;
