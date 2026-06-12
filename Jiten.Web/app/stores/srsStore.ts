@@ -145,6 +145,8 @@ export const useSrsStore = defineStore('srs', () => {
     timezone: 'Europe/London',
     showConfusableReadings: true,
     dayBoundaryScheduling: false,
+    loadBalancing: true,
+    easyDays: null,
     leechThreshold: 8,
     leechAction: 'Suspend',
     keybinds: { ...DEFAULT_KEYBINDS },

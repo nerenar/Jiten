@@ -57,7 +57,7 @@ public static class FsrsHelper
     /// <param name="loadBalancer">Optional load balancer used to pick the least-loaded day</param>
     /// <returns>Fuzzed interval</returns>
     public static TimeSpan ApplyFuzzing(TimeSpan interval, int maximumInterval, DateTime? anchorDate = null,
-                                        IFsrsLoadBalancer? loadBalancer = null)
+                                        IFsrsLoadBalancer? loadBalancer = null, EasyDaysPolicy? easyDays = null)
     {
         var intervalDays = interval.Days;
 
@@ -68,37 +68,44 @@ public static class FsrsHelper
 
         if (loadBalancer != null && anchorDate.HasValue)
         {
-            var balancedDays = SelectBalancedInterval(minInterval, maxInterval, intervalDays, anchorDate.Value, loadBalancer);
+            var balancedDays = SelectBalancedInterval(minInterval, maxInterval, intervalDays, anchorDate.Value, loadBalancer, easyDays);
             return TimeSpan.FromDays(balancedDays);
         }
 
-        var fuzzedDays = Random.NextDouble() * (maxInterval - minInterval + 1) + minInterval;
-        var clampedDays = Math.Min(Math.Round(fuzzedDays), maximumInterval);
-
-        return TimeSpan.FromDays(clampedDays);
+        return TimeSpan.FromDays(Random.Next(minInterval, maxInterval + 1));
     }
+
+    // Floor on an Easy-Days weekday weight, so a fully-avoided day stays finitely costly ("avoid if
+    // possible") instead of dividing by zero.
+    private const double MinEasyDayWeight = 0.01;
+    private const double CostEpsilon = 1e-9;
 
     /// <summary>
     /// Picks the interval (in days, within [<paramref name="minDays"/>, <paramref name="maxDays"/>]) whose
-    /// resulting due date falls on the least-loaded day, breaking ties toward <paramref name="centerDays"/>
-    /// (the un-fuzzed interval). On a flat calendar this returns the centre, reproducing no-fuzz behaviour
-    /// with no early/late bias. Registers the chosen day so later cards in the same batch balance around it.
+    /// resulting due date has the lowest load relative to that day's capacity — i.e. the least-loaded day,
+    /// weighted down on Easy-Days weekdays — breaking ties toward <paramref name="centerDays"/> (the
+    /// un-fuzzed interval). With no Easy-Days policy and a flat calendar this returns the centre, reproducing
+    /// no-fuzz behaviour with no early/late bias. Registers the chosen day so later cards in the same batch
+    /// balance around it.
     /// </summary>
     private static int SelectBalancedInterval(int minDays, int maxDays, int centerDays, DateTime anchorDate,
-                                              IFsrsLoadBalancer loadBalancer)
+                                              IFsrsLoadBalancer loadBalancer, EasyDaysPolicy? easyDays)
     {
         var bestDays = centerDays;
-        var bestLoad = int.MaxValue;
+        var bestCost = double.MaxValue;
         var bestDistance = int.MaxValue;
 
         for (var days = minDays; days <= maxDays; days++)
         {
-            var load = loadBalancer.GetLoad(anchorDate.AddDays(days));
+            var due = anchorDate.AddDays(days);
+            var load = loadBalancer.GetLoad(due);
+            var weight = easyDays?.Weight(due) ?? 1.0;
+            var cost = (load + 1) / Math.Max(weight, MinEasyDayWeight);
             var distance = Math.Abs(days - centerDays);
 
-            if (load < bestLoad || (load == bestLoad && distance < bestDistance))
+            if (cost < bestCost - CostEpsilon || (Math.Abs(cost - bestCost) <= CostEpsilon && distance < bestDistance))
             {
-                bestLoad = load;
+                bestCost = cost;
                 bestDistance = distance;
                 bestDays = days;
             }

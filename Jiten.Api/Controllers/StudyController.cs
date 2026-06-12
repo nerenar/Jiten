@@ -2087,6 +2087,16 @@ public class StudyController(
             catch (TimeZoneNotFoundException) { request.Timezone = null; }
         }
 
+        // Easy Days: must be 7 weekday weights in [0, 1]; drop anything malformed.
+        if (request.EasyDays != null)
+        {
+            if (request.EasyDays.Length != 7)
+                request.EasyDays = null;
+            else
+                for (var i = 0; i < 7; i++)
+                    request.EasyDays[i] = Math.Clamp(request.EasyDays[i], 0.0, 1.0);
+        }
+
         var fsrsSettings = await userContext.UserFsrsSettings
             .FirstOrDefaultAsync(s => s.UserId == userId);
 

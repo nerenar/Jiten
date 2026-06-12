@@ -1034,6 +1034,9 @@ export interface StudySettingsDto {
   timezone: string | null;
   showConfusableReadings: boolean;
   dayBoundaryScheduling: boolean;
+  loadBalancing: boolean;
+  /** Per-weekday Easy Days load weights, index 0=Sunday…6=Saturday, each in [0,1]. Null = off. */
+  easyDays: number[] | null;
   leechThreshold: number;
   leechAction: LeechAction;
   keybinds: StudyKeybinds;

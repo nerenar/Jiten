@@ -256,6 +256,47 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StudySettings_LoadBalancingAndEasyDays_RoundTripAndNormalize()
+    {
+        // Defaults: load balancing on, easy days off.
+        var defaults = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        defaults.GetProperty("loadBalancing").GetBoolean().Should().BeTrue();
+        defaults.GetProperty("easyDays").ValueKind.Should().Be(JsonValueKind.Null);
+
+        // Round-trip a weekend preset.
+        await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { loadBalancing = false, easyDays = new[] { 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5 } }));
+        var after = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        after.GetProperty("loadBalancing").GetBoolean().Should().BeFalse();
+        after.GetProperty("easyDays").EnumerateArray().Select(x => x.GetDouble())
+             .Should().Equal(0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5);
+
+        // Wrong length is dropped to null.
+        await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { easyDays = new[] { 0.5, 1.0, 1.0 } }));
+        var bad = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        bad.GetProperty("easyDays").ValueKind.Should().Be(JsonValueKind.Null);
+
+        // Out-of-range weights are clamped to [0, 1].
+        await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { easyDays = new[] { -3.0, 2.0, 1.0, 1.0, 1.0, 1.0, 0.5 } }));
+        var clamped = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        clamped.GetProperty("easyDays").EnumerateArray().Select(x => x.GetDouble())
+               .Should().Equal(0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5);
+    }
+
+    [Fact]
     public async Task StudyBatch_RespectsNewCardLimit()
     {
         // Set limit to 2

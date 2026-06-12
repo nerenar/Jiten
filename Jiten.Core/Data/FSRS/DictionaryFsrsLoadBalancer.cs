@@ -17,6 +17,13 @@ public class DictionaryFsrsLoadBalancer : IFsrsLoadBalancer
             Register(due);
     }
 
+    /// <summary>Seeds from pre-aggregated (day, count) pairs, e.g. a SQL GROUP BY over due dates.</summary>
+    public DictionaryFsrsLoadBalancer(IEnumerable<KeyValuePair<DateOnly, int>> loadByDay)
+    {
+        foreach (var (day, count) in loadByDay)
+            _loadByDay[day] = count;
+    }
+
     public int GetLoad(DateTime dueDate)
     {
         return _loadByDay.GetValueOrDefault(DateOnly.FromDateTime(dueDate));
