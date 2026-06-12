@@ -808,6 +808,22 @@
   },
   {
     "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["ぬじゃろう"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["uninflectable"],
+    "detail": "archaic negative presumptive"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["ぬだろう"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["uninflectable"],
+    "detail": "archaic negative presumptive"
+  },
+  {
+    "type": "onlyfinalrule",
     "dec_end": ["する", "する"],
     "con_end": ["せん", "せん"],
     "dec_tag": ["vs-i", "vs-s"],
@@ -1205,6 +1221,30 @@
     "dec_tag": ["stem-te"],
     "con_tag": ["v5u"],
     "detail": "have someone do"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["貰う"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5u"],
+    "detail": "have someone do"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["いただく"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5k"],
+    "detail": "have someone do (humble)"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["頂く"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5k"],
+    "detail": "have someone do (humble)"
   },
   {
     "type": "stdrule",
