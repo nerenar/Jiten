@@ -952,17 +952,22 @@ public partial class MorphologicalAnalyser
                 var prev = newList[^1];
                 var stolen = w1.Text[0].ToString();
                 var remainder = w1.Text[1..];
-                prev.Text += stolen;
-                prev.DictionaryForm = prev.Text;
-                prev.NormalizedForm = prev.Text;
-                prev.Reading += stolen;
-                if (prev.EndOffset >= 0) prev.EndOffset += 1;
+                var mergedText = prev.Text + stolen;
+                int mergedEndOffset = prev.EndOffset >= 0 ? prev.EndOffset + 1 : prev.EndOffset;
+                newList[^1] = new WordInfo(prev)
+                {
+                    Text = mergedText,
+                    DictionaryForm = mergedText,
+                    NormalizedForm = mergedText,
+                    Reading = prev.Reading + stolen,
+                    EndOffset = mergedEndOffset
+                };
                 newList.Add(new WordInfo
                 {
                     Text = remainder, DictionaryForm = remainder, NormalizedForm = remainder,
                     PartOfSpeech = PartOfSpeech.Particle,
                     Reading = WanaKanaShaapu.WanaKana.ToKatakana(remainder),
-                    StartOffset = prev.EndOffset,
+                    StartOffset = mergedEndOffset,
                     EndOffset = w1.EndOffset
                 });
                 i++;
@@ -998,6 +1003,7 @@ public partial class MorphologicalAnalyser
                     NormalizedForm = "いいか",
                     PartOfSpeech = PartOfSpeech.Expression,
                     Reading = "イイカ",
+                    PreMatchedWordId = 2555520,
                     StartOffset = w1.StartOffset,
                     EndOffset = ka.EndOffset
                 });
