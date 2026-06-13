@@ -1607,6 +1607,24 @@ public class MorphologicalAnalyserTests
         // 絶対に merges in lattice contexts where Sudachi splits it (consistency with fused form)
         yield return ["今だって、あたしを気遣うなんて、これまでのあんたなら絶対にしなかった",
             new[] { "今", "だって", "あたし", "を", "気遣う", "なんて", "これまで", "の", "あんた", "なら", "絶対に", "しなかった" }];
+
+        // === batch 5: quote-initial interjection / OOV tails / elongation / prefix / name theft ===
+        // 信じる split by Sudachi as 信じ+るってことか; OOV-garbage tail re-cut, こと now a grammar token
+        yield return ["これが......これが、信じるってことか。",
+            new[] { "これ", "が", "これ", "が", "信じる", "って", "こと", "か" }];
+        // 山ほど is one lexicalized adverb (Noun+ほど with a JMDict entry)
+        yield return ["やることは山ほどある。", new[] { "やる", "こと", "は", "山ほど", "ある" }];
+        // interjection えっ must not fuse with the standalone adverb そう
+        yield return ["「えっそうだったの？」", new[] { "えっ", "そう", "だった", "の" }];
+        // interjection after a speaker tag + opening quote is utterance-initial → ああ kept, not gated
+        yield return ["【テオドール】「ああ......」", new[] { "テオドール", "ああ" }];
+        // small-vowel elongation れぇぇぇ stripped; れ reattaches to the auxiliary やがる imperative
+        yield return ["早く、ここに来やがれぇぇぇっ!", new[] { "早く", "ここ", "に", "来", "やがれ" }];
+        // katakana mora stolen by 連体詞 あの recut: カティ+アの → カティア + の
+        yield return ["カティアのように振る舞ったら", new[] { "カティア", "の", "ように", "振る舞ったら" }];
+        // 総 before a noun is the prefix (そう), recovered after 総本部 splits to 総 + 本部
+        yield return ["政治総本部と国家保安省が対立しているといっても",
+            new[] { "政治", "総", "本部", "と", "国家", "保安", "省", "が", "対立している", "といっても" }];
     }
 
     [Theory]

@@ -645,6 +645,36 @@ public partial class MorphologicalAnalyser
                 }
             }
 
+            // Pattern 5: small-vowel elongation fused onto a conjugation ending. Sudachi emits
+            // [kana][run of ≥2 identical small vowels] as one OOV noun: 来やがれぇぇぇ →
+            // 来 + やが + れぇぇぇ. Strip the elongation and reattach the leading kana to the
+            // preceding verb/auxiliary when it makes a real conjugation (やが+れ → やがれ = やがる
+            // imperative). A bare noun-tagged stem (移れぇぇぇ → 移 noun) fails the verb/aux gate
+            // and is left as-is.
+            if (prev.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary &&
+                current.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection &&
+                IsTrailingSmallVowelRun(current.Text, out int coreLen))
+            {
+                var core = current.Text[..coreLen];
+                var candidate = NormalizeToHiragana(prev.Text + core);
+                var prevDictHiragana = NormalizeToHiragana(prev.DictionaryForm);
+                bool valid = candidate != prevDictHiragana && deconjugator.Deconjugate(candidate).Any(f =>
+                    f.Text == prevDictHiragana &&
+                    f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)));
+
+                if (valid)
+                {
+                    result[^1] = new WordInfo(prev)
+                    {
+                        Text = prev.Text + core,
+                        Reading = prev.Reading + WanaKanaShaapu.WanaKana.ToKatakana(core),
+                        EndOffset = current.StartOffset >= 0 ? current.StartOffset + coreLen : prev.EndOffset
+                    };
+                    changed = true;
+                    continue;
+                }
+            }
+
             result.Add(current);
         }
 
@@ -904,6 +934,40 @@ public partial class MorphologicalAnalyser
         for (int i = 0; i < wordInfos.Count;)
         {
             WordInfo w1 = wordInfos[i];
+
+            // Katakana mora stolen from a name by a following hiragana-dict prenominal: Sudachi
+            // cuts カティア|の as カティ|アの (アの = homograph of 連体詞 あの). A 連体詞 whose dict
+            // form is hiragana but whose surface starts with katakana means the leading mora
+            // belongs to the preceding katakana name — return it and emit the remainder (の) as a
+            // particle. (カティ+ア = カティア, kept as an OOV name token.)
+            if (w1.PartOfSpeech == PartOfSpeech.PrenounAdjectival
+                && w1.Text.Length >= 2
+                && IsKatakanaTextChar(w1.Text[0]) && w1.Text[0] != 'ー'
+                && w1.Text[1..].All(c => c is >= '぀' and <= 'ゟ')
+                && KanaConverter.ToHiragana(w1.Text) == w1.DictionaryForm
+                && newList.Count > 0
+                && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Name
+                && IsAllKatakanaText(newList[^1].Text))
+            {
+                var prev = newList[^1];
+                var stolen = w1.Text[0].ToString();
+                var remainder = w1.Text[1..];
+                prev.Text += stolen;
+                prev.DictionaryForm = prev.Text;
+                prev.NormalizedForm = prev.Text;
+                prev.Reading += stolen;
+                if (prev.EndOffset >= 0) prev.EndOffset += 1;
+                newList.Add(new WordInfo
+                {
+                    Text = remainder, DictionaryForm = remainder, NormalizedForm = remainder,
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    Reading = WanaKanaShaapu.WanaKana.ToKatakana(remainder),
+                    StartOffset = prev.EndOffset,
+                    EndOffset = w1.EndOffset
+                });
+                i++;
+                continue;
+            }
 
             // Sudachi misclassifies katakana particle sequences as nouns (e.g. ノヨ → name 乃代).
             // Split into individual particles: ノ + ヨ, ノネ, ノサ, etc.
@@ -2276,6 +2340,25 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
+    // A trailing run of ≥2 identical small vowels (ぇぇぇ, ぁぁ) is expressive elongation, not part
+    // of a word. Returns the length of the leading core (≥1) when such a run is present.
+    private static bool IsTrailingSmallVowelRun(string text, out int coreLen)
+    {
+        coreLen = text.Length;
+        const string smallVowels = "ぁぃぅぇぉ";
+        int i = text.Length - 1;
+        char runChar = '\0';
+        int runCount = 0;
+        while (i >= 0 && smallVowels.IndexOf(text[i]) >= 0 && (runCount == 0 || text[i] == runChar))
+        {
+            runChar = text[i];
+            runCount++;
+            i--;
+        }
+        coreLen = i + 1;
+        return runCount >= 2 && coreLen >= 1;
+    }
+
     private static readonly HashSet<string> CaseParticles =
         ["に", "を", "が", "へ", "で", "と", "は", "も", "か", "から", "より", "まで", "の"];
 
@@ -2778,6 +2861,15 @@ public partial class MorphologicalAnalyser
                     }
                 }
                 if (allSameInterjection) continue;
+
+                // An interjection followed by the standalone adverb そう (えっ+そう, あっ+そう =
+                // "huh — I see") is two utterance units. そう never fuses into a preceding
+                // interjection: neither the kana-noun key (えっそう) nor the colloquial verb
+                // deconjugation (えっそう→得る) is valid. ふん+ばったり (→踏ん張る -tari) is
+                // unaffected — its second token is ばったり, not そう.
+                if (wordInfos[i].PartOfSpeech == PartOfSpeech.Interjection
+                    && wordInfos[i + 1].Text == "そう")
+                    continue;
 
                 string combinedText = spanLen switch
                 {

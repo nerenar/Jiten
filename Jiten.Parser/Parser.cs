@@ -58,6 +58,11 @@ namespace Jiten.Parser
         private static readonly Regex MultiLongVowelRegex = new(@"ー{2,}", RegexOptions.Compiled);
         private static readonly Regex DialogueRegex = new(@"[「『].{0,200}?[」』]", RegexOptions.Compiled | RegexOptions.Singleline);
 
+        // Opening quote/bracket characters that begin a fresh utterance span (used to mark the
+        // following content token as sentence-initial).
+        private static readonly HashSet<char> OpeningQuoteChars =
+            ['「', '『', '（', '〈', '《', '【', '〔', '｢', '(', '“', '‘', '"', '\''];
+
         // Surface-text misparse tokens to remove after repair stages (deferred from MorphologicalAnalyser
         // so RepairLongVowelMisparses can use them for backward-merge reconstruction)
         private static readonly HashSet<string> MisparsesRemove =
@@ -175,6 +180,9 @@ namespace Jiten.Parser
 
             CombineNounCompounds(sentences);
             DbgDump("CombineNounCompounds");
+
+            ReclassifyLeftoverPrefixChars(sentences);
+            DbgDump("ReclassifyLeftoverPrefixChars");
 
             if (sw != null) { timings!.PrepNounCompoundsMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
@@ -2535,7 +2543,8 @@ namespace Jiten.Parser
         /// Merges X+に into a single token when the combined surface is a lexicalized adverb:
         /// any X的+に (always adverbial, JMDict entry required) or a curated pair (フルに, 無性に,
         /// 意地でも, 絶対に). Bare entry existence is deliberately NOT enough — それに/ことに would
-        /// merge over genuine case-particle uses.
+        /// merge over genuine case-particle uses. Also merges Noun+ほど when the pair is a
+        /// lexicalized adverb (山ほど); 三日ほど/5分ほど ("approximately") have no entry and stay split.
         private static void CombineLexicalAdverbs(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
@@ -2561,8 +2570,10 @@ namespace Jiten.Parser
                                         && word.Text.EndsWith('的');
                         bool isCuratedPair = next.word.Text is "に" or "でも"
                                              && LexicalizedAdverbPairs.Contains(word.Text + next.word.Text);
+                        bool isHodoPair = next.word.Text == "ほど"
+                                          && next.word.PartOfSpeech == PartOfSpeech.Particle;
 
-                        if ((isNiPair || isCuratedPair) && HasLexicalAdverbEntry(word.Text + next.word.Text))
+                        if ((isNiPair || isCuratedPair || isHodoPair) && HasLexicalAdverbEntry(word.Text + next.word.Text))
                         {
                             var combinedText = word.Text + next.word.Text;
                             var merged = new WordInfo(word)
@@ -3150,6 +3161,53 @@ namespace Jiten.Parser
 
                 if (anySplit)
                     sentence.Words = result;
+            }
+        }
+
+        // Kanji that are bound prefixes (接頭辞): when prepended to a noun they take their
+        // prefix reading, and they are NOT common standalone nouns. Curated rather than derived
+        // from a Prefix lookup entry, because free-noun kanji (前/大/本/後…) also carry an n-pref
+        // entry yet read as the noun (前準備 → 前 まえ, not 前 ぜん). 総→そう (not ふさ) etc.
+        private static readonly HashSet<char> BoundPrefixKanji =
+            ['総', '諸', '各', '準', '副', '反', '超', '非', '未', '汎', '准', '旧'];
+
+        /// After noun-compound recombination, a single-kanji token left over from
+        /// SplitUnknownNounTokens that is a bound prefix before a following noun should resolve to
+        /// its prefix reading, not a noun/counter homograph: 総本部 splits to 総 + 本部 (recombined),
+        /// and 総 must resolve to 総(そう, pref) not 総(ふさ, tuft/cluster). Gated on BoundPrefixKanji
+        /// so free-noun kanji (前/大/本) keep their noun reading.
+        private static void ReclassifyLeftoverPrefixChars(List<SentenceInfo> sentences)
+        {
+            foreach (var sentence in sentences)
+            {
+                var words = sentence.Words;
+                for (int i = 0; i < words.Count - 1; i++)
+                {
+                    var word = words[i].word;
+                    if (word.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+                        || word.Text.Length != 1
+                        || !BoundPrefixKanji.Contains(word.Text[0]))
+                        continue;
+
+                    var next = words[i + 1].word;
+                    if (next.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                        or PartOfSpeech.NaAdjective or PartOfSpeech.NominalAdjective))
+                        continue;
+
+                    if (!_lookups.TryGetValue(word.Text, out var ids))
+                        continue;
+
+                    int? prefixId = null;
+                    foreach (var id in ids)
+                        if (WordMeta.TryGetValue(id, out var meta) && meta.GetPrimaryPos() == PartOfSpeech.Prefix)
+                        { prefixId = id; break; }
+
+                    if (prefixId == null)
+                        continue;
+
+                    word.PartOfSpeech = PartOfSpeech.Prefix;
+                    word.PreMatchedWordId = prefixId;
+                }
             }
         }
 
@@ -4148,13 +4206,29 @@ namespace Jiten.Parser
             foreach (var sentence in sentences)
             {
                 bool first = true;
+                // An opening quote/bracket starts a fresh utterance span: the next content token
+                // is utterance-initial even when a speaker tag precedes it (【テオドール】「ああ…
+                // → ああ counts as sentence-initial). Blank space between the quote and the word
+                // is transparent and must not consume the flag.
+                bool afterOpeningQuote = false;
                 foreach (var (word, _, _) in sentence.Words)
                 {
                     if (word.PartOfSpeech == PartOfSpeech.SupplementarySymbol)
+                    {
+                        if (word.Text.Length > 0 && OpeningQuoteChars.Contains(word.Text[^1]))
+                            afterOpeningQuote = true;
                         continue;
+                    }
+                    if (word.PartOfSpeech == PartOfSpeech.BlankSpace)
+                    {
+                        flatTokens.Add(word);
+                        sentenceInitial.Add(first || afterOpeningQuote);
+                        continue;
+                    }
                     flatTokens.Add(word);
-                    sentenceInitial.Add(first);
+                    sentenceInitial.Add(first || afterOpeningQuote);
                     first = false;
+                    afterOpeningQuote = false;
                 }
             }
 
