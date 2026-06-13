@@ -233,6 +233,27 @@ export interface SrsRecomputeBatchResponse {
   done: boolean;
 }
 
+export interface WorkloadCurvePoint {
+  retention: number;
+  reviewsPerDay: number;
+  minutesPerDay: number;
+  recallPct: number;
+  multiplier: number;
+}
+
+export interface FsrsWorkloadCurveResponse {
+  baseRetention: number;
+  horizonDays: number;
+  includeNewCards: boolean;
+  sampled: number;
+  total: number;
+  learningSeconds: number;
+  youngSeconds: number;
+  matureSeconds: number;
+  recommendedRetention: number | null;
+  points: WorkloadCurvePoint[];
+}
+
 export interface MetadataRelation {
   externalId: string;
   linkType: number;

@@ -1,7 +1,11 @@
 <script setup lang="ts">
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
-  import { type FsrsParametersResponse } from '~/types';
+  import { Line } from 'vue-chartjs';
+  import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, type ChartOptions, type ChartData } from 'chart.js';
+  import type { FsrsParametersResponse, FsrsWorkloadCurveResponse, WorkloadCurvePoint } from '~/types';
+
+  ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip);
 
   const { $api } = useNuxtApp();
   const toast = useToast();
@@ -154,6 +158,8 @@
       isDefault.value = result.isDefault;
       desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
       hasUserEdited.value = false;
+      // Re-anchor the workload curve (baseline multipliers + recommendation) to the saved settings.
+      if (workloadCurve.value) void loadWorkloadCurve();
       toast.add({
         severity: 'success',
         summary: 'Saved',
@@ -203,6 +209,7 @@
       isDefault.value = result.isDefault;
       desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
       hasUserEdited.value = false;
+      if (workloadCurve.value) void loadWorkloadCurve();
       toast.add({
         severity: 'success',
         summary: 'Reset to default',
@@ -299,6 +306,7 @@
       desiredRetention.value = result.desiredRetention;
       isDefault.value = false;
       hasUserEdited.value = false;
+      if (workloadCurve.value) void loadWorkloadCurve();
       const detail = result.rescheduled
         ? `Parameters optimised from ${result.reviewCount} reviews. Cards have been rescheduled.`
         : `Parameters optimised from ${result.reviewCount} reviews.`;
@@ -321,6 +329,250 @@
       isOptimising.value = false;
     }
   };
+
+  // --- Workload-vs-retention feedback ---------------------------------------
+  const workloadCurve = ref<FsrsWorkloadCurveResponse | null>(null);
+  const workloadLoading = ref(false);
+  const includeNewCards = ref(false);
+  let workloadDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  const loadWorkloadCurve = async () => {
+    try {
+      workloadLoading.value = true;
+      workloadCurve.value = await $api<FsrsWorkloadCurveResponse>(
+        `srs/workload-curve?includeNewCards=${includeNewCards.value}`,
+      );
+    } catch {
+      workloadCurve.value = null;
+    } finally {
+      workloadLoading.value = false;
+    }
+  };
+
+  // The simulation is CPU-heavy (multi-second for large collections), so it is NOT run on page load — the
+  // user triggers it with the Simulate button. Once a curve exists, changing the new-cards toggle (or
+  // saving/optimising) re-runs it; otherwise nothing fires.
+  watch(includeNewCards, () => {
+    if (!workloadCurve.value) return;
+    if (workloadDebounce) clearTimeout(workloadDebounce);
+    workloadDebounce = setTimeout(() => void loadWorkloadCurve(), 200);
+  });
+
+  // Slider bounds are intentionally generous and never clamp the user's own value: some learners run
+  // much lower retention on purpose, so if the saved value sits below the floor we extend the floor.
+  const sliderMin = computed(() => Math.min(0.7, Number(desiredRetention.value) || 0.9));
+  const sliderMax = computed(() => Math.max(0.98, Number(desiredRetention.value) || 0.9));
+
+  interface WorkloadAt {
+    multiplier: number;
+    reviewsPerDay: number;
+    minutesPerDay: number;
+    recallPct: number;
+  }
+
+  // Linear interpolation of the simulated curve at an arbitrary retention, so the live readout updates
+  // smoothly as the slider drags without a request per tick.
+  function interpolateCurve(r: number): WorkloadAt | null {
+    const pts = workloadCurve.value?.points;
+    if (!pts || pts.length === 0) return null;
+    const at = (p: WorkloadCurvePoint): WorkloadAt => ({
+      multiplier: p.multiplier,
+      reviewsPerDay: p.reviewsPerDay,
+      minutesPerDay: p.minutesPerDay,
+      recallPct: p.recallPct,
+    });
+    if (r <= pts[0]!.retention) return at(pts[0]!);
+    const last = pts[pts.length - 1]!;
+    if (r >= last.retention) return at(last);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i]!;
+      const b = pts[i + 1]!;
+      if (r >= a.retention && r <= b.retention) {
+        const t = (r - a.retention) / (b.retention - a.retention);
+        const mix = (x: number, y: number) => x + t * (y - x);
+        return {
+          multiplier: mix(a.multiplier, b.multiplier),
+          reviewsPerDay: mix(a.reviewsPerDay, b.reviewsPerDay),
+          minutesPerDay: mix(a.minutesPerDay, b.minutesPerDay),
+          recallPct: mix(a.recallPct, b.recallPct),
+        };
+      }
+    }
+    return null;
+  }
+
+  const liveWorkload = computed(() => interpolateCurve(Number(desiredRetention.value)));
+  const baseRetention = computed(() => workloadCurve.value?.baseRetention ?? defaultDesiredRetention);
+
+  const multiplierLabel = computed(() => {
+    const m = liveWorkload.value?.multiplier;
+    if (m == null) return null;
+    return m >= 9.95 ? Math.round(m).toString() : m.toFixed(1);
+  });
+
+  const multiplierColor = computed(() => {
+    const m = liveWorkload.value?.multiplier ?? 1;
+    if (m <= 1.05) return 'text-green-600 dark:text-green-400';
+    if (m <= 1.5) return 'text-amber-600 dark:text-amber-400';
+    return 'text-red-600 dark:text-red-400';
+  });
+
+  const reviewsPerDayLabel = computed(() => {
+    const n = liveWorkload.value?.reviewsPerDay;
+    if (n == null) return null;
+    return n >= 10 ? Math.round(n).toString() : n.toFixed(1);
+  });
+
+  const minutesPerDayLabel = computed(() => {
+    const n = liveWorkload.value?.minutesPerDay;
+    if (n == null) return null;
+    return n >= 10 ? Math.round(n).toString() : n.toFixed(1);
+  });
+
+  const recallPctLabel = computed(() => {
+    const n = liveWorkload.value?.recallPct;
+    return n == null ? null : Math.round(n).toString();
+  });
+
+  // Per-maturity review speed (seconds/card) measured from the user's own history — shown so the time
+  // estimate is transparent about where it comes from.
+  const speedBreakdown = computed(() => {
+    const c = workloadCurve.value;
+    if (!c) return null;
+    const fmt = (s: number) => `${Math.round(s * 10) / 10}s`;
+    return `mature ${fmt(c.matureSeconds)} · young ${fmt(c.youngSeconds)} · learning ${fmt(c.learningSeconds)}`;
+  });
+
+  // Recommended retention (CMRR-style, server-computed): only surfaced when present and meaningfully
+  // different from the current setting. Never auto-applied — the user clicks "Use".
+  const recommendedRetention = computed(() => workloadCurve.value?.recommendedRetention ?? null);
+  // Once a recommendation exists the band stays mounted; we only swap its content when the slider reaches
+  // the recommended value, so passing over it doesn't unmount the band and shove the layout up.
+  const atRecommended = computed(() => {
+    const rec = recommendedRetention.value;
+    return rec != null && Math.abs(rec - Number(desiredRetention.value)) < 0.01;
+  });
+  const recommendedPct = computed(() => {
+    const rec = recommendedRetention.value;
+    return rec == null ? null : Math.round(rec * 100);
+  });
+  function applyRecommended() {
+    const rec = recommendedRetention.value;
+    if (rec != null) desiredRetention.value = Math.round(rec * 100) / 100;
+  }
+
+  const hasWorkloadData = computed(() => (workloadCurve.value?.points.length ?? 0) >= 2 && (workloadCurve.value?.total ?? 0) > 0);
+
+  // Which curve the chart plots. The headline readout always shows reviews + time + recall together; the
+  // chart shows one axis at a time so the scales stay readable.
+  type WorkloadMetric = 'reviews' | 'time' | 'recall';
+  const chartMetric = ref<WorkloadMetric>('reviews');
+  const metricOptions: { key: WorkloadMetric; label: string }[] = [
+    { key: 'reviews', label: 'Reviews' },
+    { key: 'time', label: 'Time' },
+    { key: 'recall', label: 'Recall' },
+  ];
+  interface MetricCfg {
+    axis: string;
+    color: string;
+    bg: string;
+    pick: (p: WorkloadCurvePoint) => number;
+    fmt: (v: number) => string;
+    caption: string;
+    yMin?: number;
+    yMax?: number;
+  }
+  const metricConfig: Record<WorkloadMetric, MetricCfg> = {
+    reviews: {
+      axis: 'Reviews / day',
+      color: 'rgb(37, 99, 235)',
+      bg: 'rgba(37, 99, 235, 0.12)',
+      pick: (p) => p.reviewsPerDay,
+      fmt: (v) => `≈ ${Math.round(v)} reviews/day`,
+      caption: 'Cards you’d review per day on average — the raw workload.',
+      yMin: 0,
+    },
+    time: {
+      axis: 'Minutes / day',
+      color: 'rgb(217, 119, 6)',
+      bg: 'rgba(217, 119, 6, 0.12)',
+      pick: (p) => p.minutesPerDay,
+      fmt: (v) => `≈ ${Math.round(v * 10) / 10} min/day`,
+      caption: 'Estimated minutes per day, costed from your own per-maturity review speed.',
+      yMin: 0,
+    },
+    recall: {
+      axis: 'Recall (%)',
+      color: 'rgb(16, 185, 129)',
+      bg: 'rgba(16, 185, 129, 0.12)',
+      pick: (p) => p.recallPct,
+      fmt: (v) => `≈ ${Math.round(v)}% recalled`,
+      caption: 'Share of your whole collection you’d recall on an average day — the payoff for the workload.',
+      yMax: 100,
+    },
+  };
+
+  const workloadChartData = computed<ChartData<'line'>>(() => {
+    const pts = workloadCurve.value?.points ?? [];
+    const cfg = metricConfig[chartMetric.value];
+    // Highlight the grid point closest to the current slider value.
+    const current = Number(desiredRetention.value);
+    let nearest = 0;
+    let bestDist = Infinity;
+    pts.forEach((p, i) => {
+      const d = Math.abs(p.retention - current);
+      if (d < bestDist) {
+        bestDist = d;
+        nearest = i;
+      }
+    });
+    return {
+      labels: pts.map((p) => `${Math.round(p.retention * 100)}%`),
+      datasets: [
+        {
+          label: cfg.axis,
+          data: pts.map((p) => cfg.pick(p)),
+          borderColor: cfg.color,
+          backgroundColor: cfg.bg,
+          borderWidth: 2,
+          cubicInterpolationMode: 'monotone' as const,
+          fill: true,
+          pointRadius: pts.map((_, i) => (i === nearest ? 6 : 3)),
+          pointBackgroundColor: pts.map((_, i) => (i === nearest ? 'rgb(239, 68, 68)' : cfg.color)),
+        },
+      ],
+    };
+  });
+
+  const workloadChartOptions = computed<ChartOptions<'line'>>(() => {
+    const cfg = metricConfig[chartMetric.value];
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 8, bottom: 4 } },
+      plugins: {
+        datalabels: { display: false },
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => `${items[0]?.label} retention`,
+            label: (ctx) => cfg.fmt(ctx.raw as number),
+          },
+        },
+      },
+      scales: {
+        y: {
+          // Recall lives near the top of the scale, so auto-range it (forcing 0 flattens the curve);
+          // absolute counts/minutes anchor at 0.
+          min: cfg.yMin,
+          max: cfg.yMax,
+          title: { display: true, text: cfg.axis },
+          grid: { color: 'rgba(107, 114, 128, 0.15)' },
+        },
+        x: { title: { display: true, text: 'Desired retention' }, grid: { display: false } },
+      },
+    };
+  });
 </script>
 
 <template>
@@ -331,14 +583,90 @@
     <template #content>
       <div class="mb-4">
         <h4 class="text-md font-semibold mb-1">Desired retention</h4>
-        <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">Target recall rate (0–1). For example, 0.9 = 90% retention.</p>
-        <div class="flex flex-wrap items-center gap-2">
-          <InputNumber v-model="desiredRetention" class="w-40" input-class="w-40" :min="0.01" :max="0.99" :step="0.01" :min-fraction-digits="2" :max-fraction-digits="4" />
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">Target recall rate. Higher means you remember more, but review more often.</p>
+        <div class="flex flex-wrap items-center gap-3">
+          <Slider v-model="desiredRetention" :min="sliderMin" :max="sliderMax" :step="0.01" class="w-full sm:w-64" />
+          <InputNumber v-model="desiredRetention" class="w-28" input-class="w-28" :min="0.01" :max="0.99" :step="0.01" :min-fraction-digits="2" :max-fraction-digits="4" />
           <Button label="Save" :loading="isSaving" :disabled="!!formError || isLoading || isRecomputing || isResetting" @click="saveParameters" />
         </div>
         <Message v-if="retentionError" key="retention-error" severity="error" :closable="false" class="mt-2">
           {{ retentionError }}
         </Message>
+
+        <!-- Workload-vs-retention simulation: CPU-heavy, so run on demand via the Simulate button -->
+        <div class="mt-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/40 p-3">
+          <div>
+            <div class="text-sm font-medium text-gray-700 dark:text-gray-200">Workload simulation</div>
+            <div class="text-[11px] text-gray-400">See how reviews, time and recall change with your desired retention.</div>
+          </div>
+
+          <div class="flex items-center gap-2 mt-3">
+            <ToggleSwitch v-model="includeNewCards" inputId="includeNewCards" :disabled="workloadLoading" />
+            <label for="includeNewCards" class="text-sm cursor-pointer text-gray-600 dark:text-gray-300">Include future new cards in the estimate</label>
+            <span v-if="workloadLoading" class="flex items-center gap-1 text-xs text-gray-400">
+              <i class="pi pi-spin pi-spinner text-xs" /> Updating…
+            </span>
+          </div>
+
+          <Button
+            label="Simulate"
+            icon="pi pi-chart-line"
+            :loading="workloadLoading"
+            class="mt-3"
+            @click="loadWorkloadCurve"
+          />
+
+          <template v-if="hasWorkloadData && liveWorkload">
+            <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-3">
+              <div class="text-sm">
+                <span class="font-semibold text-lg tabular-nums" :class="multiplierColor">{{ multiplierLabel }}×</span>
+                <span class="text-gray-500 dark:text-gray-400"> your current reviews</span>
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-300">
+                ≈ <span class="font-semibold tabular-nums">{{ reviewsPerDayLabel }}</span> reviews/day,
+                <span class="font-semibold tabular-nums">{{ minutesPerDayLabel }}</span> min/day,
+                <span class="font-semibold tabular-nums">{{ recallPctLabel }}%</span> recall
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1">
+              Relative to your current setting ({{ Math.round(baseRetention * 100) }}%). Projected demand from your current cards{{ includeNewCards ? ' plus future new cards' : '' }} — not capped by your daily limit.
+            </p>
+            <p v-if="speedBreakdown" class="text-[11px] text-gray-400 mt-0.5">
+              Time uses your measured review speed: {{ speedBreakdown }}.
+            </p>
+
+            <div v-if="recommendedPct != null" class="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 px-3 py-2">
+              <i :class="atRecommended ? 'pi pi-check-circle' : 'pi pi-sparkles'" class="text-emerald-600 dark:text-emerald-400 text-sm" />
+              <span class="text-sm text-emerald-800 dark:text-emerald-200">
+                Recommended ≈ <span class="font-semibold tabular-nums">{{ recommendedPct }}%</span>
+                <span class="text-emerald-700/70 dark:text-emerald-300/70"> — least review time per word remembered</span>
+              </span>
+              <Button :label="atRecommended ? 'In use' : 'Use'" size="small" severity="success" outlined class="ml-auto" :disabled="atRecommended" @click="applyRecommended" />
+            </div>
+
+            <div class="flex rounded-lg bg-surface-100 dark:bg-surface-800 p-0.5 text-xs mt-3 w-fit">
+              <button
+                v-for="opt in metricOptions"
+                :key="opt.key"
+                class="px-2.5 py-1 rounded-md transition-colors"
+                :class="
+                  chartMetric === opt.key
+                    ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                "
+                @click="chartMetric = opt.key"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
+            <div class="mt-2 transition-opacity" :class="{ 'opacity-40': workloadLoading }" style="height: 180px">
+              <Line :data="workloadChartData" :options="workloadChartOptions" />
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1">{{ metricConfig[chartMetric].caption }}</p>
+          </template>
+
+          <p v-else-if="workloadCurve" class="text-sm text-gray-500 dark:text-gray-400 mt-3">Start reviewing to see a workload estimate here.</p>
+        </div>
       </div>
 
       <div class="mb-5">
