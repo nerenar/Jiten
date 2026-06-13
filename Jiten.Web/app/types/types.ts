@@ -233,6 +233,18 @@ export interface SrsRecomputeBatchResponse {
   done: boolean;
 }
 
+export interface FsrsHealthResponse {
+  totalReviews: number;
+  // [Again, Hard, Good, Easy]
+  ratingCounts: number[];
+  sameDayReviews: number;
+  minimumReviewsForOptimize: number;
+  meetsMinimum: boolean;
+  neverUsesHard: boolean;
+  neverUsesEasy: boolean;
+  likelyHardAsFail: boolean;
+}
+
 export interface WorkloadCurvePoint {
   retention: number;
   reviewsPerDay: number;

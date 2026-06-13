@@ -3,7 +3,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, type ChartOptions, type ChartData } from 'chart.js';
-  import type { FsrsParametersResponse, FsrsWorkloadCurveResponse, WorkloadCurvePoint } from '~/types';
+  import type { FsrsParametersResponse, FsrsWorkloadCurveResponse, WorkloadCurvePoint, FsrsHealthResponse } from '~/types';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip);
 
@@ -135,6 +135,7 @@
 
   onMounted(() => {
     void loadParameters();
+    void loadHealth();
   });
 
   const saveParameters = async () => {
@@ -327,6 +328,85 @@
       });
     } finally {
       isOptimising.value = false;
+    }
+  };
+
+  // --- Review-history health check ------------------------------------------
+  const health = ref<FsrsHealthResponse | null>(null);
+  const healthLoading = ref(false);
+  const isRemapping = ref(false);
+
+  const loadHealth = async () => {
+    try {
+      healthLoading.value = true;
+      health.value = await $api<FsrsHealthResponse>('srs/settings/health');
+    } catch {
+      health.value = null;
+    } finally {
+      healthLoading.value = false;
+    }
+  };
+
+  const ratingLabels = ['Again', 'Hard', 'Good', 'Easy'];
+  const ratingColors = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6'];
+
+  const ratingBreakdown = computed(() => {
+    const h = health.value;
+    if (!h || h.totalReviews === 0) return [];
+    return h.ratingCounts.map((count, i) => ({
+      label: ratingLabels[i]!,
+      color: ratingColors[i]!,
+      count,
+      pct: (count / h.totalReviews) * 100,
+    }));
+  });
+
+  const sameDayPct = computed(() => {
+    const h = health.value;
+    if (!h || h.totalReviews === 0) return 0;
+    return (h.sameDayReviews / h.totalReviews) * 100;
+  });
+
+  // Whether there is anything noteworthy to surface; when clean we keep the panel quiet.
+  const hasHealthInsight = computed(() => {
+    const h = health.value;
+    if (!h) return false;
+    return h.likelyHardAsFail || h.neverUsesHard || h.neverUsesEasy || sameDayPct.value >= 40;
+  });
+
+  const confirmRemapHard = () => {
+    confirm.require({
+      message:
+        'This rewrites every historical Hard rating to Again and reschedules your cards. Use this only if you have been pressing Hard for cards you actually failed. This cannot be undone.',
+      header: 'Remap Hard → Again',
+      icon: 'pi pi-exclamation-triangle',
+      rejectProps: { label: 'Cancel', severity: 'secondary', outlined: true },
+      acceptProps: { label: 'Remap', severity: 'warn' },
+      accept: async () => {
+        await remapHard();
+      },
+    });
+  };
+
+  const remapHard = async () => {
+    try {
+      isRemapping.value = true;
+      const result = await $api<{ remapped: number; rescheduled: boolean }>('srs/settings/remap-hard', {
+        method: 'POST',
+        body: { reschedule: true },
+      });
+      await Promise.all([loadHealth(), loadParameters(true)]);
+      toast.add({
+        severity: 'success',
+        summary: 'Remap complete',
+        detail: `${result.remapped} Hard reviews remapped to Again and cards rescheduled.`,
+        life: 6000,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to remap reviews.';
+      toast.add({ severity: 'error', summary: 'Remap failed', detail: message, life: 5000 });
+    } finally {
+      isRemapping.value = false;
     }
   };
 
@@ -675,6 +755,62 @@
           Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br /> The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of review doubles.
           <br />You currently have {{reviewCount}} reviews.
         </p>
+
+        <!-- Review-history health check: a quick read on whether the history is fit to train on -->
+        <div v-if="health && health.totalReviews > 0" class="mb-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/40 p-3">
+          <div class="flex items-center gap-2">
+            <i class="pi pi-heart text-sm text-gray-500 dark:text-gray-400" />
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Review history health</span>
+          </div>
+
+          <!-- Button distribution bar -->
+          <div class="mt-3">
+            <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1">
+              <span>Button usage</span>
+              <span class="tabular-nums">{{ health.totalReviews }} reviews · {{ Math.round(sameDayPct) }}% same-day</span>
+            </div>
+            <div class="flex h-3 w-full overflow-hidden rounded-full bg-surface-200 dark:bg-surface-700">
+              <div
+                v-for="seg in ratingBreakdown"
+                :key="seg.label"
+                class="h-full"
+                :style="{ width: seg.pct + '%', backgroundColor: seg.color }"
+                :title="`${seg.label}: ${seg.count} (${Math.round(seg.pct)}%)`"
+              />
+            </div>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+              <div v-for="seg in ratingBreakdown" :key="seg.label" class="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-300">
+                <span class="inline-block h-2.5 w-2.5 rounded-sm" :style="{ backgroundColor: seg.color }" />
+                <span>{{ seg.label }}</span>
+                <span class="tabular-nums text-gray-400">{{ Math.round(seg.pct) }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Insights -->
+          <div v-if="hasHealthInsight" class="mt-3 flex flex-col gap-2">
+            <div v-if="health.likelyHardAsFail" class="flex flex-wrap items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 px-3 py-2">
+              <i class="pi pi-exclamation-triangle text-amber-600 dark:text-amber-400 text-sm" />
+              <span class="text-sm text-amber-800 dark:text-amber-200">
+                You press <b>Hard</b> often but almost never <b>Again</b>. If Hard is your "I failed" button, it skews optimisation. Hard should mean "recalled, but with difficulty".
+              </span>
+              <Button label="Remap Hard → Again" size="small" severity="warn" outlined class="ml-auto" :loading="isRemapping" @click="confirmRemapHard" />
+            </div>
+            <div v-if="health.neverUsesHard" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              <i class="pi pi-info-circle text-sky-500 text-sm" />
+              You have never pressed <b>Hard</b>- Using it for cards you barely recalled gives the optimiser more to work with.
+            </div>
+            <div v-if="health.neverUsesEasy" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              <i class="pi pi-info-circle text-sky-500 text-sm" />
+              You have never pressed <b>Easy</b>- Reserve it for cards that felt effortless.
+            </div>
+            <div v-if="sameDayPct >= 40 && !health.likelyHardAsFail" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              <i class="pi pi-info-circle text-sky-500 text-sm" />
+              {{ Math.round(sameDayPct) }}% of your reviews repeat a card the same day. Heavy same-day cramming can make optimisation less representative of long-term memory.
+            </div>
+          </div>
+        </div>
+
         <div class="flex items-center gap-2 mb-2">
           <Checkbox v-model="rescheduleAfterOptimise" inputId="rescheduleAfterOptimise" :binary="true" :disabled="!canOptimise" />
           <label for="rescheduleAfterOptimise" class="text-sm cursor-pointer">Also reschedule all my cards after optimisation</label>
